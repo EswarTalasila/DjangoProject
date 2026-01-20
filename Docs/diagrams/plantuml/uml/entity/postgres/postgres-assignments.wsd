@@ -1,0 +1,22 @@
+@startuml
+hide circle
+skinparam classAttributeIconSize 0
+
+package "assignments" {
+class Assignment <<Model>> {
+  +id: BigAutoField
+  +assessment: Assessment
+  +audience_type: CharField
+  +course: Course
+  +created_by: User
+  +open_at: DateTimeField
+  +due_at: DateTimeField
+  +teacher: User
+}
+}
+
+Assignment "0..*" -- "1" Assessment : assessment
+Assignment "0..*" -- "1" Course : course
+Assignment "0..*" -- "1" User : created_by
+Assignment "0..*" -- "1" User : teacher
+@enduml

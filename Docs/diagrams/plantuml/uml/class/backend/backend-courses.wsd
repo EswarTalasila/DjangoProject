@@ -1,0 +1,38 @@
+@startuml
+hide circle
+skinparam classAttributeIconSize 0
+
+package "courses" {
+class coursesServices <<Service>> {
+  +_teacher_profile_for(user: User): TeacherProfile
+  +_course_owner(course: Course): Optional[User]
+  +can_view_course(request_user: User, course: Course): bool
+  +can_manage_course(request_user: User, course: Course): bool
+  +course_to_dto(course: Course): dict
+  +enrollment_to_student_dto(enrollment: Enrollment): dict
+  +create_course(request_user: User, name: str): Course
+  +edit_course(course: Course, name: str): Course
+  +delete_course(course: Course): None
+  +list_courses_for_user(user: User): List[Course]
+  +create_student_in_course(request_user: User, payload: dict): Enrollment
+  +bulk_create_students(request_user: User, payloads: List[dict]): int
+  +remove_student_from_course(course: Course, student_user_id: int): None
+  +list_students_in_course(course: Course): List[dict]
+  +_create_submissions_for_student(student_user: User, course: Course): None
+  +_answer_type_from_question(question: Any): str
+}
+class CourseInputSerializer {
+}
+class CourseOutputSerializer {
+}
+class StudentInputSerializer {
+}
+class StudentOutputSerializer {
+}
+class CourseAdmin {
+}
+class EnrollmentAdmin {
+}
+}
+
+@enduml

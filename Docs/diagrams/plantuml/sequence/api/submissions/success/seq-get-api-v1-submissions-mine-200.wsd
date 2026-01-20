@@ -1,0 +1,11 @@
+@startuml
+autonumber
+participant Client
+database Postgres
+participant eel-backend
+
+Client ->> eel-backend: GET api/v1/submissions/mine
+eel-backend ->> Postgres: SELECT "app_users"."id", "app_users"."last_login", "app_users"."is_superuser", "app_users"."username", "app_users"."name", "app_users"."enabled", "app_users"."is_staff", "app_users"."created_at", "app_users"."updated_at", "app_users"."password_hash" FROM "app_users" WHERE "app_users"."id" = %s LIMIT 21
+eel-backend ->> Postgres: SELECT "submissions"."id", "submissions"."assignment_id", "submissions"."score", "submissions"."status", "submissions"."student_id", "submissions"."teacher_id", "submissions"."submitted_at" FROM "submissions" WHERE "submissions"."student_id" = %s
+eel-backend ->> Postgres: SELECT "submissions"."id", "submissions"."assignment_id", "submissions"."score", "submissions"."status", "submissions"."student_id", "submissions"."teacher_id", "submissions"."submitted_at" FROM "submissions" WHERE "submissions"."teacher_id" = %s
+@enduml

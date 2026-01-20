@@ -1,0 +1,38 @@
+@startuml
+hide circle
+skinparam classAttributeIconSize 0
+
+package "assessments" {
+class assessmentsServices <<Service>> {
+  +assessment_to_dto(assessment: Assessment): dict
+  +question_to_dto(question: Question): dict
+  +create_assessment(request_user: User, payload: dict): Assessment
+  +create_mood_meter_assessment(request_user: User, payload: dict): Assessment
+  +update_assessment(assessment: Assessment, payload: dict): Assessment
+  +delete_assessment(assessment: Assessment): None
+  +list_assessments(): List[Assessment]
+  +_replace_questions(assessment: Assessment, questions: Iterable[dict]): None
+  +_create_question(assessment: Assessment, payload: dict): Question
+  +_apply_rubric_links(assessment: Assessment): None
+}
+class MCQChoiceSerializer {
+}
+class MultipleChoiceDataSerializer {
+}
+class ShortAnswerDataSerializer {
+}
+class NumberScaleDataSerializer {
+}
+class MoodMeterDataSerializer {
+}
+class QuestionSerializer {
+}
+class AssessmentSerializer {
+}
+class AssessmentAdmin {
+}
+class QuestionAdmin {
+}
+}
+
+@enduml

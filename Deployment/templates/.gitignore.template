@@ -1,0 +1,61 @@
+# Template: .gitignore
+# Copy into repo root as .gitignore and customize as needed.
+# Keep rules grouped by category and sorted within sections.
+
+# --- OS and editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+.env.*
+!.env.template
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.tox/
+coverage.xml
+.coverage
+htmlcov/
+
+# --- Node/Angular ---
+node_modules/
+.angular/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Build/test artifacts ---
+junit.xml
+playwright-report/
+test-results/
+cypress/videos/
+cypress/screenshots/
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Docker ---
+*.pid
+
+# --- OTEL traces ---
+Docs/diagrams/otel/trace.jsonl
+
+# --- Diagrams exports (optional) ---
+# Keep generated diagrams if you want them versioned; otherwise ignore.
+# docs/diagrams/plantuml/out/
+
+# --- Local tools and caches ---
+.cache/
+.tmp/

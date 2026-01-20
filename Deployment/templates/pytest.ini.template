@@ -1,0 +1,8 @@
+[pytest]
+addopts = -q --disable-warnings --strict-markers
+filterwarnings =
+    ignore::DeprecationWarning
+markers =
+    unit: unit tests
+    integration: integration tests
+    security: security tests

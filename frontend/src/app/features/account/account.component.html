@@ -1,0 +1,39 @@
+<div class="account-container">
+  <h1>Accounts</h1>
+  <div class="border-container">
+    <div class="user-lists-container">
+      
+      <!-- Admins Box -->
+      <div class="user-box">
+        <h2>Admins</h2>
+        <ul class="user-list" id="admin-list">
+          <li class="user-item" *ngFor="let admin of admins">
+            <span class="user-name">{{ admin.name }} ({{ admin.username }})</span>
+            <div class="user-actions">
+              <button class="edit-button" (click)="onEditUser(admin.username)">Edit</button>
+              <button class="reset-button" (click)="onResetUser(admin)">Reset Password</button>
+              <button class="delete-button" (click)="deleteUser(admin.username)">Delete</button>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Teachers Box -->
+      <div class="user-box">
+        <h2>Teachers</h2>
+        <ul class="user-list" id="teacher-list">
+          <li class="user-item" *ngFor="let teacher of teachers">
+            <span class="user-name">{{ teacher.name }} ({{ teacher.username }})</span>
+            <div class="user-actions">
+              <button class="edit-button" (click)="onEditUser(teacher.username)">Edit</button>
+              <button class="reset-button" (click)="onResetUser(teacher)">Reset Password</button>
+              <button class="delete-button" (click)="deleteUser(teacher.username)">Delete</button>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <button class="add-button" (click)="onAddUserClick()">Add User</button>
+  </div>
+</div>

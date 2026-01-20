@@ -1,0 +1,13 @@
+rules:
+  - id: django-debug-true
+    patterns:
+      - pattern: DEBUG = True
+    message: "DEBUG should not be True in production"
+    severity: ERROR
+    languages: [python]
+
+  - id: hardcoded-secret
+    pattern: "SECRET_KEY = \"...\""
+    message: "Possible hardcoded secret"
+    severity: WARNING
+    languages: [python]

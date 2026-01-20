@@ -1,0 +1,9 @@
+@startuml
+autonumber
+participant Client
+database Postgres
+participant eel-backend
+
+Client ->> eel-backend: POST api/v1/auth/register
+eel-backend ->> Postgres: SELECT %s AS "a" FROM "app_users" WHERE UPPER("app_users"."username"::text) = UPPER(%s) LIMIT 1
+@enduml

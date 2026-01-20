@@ -1,0 +1,16 @@
+@startuml
+autonumber
+participant Client
+database Postgres
+participant eel-backend
+
+Client ->> eel-backend: GET api/v1/submissions/<int:submission_id>
+eel-backend ->> Postgres: SELECT "app_users"."id", "app_users"."last_login", "app_users"."is_superuser", "app_users"."username", "app_users"."name", "app_users"."enabled", "app_users"."is_staff", "app_users"."created_at", "app_users"."updated_at", "app_users"."password_hash" FROM "app_users" WHERE "app_users"."id" = %s LIMIT 21
+eel-backend ->> Postgres: SELECT "submissions"."id", "submissions"."assignment_id", "submissions"."score", "submissions"."status", "submissions"."student_id", "submissions"."teacher_id", "submissions"."submitted_at" FROM "submissions" WHERE "submissions"."id" = %s ORDER BY "submissions"."id" ASC LIMIT 1
+eel-backend ->> Postgres: SELECT "user_roles"."role" AS "role" FROM "user_roles" WHERE "user_roles"."user_id" = %s
+eel-backend ->> Postgres: SELECT "assignments"."id", "assignments"."assessment_id", "assignments"."audience_type", "assignments"."course_id", "assignments"."created_by_user_id", "assignments"."open_at", "assignments"."due_at", "assignments"."teacher_id" FROM "assignments" WHERE "assignments"."id" = %s LIMIT 21
+eel-backend ->> Postgres: SELECT "courses"."id", "courses"."name", "courses"."created_at", "courses"."teacher_profile_id" FROM "courses" WHERE "courses"."id" = %s LIMIT 21
+eel-backend ->> Postgres: SELECT "teacher_profiles"."id", "teacher_profiles"."user_id", "teacher_profiles"."created_at" FROM "teacher_profiles" WHERE "teacher_profiles"."id" = %s LIMIT 21
+eel-backend ->> Postgres: SELECT "answer"."id", "answer"."answer_type", "answer"."question_id", "answer"."submission_id", "answer"."score", "answer"."skipped" FROM "answer" WHERE "answer"."submission_id" = %s
+eel-backend ->> Postgres: SELECT "short_answer_answer"."id", "short_answer_answer"."text" FROM "short_answer_answer" WHERE "short_answer_answer"."id" = %s LIMIT 21
+@enduml

@@ -1,0 +1,18 @@
+@startuml
+autonumber
+participant Client
+database Postgres
+participant eel-backend
+
+Client ->> eel-backend: GET api/v1/courses/<int:course_id>/students
+eel-backend ->> Postgres: SELECT "app_users"."id", "app_users"."last_login", "app_users"."is_superuser", "app_users"."username", "app_users"."name", "app_users"."enabled", "app_users"."is_staff", "app_users"."created_at", "app_users"."updated_at", "app_users"."password_hash" FROM "app_users" WHERE "app_users"."id" = %s LIMIT 21
+eel-backend ->> Postgres: SELECT "user_roles"."role" AS "role" FROM "user_roles" WHERE "user_roles"."user_id" = %s
+eel-backend ->> Postgres: SELECT "courses"."id", "courses"."name", "courses"."created_at", "courses"."teacher_profile_id" FROM "courses" WHERE "courses"."id" = %s ORDER BY "courses"."id" ASC LIMIT 1
+eel-backend ->> Postgres: SELECT "teacher_profiles"."id", "teacher_profiles"."user_id", "teacher_profiles"."created_at" FROM "teacher_profiles" WHERE "teacher_profiles"."id" = %s LIMIT 21
+eel-backend ->> Postgres: SELECT "app_users"."id", "app_users"."last_login", "app_users"."is_superuser", "app_users"."username", "app_users"."name", "app_users"."enabled", "app_users"."is_staff", "app_users"."created_at", "app_users"."updated_at", "app_users"."password_hash" FROM "app_users" WHERE "app_users"."id" = %s LIMIT 21
+eel-backend ->> Postgres: SELECT "enrollments"."id", "enrollments"."course_id", "enrollments"."student_profile_id", "enrollments"."enrolled_at", "enrollments"."status" FROM "enrollments" WHERE "enrollments"."course_id" = %s
+eel-backend ->> Postgres: SELECT "student_profiles"."id", "student_profiles"."user_id", "student_profiles"."created_by_user_id", "student_profiles"."consent", "student_profiles"."created_at" FROM "student_profiles" WHERE "student_profiles"."id" = %s LIMIT 21
+eel-backend ->> Postgres: SELECT "app_users"."id", "app_users"."last_login", "app_users"."is_superuser", "app_users"."username", "app_users"."name", "app_users"."enabled", "app_users"."is_staff", "app_users"."created_at", "app_users"."updated_at", "app_users"."password_hash" FROM "app_users" WHERE "app_users"."id" = %s LIMIT 21
+eel-backend ->> Postgres: SELECT "student_profiles"."id", "student_profiles"."user_id", "student_profiles"."created_by_user_id", "student_profiles"."consent", "student_profiles"."created_at" FROM "student_profiles" WHERE "student_profiles"."id" = %s LIMIT 21
+eel-backend ->> Postgres: SELECT "app_users"."id", "app_users"."last_login", "app_users"."is_superuser", "app_users"."username", "app_users"."name", "app_users"."enabled", "app_users"."is_staff", "app_users"."created_at", "app_users"."updated_at", "app_users"."password_hash" FROM "app_users" WHERE "app_users"."id" = %s LIMIT 21
+@enduml

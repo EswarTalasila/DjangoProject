@@ -1,0 +1,220 @@
+@startuml
+hide circle
+skinparam classAttributeIconSize 0
+
+package "accounts" {
+class OAuthAccount <<Model>> {
+  +id: BigAutoField
+  +user: User
+  +provider: CharField
+  +subject: CharField
+  +email: CharField
+  +email_verified: BooleanField
+  +picture_url: CharField
+  +created_at: DateTimeField
+  +last_login_at: DateTimeField
+}
+class StudentProfile <<Model>> {
+  +id: BigAutoField
+  +user: User
+  +created_by: User
+  +consent: BooleanField
+  +created_at: DateTimeField
+}
+class TeacherProfile <<Model>> {
+  +id: BigAutoField
+  +user: User
+  +created_at: DateTimeField
+}
+class User <<Model>> {
+  +id: BigAutoField
+  +last_login: DateTimeField
+  +is_superuser: BooleanField
+  +username: CharField
+  +name: CharField
+  +is_active: BooleanField
+  +is_staff: BooleanField
+  +created_at: DateTimeField
+  +updated_at: DateTimeField
+  +password: CharField
+  +groups: List[Group]
+  +user_permissions: List[Permission]
+}
+class UserRole <<Model>> {
+  +id: BigAutoField
+  +user: User
+  +role: CharField
+}
+}
+
+package "assessments" {
+class Assessment <<Model>> {
+  +id: BigAutoField
+  +title: CharField
+  +category: CharField
+  +grading_mode: CharField
+  +created_by_admin: User
+  +rubric: Assessment
+  +rubric_assessment_ids: ArrayField
+}
+class McqChoice <<Model>> {
+  +id: BigAutoField
+  +question: Question
+  +choice_text: CharField
+  +points: IntegerField
+}
+class McqCorrectAnswer <<Model>> {
+  +id: BigAutoField
+  +question: Question
+  +correct_index: IntegerField
+}
+class MoodMeterLabel <<Model>> {
+  +id: BigAutoField
+  +question: Question
+  +label: CharField
+}
+class MoodMeterQuestion <<Model>> {
+  +question: Question
+}
+class MultipleChoiceQuestion <<Model>> {
+  +question: Question
+  +select_all: BooleanField
+}
+class NumberScaleQuestion <<Model>> {
+  +question: Question
+  +min: IntegerField
+  +max: IntegerField
+  +target: IntegerField
+}
+class Question <<Model>> {
+  +id: BigAutoField
+  +question_type: CharField
+  +kind: CharField
+  +assessment: Assessment
+  +prompt: TextField
+  +max_points: FloatField
+  +auto_gradable: BooleanField
+  +graded: BooleanField
+  +image: TextField
+}
+class ShortAnswerQuestion <<Model>> {
+  +question: Question
+  +case_sensitive: BooleanField
+  +trim: BooleanField
+}
+}
+
+package "assignments" {
+class Assignment <<Model>> {
+  +id: BigAutoField
+  +assessment: Assessment
+  +audience_type: CharField
+  +course: Course
+  +created_by: User
+  +open_at: DateTimeField
+  +due_at: DateTimeField
+  +teacher: User
+}
+}
+
+package "courses" {
+class Course <<Model>> {
+  +id: BigAutoField
+  +name: CharField
+  +created_at: DateTimeField
+  +teacher_profile: TeacherProfile
+}
+class Enrollment <<Model>> {
+  +id: BigAutoField
+  +course: Course
+  +student_profile: StudentProfile
+  +enrolled_at: DateTimeField
+  +status: CharField
+}
+}
+
+package "submissions" {
+class Answer <<Model>> {
+  +id: BigAutoField
+  +answer_type: CharField
+  +question: Question
+  +submission: Submission
+  +score: FloatField
+  +skipped: BooleanField
+}
+class MoodMeterAnswer <<Model>> {
+  +answer: Answer
+  +row: IntegerField
+  +col: IntegerField
+}
+class MultipleChoiceAnswer <<Model>> {
+  +answer: Answer
+}
+class MultipleChoiceSelected <<Model>> {
+  +id: BigAutoField
+  +answer: MultipleChoiceAnswer
+  +choice_index: IntegerField
+}
+class NumberScaleAnswer <<Model>> {
+  +answer: Answer
+  +val: IntegerField
+}
+class Response <<Model>> {
+  +id: BigAutoField
+  +question: Question
+  +respondent: User
+  +skipped: BooleanField
+  +submitted_at: DateTimeField
+}
+class ShortAnswerAnswer <<Model>> {
+  +answer: Answer
+  +text: CharField
+}
+class Submission <<Model>> {
+  +id: BigAutoField
+  +assignment: Assignment
+  +score: FloatField
+  +status: CharField
+  +student: User
+  +teacher: User
+  +submitted_at: DateTimeField
+}
+}
+
+User "*" -- "*" Group : groups
+User "*" -- "*" Permission : user_permissions
+UserRole "0..*" -- "1" User : user
+TeacherProfile "0..*" -- "1" User : user
+StudentProfile "0..*" -- "1" User : user
+StudentProfile "0..*" -- "1" User : created_by
+OAuthAccount "0..*" -- "1" User : user
+Course "0..*" -- "1" TeacherProfile : teacher_profile
+Enrollment "0..*" -- "1" Course : course
+Enrollment "0..*" -- "1" StudentProfile : student_profile
+Assessment "0..*" -- "1" User : created_by_admin
+Assessment "0..*" -- "1" Assessment : rubric
+Question "0..*" -- "1" Assessment : assessment
+MultipleChoiceQuestion "0..*" -- "1" Question : question
+ShortAnswerQuestion "0..*" -- "1" Question : question
+NumberScaleQuestion "0..*" -- "1" Question : question
+MoodMeterQuestion "0..*" -- "1" Question : question
+McqChoice "0..*" -- "1" Question : question
+McqCorrectAnswer "0..*" -- "1" Question : question
+MoodMeterLabel "0..*" -- "1" Question : question
+Assignment "0..*" -- "1" Assessment : assessment
+Assignment "0..*" -- "1" Course : course
+Assignment "0..*" -- "1" User : created_by
+Assignment "0..*" -- "1" User : teacher
+Submission "0..*" -- "1" Assignment : assignment
+Submission "0..*" -- "1" User : student
+Submission "0..*" -- "1" User : teacher
+Answer "0..*" -- "1" Question : question
+Answer "0..*" -- "1" Submission : submission
+MultipleChoiceAnswer "0..*" -- "1" Answer : answer
+MultipleChoiceSelected "0..*" -- "1" MultipleChoiceAnswer : answer
+ShortAnswerAnswer "0..*" -- "1" Answer : answer
+NumberScaleAnswer "0..*" -- "1" Answer : answer
+MoodMeterAnswer "0..*" -- "1" Answer : answer
+Response "0..*" -- "1" Question : question
+Response "0..*" -- "1" User : respondent
+@enduml

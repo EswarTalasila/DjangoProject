@@ -1,0 +1,117 @@
+<div class="create-container">
+  <h1>Add Account</h1>
+  <div class="create-inputs">
+    <form class="create-form" (submit)="onSubmit($event)">
+      <div class="form-group">
+        <h2>Choose a role:</h2>
+        <select id="role" name="role">
+          <option value="admin">Admin</option>
+          <option value="teacher">Teacher</option>
+        </select>
+      </div>
+      <br />
+      <div class="form-group">
+        <input
+          type="text"
+          id="fname"
+          name="fname"
+          placeholder="first name"
+          required
+        />
+      </div>
+      <div class="form-group">
+        <input
+          type="text"
+          id="lname"
+          name="lname"
+          placeholder="last name"
+          required
+        />
+      </div>
+      <div class="form-group">
+        <input
+          type="text"
+          id="email"
+          name="email"
+          placeholder="email"
+          required
+        />
+      </div>
+      <br />
+      
+      <button id="create-button" type="submit">Create User</button>
+      <div class="lined-text">
+        <p>or</p>
+      </div>
+      <div class="upload-container">
+        <h3>Upload Spreadsheet</h3>
+
+        <!-- Info Dialog -->
+        <div class="info-dialog" *ngIf="showInfoDialog" [@fadeIn]>
+          <button type="button" class="close-btn" (click)="closeInfoDialog()" aria-label="Close">✕</button>
+          <h4>Bulk Upload Instructions</h4>
+          <p class="dialog-description">Upload a CSV file to add multiple users at once.</p>
+          <div class="dialog-content">
+            <p><strong>Accepted File Type:</strong> CSV (.csv)</p>
+            <p><strong>Required Columns:</strong></p>
+            <ul>
+              <li><code>First Name</code> - User's first name</li>
+              <li><code>Last Name</code> - User's last name</li>
+              <li><code>Email</code> - User's email address</li>
+              <li><code>Role</code> - User's role (Admin or Teacher)</li>
+            </ul>
+            <p class="note"><strong>Note:</strong> Column names must match exactly as shown above.</p>
+          </div>
+        </div>
+        
+        <div class="file-row">
+          <label class="file-btn" for="fileInput">Choose file</label>
+          <input
+            id="fileInput"
+            type="file"
+            (change)="onFileSelected($event)"
+            accept=".xlsx,.csv"
+            hidden
+          />
+          <span class="file-name">{{ selectedFileName }}</span>
+        </div>
+
+        <div *ngIf="previewData.length > 0">
+          <h4>Preview:</h4>
+          <table>
+            <thead>
+              <tr>
+                <th>First Name</th>
+                <th>Last Name</th>
+                <th>Email</th>
+                <th>Role</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let s of previewData.slice(0, 5)">
+                <td data-label="First Name">{{ s.firstName }}</td>
+                <td data-label="Last Name">{{ s.lastName }}</td>
+                <td data-label="Email">{{ s.username }}</td>
+                <td data-label="Role">
+                  <ng-container *ngIf="s.role === 'ROLE_ADMIN'">Admin</ng-container>
+                  <ng-container *ngIf="s.role === 'ROLE_TEACHER'">Teacher</ng-container>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="confirm-row">
+            <button
+              type="button"
+              class="confirm-btn"
+              type="button"
+              [disabled]="previewData.length === 0"
+              (click)="onSubmitBulk()"
+            >
+              Confirm Upload
+            </button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>

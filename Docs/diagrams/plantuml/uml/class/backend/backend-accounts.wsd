@@ -1,0 +1,51 @@
+@startuml
+hide circle
+skinparam classAttributeIconSize 0
+
+package "accounts" {
+class accountsServices <<Service>> {
+  +_get_role_value(role: Optional[str]): str
+  +set_single_role(user: User, role: str): None
+  +ensure_profiles_for_role(user: User, role: str, creator: Optional[User]): None
+  +build_user_response(user: User, access_token: str): dict
+  +authenticate_user(username: str, password: str): Optional[User]
+  +can_create_user(request_user: User, requested_role: str): bool
+  +teacher_owns_student(teacher_user: User, student_user: User): bool
+  +can_edit_user(request_user: User, target_user: User, requested_role: str): bool
+  +can_delete_user(request_user: User, target_user: User): bool
+  +can_reset_password(request_user: User, target_user: User): bool
+  +create_user_from_payload(payload: dict, role_override: Optional[str], creator: Optional[User]): User
+  +link_or_create_oauth_account(user: User, subject: str, email: str): OAuthAccount
+}
+class RoleChoiceField {
+  +to_internal_value(data: Any): Any
+}
+class UserInputSerializer {
+}
+class UserOutputSerializer {
+  +get_role(obj: Any): Any
+}
+class CheckEmailSerializer {
+}
+class BulkUserSerializer {
+}
+class UserRoleSerializer {
+}
+class UserAdmin {
+}
+class UserRoleAdmin {
+}
+class StudentProfileAdmin {
+}
+class TeacherProfileAdmin {
+}
+class OAuthAccountAdmin {
+}
+class Command {
+  +add_arguments(parser: Any): Any
+  +handle(): Any
+  +_ensure_user(username: Any, name: Any, password: Any, role: Any, force_password: Any): Any
+}
+}
+
+@enduml

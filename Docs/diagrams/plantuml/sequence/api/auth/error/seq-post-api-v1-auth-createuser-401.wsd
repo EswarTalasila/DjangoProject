@@ -1,0 +1,7 @@
+@startuml
+autonumber
+participant Client
+participant eel-backend
+
+Client ->> eel-backend: POST api/v1/auth/createuser
+@enduml

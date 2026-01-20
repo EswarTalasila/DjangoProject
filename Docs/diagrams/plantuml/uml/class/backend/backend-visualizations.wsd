@@ -1,0 +1,15 @@
+@startuml
+hide circle
+skinparam classAttributeIconSize 0
+
+package "visualizations" {
+class visualizationsServices <<Service>> {
+  +_get_mood_meter_assessment_id(): Optional[int]
+  +get_visualization_data(filters: Dict, request_user: Any): List[dict]
+  +submission_to_visualization(submission: Submission): dict
+}
+class VisualizationFilterSerializer {
+}
+}
+
+@enduml

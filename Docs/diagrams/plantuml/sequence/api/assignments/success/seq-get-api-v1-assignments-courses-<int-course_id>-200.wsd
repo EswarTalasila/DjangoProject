@@ -1,0 +1,11 @@
+@startuml
+autonumber
+participant Client
+database Postgres
+participant eel-backend
+
+Client ->> eel-backend: GET api/v1/assignments/courses/<int:course_id>
+eel-backend ->> Postgres: SELECT "app_users"."id", "app_users"."last_login", "app_users"."is_superuser", "app_users"."username", "app_users"."name", "app_users"."enabled", "app_users"."is_staff", "app_users"."created_at", "app_users"."updated_at", "app_users"."password_hash" FROM "app_users" WHERE "app_users"."id" = %s LIMIT 21
+eel-backend ->> Postgres: SELECT "user_roles"."role" AS "role" FROM "user_roles" WHERE "user_roles"."user_id" = %s
+eel-backend ->> Postgres: SELECT "assignments"."id", "assignments"."assessment_id", "assignments"."audience_type", "assignments"."course_id", "assignments"."created_by_user_id", "assignments"."open_at", "assignments"."due_at", "assignments"."teacher_id" FROM "assignments" WHERE "assignments"."course_id" = %s
+@enduml

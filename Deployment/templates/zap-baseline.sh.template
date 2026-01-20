@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Template: OWASP ZAP baseline scan
+# Usage: ./zap-baseline.sh http://localhost:8000/api
+
+TARGET=${1:-http://localhost:8000/api}
+
+docker run --rm -t owasp/zap2docker-stable zap-baseline.py \
+  -t "$TARGET" \
+  -r zap_report.html

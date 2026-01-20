@@ -1,0 +1,31 @@
+@startuml
+autonumber
+participant Client
+database Postgres
+participant eel-backend
+
+Client ->> eel-backend: DELETE api/v1/auth/user/<str:username>
+eel-backend ->> Postgres: SELECT "app_users"."id", "app_users"."last_login", "app_users"."is_superuser", "app_users"."username", "app_users"."name", "app_users"."enabled", "app_users"."is_staff", "app_users"."created_at", "app_users"."updated_at", "app_users"."password_hash" FROM "app_users" WHERE "app_users"."id" = %s LIMIT 21
+eel-backend ->> Postgres: SELECT "user_roles"."role" AS "role" FROM "user_roles" WHERE "user_roles"."user_id" = %s
+eel-backend ->> Postgres: SELECT "app_users"."id", "app_users"."last_login", "app_users"."is_superuser", "app_users"."username", "app_users"."name", "app_users"."enabled", "app_users"."is_staff", "app_users"."created_at", "app_users"."updated_at", "app_users"."password_hash" FROM "app_users" WHERE "app_users"."username" = %s ORDER BY "app_users"."id" ASC LIMIT 1
+eel-backend ->> Postgres: SELECT "user_roles"."role" AS "role" FROM "user_roles" WHERE "user_roles"."user_id" = %s
+eel-backend ->> Postgres: SELECT "user_roles"."role" AS "role" FROM "user_roles" WHERE "user_roles"."user_id" = %s
+eel-backend ->> Postgres: SELECT "teacher_profiles"."id" FROM "teacher_profiles" WHERE "teacher_profiles"."user_id" IN (%s)
+eel-backend ->> Postgres: SELECT "courses"."id" FROM "courses" WHERE "courses"."teacher_profile_id" IN (%s)
+eel-backend ->> Postgres: SELECT "student_profiles"."id" FROM "student_profiles" WHERE "student_profiles"."user_id" IN (%s)
+eel-backend ->> Postgres: SELECT "student_profiles"."id" FROM "student_profiles" WHERE "student_profiles"."created_by_user_id" IN (%s)
+eel-backend ->> Postgres: SELECT "assessments"."id" FROM "assessments" WHERE "assessments"."created_by_admin_id" IN (%s)
+eel-backend ->> Postgres: SELECT "assignments"."id" FROM "assignments" WHERE "assignments"."created_by_user_id" IN (%s)
+eel-backend ->> Postgres: DELETE FROM "django_admin_log" WHERE "django_admin_log"."user_id" IN (%s)
+eel-backend ->> Postgres: DELETE FROM "app_users_groups" WHERE "app_users_groups"."user_id" IN (%s)
+eel-backend ->> Postgres: DELETE FROM "app_users_user_permissions" WHERE "app_users_user_permissions"."user_id" IN (%s)
+eel-backend ->> Postgres: DELETE FROM "user_roles" WHERE "user_roles"."user_id" IN (%s)
+eel-backend ->> Postgres: DELETE FROM "oauth_accounts" WHERE "oauth_accounts"."user_id" IN (%s)
+eel-backend ->> Postgres: UPDATE "token_blacklist_outstandingtoken" SET "user_id" = NULL WHERE "token_blacklist_outstandingtoken"."user_id" IN (%s)
+eel-backend ->> Postgres: UPDATE "assignments" SET "teacher_id" = NULL WHERE "assignments"."teacher_id" IN (%s)
+eel-backend ->> Postgres: UPDATE "submissions" SET "student_id" = NULL WHERE "submissions"."student_id" IN (%s)
+eel-backend ->> Postgres: UPDATE "submissions" SET "teacher_id" = NULL WHERE "submissions"."teacher_id" IN (%s)
+eel-backend ->> Postgres: UPDATE "response" SET "respondent_id" = NULL WHERE "response"."respondent_id" IN (%s)
+eel-backend ->> Postgres: DELETE FROM "teacher_profiles" WHERE "teacher_profiles"."id" IN (%s)
+eel-backend ->> Postgres: DELETE FROM "app_users" WHERE "app_users"."id" IN (%s)
+@enduml

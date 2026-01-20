@@ -1,0 +1,7 @@
+@startuml
+autonumber
+participant Client
+participant eel-backend
+
+Client ->> eel-backend: GET api/v1/assignments/users/<int:user_id>
+@enduml

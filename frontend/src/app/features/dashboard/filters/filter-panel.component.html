@@ -1,0 +1,105 @@
+<div class="filter-panel">
+  <div class="filter-header">
+    <h3>Filter Data</h3>
+    <button class="reset-btn" (click)="resetFilters()">Reset All</button>
+  </div>
+
+  <div class="filter-section">
+    <div class="filter-group">
+      <label for="course">Course</label>
+      <select
+        id="course"
+        [(ngModel)]="selectedCourseId"
+        (change)="onCourseChange()"
+        class="filter-select"
+      >
+        <option [ngValue]="null">All Courses</option>
+        <option *ngFor="let course of courses" [ngValue]="course.id">
+          {{ course.name }}
+        </option>
+      </select>
+    </div>
+
+    <div class="filter-group" *ngIf="isTeacher && canSelectStudent">
+      <label for="student">Student</label>
+      <select
+        id="student"
+        [(ngModel)]="selectedStudentId"
+        (change)="onStudentChange()"
+        class="filter-select"
+      >
+        <option [ngValue]="null">All Students</option>
+        <option *ngFor="let student of students" [ngValue]="student.id">
+          {{ student.name }}
+        </option>
+      </select>
+    </div>
+
+    <div class="filter-group" *ngIf="isAdmin">
+      <label for="teacher">Teacher</label>
+      <select
+        id="teacher"
+        [(ngModel)]="selectedTeacherId"
+        (change)="onTeacherChange()"
+        class="filter-select"
+      >
+        <option [ngValue]="null">All Teachers</option>
+        <option *ngFor="let teacher of teachers" [ngValue]="teacher.id">
+          {{ teacher.name }}
+        </option>
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label for="category">Category</label>
+      <select
+        id="category"
+        [(ngModel)]="selectedCategory"
+        (change)="onCategoryChange()"
+        class="filter-select"
+      >
+        <option [ngValue]="null">All Categories</option>
+        <option *ngFor="let category of categories" [ngValue]="category">
+          {{ category }}
+        </option>
+      </select>
+    </div>
+
+    <div class="filter-group">
+      <label for="assessment">Assessment</label>
+      <select
+        id="assessment"
+        [(ngModel)]="selectedAssessmentId"
+        (change)="onAssessmentChange()"
+        class="filter-select"
+      >
+        <option [ngValue]="null">All Assessments</option>
+        <option
+          *ngFor="let assessment of assessments"
+          [ngValue]="assessment.id"
+        >
+          {{ assessment.title }}
+        </option>
+      </select>
+    </div>
+
+    <!-- <div class="filter-group checkbox-group">
+      <label>
+        <input
+          type="checkbox"
+          [(ngModel)]="isMoodMeterOnly"
+          (change)="onMoodMeterToggle()"
+        />
+        <span>Mood Meter</span>
+      </label>
+    </div> -->
+  </div>
+
+  <div class="filter-info">
+  <p class="info-text">
+    <strong>Tip:</strong> Select filters to narrow down your data. At least
+    {{ isTeacher ? "5" : "5" }} submissions are needed for statistical
+    visualizations.
+  </p>
+  </div>
+</div>

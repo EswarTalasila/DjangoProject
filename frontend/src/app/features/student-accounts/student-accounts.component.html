@@ -1,0 +1,113 @@
+<div class="container">
+  <h1>Add Students</h1>
+  <div class="inputs">
+    <form class="student-form" (submit)="onSubmit($event)">
+      <div class="form-group">
+        <input
+          type="text"
+          id="fname"
+          name="fname"
+          placeholder="first name"
+          required
+        />
+      </div>
+      <div class="form-group">
+        <input
+          type="text"
+          id="lname"
+          name="lname"
+          placeholder="last name"
+          required
+        />
+      </div>
+      <div class="form-group">
+        <input
+          type="text"
+          id="email"
+          name="email"
+          placeholder="email"
+          required
+        />
+      </div>
+      <div class="form-group consent-group">
+        <label class="consent-label">
+          <input
+            type="checkbox"
+            id="consent"
+            name="consent"
+            [(ngModel)]="studentConsent"
+          />
+          Student has given consent
+        </label>
+      </div>
+      <button id="add-student" type="submit">Add Student</button>
+    </form>
+    <div class="lined-text">
+      <p>or</p>
+    </div>
+    <div class="upload-container">
+      <h3>Upload Spreadsheet</h3>
+      
+      <!-- Info Dialog -->
+      <div class="info-dialog" *ngIf="showInfoDialog" [@fadeIn]>
+        <button class="close-btn" (click)="closeInfoDialog()" aria-label="Close">✕</button>
+        <h4>Bulk Upload Instructions</h4>
+        <p class="dialog-description">Upload a CSV file to add multiple students at once.</p>
+        <div class="dialog-content">
+          <p><strong>Accepted File Type:</strong> CSV (.csv)</p>
+          <p><strong>Required Columns:</strong></p>
+          <ul>
+            <li><code>First Name</code> - Student's first name</li>
+            <li><code>Last Name</code> - Student's last name</li>
+            <li><code>Email</code> - Student's email address</li>
+            <li><code>Consent</code> (optional) - true/false (defaults to true if not specified)</li>
+          </ul>
+          <p class="note"><strong>Note:</strong> Column names must match exactly as shown above.</p>
+        </div>
+      </div>
+      
+      <div class="file-row">
+        <label class="file-btn" for="fileInput">Choose file</label>
+        <input
+          id="fileInput"
+          type="file"
+          (change)="onFileSelected($event)"
+          accept=".xlsx,.csv"
+          hidden
+        />
+        <span class="file-name">{{ selectedFileName }}</span>
+      </div>
+
+      <div *ngIf="previewData.length > 0">
+        <h4>Preview:</h4>
+        <table>
+          <thead>
+            <tr>
+              <th>First Name</th>
+              <th>Last Name</th>
+              <th>Email</th>
+              <th>Consent</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let s of previewData.slice(0, 5)">
+              <td data-label="First Name">{{ s.firstName }}</td>
+              <td data-label="Last Name">{{ s.lastName }}</td>
+              <td data-label="Email">{{ s.username }}</td>
+              <td data-label="Consent">{{ s.consent ? 'Yes' : 'No' }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="confirm-row">
+          <button
+            class="confirm-btn"
+            [disabled]="previewData.length === 0"
+            (click)="onSubmitBulk()"
+          >
+            Confirm Upload
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

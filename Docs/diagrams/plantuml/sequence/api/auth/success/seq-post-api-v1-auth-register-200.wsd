@@ -1,0 +1,14 @@
+@startuml
+autonumber
+participant Client
+database Postgres
+participant eel-backend
+
+Client ->> eel-backend: POST api/v1/auth/register
+eel-backend ->> Postgres: SELECT %s AS "a" FROM "app_users" WHERE UPPER("app_users"."username"::text) = UPPER(%s) LIMIT 1
+eel-backend ->> Postgres: INSERT INTO "app_users" ("last_login", "is_superuser", "username", "name", "enabled", "is_staff", "created_at", "updated_at", "password_hash") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING "app_users"."id"
+eel-backend ->> Postgres: DELETE FROM "user_roles" WHERE "user_roles"."user_id" = %s
+eel-backend ->> Postgres: INSERT INTO "user_roles" ("user_id", "role") VALUES (%s, %s) RETURNING "user_roles"."id"
+eel-backend ->> Postgres: SELECT %s AS "a" FROM "student_profiles" WHERE "student_profiles"."user_id" = %s LIMIT 1
+eel-backend ->> Postgres: INSERT INTO "student_profiles" ("user_id", "created_by_user_id", "consent", "created_at") VALUES (%s, %s, %s, %s) RETURNING "student_profiles"."id"
+@enduml

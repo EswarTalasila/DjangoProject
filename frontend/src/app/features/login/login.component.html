@@ -1,0 +1,41 @@
+<div class="login-container">
+  <h1>Login</h1>
+  <div class="login-actions">
+    <button id="google-signin-button" (click)="signInWithGoogle()">
+      <span class="google-logo"
+        ><img src="/google.svg" alt="Google logo"
+      /></span>
+      Sign in with Google
+    </button>
+    <div class="lined-text">
+      <p>or</p>
+    </div>
+    <form class="login-form" (submit)="showPasswordField ? onSubmit($event) : checkEmail()">
+      <div class="form-group">
+        <input
+          type="text"
+          id="email"
+          name="email"
+          [(ngModel)]="email"
+          placeholder="email"
+          required
+        />
+      </div>
+
+      <button id="continue-btn" *ngIf="!showPasswordField" type="button" (click)="checkEmail()" [disabled]="!email">Continue</button>
+
+      <div *ngIf="showPasswordField" class="form-group">
+        <input
+          type="password"
+          id="password"
+          name="password"
+          [(ngModel)]="password"
+          placeholder="password"
+          required
+        />
+      </div>
+      <button *ngIf="showPasswordField" id="login-button" type="submit" [disabled]="!password">Login</button>
+    </form>
+    <link rel="stylesheet" href="">
+  </div>
+</div>

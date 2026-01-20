@@ -1,0 +1,17 @@
+@startuml
+autonumber
+participant Client
+database Postgres
+participant eel-backend
+
+Client ->> eel-backend: POST api/v1/auth/createuser
+eel-backend ->> Postgres: SELECT "app_users"."id", "app_users"."last_login", "app_users"."is_superuser", "app_users"."username", "app_users"."name", "app_users"."enabled", "app_users"."is_staff", "app_users"."created_at", "app_users"."updated_at", "app_users"."password_hash" FROM "app_users" WHERE "app_users"."id" = %s LIMIT 21
+eel-backend ->> Postgres: SELECT "user_roles"."role" AS "role" FROM "user_roles" WHERE "user_roles"."user_id" = %s
+eel-backend ->> Postgres: SELECT "user_roles"."role" AS "role" FROM "user_roles" WHERE "user_roles"."user_id" = %s
+eel-backend ->> Postgres: SELECT %s AS "a" FROM "app_users" WHERE UPPER("app_users"."username"::text) = UPPER(%s) LIMIT 1
+eel-backend ->> Postgres: INSERT INTO "app_users" ("last_login", "is_superuser", "username", "name", "enabled", "is_staff", "created_at", "updated_at", "password_hash") VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING "app_users"."id"
+eel-backend ->> Postgres: DELETE FROM "user_roles" WHERE "user_roles"."user_id" = %s
+eel-backend ->> Postgres: INSERT INTO "user_roles" ("user_id", "role") VALUES (%s, %s) RETURNING "user_roles"."id"
+eel-backend ->> Postgres: SELECT %s AS "a" FROM "teacher_profiles" WHERE "teacher_profiles"."user_id" = %s LIMIT 1
+eel-backend ->> Postgres: INSERT INTO "teacher_profiles" ("user_id", "created_at") VALUES (%s, %s) RETURNING "teacher_profiles"."id"
+@enduml

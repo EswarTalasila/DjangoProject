@@ -1,0 +1,23 @@
+# Template: Traefik static configuration
+# Copy to traefik.yml and fill in the email and domain.
+
+api:
+  dashboard: true
+
+providers:
+  docker:
+    exposedByDefault: false
+
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+
+certificatesResolvers:
+  le:
+    acme:
+      email: REPLACE_ME
+      storage: /letsencrypt/acme.json
+      httpChallenge:
+        entryPoint: web

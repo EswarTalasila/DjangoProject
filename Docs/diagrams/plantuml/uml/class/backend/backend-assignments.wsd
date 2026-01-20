@@ -1,0 +1,22 @@
+@startuml
+hide circle
+skinparam classAttributeIconSize 0
+
+package "assignments" {
+class assignmentsServices <<Service>> {
+  +assignment_to_dto(assignment: Assignment): dict
+  +create_assignment(creator_user: User, payload: dict): Assignment
+  +get_assignment(assignment_id: int): Assignment
+  +list_by_course(course_id: int): List[Assignment]
+  +list_for_user(user: User): List[Assignment]
+  +delete_assignment(assignment: Assignment): None
+  +_create_submissions_for_course(assignment: Assignment): None
+  +_answer_type_from_question(question: Any): str
+}
+class AssignmentSerializer {
+}
+class AssignmentAdmin {
+}
+}
+
+@enduml

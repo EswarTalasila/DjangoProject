@@ -1,0 +1,14 @@
+repos:
+  - repo: local
+    hooks:
+      - id: backend-checks
+        name: Backend lint + type + docstring checks (Docker)
+        entry: scripts/lint/run_backend_checks.sh
+        language: system
+        pass_filenames: false
+
+      - id: backend-docstrings
+        name: Backend docstring coverage (Docker)
+        entry: scripts/lint/run_docstring_check.sh
+        language: system
+        pass_filenames: false
