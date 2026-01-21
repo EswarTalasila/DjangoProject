@@ -266,8 +266,17 @@ def find_root(spans: list[dict]) -> dict | None:
 
 
 def sanitize(value: str) -> str:
+    """Sanitize a string for use in filenames across all platforms.
+
+    Removes or replaces characters that are invalid on Windows, macOS, or Linux:
+    - Slashes, colons, spaces become hyphens
+    - Angle brackets, curly braces, and other special chars are removed
+    """
     cleaned = value.replace("/", "-").replace(" ", "-").replace("{", "").replace("}", "")
     cleaned = cleaned.replace(":", "-").replace(".", "-")
+    # Remove characters invalid on Windows: < > " | ? *
+    cleaned = cleaned.replace("<", "").replace(">", "")
+    cleaned = cleaned.replace('"', "").replace("|", "").replace("?", "").replace("*", "")
     while "--" in cleaned:
         cleaned = cleaned.replace("--", "-")
     return cleaned.strip("-") or "unknown"
