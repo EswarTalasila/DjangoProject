@@ -6,11 +6,11 @@ Define the supported question types, answer payloads, and grading behavior for p
 ## Matrix
 | QuestionType | AnswerType | Required Fields | Auto-Scorable | Grading Logic |
 |---|---|---|---|---|
-| MULTIPLE_CHOICE | MultipleChoiceAnswer | selected: int[] | Yes | Exact match vs correct answers, score sum | 
-| SHORT_ANSWER | ShortAnswerAnswer | text: string | Partial | Case sensitivity + trim flags | 
-| NUMBER_SCALE | NumberScaleAnswer | value: number | Yes | Direct mapping or range score | 
-| MOOD_METER | MoodMeterAnswer | x: int, y: int | No | No scoring | 
-| GRADING_CRITERIA | RubricAnswer | levelId: int | No | Teacher selects rubric level | 
+| MULTIPLE_CHOICE | MultipleChoiceAnswer | selected: int[] | Yes | Exact match vs correct answers, score sum |
+| SHORT_ANSWER | ShortAnswerAnswer | text: string | Partial | Case sensitivity + trim flags |
+| NUMBER_SCALE | NumberScaleAnswer | value: number | Yes | Direct mapping or range score |
+| MOOD_METER | MoodMeterAnswer | x: int, y: int | No | No scoring |
+| GRADING_CRITERIA | RubricAnswer | levelId: int | No | Teacher selects rubric level |
 
 ## Data constraints
 - Question definitions are immutable once submissions exist (version or lock).

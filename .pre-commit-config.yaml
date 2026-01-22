@@ -1,0 +1,79 @@
+# Pre-commit hooks configuration
+# https://pre-commit.com
+#
+# Install hooks: pre-commit install
+# Run manually:  pre-commit run --all-files
+# Update hooks:  pre-commit autoupdate
+#
+# These hooks run automatically on `git commit`. If a hook modifies files,
+# the commit is aborted so you can review the changes, re-stage, and commit again.
+
+repos:
+  # ===========================================================================
+  # Ruff - Python linting and formatting
+  # ===========================================================================
+  # Ruff replaces flake8, isort, pyupgrade, and more in a single fast tool.
+  # Configuration is in backend/pyproject.toml under [tool.ruff]
+  #
+  # Safe fixes only: formatting, import sorting, whitespace
+  # Unsafe fixes (unused imports, code simplification) are reported but not auto-fixed
+  # ===========================================================================
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      # Linter: checks for errors and style issues
+      # --fix applies only safe fixes (formatting, imports)
+      # Unsafe fixes are shown as warnings for manual review
+      - id: ruff
+        name: ruff (lint)
+        args: [--fix, --exit-non-zero-on-fix]
+        files: ^backend/
+
+      # Formatter: consistent code style (like black, but faster)
+      - id: ruff-format
+        name: ruff (format)
+        files: ^backend/
+
+  # ===========================================================================
+  # General file hygiene
+  # ===========================================================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # Prevent large files from being committed
+      - id: check-added-large-files
+        args: [--maxkb=500]
+
+      # Fix trailing whitespace
+      - id: trailing-whitespace
+        exclude: ^frontend/
+
+      # Ensure files end with a newline
+      - id: end-of-file-fixer
+        exclude: ^frontend/
+
+      # Check YAML syntax
+      - id: check-yaml
+        args: [--unsafe]  # Allow custom tags
+
+      # Check TOML syntax
+      - id: check-toml
+
+      # Prevent commits to main/master
+      - id: no-commit-to-branch
+        args: [--branch, master, --branch, main]
+
+  # ===========================================================================
+  # Future: mypy (disabled until DTOs are in place)
+  # ===========================================================================
+  # Uncomment after completing issue #3 (pydantic DTOs) and #4 (mypy strict)
+  #
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.8.0
+  #   hooks:
+  #     - id: mypy
+  #       files: ^backend/src/
+  #       additional_dependencies:
+  #         - django-stubs
+  #         - djangorestframework-stubs
+  #         - pydantic
