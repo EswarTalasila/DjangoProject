@@ -8,7 +8,7 @@ A web application for managing educational assessments, student submissions, and
 |------------|--------------------------------------------------|
 | Frontend   | Angular 21, TypeScript, SCSS                     |
 | Backend    | Django 5, Django REST Framework, Python 3.12     |
-| Database   | PostgreSQL 16                                    |
+| Database   | PostgreSQL 17                                    |
 | Auth       | JWT (SimpleJWT) + Google OAuth                   |
 | Testing    | pytest (backend, 53 tests), Playwright (E2E)     |
 | Containers | Docker, Docker Compose, Traefik (reverse proxy)  |
@@ -19,7 +19,7 @@ A web application for managing educational assessments, student submissions, and
 - OR for local development:
   - Python 3.12+
   - Node.js 22 LTS (see `.nvmrc`)
-  - PostgreSQL 16+
+  - PostgreSQL 17+
 
 ## User Guide
 
@@ -69,7 +69,7 @@ docker compose exec backend python src/manage.py createsuperuser
 |----------------|------|---------------------------------------------------|
 | `frontend`     | 4200 | Angular dev server with hot reload                |
 | `backend`      | 8000 | Django REST API                                   |
-| `database`     | 5432 | PostgreSQL 16                                     |
+| `database`     | 5432 | PostgreSQL 17                                     |
 | `pgadmin`      | 5050 | Database management UI (auto-connects to database)|
 | `traefik`      | 80   | Reverse proxy (production routing)                |
 | `frontend-e2e` | -    | Playwright E2E test runner with headless Chromium |
