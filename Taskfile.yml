@@ -1,0 +1,201 @@
+# https://taskfile.dev
+# Run `task --list` to see all available tasks
+# Run `task <name>` to execute a task
+
+version: "3"
+
+vars:
+  DOCKER_COMPOSE: docker compose
+  BACKEND_CONTAINER: backend
+  FRONTEND_CONTAINER: frontend
+  DATABASE_CONTAINER: database
+
+tasks:
+  # ===========================================================================
+  # Default
+  # ===========================================================================
+  default:
+    desc: List all available tasks
+    cmds:
+      - task --list
+
+  # ===========================================================================
+  # Docker: Container Management
+  # ===========================================================================
+  docker:rebuild:
+    desc: Full rebuild - stop, rebuild images (no cache), and start
+    cmds:
+      - "{{.DOCKER_COMPOSE}} down"
+      - "{{.DOCKER_COMPOSE}} build --no-cache"
+      - "{{.DOCKER_COMPOSE}} up -d"
+
+  docker:rebuild-backend:
+    desc: Rebuild only the backend container
+    cmds:
+      - "{{.DOCKER_COMPOSE}} up -d --build {{.BACKEND_CONTAINER}}"
+
+  docker:rebuild-frontend:
+    desc: Rebuild only the frontend container
+    cmds:
+      - "{{.DOCKER_COMPOSE}} up -d --build {{.FRONTEND_CONTAINER}}"
+
+  docker:logs:
+    desc: Follow logs for all services
+    cmds:
+      - "{{.DOCKER_COMPOSE}} logs -f"
+
+  docker:logs-backend:
+    desc: Follow backend logs
+    cmds:
+      - "{{.DOCKER_COMPOSE}} logs -f {{.BACKEND_CONTAINER}}"
+
+  docker:shell:
+    desc: Open a shell in the backend container
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} sh"
+
+  docker:db-shell:
+    desc: Open psql shell in the database container
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.DATABASE_CONTAINER}} psql -U datadash -d datadash"
+
+  # ===========================================================================
+  # Testing
+  # ===========================================================================
+  test:
+    desc: Run all backend tests
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest"
+
+  test:verbose:
+    desc: Run all backend tests with verbose output
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -v"
+
+  test:coverage:
+    desc: Run tests with coverage report
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest --cov=src --cov-report=term-missing"
+
+  test:coverage-html:
+    desc: Run tests with HTML coverage report
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest --cov=src --cov-report=html"
+      - 'echo "Coverage report generated at backend/htmlcov/index.html"'
+
+  test:integration:
+    desc: Run integration tests only
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest tests/integration -v"
+
+  test:workflow:
+    desc: Run workflow tests only
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -m workflow -v"
+
+  test:frontend:
+    desc: Run frontend unit tests
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.FRONTEND_CONTAINER}} npm test -- --watch=false"
+
+  test:e2e:
+    desc: Run Playwright E2E tests (requires e2e profile)
+    cmds:
+      - "{{.DOCKER_COMPOSE}} --profile e2e run --rm frontend-e2e npx playwright test"
+
+  # ===========================================================================
+  # Code Quality
+  # ===========================================================================
+  lint:
+    desc: Run ruff linter (check only)
+    dir: backend
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} ruff check src tests"
+
+  lint:fix:
+    desc: Run ruff linter with safe auto-fixes
+    dir: backend
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} ruff check src tests --fix"
+
+  format:
+    desc: Run ruff formatter
+    dir: backend
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} ruff format src tests"
+
+  format:check:
+    desc: Check formatting without making changes
+    dir: backend
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} ruff format src tests --check"
+
+  typecheck:
+    desc: Run mypy type checker
+    dir: backend
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} mypy src"
+
+  check:
+    desc: Run all checks (lint + format check + typecheck)
+    cmds:
+      - task: lint
+      - task: format:check
+      - task: typecheck
+
+  # ===========================================================================
+  # Pre-commit
+  # ===========================================================================
+  hooks:install:
+    desc: Install pre-commit hooks
+    cmds:
+      - pre-commit install
+
+  hooks:run:
+    desc: Run all pre-commit hooks on all files
+    cmds:
+      - pre-commit run --all-files
+
+  hooks:update:
+    desc: Update pre-commit hooks to latest versions
+    cmds:
+      - pre-commit autoupdate
+
+  # ===========================================================================
+  # Django Management
+  # ===========================================================================
+  migrate:
+    desc: Run Django database migrations
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py migrate"
+
+  makemigrations:
+    desc: Create new Django migrations
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py makemigrations"
+
+  django:shell:
+    desc: Open Django shell
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py shell"
+
+  django:createsuperuser:
+    desc: Create a Django superuser
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py createsuperuser"
+
+  # ===========================================================================
+  # Local Development (IDE support, not for running the app)
+  # ===========================================================================
+  local:sync:
+    desc: Install backend deps locally for IDE resolution (requires uv)
+    dir: backend
+    cmds:
+      - uv pip install -e ".[dev]"
+
+  local:venv:
+    desc: Create local venv with uv for IDE support
+    dir: backend
+    cmds:
+      - uv venv
+      - 'echo "Activate with: source .venv/bin/activate"'

@@ -21,5 +21,6 @@ warn_return_any = true
 check_untyped_defs = true
 ignore_missing_imports = true
 
-[tool.mypy.tests.*]
+[[tool.mypy.overrides]]
+module = "tests.*"
 ignore_errors = true

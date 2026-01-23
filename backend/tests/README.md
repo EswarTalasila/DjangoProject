@@ -52,4 +52,3 @@ pytest -m workflow_student -v
 ### Security
 
 - `security/__init__.py`
-

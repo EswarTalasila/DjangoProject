@@ -4,14 +4,14 @@ A web application for managing educational assessments, student submissions, and
 
 ## Technology Stack
 
-| Layer | Technology |
-|-------|------------|
-| Frontend | Angular 21, TypeScript, SCSS |
-| Backend | Django 5, Django REST Framework, Python 3.12 |
-| Database | PostgreSQL 16 |
-| Auth | JWT (SimpleJWT) + Google OAuth |
-| Testing | pytest (backend, 53 tests), Playwright (E2E) |
-| Containers | Docker, Docker Compose, Traefik (reverse proxy) |
+| Layer      | Technology                                       |
+|------------|--------------------------------------------------|
+| Frontend   | Angular 21, TypeScript, SCSS                     |
+| Backend    | Django 5, Django REST Framework, Python 3.12     |
+| Database   | PostgreSQL 16                                    |
+| Auth       | JWT (SimpleJWT) + Google OAuth                   |
+| Testing    | pytest (backend, 53 tests), Playwright (E2E)     |
+| Containers | Docker, Docker Compose, Traefik (reverse proxy)  |
 
 ## Prerequisites
 
@@ -65,13 +65,13 @@ docker compose exec backend python src/manage.py createsuperuser
 
 ### Docker Services
 
-| Service | Port | Description |
-|---------|------|-------------|
-| `frontend` | 4200 | Angular dev server with hot reload |
-| `backend` | 8000 | Django REST API |
-| `database` | 5432 | PostgreSQL 16 |
-| `traefik` | 80 | Reverse proxy (production routing) |
-| `frontend-e2e` | - | Playwright E2E test runner with headless Chromium |
+| Service        | Port | Description                                       |
+|----------------|------|---------------------------------------------------|
+| `frontend`     | 4200 | Angular dev server with hot reload                |
+| `backend`      | 8000 | Django REST API                                   |
+| `database`     | 5432 | PostgreSQL 16                                     |
+| `traefik`      | 80   | Reverse proxy (production routing)                |
+| `frontend-e2e` | -    | Playwright E2E test runner with headless Chromium |
 
 ### Roles and Workflows
 - Admin: creates assessments and manages users.
@@ -98,7 +98,97 @@ nvm use
 
 nvm reads the `.nvmrc` file automatically when you run `nvm use` or `nvm install` without a version argument.
 
+### Pre-commit Hooks
+
+This project uses [pre-commit](https://pre-commit.com/) to run code quality checks before each commit. Hooks are configured in `.pre-commit-config.yaml`.
+
+```bash
+# Install pre-commit (if not already installed)
+pip install pre-commit
+# or: brew install pre-commit
+
+# Install the git hooks
+pre-commit install
+
+# Run hooks manually on all files
+pre-commit run --all-files
+
+# Update hooks to latest versions
+pre-commit autoupdate
+```
+
+**How it works:**
+1. You stage files with `git add`
+2. You run `git commit`
+3. Pre-commit runs ruff (linter + formatter) on staged files
+4. If ruff makes changes, the commit is **aborted** and changes are left unstaged
+5. You review the changes, verify they work, re-stage, and commit again
+
+**Configured hooks:**
+- **ruff (lint)** - Checks for errors, applies safe auto-fixes (formatting, import sorting)
+- **ruff (format)** - Consistent code formatting
+- **trailing-whitespace** - Removes trailing whitespace
+- **end-of-file-fixer** - Ensures files end with newline
+- **check-yaml/check-toml** - Validates config file syntax
+- **no-commit-to-branch** - Prevents direct commits to main/master
+
+Unsafe fixes (removing unused imports, code simplification) are reported as warnings for manual review but not auto-applied.
+
+## Task Runner
+
+This project uses [Task](https://taskfile.dev/) for running common commands. Task is a modern alternative to Make with simpler syntax.
+
+### Installing Task
+
+```bash
+# macOS
+brew install go-task
+
+# Linux (snap)
+sudo snap install task --classic
+
+# Linux (script)
+sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+# Windows (scoop)
+scoop install task
+
+# Windows (chocolatey)
+choco install go-task
+```
+
+### Available Tasks
+
+Run `task --list` to see all available commands. Key tasks:
+
+| Task                       | Description                                |
+|----------------------------|--------------------------------------------|
+| `task test`                | Run all backend tests                      |
+| `task test:coverage`       | Run tests with coverage report             |
+| `task lint`                | Run ruff linter                            |
+| `task lint:fix`            | Run linter with safe auto-fixes            |
+| `task format`              | Format code with ruff                      |
+| `task typecheck`           | Run mypy type checker                      |
+| `task check`               | Run all checks (lint + format + typecheck) |
+| `task docker:rebuild`      | Full rebuild (down, build --no-cache, up)  |
+| `task docker:logs-backend` | Follow backend logs                        |
+| `task migrate`             | Run Django migrations                      |
+| `task hooks:install`       | Install pre-commit hooks                   |
+| `task hooks:run`           | Run pre-commit on all files                |
+| `task local:sync`          | Install deps locally for IDE support       |
+
+### Task Groups
+
+- `docker:*` - Container management (rebuild, logs, shell)
+- `test:*` - Testing (unit, integration, coverage, e2e)
+- `lint`, `format`, `typecheck`, `check` - Code quality
+- `hooks:*` - Pre-commit hook management
+- `django:*` - Django management commands
+- `local:*` - Local development (IDE support)
+
 ## Common Commands
+
+The following commands work without Task installed. For a streamlined experience, see the Task Runner section above.
 
 ### Starting and Stopping
 
@@ -244,7 +334,44 @@ docker compose run --rm frontend npm run lint
 
 ## Local Development (Without Docker)
 
-### Backend
+### Backend with uv (Recommended)
+
+[uv](https://docs.astral.sh/uv/) is a fast Python package manager that handles virtual environments and dependencies. It's 10-100x faster than pip.
+
+```bash
+# Install uv (macOS/Linux)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install uv (Windows)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# Navigate to backend
+cd backend
+
+# Create virtual environment and install dependencies
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -e ".[dev]"
+
+# Set environment variables (or use .env file)
+export DATABASE_URL=postgres://user:pass@localhost:5432/datadash
+export DJANGO_SECRET_KEY=local-dev-secret
+export DJANGO_DEBUG=true
+
+# Run migrations
+python src/manage.py migrate
+
+# Start development server
+python src/manage.py runserver
+```
+
+**IDE Support:** If using Docker for development but want IDE autocompletion, run:
+```bash
+cd backend && uv venv && uv pip install -e ".[dev]"
+```
+This installs dependencies locally so your IDE can resolve imports without running the app locally.
+
+### Backend with pip (Alternative)
 
 ```bash
 cd backend
@@ -318,31 +445,31 @@ npm start
 
 See `.env.template` for the full list. Key variables:
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `POSTGRES_PASSWORD` | Database password | Yes |
-| `DJANGO_SECRET_KEY` | Django secret for sessions/CSRF | Yes |
-| `JWT_SECRET_KEY` | JWT signing key | Yes |
-| `DJANGO_DEBUG` | Enable debug mode (false in prod) | No |
-| `DJANGO_ALLOWED_HOSTS` | Comma-separated allowed hosts | Yes (prod) |
-| `DJANGO_CORS_ALLOWED_ORIGINS` | Comma-separated CORS origins | Yes (prod) |
-| `GOOGLE_OAUTH_CLIENT_ID` | Google OAuth client ID | No |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth client secret | No |
-| `OTEL_TRACE_FILE` | Local OTEL JSONL trace output (do not commit) | No |
+| Variable                       | Description                                  | Required   |
+|--------------------------------|----------------------------------------------|------------|
+| `POSTGRES_PASSWORD`            | Database password                            | Yes        |
+| `DJANGO_SECRET_KEY`            | Django secret for sessions/CSRF              | Yes        |
+| `JWT_SECRET_KEY`               | JWT signing key                              | Yes        |
+| `DJANGO_DEBUG`                 | Enable debug mode (false in prod)            | No         |
+| `DJANGO_ALLOWED_HOSTS`         | Comma-separated allowed hosts                | Yes (prod) |
+| `DJANGO_CORS_ALLOWED_ORIGINS`  | Comma-separated CORS origins                 | Yes (prod) |
+| `GOOGLE_OAUTH_CLIENT_ID`       | Google OAuth client ID                       | No         |
+| `GOOGLE_OAUTH_CLIENT_SECRET`   | Google OAuth client secret                   | No         |
+| `OTEL_TRACE_FILE`              | Local OTEL JSONL trace output (do not commit)| No         |
 
 ## API Endpoints
 
 The API is versioned under `/api/v1/`. Key endpoint groups:
 
-| Path | Description |
-|------|-------------|
-| `/api/v1/auth/` | Authentication (login, register, OAuth) |
-| `/api/v1/assessments/` | Assessment CRUD (admin only) |
-| `/api/v1/assignments/` | Assignment distribution |
-| `/api/v1/courses/` | Course management |
-| `/api/v1/students/` | Student enrollment |
-| `/api/v1/submissions/` | Submission create/read/grade |
-| `/api/v1/visualizations/` | Dashboard data aggregation |
+| Path                      | Description                             |
+|---------------------------|-----------------------------------------|
+| `/api/v1/auth/`           | Authentication (login, register, OAuth) |
+| `/api/v1/assessments/`    | Assessment CRUD (admin only)            |
+| `/api/v1/assignments/`    | Assignment distribution                 |
+| `/api/v1/courses/`        | Course management                       |
+| `/api/v1/students/`       | Student enrollment                      |
+| `/api/v1/submissions/`    | Submission create/read/grade            |
+| `/api/v1/visualizations/` | Dashboard data aggregation              |
 
 See `Docs/Specs/12-API-Contract.md` for full API documentation.
 
@@ -487,7 +614,8 @@ See `Docs/Specs/08-Migration-Plan.md` for tracked issues including:
 ## Contributing
 
 1. Create a feature branch from `main`
-2. Follow the code style in `Docs/Specs/11-Code-Style-and-Architecture.md`
-3. Add tests for new functionality
-4. Run linting and tests before committing
-5. Submit a pull request with a clear description
+2. Install pre-commit hooks: `pre-commit install`
+3. Follow the code style in `Docs/Specs/11-Code-Style-and-Architecture.md`
+4. Add tests for new functionality
+5. Run `task check` before committing (or let pre-commit hooks run automatically)
+6. Submit a pull request with a clear description

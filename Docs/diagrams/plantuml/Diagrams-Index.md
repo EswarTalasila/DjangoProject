@@ -163,4 +163,3 @@ All paths are relative to `Docs/diagrams/plantuml/`.
 #### error
 
 - `sequence/api/visualization/error/seq-post-api-v1-visualization-403.wsd`
-
