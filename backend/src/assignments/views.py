@@ -64,7 +64,7 @@ def create(request):
         assignment = create_assignment(request.user, serializer.validated_data)
     except ValueError as exc:
         return error_response(exc)
-    return Response(assignment_to_dto(assignment), status=status.HTTP_201_CREATED)
+    return Response(assignment_to_dto(assignment).model_dump(), status=status.HTTP_201_CREATED)
 
 
 @api_view(["GET", "DELETE"])
@@ -100,7 +100,7 @@ def detail(request, assignment_id: int):
             ).exists()
             if not enrolled:
                 return Response(status=status.HTTP_403_FORBIDDEN)
-        return Response(assignment_to_dto(assignment), status=status.HTTP_200_OK)
+        return Response(assignment_to_dto(assignment).model_dump(), status=status.HTTP_200_OK)
     if not IsTeacher().has_permission(request, None):
         return Response(status=status.HTTP_403_FORBIDDEN)
     delete_assignment(assignment)
@@ -122,7 +122,7 @@ def list_course(request, course_id: int):
         200: Array of assignment DTOs
     """
     assignments = list_by_course(course_id)
-    return Response([assignment_to_dto(a) for a in assignments], status=status.HTTP_200_OK)
+    return Response([assignment_to_dto(a).model_dump() for a in assignments], status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
@@ -149,4 +149,4 @@ def list_user(request, user_id: int):
     if not target:
         return Response("User not found", status=status.HTTP_404_NOT_FOUND)
     assignments = list_for_user(target)
-    return Response([assignment_to_dto(a) for a in assignments], status=status.HTTP_200_OK)
+    return Response([assignment_to_dto(a).model_dump() for a in assignments], status=status.HTTP_200_OK)

@@ -17,6 +17,7 @@ from django.utils import timezone
 
 from accounts.models import Role, User
 from assessments.models import Assessment, QuestionKind
+from core.dtos import AssignmentDTO
 from core.permissions import primary_role
 from courses.models import Enrollment
 from submissions.models import (
@@ -32,17 +33,17 @@ from submissions.models import (
 from .models import Assignment
 
 
-def assignment_to_dto(assignment: Assignment) -> dict:
+def assignment_to_dto(assignment: Assignment) -> AssignmentDTO:
     """Convert an Assignment to a DTO for API responses."""
-    return {
-        "id": assignment.id,
-        "assessmentId": assignment.assessment_id,
-        "audienceType": assignment.audience_type,
-        "courseId": assignment.course_id,
-        "targetTeacherId": assignment.teacher_id,
-        "openAt": assignment.open_at,
-        "dueAt": assignment.due_at,
-    }
+    return AssignmentDTO(
+        id=assignment.id,
+        assessmentId=assignment.assessment_id,
+        audienceType=assignment.audience_type,
+        courseId=assignment.course_id,
+        targetTeacherId=assignment.teacher_id,
+        openAt=assignment.open_at,
+        dueAt=assignment.due_at,
+    )
 
 
 def create_assignment(creator_user: User, payload: dict) -> Assignment:

@@ -22,6 +22,7 @@ from accounts.models import Role, StudentProfile, TeacherProfile, User
 from accounts.services import create_user_from_payload
 from assessments.models import Assessment, QuestionKind
 from assignments.models import Assignment
+from core.dtos import CourseDTO, EnrollmentStudentDTO
 from core.permissions import has_role
 from submissions.models import (
     Answer,
@@ -68,39 +69,38 @@ def can_manage_course(request_user: User, course: Course) -> bool:
     return owner is not None and owner.id == request_user.id
 
 
-def course_to_dto(course: Course) -> dict:
+def course_to_dto(course: Course) -> CourseDTO:
     """
     Convert a Course to a DTO with enrolled students and assignment IDs.
 
     Returns:
-        Dict with id, name, students (list of student DTOs), studentCount,
-        assignmentIds, and teacherId
+        CourseDTO with id, name, students, studentCount, assignmentIds, teacherId
     """
     enrollments = Enrollment.objects.filter(course=course)
     students = [enrollment_to_student_dto(e) for e in enrollments]
     assignment_ids = list(Assignment.objects.filter(course=course).values_list("id", flat=True))
-    return {
-        "id": course.id,
-        "name": course.name,
-        "students": students,
-        "studentCount": len(students),
-        "assignmentIds": assignment_ids,
-        "teacherId": course.teacher_profile_id,
-    }
+    return CourseDTO(
+        id=course.id,
+        name=course.name,
+        students=students,
+        studentCount=len(students),
+        assignmentIds=assignment_ids,
+        teacherId=course.teacher_profile_id,
+    )
 
 
-def enrollment_to_student_dto(enrollment: Enrollment) -> dict:
+def enrollment_to_student_dto(enrollment: Enrollment) -> EnrollmentStudentDTO:
     """Convert an Enrollment to a student DTO with user info and consent status."""
     student_profile = enrollment.student_profile
     user = student_profile.user if student_profile else None
-    return {
-        "id": user.id if user else None,
-        "name": user.name if user else None,
-        "username": user.username if user else None,
-        "role": "ROLE_STUDENT",
-        "consent": bool(student_profile.consent) if student_profile else False,
-        "courseId": enrollment.course_id,
-    }
+    return EnrollmentStudentDTO(
+        id=user.id if user else None,
+        name=user.name if user else None,
+        username=user.username if user else None,
+        role="ROLE_STUDENT",
+        consent=bool(student_profile.consent) if student_profile else False,
+        courseId=enrollment.course_id,
+    )
 
 
 @transaction.atomic
@@ -243,7 +243,7 @@ def remove_student_from_course(course: Course, student_user_id: int) -> None:
     User.objects.filter(id=student_user_id).delete()
 
 
-def list_students_in_course(course: Course) -> list[dict]:
+def list_students_in_course(course: Course) -> list[EnrollmentStudentDTO]:
     """Return all students enrolled in a course as DTOs."""
     enrollments = Enrollment.objects.filter(course=course)
     return [enrollment_to_student_dto(e) for e in enrollments]

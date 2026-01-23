@@ -10,6 +10,7 @@ student performance data across courses, assessments, and categories.
 """
 
 from assessments.models import Assessment, GradingMode
+from core.dtos import VisualizationSubmissionDTO
 from submissions.models import Submission, SubmissionStatus
 from submissions.services import answer_to_dto
 
@@ -23,7 +24,7 @@ def _get_mood_meter_assessment_id() -> int | None:
     )
 
 
-def get_visualization_data(filters: dict, request_user) -> list[dict]:
+def get_visualization_data(filters: dict, request_user) -> list[VisualizationSubmissionDTO]:
     """
     Query submission data for dashboard visualizations.
 
@@ -41,7 +42,7 @@ def get_visualization_data(filters: dict, request_user) -> list[dict]:
         request_user: The user requesting data (for future permission scoping)
 
     Returns:
-        List of visualization DTOs with submission and context data
+        List of VisualizationSubmissionDTOs with submission and context data
     """
     student_id = filters.get("studentId")
     course_id = filters.get("courseId")
@@ -79,7 +80,7 @@ def get_visualization_data(filters: dict, request_user) -> list[dict]:
     return [submission_to_visualization(sub) for sub in submissions]
 
 
-def submission_to_visualization(submission: Submission) -> dict:
+def submission_to_visualization(submission: Submission) -> VisualizationSubmissionDTO:
     """
     Convert a Submission to an enriched DTO for visualization.
 
@@ -88,25 +89,25 @@ def submission_to_visualization(submission: Submission) -> dict:
     submission DTO.
 
     Returns:
-        Dict with standard submission fields plus courseId, courseName,
-        assessmentTitle, and assessmentCategory
+        VisualizationSubmissionDTO with standard submission fields plus courseId,
+        courseName, assessmentTitle, and assessmentCategory
     """
     assignment = submission.assignment
     assessment = assignment.assessment if assignment else None
     course_id = assignment.course_id if assignment else None
     course_name = assignment.course.name if assignment and assignment.course else None
 
-    return {
-        "id": submission.id,
-        "assignmentId": submission.assignment_id,
-        "studentId": submission.student_id,
-        "teacherId": submission.teacher_id,
-        "submittedAt": submission.submitted_at,
-        "score": submission.score,
-        "status": submission.status,
-        "answers": [answer_to_dto(answer) for answer in submission.answers.all()],
-        "courseId": course_id,
-        "courseName": course_name,
-        "assessmentTitle": assessment.title if assessment else None,
-        "assessmentCategory": assessment.category if assessment else None,
-    }
+    return VisualizationSubmissionDTO(
+        id=submission.id,
+        assignmentId=submission.assignment_id,
+        studentId=submission.student_id,
+        teacherId=submission.teacher_id,
+        submittedAt=submission.submitted_at,
+        score=submission.score,
+        status=submission.status,
+        answers=[answer_to_dto(answer) for answer in submission.answers.all()],
+        courseId=course_id,
+        courseName=course_name,
+        assessmentTitle=assessment.title if assessment else None,
+        assessmentCategory=assessment.category if assessment else None,
+    )

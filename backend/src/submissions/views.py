@@ -166,7 +166,7 @@ def _create_for_assignment(request, assignment_id: int, assignment: Assignment):
         return error_response(exc)
     except Exception:
         return server_error_response()
-    return Response(submission_to_dto(submission), status=status.HTTP_201_CREATED)
+    return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_201_CREATED)
 
 
 @api_view(["POST"])
@@ -236,7 +236,7 @@ def assignment_submissions(request, assignment_id: int):
     if role == Role.TEACHER and not _teacher_owns_assignment(request.user, assignment):
         return Response(status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
-    return Response([submission_to_dto(sub) for sub in submissions], status=status.HTTP_200_OK)
+    return Response([submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
@@ -277,7 +277,7 @@ def teacher_self_assess(request, assessment_id: int):
         return error_response(exc)
     except Exception:
         return server_error_response()
-    return Response(submission_to_dto(submission), status=status.HTTP_201_CREATED)
+    return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_201_CREATED)
 
 
 @api_view(["GET"])
@@ -305,7 +305,7 @@ def get_one(request, submission_id: int):
         return server_error_response()
     if not _can_access_submission(request.user, submission):
         return Response(status=status.HTTP_403_FORBIDDEN)
-    return Response(submission_to_dto(submission), status=status.HTTP_200_OK)
+    return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
@@ -334,7 +334,7 @@ def get_by_assignment_id(request, assignment_id: int):
     if role == Role.TEACHER and not _teacher_owns_assignment(request.user, assignment):
         return Response(status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
-    return Response([submission_to_dto(sub) for sub in submissions], status=status.HTTP_200_OK)
+    return Response([submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
@@ -367,7 +367,7 @@ def get_by_student_id(request, student_id: int):
     else:
         return Response(status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_student(student_id)
-    return Response([submission_to_dto(sub) for sub in submissions], status=status.HTTP_200_OK)
+    return Response([submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
@@ -396,7 +396,7 @@ def get_by_teacher_id(request, teacher_id: int):
     else:
         return Response(status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_teacher(teacher_id)
-    return Response([submission_to_dto(sub) for sub in submissions], status=status.HTTP_200_OK)
+    return Response([submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
@@ -441,7 +441,7 @@ def get_student_submission(request, student_id: int, assignment_id: int):
         return error_response(exc)
     except Exception:
         return server_error_response()
-    return Response(submission_to_dto(submission), status=status.HTTP_200_OK)
+    return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
 
 
 @api_view(["PUT"])
@@ -497,7 +497,7 @@ def save_draft(request, student_id: int, assignment_id: int):
         return error_response(exc)
     except Exception:
         return server_error_response()
-    return Response(submission_to_dto(submission), status=status.HTTP_200_OK)
+    return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
@@ -580,7 +580,7 @@ def edit(request):
         return error_response(exc)
     except Exception:
         return server_error_response()
-    return Response(submission_to_dto(submission), status=status.HTTP_200_OK)
+    return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
 
 
 @api_view(["PATCH"])
@@ -624,4 +624,4 @@ def override_score_view(request, submission_id: int):
         return error_response(exc)
     except Exception:
         return server_error_response()
-    return Response(submission_to_dto(submission), status=status.HTTP_200_OK)
+    return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)

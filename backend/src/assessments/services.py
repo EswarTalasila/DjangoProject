@@ -26,6 +26,7 @@ from django.db import transaction
 
 from accounts.models import User
 from assignments.models import Assignment
+from core.dtos import AssessmentDTO, QuestionDTO
 
 from .models import (
     Assessment,
@@ -41,7 +42,7 @@ from .models import (
 )
 
 
-def assessment_to_dto(assessment: Assessment) -> dict:
+def assessment_to_dto(assessment: Assessment) -> AssessmentDTO:
     """
     Convert an Assessment to a full DTO including all questions.
 
@@ -49,20 +50,20 @@ def assessment_to_dto(assessment: Assessment) -> dict:
         assessment: The Assessment model instance
 
     Returns:
-        Dict with id, title, category, gradingMode, questions, rubricId, rubricAssessmentIds
+        AssessmentDTO with id, title, category, gradingMode, questions, rubricId, rubricAssessmentIds
     """
-    return {
-        "id": assessment.id,
-        "title": assessment.title,
-        "category": assessment.category,
-        "gradingMode": assessment.grading_mode,
-        "questions": [question_to_dto(q) for q in assessment.questions.all()],
-        "rubricId": assessment.rubric_id,
-        "rubricAssessmentIds": assessment.rubric_assessment_ids or [],
-    }
+    return AssessmentDTO(
+        id=assessment.id,
+        title=assessment.title,
+        category=assessment.category,
+        gradingMode=assessment.grading_mode,
+        questions=[question_to_dto(q) for q in assessment.questions.all()],
+        rubricId=assessment.rubric_id,
+        rubricAssessmentIds=assessment.rubric_assessment_ids or [],
+    )
 
 
-def question_to_dto(question: Question) -> dict:
+def question_to_dto(question: Question) -> QuestionDTO:
     """
     Convert a Question to a DTO, handling all question types.
 
@@ -76,8 +77,8 @@ def question_to_dto(question: Question) -> dict:
         question: The Question model instance
 
     Returns:
-        Dict with questionId, id, type, prompt, maxPoints, autoGradable, graded, and
-        type-specific data
+        QuestionDTO with questionId, id, type, prompt, maxPoints, autoGradable, graded,
+        and type-specific data
     """
     data: dict | None = None
     select_all = None
@@ -108,19 +109,19 @@ def question_to_dto(question: Question) -> dict:
             "labels": [label.label for label in question.mood_meter_labels.all()],
         }
 
-    return {
-        "questionId": question.id,
-        "id": question.id,
-        "type": question.kind,
-        "prompt": question.prompt,
-        "maxPoints": question.max_points,
-        "autoGradable": question.auto_gradable,
-        "graded": question.graded,
-        "selectAll": select_all,
-        "min": min_value,
-        "max": max_value,
-        "data": data,
-    }
+    return QuestionDTO(
+        questionId=question.id,
+        id=question.id,
+        type=question.kind,
+        prompt=question.prompt,
+        maxPoints=question.max_points,
+        autoGradable=question.auto_gradable,
+        graded=question.graded,
+        selectAll=select_all,
+        min=min_value,
+        max=max_value,
+        data=data,
+    )
 
 
 @transaction.atomic

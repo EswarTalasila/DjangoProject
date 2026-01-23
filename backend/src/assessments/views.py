@@ -70,10 +70,10 @@ def list_or_create(request):
         serializer = AssessmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         assessment = create_assessment(request.user, serializer.validated_data)
-        return Response(assessment_to_dto(assessment), status=status.HTTP_201_CREATED)
+        return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_201_CREATED)
 
     assessments = list_assessments()
-    return Response([assessment_to_dto(a) for a in assessments], status=status.HTTP_200_OK)
+    return Response([assessment_to_dto(a).model_dump() for a in assessments], status=status.HTTP_200_OK)
 
 
 @api_view(["GET", "PUT", "DELETE"])
@@ -114,7 +114,7 @@ def detail(request, assessment_id: int):
             ).exists()
             if not allowed:
                 return Response(status=status.HTTP_403_FORBIDDEN)
-        return Response(assessment_to_dto(assessment), status=status.HTTP_200_OK)
+        return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_200_OK)
 
     if request.method == "PUT":
         if not IsAdmin().has_permission(request, None):
@@ -125,7 +125,7 @@ def detail(request, assessment_id: int):
             updated = update_assessment(assessment, serializer.validated_data)
         except ValueError as exc:
             return error_response(exc)
-        return Response(assessment_to_dto(updated), status=status.HTTP_200_OK)
+        return Response(assessment_to_dto(updated).model_dump(), status=status.HTTP_200_OK)
 
     if not IsAdmin().has_permission(request, None):
         return Response(status=status.HTTP_403_FORBIDDEN)
