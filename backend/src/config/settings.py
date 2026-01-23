@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
+    "drf_spectacular",
     # Local apps
     "core",
     "accounts",
@@ -51,6 +52,15 @@ INSTALLED_APPS = [
     "exports",
 ]
 
+# Development-only apps (not loaded in production)
+# - debug_toolbar: SQL query inspection, request/response debugging
+# - django_extensions: shell_plus with auto-imports, show_urls, graph_models
+if DEBUG:
+    INSTALLED_APPS += [
+        "debug_toolbar",
+        "django_extensions",
+    ]
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "corsheaders.middleware.CorsMiddleware",
@@ -61,6 +71,10 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# Debug toolbar middleware (insert after SecurityMiddleware)
+if DEBUG:
+    MIDDLEWARE.insert(1, "debug_toolbar.middleware.DebugToolbarMiddleware")
 
 ROOT_URLCONF = "config.urls"
 
@@ -134,6 +148,19 @@ CORS_ALLOWED_ORIGINS = [
 
 CORS_ALLOW_CREDENTIALS = True
 
+# Debug toolbar settings
+# For Docker, we need to include the Docker network gateway
+INTERNAL_IPS = ["127.0.0.1", "localhost"]
+if DEBUG:
+    import socket
+
+    # Add Docker host IP for debug toolbar to work in containers
+    try:
+        hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
+        INTERNAL_IPS += [ip[: ip.rfind(".")] + ".1" for ip in ips]
+    except socket.gaierror:
+        pass
+
 # REST Framework
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -147,6 +174,24 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# drf-spectacular settings (OpenAPI/Swagger documentation)
+# Generates OpenAPI 3.0 schema automatically from DRF views and serializers
+# Access documentation at:
+#   - /api/docs/   (Swagger UI - interactive)
+#   - /api/redoc/  (ReDoc - clean reading)
+#   - /api/schema/ (Raw OpenAPI YAML)
+SPECTACULAR_SETTINGS = {
+    "TITLE": "EE Lab Data Dashboard API",
+    "DESCRIPTION": "API for managing educational assessments, submissions, and visualization.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,  # Don't include schema endpoint in schema itself
+    "SWAGGER_UI_SETTINGS": {
+        "deepLinking": True,  # Enable defined links in Swagger UI
+        "persistAuthorization": True,  # Keep auth tokens between page refreshes
+    },
 }
 
 SIMPLE_JWT = {

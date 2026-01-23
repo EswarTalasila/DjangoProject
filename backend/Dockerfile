@@ -30,9 +30,11 @@ WORKDIR /app
 # -----------------------------------------------------------------------------
 # build-essential: Required for compiling Python packages with C extensions
 # libpq-dev: PostgreSQL client library headers for psycopg
+# graphviz: Required for django-extensions graph_models command
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
+    graphviz \
     && rm -rf /var/lib/apt/lists/*
 
 # -----------------------------------------------------------------------------

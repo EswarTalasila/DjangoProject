@@ -162,6 +162,21 @@ tasks:
       - pre-commit autoupdate
 
   # ===========================================================================
+  # API Documentation (drf-spectacular)
+  # Requires backend container to be running: docker compose up -d backend
+  # ===========================================================================
+  docs:
+    desc: Open API documentation in browser (Swagger UI)
+    cmds:
+      - open http://localhost:8000/api/docs/ || xdg-open http://localhost:8000/api/docs/ || start http://localhost:8000/api/docs/
+
+  docs:schema:
+    desc: Download OpenAPI schema as YAML
+    cmds:
+      - curl -o openapi-schema.yaml http://localhost:8000/api/schema/
+      - 'echo "Schema saved to openapi-schema.yaml"'
+
+  # ===========================================================================
   # Django Management
   # ===========================================================================
   migrate:
@@ -183,6 +198,25 @@ tasks:
     desc: Create a Django superuser
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py createsuperuser"
+
+  # ===========================================================================
+  # Django Extensions (requires django-extensions package)
+  # ===========================================================================
+  django:shell-plus:
+    desc: Open enhanced Django shell with auto-imports
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py shell_plus"
+
+  django:show-urls:
+    desc: Show all registered URL patterns
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py show_urls"
+
+  django:graph-models:
+    desc: Generate model dependency graph (requires graphviz)
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py graph_models -a -o models.png"
+      - 'echo "Model graph saved to backend/models.png"'
 
   # ===========================================================================
   # Local Development (IDE support, not for running the app)

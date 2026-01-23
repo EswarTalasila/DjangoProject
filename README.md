@@ -176,6 +176,9 @@ Run `task --list` to see all available commands. Key tasks:
 | `task hooks:install`       | Install pre-commit hooks                   |
 | `task hooks:run`           | Run pre-commit on all files                |
 | `task local:sync`          | Install deps locally for IDE support       |
+| `task docs`                | Open API docs in browser (Swagger UI)      |
+| `task django:shell-plus`   | Enhanced Django shell with auto-imports    |
+| `task django:show-urls`    | Show all registered URL patterns           |
 
 ### Task Groups
 
@@ -183,7 +186,8 @@ Run `task --list` to see all available commands. Key tasks:
 - `test:*` - Testing (unit, integration, coverage, e2e)
 - `lint`, `format`, `typecheck`, `check` - Code quality
 - `hooks:*` - Pre-commit hook management
-- `django:*` - Django management commands
+- `django:*` - Django management commands and extensions
+- `docs:*` - API documentation
 - `local:*` - Local development (IDE support)
 
 ## Common Commands
@@ -470,6 +474,14 @@ The API is versioned under `/api/v1/`. Key endpoint groups:
 | `/api/v1/students/`       | Student enrollment                      |
 | `/api/v1/submissions/`    | Submission create/read/grade            |
 | `/api/v1/visualizations/` | Dashboard data aggregation              |
+
+### API Documentation (Interactive)
+
+| Path           | Description                                      |
+|----------------|--------------------------------------------------|
+| `/api/docs/`   | Swagger UI - Interactive API documentation       |
+| `/api/redoc/`  | ReDoc - Alternative API documentation viewer     |
+| `/api/schema/` | OpenAPI 3.0 schema (YAML)                        |
 
 See `Docs/Specs/12-API-Contract.md` for full API documentation.
 
