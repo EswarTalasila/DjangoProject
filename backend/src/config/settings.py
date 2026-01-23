@@ -81,7 +81,8 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        # Custom templates directory for overriding third-party templates (e.g., Swagger UI)
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -189,8 +190,11 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,  # Don't include schema endpoint in schema itself
     "SWAGGER_UI_SETTINGS": {
-        "deepLinking": True,  # Enable defined links in Swagger UI
+        "deepLinking": True,  # Enable deep links in Swagger UI
         "persistAuthorization": True,  # Keep auth tokens between page refreshes
+        # Dark-friendly syntax highlighting for code blocks
+        # Available themes: agate, arta, monokai, nord, obsidian, tomorrow-night, idea
+        "syntaxHighlight.theme": "obsidian",
     },
 }
 

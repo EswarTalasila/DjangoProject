@@ -174,7 +174,10 @@ Run `task --list` to see all available commands. Key tasks:
 | `task format`              | Format code with ruff                      |
 | `task typecheck`           | Run mypy type checker                      |
 | `task check`               | Run all checks (lint + format + typecheck) |
-| `task docker:rebuild`      | Full rebuild (down, build --no-cache, up)  |
+| `task docker:rebuild`      | Full rebuild with volume reset             |
+| `task docker:rebuild-clean`| Clean everything then rebuild from scratch |
+| `task docker:volume-clean` | Remove project volumes (clear cached data) |
+| `task docker:clean`        | Full cleanup (containers + volumes)        |
 | `task docker:logs-backend` | Follow backend logs                        |
 | `task migrate`             | Run Django migrations                      |
 | `task hooks:install`       | Install pre-commit hooks                   |

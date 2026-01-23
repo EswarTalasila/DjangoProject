@@ -90,11 +90,33 @@ tasks:
   # ===========================================================================
   # Docker: Container Management
   # ===========================================================================
-  docker:rebuild:
-    desc: Full rebuild - stop, rebuild images (no cache), and start
+  docker:volume-clean:
+    desc: Remove project volumes (clears cached configs and database data)
     deps: [_check:docker]
     cmds:
-      - "{{.DOCKER_COMPOSE}} down"
+      - "{{.DOCKER_COMPOSE}} down -v"
+      - 'echo "Project volumes removed. Database data has been cleared."'
+
+  docker:clean:
+    desc: Full cleanup - remove containers, volumes, and orphaned containers
+    deps: [_check:docker]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} down -v --remove-orphans"
+      - 'echo "Full cleanup complete. All project containers and volumes removed."'
+
+  docker:rebuild-clean:
+    desc: Clean everything then rebuild from scratch (fresh start)
+    deps: [_check:docker, docker:clean]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} build --no-cache"
+      - "{{.DOCKER_COMPOSE}} up -d"
+      - 'echo "Clean rebuild complete. All services started fresh."'
+
+  docker:rebuild:
+    desc: Full rebuild - stop, remove volumes, rebuild images (no cache), and start
+    deps: [_check:docker]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} down -v"
       - "{{.DOCKER_COMPOSE}} build --no-cache"
       - "{{.DOCKER_COMPOSE}} up -d"
 
