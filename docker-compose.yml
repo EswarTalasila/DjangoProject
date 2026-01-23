@@ -51,7 +51,20 @@ services:
       retries: 5
     networks:
       - eel-network
-
+  pgadmin: # <--- FIXED: Aligned with 'database'
+    image: dpage/pgadmin4:9.8
+    container_name: eel-pgadmin # Good practice to add this
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: demo@example.com
+      PGADMIN_DEFAULT_PASSWORD: secret
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    networks:
+      - eel-network
+    depends_on:
+      - database
   # ==========================================================================
   # Backend (Django)
   # ==========================================================================

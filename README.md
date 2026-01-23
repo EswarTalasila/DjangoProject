@@ -147,6 +147,9 @@ brew install go-task
 # Linux (snap)
 sudo snap install task --classic
 
+# Linux (apt)
+curl -1sLf 'https://dl.cloudsmith.io/public/task/task/setup.deb.sh' | sudo -E bash && sudo apt install task
+
 # Linux (script)
 sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
