@@ -70,6 +70,7 @@ docker compose exec backend python src/manage.py createsuperuser
 | `frontend`     | 4200 | Angular dev server with hot reload                |
 | `backend`      | 8000 | Django REST API                                   |
 | `database`     | 5432 | PostgreSQL 16                                     |
+| `pgadmin`      | 5050 | Database management UI (auto-connects to database)|
 | `traefik`      | 80   | Reverse proxy (production routing)                |
 | `frontend-e2e` | -    | Playwright E2E test runner with headless Chromium |
 
@@ -182,6 +183,8 @@ Run `task --list` to see all available commands. Key tasks:
 | `task docker:volume-clean` | Remove project volumes (clear cached data) |
 | `task docker:clean`        | Full cleanup (containers + volumes)        |
 | `task docker:logs-backend` | Follow backend logs                        |
+| `task docker:pgadmin`      | Open pgAdmin in browser                    |
+| `task docker:db-shell`     | Open psql shell in database container      |
 | `task migrate`             | Run Django migrations                      |
 | `task hooks:install`       | Install pre-commit hooks                   |
 | `task hooks:run`           | Run pre-commit on all files                |
@@ -245,6 +248,16 @@ docker compose exec backend python src/manage.py shell
 # Open database shell
 docker compose exec database psql -U datadash -d datadash
 ```
+
+#### pgAdmin (Database Management UI)
+
+pgAdmin is available at http://localhost:5050 for visual database management.
+
+- **Login:** `demo@example.com` / `secret`
+- **Database:** Pre-configured to auto-connect (no password prompt)
+- **Open in browser:** `task docker:pgadmin`
+
+The database connection is automatically configured using credentials from your `.env` file. No manual server setup required.
 
 ### Testing
 
