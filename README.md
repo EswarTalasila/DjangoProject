@@ -496,6 +496,100 @@ The API is versioned under `/api/v1/`. Key endpoint groups:
 
 See `Docs/Specs/12-API-Contract.md` for full API documentation.
 
+## Authentication
+
+This section covers setting up authentication for local development and API testing.
+
+### Django Admin Setup
+
+Create a superuser to access the Django admin panel:
+
+```bash
+# Using Task runner
+task django:createsuperuser
+
+# Or using docker compose directly
+docker compose exec backend python src/manage.py createsuperuser
+```
+
+Follow the prompts to set email, name, and password. Access the admin panel at http://localhost:8000/admin/.
+
+The admin panel allows:
+- User management (create, edit, delete users)
+- Role assignment (admin, teacher, student)
+- Course and enrollment management
+- Assessment and question management
+- Submission review
+
+### JWT Token Authentication
+
+The API uses JWT (JSON Web Tokens) for authentication. Tokens are obtained via the login endpoint.
+
+**Token lifetimes:**
+- Access token: 1 hour
+- Refresh token: 7 days
+
+**Obtaining tokens:**
+
+```bash
+# Login to get tokens
+curl -X POST http://localhost:8000/api/v1/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin@example.com", "password": "your-password"}'
+
+# Response:
+# {
+#   "accessToken": "eyJhbGciOiJIUzI1NiIs...",
+#   "tokenType": "Bearer",
+#   "role": "admin",
+#   "id": "1"
+# }
+```
+
+**Using tokens in requests:**
+
+```bash
+curl -X GET http://localhost:8000/api/v1/assessments/ \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+### Swagger UI Authentication
+
+The interactive API documentation at `/api/docs/` supports JWT authentication:
+
+1. **Get a token** - Use the login endpoint above or via Swagger UI itself:
+   - Expand `/api/v1/auth/login/`
+   - Click "Try it out"
+   - Enter credentials and execute
+   - Copy the `accessToken` from the response
+
+2. **Authorize Swagger UI**:
+   - Click the "Authorize" button (lock icon) at the top right
+   - Enter: `Bearer <your-access-token>` (include the word "Bearer")
+   - Click "Authorize"
+
+3. **Test authenticated endpoints** - All subsequent requests will include your token
+
+**Note:** The `persistAuthorization: true` setting keeps your token between page refreshes.
+
+### Troubleshooting Authentication
+
+**Token expired:**
+- Access tokens expire after 1 hour
+- Re-authenticate via login endpoint to get new tokens
+
+**"Authentication credentials were not provided":**
+- Ensure the Authorization header is set
+- Format must be: `Bearer <token>` (note the space)
+
+**"Token is invalid or expired":**
+- Token may have been revoked or expired
+- Re-authenticate to get fresh tokens
+
+**CORS errors in browser:**
+- Check `DJANGO_CORS_ALLOWED_ORIGINS` includes your frontend URL
+- Default: `http://localhost:4200`
+
 ## Django Patterns Reference
 
 This section explains common Django and Django REST Framework patterns used throughout the backend. For newcomers to Django, this serves as a quick reference for understanding the codebase.
