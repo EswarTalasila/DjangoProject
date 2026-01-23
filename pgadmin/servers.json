@@ -7,10 +7,8 @@
       "Username": "datadash",
       "Host": "database",
       "MaintenanceDB": "datadash",
-      "ConnectionParameters": {
-        "sslmode": "prefer",
-        "connect_timeout": 10
-      }
+      "PassFile": "/var/lib/pgadmin/pgpass",
+      "SSLMode": "prefer"
     }
   }
 }
