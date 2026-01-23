@@ -163,6 +163,10 @@ Run `task --list` to see all available commands. Key tasks:
 
 | Task                       | Description                                |
 |----------------------------|--------------------------------------------|
+| `task up`                  | Start all services                         |
+| `task down`                | Stop all services                          |
+| `task up:debug`            | Start backend with verbose debug output    |
+| `task up:otel`             | Start with OpenTelemetry tracing enabled   |
 | `task test`                | Run all backend tests                      |
 | `task test:coverage`       | Run tests with coverage report             |
 | `task lint`                | Run ruff linter                            |
@@ -179,15 +183,19 @@ Run `task --list` to see all available commands. Key tasks:
 | `task docs`                | Open API docs in browser (Swagger UI)      |
 | `task django:shell-plus`   | Enhanced Django shell with auto-imports    |
 | `task django:show-urls`    | Show all registered URL patterns           |
+| `task diagrams:generate`   | Generate PlantUML from OTEL traces         |
+| `task diagrams:index`      | Regenerate diagrams index                  |
 
 ### Task Groups
 
+- `up`, `down`, `up:*` - Service management (start, stop, debug modes)
 - `docker:*` - Container management (rebuild, logs, shell)
 - `test:*` - Testing (unit, integration, coverage, e2e)
 - `lint`, `format`, `typecheck`, `check` - Code quality
 - `hooks:*` - Pre-commit hook management
 - `django:*` - Django management commands and extensions
 - `docs:*` - API documentation
+- `diagrams:*` - PlantUML diagram generation from OTEL traces
 - `local:*` - Local development (IDE support)
 
 ## Common Commands
