@@ -2,30 +2,26 @@
 Django settings for EE-Lab-Personal project.
 
 Environment-based configuration for development and production.
+Configuration is loaded via pydantic-settings for type safety and validation.
 """
 
-import os
 from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
 
+from config.env import env
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY", "django-insecure-local-dev-only-change-in-production"
-)
+SECRET_KEY = env.django_secret_key
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() in ("true", "1", "yes")
+DEBUG = env.django_debug
 
-ALLOWED_HOSTS = [
-    h.strip()
-    for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
-    if h.strip()
-]
+ALLOWED_HOSTS = env.allowed_hosts_list
 
 # Application definition
 INSTALLED_APPS = [
@@ -99,12 +95,8 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgres://datadash:localdev@localhost:5432/datadash"
-)
-
 DATABASES = {
-    "default": dj_database_url.parse(DATABASE_URL, conn_max_age=600),
+    "default": dj_database_url.parse(env.database_url, conn_max_age=600),
 }
 
 # Custom user model
@@ -141,11 +133,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get("DJANGO_CORS_ALLOWED_ORIGINS", "http://localhost:4200").split(",")
-    if origin.strip()
-]
+CORS_ALLOWED_ORIGINS = env.cors_origins_list
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -207,8 +195,8 @@ SIMPLE_JWT = {
 }
 
 # Google OAuth settings
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_CLIENT_ID = env.google_client_id
+GOOGLE_CLIENT_SECRET = env.google_client_secret
 
 # Security settings (production overrides)
 if not DEBUG:
