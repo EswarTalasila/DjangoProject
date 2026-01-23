@@ -84,7 +84,7 @@ def _teacher_owns_assignment(user, assignment: Assignment) -> bool:
     if assignment.teacher_id == user.id:
         return True
     if assignment.course and assignment.course.teacher_profile:
-        return assignment.course.teacher_profile.user_id == user.id
+        return bool(assignment.course.teacher_profile.user_id == user.id)
     return False
 
 
@@ -127,7 +127,7 @@ def _can_access_submission(user, submission) -> bool:
     if role == Role.ADMIN:
         return True
     if role == Role.STUDENT:
-        return submission.student_id == user.id
+        return bool(submission.student_id == user.id)
     if role == Role.TEACHER:
         return _teacher_owns_assignment(user, submission.assignment)
     return False

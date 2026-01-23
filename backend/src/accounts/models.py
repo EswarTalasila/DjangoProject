@@ -27,6 +27,8 @@ Note:
     normalized to lowercase during creation.
 """
 
+from typing import cast
+
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 
@@ -39,7 +41,7 @@ class UserManager(BaseUserManager):
     handling email normalization and password hashing automatically.
     """
 
-    def create_user(self, username, name, password=None, **extra_fields):
+    def create_user(self, username, name, password=None, **extra_fields) -> "User":
         """
         Create and persist a user with a normalized email.
 
@@ -60,7 +62,7 @@ class UserManager(BaseUserManager):
         if not name:
             raise ValueError("name is required")
         username = self.normalize_email(username)
-        user = self.model(username=username, name=name, **extra_fields)
+        user = cast("User", self.model(username=username, name=name, **extra_fields))
         if password:
             user.set_password(password)
         else:

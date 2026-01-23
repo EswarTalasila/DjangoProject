@@ -66,12 +66,12 @@ def list_or_create(request):
             course = create_course(request.user, serializer.validated_data["name"])
         except ValueError as exc:
             return error_response(exc)
-        payload = course_to_dto(course)
-        return Response(payload, status=status.HTTP_200_OK)
+        course_data = course_to_dto(course)
+        return Response(course_data, status=status.HTTP_200_OK)
 
     courses = list_courses_for_user(request.user)
-    payload = [course_to_dto(course) for course in courses]
-    return Response(payload, status=status.HTTP_200_OK)
+    courses_data = [course_to_dto(course) for course in courses]
+    return Response(courses_data, status=status.HTTP_200_OK)
 
 
 @api_view(["GET", "PUT", "DELETE"])
