@@ -1,0 +1,16 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "EEL Development Database",
+      "Group": "Servers",
+      "Port": 5432,
+      "Username": "datadash",
+      "Host": "database",
+      "MaintenanceDB": "datadash",
+      "ConnectionParameters": {
+        "sslmode": "prefer",
+        "connect_timeout": 10
+      }
+    }
+  }
+}

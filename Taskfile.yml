@@ -156,6 +156,13 @@ tasks:
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.DATABASE_CONTAINER}} psql -U datadash -d datadash"
 
+  docker:pgadmin:
+    desc: Open pgAdmin in browser (database management UI)
+    deps: [_check:docker]
+    cmds:
+      - open http://localhost:5050 || xdg-open http://localhost:5050 || start http://localhost:5050
+      - 'echo "Login: demo@example.com / secret"'
+
   # ===========================================================================
   # Testing
   # Requires backend container to be running: task up
