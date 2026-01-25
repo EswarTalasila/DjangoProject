@@ -33,7 +33,7 @@ services:
   # Database
   # ==========================================================================
   database:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: eel-database
     restart: unless-stopped
     environment:
@@ -51,7 +51,44 @@ services:
       retries: 5
     networks:
       - eel-network
-
+  # ==========================================================================
+  # pgAdmin - Database Management UI
+  # Access at http://localhost:5050
+  # Login: demo@example.com / secret
+  # ==========================================================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: eel-pgadmin
+    user: root
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: demo@example.com
+      PGADMIN_DEFAULT_PASSWORD: secret
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      # Reload server definitions on every container restart
+      PGADMIN_REPLACE_SERVERS_ON_STARTUP: "True"
+      # Use pgpass file for auto-login to database servers
+      PGPASS_FILE: /var/lib/pgadmin/pgpass
+      # Pass database credentials for pgpass generation
+      POSTGRES_USER: ${POSTGRES_USER:-datadash}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
+    volumes:
+      # Auto-register database server on startup
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+    # Generate pgpass from environment variables at startup
+    entrypoint: >
+      /bin/sh -c "
+      echo \"database:5432:*:$$POSTGRES_USER:$$POSTGRES_PASSWORD\" > /var/lib/pgadmin/pgpass &&
+      chmod 600 /var/lib/pgadmin/pgpass &&
+      chown 5050:5050 /var/lib/pgadmin/pgpass &&
+      /entrypoint.sh
+      "
+    networks:
+      - eel-network
+    depends_on:
+      - database
   # ==========================================================================
   # Backend (Django)
   # ==========================================================================

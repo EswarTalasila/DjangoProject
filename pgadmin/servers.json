@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "EEL Development Database",
+      "Group": "Servers",
+      "Port": 5432,
+      "Username": "datadash",
+      "Host": "database",
+      "MaintenanceDB": "datadash",
+      "PassFile": "/var/lib/pgadmin/pgpass",
+      "SSLMode": "prefer"
+    }
+  }
+}

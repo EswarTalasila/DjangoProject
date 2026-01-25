@@ -8,7 +8,7 @@ A web application for managing educational assessments, student submissions, and
 |------------|--------------------------------------------------|
 | Frontend   | Angular 21, TypeScript, SCSS                     |
 | Backend    | Django 5, Django REST Framework, Python 3.12     |
-| Database   | PostgreSQL 16                                    |
+| Database   | PostgreSQL 17                                    |
 | Auth       | JWT (SimpleJWT) + Google OAuth                   |
 | Testing    | pytest (backend, 53 tests), Playwright (E2E)     |
 | Containers | Docker, Docker Compose, Traefik (reverse proxy)  |
@@ -19,7 +19,7 @@ A web application for managing educational assessments, student submissions, and
 - OR for local development:
   - Python 3.12+
   - Node.js 22 LTS (see `.nvmrc`)
-  - PostgreSQL 16+
+  - PostgreSQL 17+
 
 ## User Guide
 
@@ -69,7 +69,8 @@ docker compose exec backend python src/manage.py createsuperuser
 |----------------|------|---------------------------------------------------|
 | `frontend`     | 4200 | Angular dev server with hot reload                |
 | `backend`      | 8000 | Django REST API                                   |
-| `database`     | 5432 | PostgreSQL 16                                     |
+| `database`     | 5432 | PostgreSQL 17                                     |
+| `pgadmin`      | 5050 | Database management UI (auto-connects to database)|
 | `traefik`      | 80   | Reverse proxy (production routing)                |
 | `frontend-e2e` | -    | Playwright E2E test runner with headless Chromium |
 
@@ -147,6 +148,9 @@ brew install go-task
 # Linux (snap)
 sudo snap install task --classic
 
+# Linux (apt)
+curl -1sLf 'https://dl.cloudsmith.io/public/task/task/setup.deb.sh' | sudo -E bash && sudo apt install task
+
 # Linux (script)
 sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
@@ -179,6 +183,8 @@ Run `task --list` to see all available commands. Key tasks:
 | `task docker:volume-clean` | Remove project volumes (clear cached data) |
 | `task docker:clean`        | Full cleanup (containers + volumes)        |
 | `task docker:logs-backend` | Follow backend logs                        |
+| `task docker:pgadmin`      | Open pgAdmin in browser                    |
+| `task docker:db-shell`     | Open psql shell in database container      |
 | `task migrate`             | Run Django migrations                      |
 | `task hooks:install`       | Install pre-commit hooks                   |
 | `task hooks:run`           | Run pre-commit on all files                |
@@ -242,6 +248,16 @@ docker compose exec backend python src/manage.py shell
 # Open database shell
 docker compose exec database psql -U datadash -d datadash
 ```
+
+#### pgAdmin (Database Management UI)
+
+pgAdmin is available at http://localhost:5050 for visual database management.
+
+- **Login:** `demo@example.com` / `secret`
+- **Database:** Pre-configured to auto-connect (no password prompt)
+- **Open in browser:** `task docker:pgadmin`
+
+The database connection is automatically configured using credentials from your `.env` file. No manual server setup required.
 
 ### Testing
 
