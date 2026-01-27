@@ -20,6 +20,7 @@ from django.utils import timezone
 
 from assessments.models import Assessment, Question
 from assignments.models import Assignment, AudienceType
+from core.dtos import AnswerDTO, SubmissionCompactDTO, SubmissionDTO
 
 from .models import (
     Answer,
@@ -34,7 +35,7 @@ from .models import (
 )
 
 
-def submission_to_dto(submission: Submission) -> dict:
+def submission_to_dto(submission: Submission) -> SubmissionDTO:
     """
     Convert a Submission to a full DTO for API responses.
 
@@ -44,21 +45,21 @@ def submission_to_dto(submission: Submission) -> dict:
         submission: The Submission model instance
 
     Returns:
-        Dict with id, assignmentId, studentId, teacherId, submittedAt, score, status, answers
+        SubmissionDTO with id, assignmentId, studentId, teacherId, submittedAt, score, status, answers
     """
-    return {
-        "id": submission.id,
-        "assignmentId": submission.assignment_id,
-        "studentId": submission.student_id,
-        "teacherId": submission.teacher_id,
-        "submittedAt": submission.submitted_at,
-        "score": submission.score,
-        "status": submission.status,
-        "answers": [answer_to_dto(answer) for answer in submission.answers.all()],
-    }
+    return SubmissionDTO(
+        id=submission.id,
+        assignmentId=submission.assignment_id,
+        studentId=submission.student_id,
+        teacherId=submission.teacher_id,
+        submittedAt=submission.submitted_at,
+        score=submission.score,
+        status=submission.status,
+        answers=[answer_to_dto(answer) for answer in submission.answers.all()],
+    )
 
 
-def submission_to_compact_dto(submission: Submission) -> dict:
+def submission_to_compact_dto(submission: Submission) -> SubmissionCompactDTO:
     """
     Convert a Submission to a compact DTO for list views.
 
@@ -68,18 +69,18 @@ def submission_to_compact_dto(submission: Submission) -> dict:
         submission: The Submission model instance
 
     Returns:
-        Dict with id, assignmentId, submittedAt, score, status (no answers)
+        SubmissionCompactDTO with id, assignmentId, submittedAt, score, status (no answers)
     """
-    return {
-        "id": submission.id,
-        "assignmentId": submission.assignment_id,
-        "submittedAt": submission.submitted_at,
-        "score": submission.score,
-        "status": submission.status,
-    }
+    return SubmissionCompactDTO(
+        id=submission.id,
+        assignmentId=submission.assignment_id,
+        submittedAt=submission.submitted_at,
+        score=submission.score,
+        status=submission.status,
+    )
 
 
-def answer_to_dto(answer: Answer) -> dict:
+def answer_to_dto(answer: Answer) -> AnswerDTO:
     """
     Convert an Answer to a DTO, handling all answer types.
 
@@ -93,7 +94,7 @@ def answer_to_dto(answer: Answer) -> dict:
         answer: The Answer model instance
 
     Returns:
-        Dict with questionId, type, data, and score
+        AnswerDTO with questionId, type, data, and score
     """
     data: dict
     if answer.answer_type == AnswerType.MULTIPLE_CHOICE:
@@ -107,12 +108,12 @@ def answer_to_dto(answer: Answer) -> dict:
         data = {"row": answer.mood_meter.row, "col": answer.mood_meter.col}
     else:
         data = {}
-    return {
-        "questionId": answer.question_id,
-        "type": answer.answer_type,
-        "data": data,
-        "score": answer.score,
-    }
+    return AnswerDTO(
+        questionId=answer.question_id,
+        type=answer.answer_type,
+        data=data,
+        score=answer.score,
+    )
 
 
 @transaction.atomic
@@ -301,7 +302,7 @@ def list_mine(user_id: int, status: str | None) -> list[dict]:
     items = list(submissions.values())
     if status:
         items = [sub for sub in items if sub.status == status]
-    return [submission_to_compact_dto(sub) for sub in items]
+    return [submission_to_compact_dto(sub).model_dump() for sub in items]
 
 
 @transaction.atomic

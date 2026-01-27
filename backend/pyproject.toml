@@ -32,6 +32,7 @@ dependencies = [
     "uvicorn[standard]>=0.27,<1.0",
     "whitenoise>=6.6,<7.0",
     "pydantic>=2.5,<3.0",
+    "pydantic-settings>=2.7,<3.0",
     "google-auth>=2.27,<3.0",
     "google-auth-oauthlib>=1.2,<2.0",
     "opentelemetry-api>=1.23,<2.0",
@@ -58,6 +59,10 @@ dev = [
     "pre-commit>=3.6,<4.0",
     "bandit>=1.7,<2.0",
     "safety>=3.0,<4.0",
+    "django-debug-toolbar>=5.0,<7.0",
+    "django-extensions>=3.2,<4.0",
+    "drf-spectacular>=0.27,<1.0",
+    "pydot>=3.0,<5.0",
 ]
 export = [
     "reportlab>=4.0,<5.0",
@@ -110,14 +115,34 @@ line-length = 100
 [tool.mypy]
 python_version = "3.12"
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
-# TODO: tighten to strict typing once module annotations are filled in.
+# Gradual strict type checking - see issue #4
+# Phase 1: Enable checking without requiring annotations on all existing code
 strict = false
 disallow_untyped_defs = false
 disallow_untyped_calls = false
-check_untyped_defs = false
-warn_return_any = false
+check_untyped_defs = true
+warn_return_any = true
+warn_unused_ignores = true
 warn_unused_configs = true
+warn_redundant_casts = true
+no_implicit_optional = true
 ignore_missing_imports = true
+
+# Ignore migrations - auto-generated code
+[[tool.mypy.overrides]]
+module = "*.migrations.*"
+ignore_errors = true
+
+# Strict typing for new/refactored modules
+[[tool.mypy.overrides]]
+module = "config.env"
+disallow_untyped_defs = true
+
+# Django model files - field types are inferred by django-stubs plugin
+# Disable var-annotated errors since model fields don't need explicit annotations
+[[tool.mypy.overrides]]
+module = ["*.models", "*.models.*"]
+disable_error_code = ["var-annotated"]
 
 [tool.django-stubs]
 django_settings_module = "config.settings"

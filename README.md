@@ -8,7 +8,7 @@ A web application for managing educational assessments, student submissions, and
 |------------|--------------------------------------------------|
 | Frontend   | Angular 21, TypeScript, SCSS                     |
 | Backend    | Django 5, Django REST Framework, Python 3.12     |
-| Database   | PostgreSQL 16                                    |
+| Database   | PostgreSQL 17                                    |
 | Auth       | JWT (SimpleJWT) + Google OAuth                   |
 | Testing    | pytest (backend, 53 tests), Playwright (E2E)     |
 | Containers | Docker, Docker Compose, Traefik (reverse proxy)  |
@@ -19,7 +19,7 @@ A web application for managing educational assessments, student submissions, and
 - OR for local development:
   - Python 3.12+
   - Node.js 22 LTS (see `.nvmrc`)
-  - PostgreSQL 16+
+  - PostgreSQL 17+
 
 ## User Guide
 
@@ -69,7 +69,8 @@ docker compose exec backend python src/manage.py createsuperuser
 |----------------|------|---------------------------------------------------|
 | `frontend`     | 4200 | Angular dev server with hot reload                |
 | `backend`      | 8000 | Django REST API                                   |
-| `database`     | 5432 | PostgreSQL 16                                     |
+| `database`     | 5432 | PostgreSQL 17                                     |
+| `pgadmin`      | 5050 | Database management UI (auto-connects to database)|
 | `traefik`      | 80   | Reverse proxy (production routing)                |
 | `frontend-e2e` | -    | Playwright E2E test runner with headless Chromium |
 
@@ -147,6 +148,9 @@ brew install go-task
 # Linux (snap)
 sudo snap install task --classic
 
+# Linux (apt)
+curl -1sLf 'https://dl.cloudsmith.io/public/task/task/setup.deb.sh' | sudo -E bash && sudo apt install task
+
 # Linux (script)
 sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
@@ -163,6 +167,10 @@ Run `task --list` to see all available commands. Key tasks:
 
 | Task                       | Description                                |
 |----------------------------|--------------------------------------------|
+| `task up`                  | Start all services                         |
+| `task down`                | Stop all services                          |
+| `task up:debug`            | Start backend with verbose debug output    |
+| `task up:otel`             | Start with OpenTelemetry tracing enabled   |
 | `task test`                | Run all backend tests                      |
 | `task test:coverage`       | Run tests with coverage report             |
 | `task lint`                | Run ruff linter                            |
@@ -170,20 +178,33 @@ Run `task --list` to see all available commands. Key tasks:
 | `task format`              | Format code with ruff                      |
 | `task typecheck`           | Run mypy type checker                      |
 | `task check`               | Run all checks (lint + format + typecheck) |
-| `task docker:rebuild`      | Full rebuild (down, build --no-cache, up)  |
+| `task docker:rebuild`      | Full rebuild with volume reset             |
+| `task docker:rebuild-clean`| Clean everything then rebuild from scratch |
+| `task docker:volume-clean` | Remove project volumes (clear cached data) |
+| `task docker:clean`        | Full cleanup (containers + volumes)        |
 | `task docker:logs-backend` | Follow backend logs                        |
+| `task docker:pgadmin`      | Open pgAdmin in browser                    |
+| `task docker:db-shell`     | Open psql shell in database container      |
 | `task migrate`             | Run Django migrations                      |
 | `task hooks:install`       | Install pre-commit hooks                   |
 | `task hooks:run`           | Run pre-commit on all files                |
 | `task local:sync`          | Install deps locally for IDE support       |
+| `task docs`                | Open API docs in browser (Swagger UI)      |
+| `task django:shell-plus`   | Enhanced Django shell with auto-imports    |
+| `task django:show-urls`    | Show all registered URL patterns           |
+| `task diagrams:generate`   | Generate PlantUML from OTEL traces         |
+| `task diagrams:index`      | Regenerate diagrams index                  |
 
 ### Task Groups
 
+- `up`, `down`, `up:*` - Service management (start, stop, debug modes)
 - `docker:*` - Container management (rebuild, logs, shell)
 - `test:*` - Testing (unit, integration, coverage, e2e)
 - `lint`, `format`, `typecheck`, `check` - Code quality
 - `hooks:*` - Pre-commit hook management
-- `django:*` - Django management commands
+- `django:*` - Django management commands and extensions
+- `docs:*` - API documentation
+- `diagrams:*` - PlantUML diagram generation from OTEL traces
 - `local:*` - Local development (IDE support)
 
 ## Common Commands
@@ -227,6 +248,16 @@ docker compose exec backend python src/manage.py shell
 # Open database shell
 docker compose exec database psql -U datadash -d datadash
 ```
+
+#### pgAdmin (Database Management UI)
+
+pgAdmin is available at http://localhost:5050 for visual database management.
+
+- **Login:** `demo@example.com` / `secret`
+- **Database:** Pre-configured to auto-connect (no password prompt)
+- **Open in browser:** `task docker:pgadmin`
+
+The database connection is automatically configured using credentials from your `.env` file. No manual server setup required.
 
 ### Testing
 
@@ -471,7 +502,109 @@ The API is versioned under `/api/v1/`. Key endpoint groups:
 | `/api/v1/submissions/`    | Submission create/read/grade            |
 | `/api/v1/visualizations/` | Dashboard data aggregation              |
 
+### API Documentation (Interactive)
+
+| Path           | Description                                      |
+|----------------|--------------------------------------------------|
+| `/api/docs/`   | Swagger UI - Interactive API documentation       |
+| `/api/redoc/`  | ReDoc - Alternative API documentation viewer     |
+| `/api/schema/` | OpenAPI 3.0 schema (YAML)                        |
+
 See `Docs/Specs/12-API-Contract.md` for full API documentation.
+
+## Authentication
+
+This section covers setting up authentication for local development and API testing.
+
+### Django Admin Setup
+
+Create a superuser to access the Django admin panel:
+
+```bash
+# Using Task runner
+task django:createsuperuser
+
+# Or using docker compose directly
+docker compose exec backend python src/manage.py createsuperuser
+```
+
+Follow the prompts to set email, name, and password. Access the admin panel at http://localhost:8000/admin/.
+
+The admin panel allows:
+- User management (create, edit, delete users)
+- Role assignment (admin, teacher, student)
+- Course and enrollment management
+- Assessment and question management
+- Submission review
+
+### JWT Token Authentication
+
+The API uses JWT (JSON Web Tokens) for authentication. Tokens are obtained via the login endpoint.
+
+**Token lifetimes:**
+- Access token: 1 hour
+- Refresh token: 7 days
+
+**Obtaining tokens:**
+
+```bash
+# Login to get tokens
+curl -X POST http://localhost:8000/api/v1/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d '{"username": "admin@example.com", "password": "your-password"}'
+
+# Response:
+# {
+#   "accessToken": "eyJhbGciOiJIUzI1NiIs...",
+#   "tokenType": "Bearer",
+#   "role": "admin",
+#   "id": "1"
+# }
+```
+
+**Using tokens in requests:**
+
+```bash
+curl -X GET http://localhost:8000/api/v1/assessments/ \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+### Swagger UI Authentication
+
+The interactive API documentation at `/api/docs/` supports JWT authentication:
+
+1. **Get a token** - Use the login endpoint above or via Swagger UI itself:
+   - Expand `/api/v1/auth/login/`
+   - Click "Try it out"
+   - Enter credentials and execute
+   - Copy the `accessToken` from the response
+
+2. **Authorize Swagger UI**:
+   - Click the "Authorize" button (lock icon) at the top right
+   - Enter: `Bearer <your-access-token>` (include the word "Bearer")
+   - Click "Authorize"
+
+3. **Test authenticated endpoints** - All subsequent requests will include your token
+
+**Note:** The `persistAuthorization: true` setting keeps your token between page refreshes.
+
+### Troubleshooting Authentication
+
+**Token expired:**
+- Access tokens expire after 1 hour
+- Re-authenticate via login endpoint to get new tokens
+
+**"Authentication credentials were not provided":**
+- Ensure the Authorization header is set
+- Format must be: `Bearer <token>` (note the space)
+
+**"Token is invalid or expired":**
+- Token may have been revoked or expired
+- Re-authenticate to get fresh tokens
+
+**CORS errors in browser:**
+- Check `DJANGO_CORS_ALLOWED_ORIGINS` includes your frontend URL
+- Default: `http://localhost:4200`
 
 ## Django Patterns Reference
 

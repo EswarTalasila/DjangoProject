@@ -9,6 +9,8 @@ vars:
   BACKEND_CONTAINER: backend
   FRONTEND_CONTAINER: frontend
   DATABASE_CONTAINER: database
+  OTEL_TRACE_DIR: Docs/diagrams/otel
+  PLANTUML_DIR: Docs/diagrams/plantuml
 
 tasks:
   # ===========================================================================
@@ -20,124 +22,242 @@ tasks:
       - task --list
 
   # ===========================================================================
-  # Docker: Container Management
+  # Validation (internal tasks, not shown in --list)
+  # These tasks check preconditions before other tasks run
   # ===========================================================================
-  docker:rebuild:
-    desc: Full rebuild - stop, rebuild images (no cache), and start
+  _check:docker:
+    internal: true
+    desc: Verify Docker daemon is running
+    preconditions:
+      - sh: docker info > /dev/null 2>&1
+        msg: "Docker is not running. Please start Docker Desktop or the Docker daemon."
+
+  _check:env:
+    internal: true
+    desc: Verify .env file exists
+    preconditions:
+      - sh: test -f .env
+        msg: ".env file not found. Copy .env.template to .env and configure it."
+
+  _check:backend-running:
+    internal: true
+    desc: Verify backend container is running
+    preconditions:
+      - sh: docker compose ps --status running | grep -q backend
+        msg: "Backend container is not running. Run 'task up' first."
+
+  _check:otel-traces:
+    internal: true
+    desc: Verify OTEL trace file exists
+    preconditions:
+      - sh: test -f {{.OTEL_TRACE_DIR}}/traces.jsonl
+        msg: "No OTEL traces found at {{.OTEL_TRACE_DIR}}/traces.jsonl. Run 'task up:otel' and exercise the API first."
+
+  # ===========================================================================
+  # Service Management
+  # Start/stop the application stack
+  # ===========================================================================
+  up:
+    desc: Start all services (database, backend, frontend)
+    deps: [_check:docker]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} up -d"
+
+  down:
+    desc: Stop all services
+    deps: [_check:docker]
     cmds:
       - "{{.DOCKER_COMPOSE}} down"
+
+  up:debug:
+    desc: Start backend with debug toolbar and verbose logging
+    deps: [_check:docker]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} up -d database"
+      - "{{.DOCKER_COMPOSE}} up -d frontend"
+      - "DJANGO_DEBUG=true {{.DOCKER_COMPOSE}} up backend"
+    # Runs backend in foreground to see all debug output
+
+  up:otel:
+    desc: Start with OpenTelemetry tracing enabled (writes to Docs/diagrams/otel/)
+    deps: [_check:docker]
+    cmds:
+      - mkdir -p {{.OTEL_TRACE_DIR}}
+      - "OTEL_ENABLED=true {{.DOCKER_COMPOSE}} up -d"
+      - 'echo "Traces will be written to {{.OTEL_TRACE_DIR}}/traces.jsonl"'
+      - 'echo "Exercise the API, then run: task diagrams:generate"'
+
+  # ===========================================================================
+  # Docker: Container Management
+  # ===========================================================================
+  docker:volume-clean:
+    desc: Remove project volumes (clears cached configs and database data)
+    deps: [_check:docker]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} down -v"
+      - 'echo "Project volumes removed. Database data has been cleared."'
+
+  docker:clean:
+    desc: Full cleanup - remove containers, volumes, and orphaned containers
+    deps: [_check:docker]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} down -v --remove-orphans"
+      - 'echo "Full cleanup complete. All project containers and volumes removed."'
+
+  docker:rebuild-clean:
+    desc: Clean everything then rebuild from scratch (fresh start)
+    deps: [_check:docker, docker:clean]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} build --no-cache"
+      - "{{.DOCKER_COMPOSE}} up -d"
+      - 'echo "Clean rebuild complete. All services started fresh."'
+
+  docker:rebuild:
+    desc: Full rebuild - stop, remove volumes, rebuild images (no cache), and start
+    deps: [_check:docker]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} down -v"
       - "{{.DOCKER_COMPOSE}} build --no-cache"
       - "{{.DOCKER_COMPOSE}} up -d"
 
   docker:rebuild-backend:
     desc: Rebuild only the backend container
+    deps: [_check:docker]
     cmds:
       - "{{.DOCKER_COMPOSE}} up -d --build {{.BACKEND_CONTAINER}}"
 
   docker:rebuild-frontend:
     desc: Rebuild only the frontend container
+    deps: [_check:docker]
     cmds:
       - "{{.DOCKER_COMPOSE}} up -d --build {{.FRONTEND_CONTAINER}}"
 
   docker:logs:
     desc: Follow logs for all services
+    deps: [_check:docker]
     cmds:
       - "{{.DOCKER_COMPOSE}} logs -f"
 
   docker:logs-backend:
     desc: Follow backend logs
+    deps: [_check:docker]
     cmds:
       - "{{.DOCKER_COMPOSE}} logs -f {{.BACKEND_CONTAINER}}"
 
   docker:shell:
     desc: Open a shell in the backend container
+    deps: [_check:docker, _check:backend-running]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} sh"
 
   docker:db-shell:
     desc: Open psql shell in the database container
+    deps: [_check:docker]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.DATABASE_CONTAINER}} psql -U datadash -d datadash"
 
+  docker:pgadmin:
+    desc: Open pgAdmin in browser (database management UI)
+    deps: [_check:docker]
+    cmds:
+      - open http://localhost:5050 || xdg-open http://localhost:5050 || start http://localhost:5050
+      - 'echo "Login: demo@example.com / secret"'
+
   # ===========================================================================
   # Testing
+  # Requires backend container to be running: task up
   # ===========================================================================
   test:
     desc: Run all backend tests
+    deps: [_check:docker, _check:backend-running]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest"
 
   test:verbose:
     desc: Run all backend tests with verbose output
+    deps: [_check:docker, _check:backend-running]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -v"
 
   test:coverage:
     desc: Run tests with coverage report
+    deps: [_check:docker, _check:backend-running]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest --cov=src --cov-report=term-missing"
 
   test:coverage-html:
     desc: Run tests with HTML coverage report
+    deps: [_check:docker, _check:backend-running]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest --cov=src --cov-report=html"
       - 'echo "Coverage report generated at backend/htmlcov/index.html"'
 
   test:integration:
     desc: Run integration tests only
+    deps: [_check:docker, _check:backend-running]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest tests/integration -v"
 
   test:workflow:
     desc: Run workflow tests only
+    deps: [_check:docker, _check:backend-running]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -m workflow -v"
 
   test:frontend:
     desc: Run frontend unit tests
+    deps: [_check:docker]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.FRONTEND_CONTAINER}} npm test -- --watch=false"
 
   test:e2e:
     desc: Run Playwright E2E tests (requires e2e profile)
+    deps: [_check:docker]
     cmds:
       - "{{.DOCKER_COMPOSE}} --profile e2e run --rm frontend-e2e npx playwright test"
 
   # ===========================================================================
   # Code Quality
+  # Requires backend container to be running: task up
   # ===========================================================================
   lint:
     desc: Run ruff linter (check only)
+    deps: [_check:docker, _check:backend-running]
     dir: backend
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} ruff check src tests"
 
   lint:fix:
     desc: Run ruff linter with safe auto-fixes
+    deps: [_check:docker, _check:backend-running]
     dir: backend
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} ruff check src tests --fix"
 
   format:
     desc: Run ruff formatter
+    deps: [_check:docker, _check:backend-running]
     dir: backend
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} ruff format src tests"
 
   format:check:
     desc: Check formatting without making changes
+    deps: [_check:docker, _check:backend-running]
     dir: backend
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} ruff format src tests --check"
 
   typecheck:
     desc: Run mypy type checker
+    deps: [_check:docker, _check:backend-running]
     dir: backend
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} mypy src"
 
   check:
     desc: Run all checks (lint + format check + typecheck)
+    deps: [_check:docker, _check:backend-running]
     cmds:
       - task: lint
       - task: format:check
@@ -162,40 +282,118 @@ tasks:
       - pre-commit autoupdate
 
   # ===========================================================================
+  # API Documentation (drf-spectacular)
+  # Requires backend container to be running: task up
+  # ===========================================================================
+  docs:
+    desc: Open API documentation in browser (Swagger UI)
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - open http://localhost:8000/api/docs/ || xdg-open http://localhost:8000/api/docs/ || start http://localhost:8000/api/docs/
+
+  docs:schema:
+    desc: Download OpenAPI schema as YAML
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - curl -o openapi-schema.yaml http://localhost:8000/api/schema/
+      - 'echo "Schema saved to openapi-schema.yaml"'
+
+  # ===========================================================================
   # Django Management
+  # Requires backend container to be running: task up
   # ===========================================================================
   migrate:
     desc: Run Django database migrations
+    deps: [_check:docker, _check:backend-running]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py migrate"
 
   makemigrations:
     desc: Create new Django migrations
+    deps: [_check:docker, _check:backend-running]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py makemigrations"
 
   django:shell:
     desc: Open Django shell
+    deps: [_check:docker, _check:backend-running]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py shell"
 
   django:createsuperuser:
     desc: Create a Django superuser
+    deps: [_check:docker, _check:backend-running]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py createsuperuser"
 
   # ===========================================================================
+  # Django Extensions (requires django-extensions package)
+  # Requires backend container to be running: task up
+  # ===========================================================================
+  django:shell-plus:
+    desc: Open enhanced Django shell with auto-imports
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py shell_plus"
+
+  django:show-urls:
+    desc: Show all registered URL patterns
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py show_urls"
+
+  django:graph-models:
+    desc: Generate model dependency graph (requires graphviz)
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py graph_models -a -o models.png"
+      - 'echo "Model graph saved to backend/models.png"'
+
+  # ===========================================================================
+  # Diagrams (PlantUML generation from OTEL traces)
+  # Generates sequence diagrams from OpenTelemetry trace data
+  # Requires: OTEL traces in Docs/diagrams/otel/traces.jsonl
+  # Output goes to: Docs/diagrams/plantuml/
+  # ===========================================================================
+  diagrams:generate:
+    desc: Generate PlantUML diagrams from OTEL traces
+    deps: [_check:docker, _check:otel-traces]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} run --rm {{.BACKEND_CONTAINER}} sh -c 'PYTHONPATH=/app/src python /app/scripts/diagrams/generate_all.py'"
+      - task: diagrams:index
+
+  diagrams:generate-from:
+    desc: Generate diagrams from specific trace file (usage':' task diagrams:generate-from -- /path/to/trace.jsonl)
+    deps: [_check:docker]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} run --rm {{.BACKEND_CONTAINER}} sh -c 'PYTHONPATH=/app/src python /app/scripts/diagrams/generate_all.py --trace {{.CLI_ARGS}}'"
+      - task: diagrams:index
+
+  diagrams:index:
+    desc: Regenerate the diagrams index (Docs/diagrams/plantuml/Diagrams-Index.md)
+    deps: [_check:docker]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} run --rm {{.BACKEND_CONTAINER}} python /app/scripts/diagrams/index_diagrams.py"
+
+  # ===========================================================================
   # Local Development (IDE support, not for running the app)
+  # These run outside Docker for local IDE configuration
   # ===========================================================================
   local:sync:
     desc: Install backend deps locally for IDE resolution (requires uv)
     dir: backend
+    preconditions:
+      - sh: command -v uv
+        msg: "uv is not installed. Install with: curl -LsSf https://astral.sh/uv/install.sh | sh"
     cmds:
       - uv pip install -e ".[dev]"
 
   local:venv:
     desc: Create local venv with uv for IDE support
     dir: backend
+    preconditions:
+      - sh: command -v uv
+        msg: "uv is not installed. Install with: curl -LsSf https://astral.sh/uv/install.sh | sh"
     cmds:
       - uv venv
       - 'echo "Activate with: source .venv/bin/activate"'

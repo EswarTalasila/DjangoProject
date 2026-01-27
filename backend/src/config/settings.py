@@ -2,30 +2,26 @@
 Django settings for EE-Lab-Personal project.
 
 Environment-based configuration for development and production.
+Configuration is loaded via pydantic-settings for type safety and validation.
 """
 
-import os
 from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
 
+from config.env import env
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY", "django-insecure-local-dev-only-change-in-production"
-)
+SECRET_KEY = env.django_secret_key
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get("DJANGO_DEBUG", "true").lower() in ("true", "1", "yes")
+DEBUG = env.django_debug
 
-ALLOWED_HOSTS = [
-    h.strip()
-    for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
-    if h.strip()
-]
+ALLOWED_HOSTS = env.allowed_hosts_list
 
 # Application definition
 INSTALLED_APPS = [
@@ -40,6 +36,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
+    "drf_spectacular",
     # Local apps
     "core",
     "accounts",
@@ -50,6 +47,15 @@ INSTALLED_APPS = [
     "visualizations",
     "exports",
 ]
+
+# Development-only apps (not loaded in production)
+# - debug_toolbar: SQL query inspection, request/response debugging
+# - django_extensions: shell_plus with auto-imports, show_urls, graph_models
+if DEBUG:
+    INSTALLED_APPS += [
+        "debug_toolbar",
+        "django_extensions",
+    ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -62,12 +68,17 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+# Debug toolbar middleware (insert after SecurityMiddleware)
+if DEBUG:
+    MIDDLEWARE.insert(1, "debug_toolbar.middleware.DebugToolbarMiddleware")
+
 ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        # Custom templates directory for overriding third-party templates (e.g., Swagger UI)
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -84,12 +95,8 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
-DATABASE_URL = os.environ.get(
-    "DATABASE_URL", "postgres://datadash:localdev@localhost:5432/datadash"
-)
-
 DATABASES = {
-    "default": dj_database_url.parse(DATABASE_URL, conn_max_age=600),
+    "default": dj_database_url.parse(env.database_url, conn_max_age=600),
 }
 
 # Custom user model
@@ -126,13 +133,22 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # CORS settings
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get("DJANGO_CORS_ALLOWED_ORIGINS", "http://localhost:4200").split(",")
-    if origin.strip()
-]
+CORS_ALLOWED_ORIGINS = env.cors_origins_list
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Debug toolbar settings
+# For Docker, we need to include the Docker network gateway
+INTERNAL_IPS = ["127.0.0.1", "localhost"]
+if DEBUG:
+    import socket
+
+    # Add Docker host IP for debug toolbar to work in containers
+    try:
+        hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
+        INTERNAL_IPS += [ip[: ip.rfind(".")] + ".1" for ip in ips]
+    except socket.gaierror:
+        pass
 
 # REST Framework
 REST_FRAMEWORK = {
@@ -147,6 +163,27 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# drf-spectacular settings (OpenAPI/Swagger documentation)
+# Generates OpenAPI 3.0 schema automatically from DRF views and serializers
+# Access documentation at:
+#   - /api/docs/   (Swagger UI - interactive)
+#   - /api/redoc/  (ReDoc - clean reading)
+#   - /api/schema/ (Raw OpenAPI YAML)
+SPECTACULAR_SETTINGS = {
+    "TITLE": "EE Lab Data Dashboard API",
+    "DESCRIPTION": "API for managing educational assessments, submissions, and visualization.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,  # Don't include schema endpoint in schema itself
+    "SWAGGER_UI_SETTINGS": {
+        "deepLinking": True,  # Enable deep links in Swagger UI
+        "persistAuthorization": True,  # Keep auth tokens between page refreshes
+        # Dark-friendly syntax highlighting for code blocks
+        # Available themes: agate, arta, monokai, nord, obsidian, tomorrow-night, idea
+        "syntaxHighlight.theme": "obsidian",
+    },
 }
 
 SIMPLE_JWT = {
@@ -158,8 +195,8 @@ SIMPLE_JWT = {
 }
 
 # Google OAuth settings
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
-GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_CLIENT_ID = env.google_client_id
+GOOGLE_CLIENT_SECRET = env.google_client_secret
 
 # Security settings (production overrides)
 if not DEBUG:

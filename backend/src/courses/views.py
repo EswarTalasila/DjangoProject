@@ -66,12 +66,12 @@ def list_or_create(request):
             course = create_course(request.user, serializer.validated_data["name"])
         except ValueError as exc:
             return error_response(exc)
-        payload = course_to_dto(course)
-        return Response(payload, status=status.HTTP_200_OK)
+        course_data = course_to_dto(course).model_dump()
+        return Response(course_data, status=status.HTTP_200_OK)
 
     courses = list_courses_for_user(request.user)
-    payload = [course_to_dto(course) for course in courses]
-    return Response(payload, status=status.HTTP_200_OK)
+    courses_data = [course_to_dto(course).model_dump() for course in courses]
+    return Response(courses_data, status=status.HTTP_200_OK)
 
 
 @api_view(["GET", "PUT", "DELETE"])
@@ -107,7 +107,7 @@ def detail(request, course_id: int):
     if request.method == "GET":
         if not can_view_course(request.user, course):
             return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
-        return Response(course_to_dto(course), status=status.HTTP_200_OK)
+        return Response(course_to_dto(course).model_dump(), status=status.HTTP_200_OK)
 
     if request.method == "PUT":
         if not can_manage_course(request.user, course):
@@ -115,7 +115,7 @@ def detail(request, course_id: int):
         serializer = CourseInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         course = edit_course(course, serializer.validated_data["name"])
-        return Response(course_to_dto(course), status=status.HTTP_200_OK)
+        return Response(course_to_dto(course).model_dump(), status=status.HTTP_200_OK)
 
     if not can_manage_course(request.user, course):
         return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
@@ -145,7 +145,8 @@ def list_students(request, course_id: int):
         return Response("Course not found", status=status.HTTP_404_NOT_FOUND)
     if not can_manage_course(request.user, course):
         return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
-    return Response(list_students_in_course(course), status=status.HTTP_200_OK)
+    students = [s.model_dump() for s in list_students_in_course(course)]
+    return Response(students, status=status.HTTP_200_OK)
 
 
 @api_view(["DELETE"])

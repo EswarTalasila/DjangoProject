@@ -61,4 +61,4 @@ def get_visualizations(request):
         return error_response(exc)
     except Exception:
         return server_error_response()
-    return Response(data, status=status.HTTP_200_OK)
+    return Response([d.model_dump() for d in data], status=status.HTTP_200_OK)

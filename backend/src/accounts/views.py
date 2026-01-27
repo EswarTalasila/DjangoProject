@@ -25,6 +25,7 @@ Endpoints:
 """
 
 import json
+from typing import Any, cast
 from urllib.request import Request, urlopen
 
 from django.contrib.auth import get_user_model
@@ -55,7 +56,7 @@ from .services import (
 User = get_user_model()
 
 
-def _google_userinfo(access_token: str) -> dict:
+def _google_userinfo(access_token: str) -> dict[str, Any]:
     """
     Fetch Google user profile information using an OAuth access token.
 
@@ -84,7 +85,7 @@ def _google_userinfo(access_token: str) -> dict:
         headers={"Authorization": f"Bearer {access_token}"},
     )
     with urlopen(request, timeout=10) as response:  # noqa: S310
-        return json.loads(response.read().decode("utf-8"))
+        return cast(dict[str, Any], json.loads(response.read().decode("utf-8")))
 
 
 @api_view(["POST"])
@@ -223,13 +224,14 @@ def login_with_google(request):
         account.save(update_fields=["email", "last_login_at"])
         user = account.user
     else:
-        user = User.objects.filter(username__iexact=email).first()
-        if not user:
+        found_user = User.objects.filter(username__iexact=email).first()
+        if not found_user:
             return Response(
                 {"error": "No account associated with this Google email."},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
-        link_or_create_oauth_account(user, subject, email)
+        link_or_create_oauth_account(found_user, subject, email)
+        user = found_user
 
     refresh = RefreshToken.for_user(user)
     body = {
