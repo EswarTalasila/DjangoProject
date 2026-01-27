@@ -69,6 +69,12 @@ tasks:
     cmds:
       - "{{.DOCKER_COMPOSE}} down"
 
+  down:proxy:
+    desc: Stop all services, including the Nginx proxy container if running
+    deps: [_check:docker]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} --profile proxy down"
+
   up:debug:
     desc: Start backend with debug toolbar and verbose logging
     deps: [_check:docker]
@@ -87,6 +93,11 @@ tasks:
       - 'echo "Traces will be written to {{.OTEL_TRACE_DIR}}/traces.jsonl"'
       - 'echo "Exercise the API, then run: task diagrams:generate"'
 
+  up:proxy:
+    desc: Start with Nginx proxy enabled, exposing port 80. Assumes frontend is on port 4200 and the backend is on port 8000
+    deps: [_check:docker]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} --profile proxy up -d"
   # ===========================================================================
   # Docker: Container Management
   # ===========================================================================
