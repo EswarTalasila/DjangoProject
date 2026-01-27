@@ -178,25 +178,22 @@ services:
       - eel-network
 
   # ==========================================================================
-  # Reverse Proxy (Traefik) - Optional for dev
+  # Reverse Proxy (Nginx)
   # ==========================================================================
-  traefik:
-    image: traefik:v3.0
-    container_name: eel-traefik
+
+  nginx:
+    image: nginx:latest
     restart: unless-stopped
+    container_name: eel-proxy
     profiles:
       - proxy
-    command:
-      - --api.dashboard=true
-      - --api.insecure=true
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
     ports:
       - "80:80"
-      - "8080:8080"  # Traefik dashboard
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
     networks:
       - eel-network
 
