@@ -118,7 +118,6 @@ services:
       - ./Docs/diagrams/otel:/app/traces:cached
     ports:
       - "8000:8000"
-      - "587:587" # SMTP
     depends_on:
       database:
         condition: service_healthy
