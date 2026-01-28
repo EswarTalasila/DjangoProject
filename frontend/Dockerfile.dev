@@ -35,11 +35,8 @@ RUN npm ci
 # Point to Alpine's Chromium for Karma tests
 ENV CHROME_BIN=/usr/bin/chromium
 
-EXPOSE 4200
+EXPOSE 3000
 
-# -----------------------------------------------------------------------------
-# Default command
-# -----------------------------------------------------------------------------
-# Note: In development, docker-compose.yml mounts the source code as a volume
-# and may override this command. The --poll flag enables file watching in Docker.
-CMD ["npm", "start", "--", "--host", "0.0.0.0", "--poll", "2000"]
+# 3. Start Command
+# We use the "dev" script we defined in package.json
+CMD ["npm", "run", "dev"]
