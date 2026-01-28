@@ -109,6 +109,10 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       - OTEL_EXPORTER_OTLP_HEADERS=${OTEL_EXPORTER_OTLP_HEADERS:-}
       - OTEL_TRACE_FILE=${OTEL_TRACE_FILE:-/app/traces/traces.jsonl}
+      # Admin account seeding (used by ensure_admin management command)
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-Admin}
     volumes:
       - ./backend/src:/app/src:cached
       - ./backend/tests:/app/tests:cached
