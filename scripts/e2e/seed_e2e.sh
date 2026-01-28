@@ -21,7 +21,7 @@ for var in \
 done
 
 if [[ "$USE_DOCKER" == "true" ]]; then
-  docker compose run --rm "${env_args[@]}" backend python src/manage.py seed_e2e "$@"
+  docker compose exec "${env_args[@]}" backend python src/manage.py seed_e2e "$@"
 else
   (cd backend && python src/manage.py seed_e2e "$@")
 fi
