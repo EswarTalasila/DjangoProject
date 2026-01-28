@@ -166,8 +166,8 @@ services:
       - e2e
     working_dir: /work/frontend
     environment:
-      - E2E_BASE_URL=${E2E_BASE_URL:-http://localhost:4200}
-      - E2E_API_URL=${E2E_API_URL:-http://localhost:8000/api/v1}
+      - E2E_BASE_URL=${E2E_BASE_URL:-http://frontend:4200}
+      - E2E_API_URL=${E2E_API_URL:-http://backend:8000/api/v1}
     volumes:
       - ./frontend:/work/frontend:cached
       - playwright_node_modules:/work/frontend/node_modules
