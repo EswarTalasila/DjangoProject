@@ -1,0 +1,15 @@
+<div class="assessment-list-container">
+  <h1>Reflection Logs</h1>
+  
+  <div class="assessment-list">
+    <div *ngFor="let assessment of assessments" class="assessment-item">
+      <div class="assessment-info">
+        <h2>{{ assessment.title }}</h2>
+      </div>
+      
+      <button class="start-button" (click)="startAssessment(assessment.id)">
+        Start
+      </button>
+    </div>
+  </div>
+</div>

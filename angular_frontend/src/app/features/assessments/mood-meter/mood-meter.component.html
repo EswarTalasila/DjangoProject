@@ -1,0 +1,85 @@
+<div class="mood-meter-container">
+  <h1>Mood Meter</h1>
+  <h3>How are you feeling?</h3>
+  <div class="mood-meter">
+    <div class="quadrant high-energy low-pleasantness">
+      <div class="title">High Energy / Low Pleasantness</div>
+      <div class="mood-grid">
+        <div
+          *ngFor="let mood of moods.highEnergyLowPleasantness"
+          class="mood"
+          [class.selected]="isSelected(mood.name)"
+          [style.grid-row]="(mood.row % 5) + 1"
+          [style.grid-column]="(mood.col % 5) + 1"
+          (click)="selectMood(mood)"
+        >
+          {{ mood.name }}
+        </div>
+      </div>
+    </div>
+    <div class="quadrant high-energy high-pleasantness">
+      <div class="title">High Energy / High Pleasantness</div>
+      <div class="mood-grid">
+        <div
+          *ngFor="let mood of moods.highEnergyHighPleasantness"
+          class="mood"
+          [class.selected]="isSelected(mood.name)"
+          [style.grid-row]="(mood.row % 5) + 1"
+          [style.grid-column]="(mood.col % 5) + 1"
+          (click)="selectMood(mood)"
+        >
+          {{ mood.name }}
+        </div>
+      </div>
+    </div>
+    <div class="quadrant low-energy low-pleasantness">
+      <div class="title">Low Energy / Low Pleasantness</div>
+      <div class="mood-grid">
+        <div
+          *ngFor="let mood of moods.lowEnergyLowPleasantness"
+          class="mood"
+          [class.selected]="isSelected(mood.name)"
+          [style.grid-row]="(mood.row % 5) + 1"
+          [style.grid-column]="(mood.col % 5) + 1"
+          (click)="selectMood(mood)"
+        >
+          {{ mood.name }}
+        </div>
+      </div>
+    </div>
+    <div class="quadrant low-energy high-pleasantness">
+      <div class="title">Low Energy / High Pleasantness</div>
+      <div class="mood-grid">
+        <div
+          *ngFor="let mood of moods.lowEnergyHighPleasantness"
+          class="mood"
+          [class.selected]="isSelected(mood.name)"
+          [style.grid-row]="(mood.row % 5) + 1"
+          [style.grid-column]="(mood.col % 5) + 1"
+          (click)="selectMood(mood)"
+        >
+          {{ mood.name }}
+        </div>
+      </div>
+    </div>
+    <div class="axis x-axis">Low pleasantness</div>
+    <div class="axis x-axis high">High pleasantness</div>
+    <div class="axis y-axis">Low energy</div>
+    <div class="axis y-axis high">High energy</div>
+  </div>
+  <p>This information was adapted from Soma & Soul with permission from Kim Jeffs.</p>
+  <div class="selected-display" *ngIf="selectedMoods.length > 0">
+    <strong>You selected:</strong>
+    <ul>
+      <li *ngFor="let mood of selectedMoods">{{mood.name}}</li>
+    </ul>
+  </div>
+  <button 
+    class="submit" 
+    *ngIf="selectedMoods.length > 0" 
+    (click)="onSubmit()" 
+    [disabled]="submitting">
+    {{ submitting ? 'Submitting...' : 'Submit' }}
+  </button>
+  <div class="error-message" *ngIf="submitError">{{ submitError }}</div>
+</div>

@@ -1,0 +1,141 @@
+:host {
+  display: block;
+  font-family: Arial, Helvetica, sans-serif;
+  max-width: 100%;
+  padding: 0 1rem;
+  box-sizing: border-box;
+  background-color: var(--background-color);
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 2.5em;
+}
+
+p {
+  font-size: 1.2em;
+}
+
+div.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+  gap: 1rem;
+}
+
+.empty-list {
+  text-align: center;
+  padding: 3rem 5rem;
+  color: #666;
+  background-color: var(--primary-color);
+  border: 2px solid #ccc;
+  border-radius: 20px;
+  margin-bottom: 2rem;
+
+  h2 {
+    font-size: 1.8em;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--text-color);
+  }
+
+  p {
+    font-size: 1.1em;
+  }
+}
+
+.list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.assessment-card {
+  background-color: var(--primary-color);
+  border: 2px solid #ccc;
+  border-radius: 20px;
+  transition: all 0.2s ease;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  margin-bottom: 2rem;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  }
+
+  .card-header {
+    background-color: var(--button-color);
+    color: var(--button-text-color);
+    padding: 1rem 10rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+
+    h3 {
+      font-size: 1.3em;
+      font-weight: 600;
+      margin: 0;
+      flex: 1;
+      display: flex;
+      justify-content: center;
+    }
+  }
+
+  .card-body {
+    padding: 3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    color: var(--text-color);
+
+    
+  }
+}
+
+.create-button {
+  width: 15%
+}
+
+button {
+  width: 100%;
+  padding: 0.75rem;
+  background-color: var(--button-color);
+  color: var(--button-text-color);
+  border: none;
+  border-radius: 5px;
+  font-weight: 600;
+  font-size: 1em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    opacity: 0.9;
+    transform: translateX(2px);
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    .header h1 {
+      font-size: 2em;
+    }
+
+    .assessment-card {
+      border-radius: 15px;
+    }
+  }
+}

@@ -1,0 +1,70 @@
+<div class="assessments-container">
+  <div class="header">
+    <h1>Submissions</h1>
+  </div>
+
+  <div class="assessments-tables">
+    <!-- Self Table -->
+    <div class="assessments-section">
+      <h2>Reflection Logs</h2>
+
+      <table class="assessments-table">
+        <thead>
+          <tr>
+            <th class="title-column">Assignment Title</th>
+            <th class="date-column">Submitted At</th>
+            <th class="action-column">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let assignment of selfAssignments">
+            <td class="title-column">{{ assignment.title }}</td>
+            <td class="date-column">
+              {{ assignment.submittedAt ? (assignment.submittedAt | date:'medium') : 'Not submitted' }}
+            </td>
+            <td class="action-column">
+              <button (click)="editSubmission(assignment)">Edit Submission</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Student Table -->
+    <div class="assessments-section">
+      <h2>Assignments</h2>
+
+      <div class="filters">
+        <label>
+          Course:
+          <select [(ngModel)]="selectedCourse" (change)="onCourseChange()">
+            <option value="all">All Courses</option>
+            <option *ngFor="let course of courses" [value]="course.id">{{ course.name }}</option>
+          </select>
+        </label>
+      </div>
+
+      <table class="assessments-table">
+        <thead>
+          <tr>
+            <th class="title-column">Assignment Title</th>
+            <th class="status-column">Status</th>
+            <th class="action-column">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let assessment of studentAssessments">
+            <td class="title-column">{{ assessment.assessmentName }}</td>
+            <td class="status-column">{{ getStatusText(assessment) }}</td>
+            <td class="action-column">
+              <div class="action-buttons">
+                <button class="view-btn" (click)="viewSubmissions(assessment)">View Submissions</button>
+                <button class="delete-btn" (click)="deleteAssignment(assessment, $event)" title="Delete Assignment">✕</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

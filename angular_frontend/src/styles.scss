@@ -1,0 +1,24 @@
+/* You can add global styles to this file, and also import other style files */
+
+:root {
+  --background-color: #ebe9e7;
+  --primary-color: #f8f3d8;
+  --secondary-color: #ebe9e7;
+  --text-color: #333;         
+  --hover-color: #2b6ea4;     
+  --header-color: #bad28f;    
+  --button-color: #61323e;    
+  --button-text-color: #fff;   
+  --header-text-color: #333; 
+  --warning-color: #E56B70;
+
+
+  --success-color: #10b981;
+  --error-color: #ef4444;
+  --border-color: #d1d5db;
+}
+
+body {
+  margin: 0;
+  padding-top: 100px; /* for header */
+}

@@ -1,0 +1,256 @@
+<!-- teacher-grade.component.html -->
+<div class="submission-viewer-container">
+  <div *ngIf="assessment && submission" class="submission-content">
+    <div class="submission-header">
+      <button (click)="navigateBack()" class="back-link">
+        Back to Assignments
+      </button>
+      <h1>{{ assessment.title }}</h1>
+      <div class="header-info">
+        <div class="info-badge">
+          <span>{{ assessment.questions.length }} questions</span>
+        </div>
+      </div>
+    </div>
+
+    <button *ngIf="!isMoodMeter" (click)="submitScores()" class="submit-button">Submit Grading</button>
+
+    <div class="side-by-side-container" [class.single-column]="isMoodMeter">
+      <!-- LEFT COLUMN: Student Submission -->
+      <div class="submission-column">
+        <h2 class="column-title">Student Submission</h2>
+        <div class="questions-list">
+          <div
+            *ngFor="let question of assessment.questions; let i = index"
+            class="question-item"
+          >
+            <button
+              class="question-header"
+              (click)="expandedQuestionId = expandedQuestionId === question.questionId ? null : question.questionId"
+              [class.expanded]="expandedQuestionId === question.questionId"
+            >
+              <div class="question-header-content">
+                <span class="question-number">Question {{ i + 1 }}</span>
+                <span class="question-prompt-preview">{{ question.prompt }}</span>
+              </div>
+              <div class="question-header-actions">
+                <span class="question-points">{{ question.maxPoints }} points</span>
+                <svg
+                  class="chevron-icon"
+                  [class.rotated]="expandedQuestionId === question.questionId"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </div>
+            </button>
+
+            <div
+              class="question-details"
+              *ngIf="expandedQuestionId === question.questionId"
+            >
+              <div class="question-info">
+                <h3 class="question-prompt">{{ question.prompt }}</h3>
+                <div class="question-meta">
+                  <span class="type-badge">{{ question.type.replace('_', ' ') }}</span>
+                  <span class="separator">•</span>
+                  <span>{{ question.maxPoints }} points</span>
+                </div>
+              </div>
+
+              <!-- Multiple Choice Questions -->
+              <div
+                *ngIf="question.type === 'MULTIPLE_CHOICE'"
+                class="question-answer"
+              >
+                <div class="instruction-text">
+                  {{ question.selectAll ? 'Select all that apply' : 'Select one answer' }}
+                </div>
+                <div class="choices-container">
+                  <div
+                    *ngFor="let choice of question.data?.['choices']; let idx = index"
+                    class="choice-option"
+                    [class.selected]="question.questionId && answers.get(question.questionId)?.selected?.includes(idx)"
+                  >
+                    <div class="choice-indicator">
+                      <input
+                        [type]="question.selectAll ? 'checkbox' : 'radio'"
+                        [checked]="question.questionId && answers.get(question.questionId)?.selected?.includes(idx)"
+                        disabled
+                      />
+                    </div>
+                    <label>{{ choice.prompt }}</label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Short Answer Questions -->
+              <div
+                *ngIf="question.type === 'SHORT_ANSWER'"
+                class="question-answer"
+              >
+                <div class="answer-box">
+                  <div class="answer-label">Student Response:</div>
+                  <div class="answer-text">
+                    {{ question.questionId ? (answers.get(question.questionId)?.text || 'No answer provided') : 'No answer provided' }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Number Scale Questions -->
+              <div
+                *ngIf="question.type === 'NUMBER_SCALE'"
+                class="question-answer"
+              >
+                <div class="scale-box">
+                  <div class="scale-labels">
+                    <span>{{ question.min }}</span>
+                    <span>{{ question.max }}</span>
+                  </div>
+                  <div class="scale-track">
+                    <input
+                      type="range"
+                      class="scale-input"
+                      [min]="question.min"
+                      [max]="question.max"
+                      [value]="question.questionId ? (answers.get(question.questionId)?.val ?? question.min) : question.min"
+                      disabled
+                    />
+                  </div>
+                  <div class="scale-value">
+                    <span>Selected: </span>
+                    <strong>{{ question.questionId ? (answers.get(question.questionId)?.val ?? 'Not selected') : 'Not selected' }}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Mood Meter Questions -->
+              <div
+                *ngIf="question.type === 'MOOD_METER'"
+                class="question-answer"
+              >
+                <div class="mood-meter-box">
+                  <div class="mood-display">
+                    <div class="mood-header">
+                      <span class="label">Student's Mood Selections:</span>
+                      <span class="mood-count">({{ getMoodMeterAnswers(question.questionId!).length }} selected)</span>
+                    </div>
+                    
+                    <!-- Display all selected moods -->
+                    <div class="mood-list" *ngIf="getMoodMeterAnswers(question.questionId!).length > 0">
+                      <div 
+                        *ngFor="let moodAnswer of getMoodMeterAnswers(question.questionId!); let idx = index" 
+                        class="mood-item"
+                      >
+                        <div class="mood-number">{{ idx + 1 }}.</div>
+                        <div class="mood-details">
+                          <strong class="mood-value">
+                            {{ getMoodName(moodAnswer.row, moodAnswer.col) }}
+                          </strong>
+                          <div class="mood-quadrant">
+                            <span class="quadrant-label">Quadrant:</span>
+                            <span class="quadrant-value">
+                              {{ getMoodQuadrant(moodAnswer.row, moodAnswer.col) }}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- No mood selected message -->
+                    <div class="no-mood" *ngIf="getMoodMeterAnswers(question.questionId!).length === 0">
+                      <em>No moods selected</em>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: Rubric Section (hidden for Mood Meter) -->
+      <div class="submission-column" *ngIf="!isMoodMeter">
+        <h2 class="column-title">Grading Rubric</h2>
+        <div *ngIf="rubric" class="rubric-section">
+          <div class="rubric-questions-list">
+            <div
+              *ngFor="let rubricQuestion of rubric.questions; let i = index"
+              class="question-item"
+            >
+              <button
+                class="question-header"
+                (click)="expandedRubricQuestionId = expandedRubricQuestionId === rubricQuestion.questionId ? null : rubricQuestion.questionId"
+                [class.expanded]="expandedRubricQuestionId === rubricQuestion.questionId"
+              >
+                <div class="question-header-content">
+                  <span class="question-number">Rubric Item {{ i + 1 }}</span>
+                  <span class="question-prompt-preview">{{ rubricQuestion.prompt }}</span>
+                </div>
+                <div class="question-header-actions">
+                  <span class="question-points">{{ rubricQuestion.maxPoints }} points</span>
+                  <svg
+                    class="chevron-icon"
+                    [class.rotated]="expandedRubricQuestionId === rubricQuestion.questionId"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </div>
+              </button>
+
+              <div
+                class="question-details"
+                *ngIf="expandedRubricQuestionId === rubricQuestion.questionId"
+              >
+                <div class="question-info">
+                  <h3 class="question-prompt">{{ rubricQuestion.prompt }}</h3>
+                  <div class="question-meta">
+                    <span>{{ rubricQuestion.maxPoints }} points</span>
+                  </div>
+                </div>
+
+                <!-- Rubric grading inputs -->
+                <div class="rubric-grading">
+                  <div class="score-input-container">
+                    <label class="score-label">Score:</label>
+                    <input
+                      type="number"
+                      class="score-input"
+                      [min]="0"
+                      [max]="rubricQuestion.maxPoints"
+                      step="0.5"
+                      placeholder="0.0"
+                      [value]="rubricScores.get(rubricQuestion.questionId) ?? 0"
+                      (input)="updateRubricScore(rubricQuestion.questionId, $event)"
+                    />
+                    <span class="max-points-label">/ {{ rubricQuestion.maxPoints }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <div *ngIf="!assessment || !submission" class="loading-state">
+    <p>Loading submission...</p>
+  </div>
+</div>

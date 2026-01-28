@@ -1,0 +1,23 @@
+<!-- src/app/header.component.html -->
+<header>
+  <!-- Logo/Title -->
+  <div class="header-logo">
+    <h1>Environmental Education Lab</h1>
+  </div>
+
+  <!-- Navigation links -->
+  <nav>
+    <ul>
+      <li *ngIf="userRole === 'TEACHER' || userRole === 'ADMIN'"><a href="/dashboard">Dashboard</a></li>
+      <li *ngIf="userRole === 'STUDENT'"><a [routerLink]="[userId, 'assignments']">Assignments</a></li>
+      <li *ngIf="userRole === 'ADMIN'"><a href="/account">Accounts</a></li>
+      <li *ngIf="userRole === 'ADMIN'"><a href="/assessments">Assessments</a></li>
+      <li *ngIf="userRole === 'TEACHER'"><a [routerLink]="['/teacher', userId, 'assessments']">Submissions</a></li>
+      <li *ngIf="userRole === 'TEACHER'"><a [routerLink]="['/teacher', userId, 'self']">Reflection Logs</a></li>
+      <li *ngIf="userRole === 'TEACHER'"><a [routerLink]="['/teacher', userId, 'assignments', 'create']">Create Assignment</a></li>
+      <li *ngIf="userRole === 'TEACHER'"><a href="/courses">Courses</a></li>
+      <li *ngIf="userRole === 'TEACHER' || userRole === 'ADMIN' || userRole === 'STUDENT'"><a href="/login">Logout</a></li>
+      <li *ngIf="userRole !== 'TEACHER' && userRole !== 'ADMIN' && userRole !== 'STUDENT'"><a href="/login">Login</a></li>
+    </ul>
+  </nav>
+</header>

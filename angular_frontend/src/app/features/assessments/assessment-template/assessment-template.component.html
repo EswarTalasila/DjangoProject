@@ -1,0 +1,110 @@
+<div class="container">
+  <h1>{{ isEditMode ? 'Edit Assessment' : 'Create Assessment' }}</h1>
+  <div class="assessment-details">
+    <div class="detail-row">
+      <label for="title">Assessment Title:</label>
+      <textarea 
+        id="title"
+        class="title-input auto-expand" 
+        placeholder="Enter assessment title"
+        [(ngModel)]="assessmentTitle"
+        (input)="autoExpand($event)"
+      ></textarea>
+    </div>
+
+    <div class="detail-row">
+      <label for="gradingMode">Assessment Type:</label>
+      <select id="gradingMode" [(ngModel)]="gradingMode" class="grading-select">
+        <option value="AUTO">Automatic</option>
+        <option value="MANUAL">Manual</option>
+        <option value="HYBRID">Hybrid</option>
+        <option value="RUBRIC">Rubric</option>
+        <option value="REFLECTION">Reflection</option>
+        <option value="MOOD_METER">Mood Meter</option>
+      </select>
+    </div>
+
+    <div *ngIf="gradingMode === 'RUBRIC'" class="detail-row">
+      <label for="rubricAssessment">Select Assessment:</label>
+      <select 
+        id="rubricAssessment"
+        [(ngModel)]="selectedRubricAssessmentId"
+        class="rubric-select"
+      >
+        <option [value]="undefined" disabled selected>Choose an assessment...</option>
+        <option *ngFor="let assessment of availableAssessments" [value]="assessment.id">
+          {{ assessment.title }}
+        </option>
+      </select>
+    </div>
+
+    <div *ngIf="gradingMode !== 'RUBRIC'" class="detail-row">
+      <label for="title">Assessment Category:</label>
+      <textarea 
+        id="title"
+        class="title-input auto-expand" 
+        placeholder="Enter assessment category (optional)"
+        [(ngModel)]="assessmentCategory"
+        (input)="autoExpand($event)"
+      ></textarea>
+    </div>
+
+  </div>
+
+  <div *ngIf="gradingMode !== 'MOOD_METER'">
+    <div class="template-container">
+      <div *ngFor="let question of questions; let i = index" class="question-wrapper">
+        <div class="question-number">Question {{ i + 1 }}</div>
+        <ng-container *ngIf="gradingMode === 'RUBRIC' && question.type === 'short-answer'">
+          <app-grading-criteria-question
+            [data]="$any(questions[i])"
+            (dataChange)="questions[i] = $event"
+            (delete)="removeQuestion(i)"
+          >
+          </app-grading-criteria-question>
+        </ng-container>
+        <ng-container *ngIf="gradingMode !== 'RUBRIC' || question.type !== 'short-answer'">
+          <ng-container [ngSwitch]="question.type">
+            <app-multiple-choice-question
+              *ngSwitchCase="'multiple-choice'"
+              [data]="$any(questions[i])"
+              (dataChange)="questions[i] = $event"
+              (delete)="removeQuestion(i)"
+            >
+            </app-multiple-choice-question>
+            <app-short-answer-question
+              *ngSwitchCase="'short-answer'"
+              [data]="$any(questions[i])"
+              (dataChange)="questions[i] = $event"
+              (delete)="removeQuestion(i)"
+            >
+            </app-short-answer-question>
+            <app-scale-question
+              *ngSwitchCase="'scale'"
+              [data]="$any(questions[i])"
+              (dataChange)="questions[i] = $event"
+              (delete)="removeQuestion(i)"
+            >
+            </app-scale-question>
+          </ng-container>
+        </ng-container>
+      </div>
+      <div *ngIf="questions.length === 0" class="no-questions">
+        <p>No questions added yet. Click a button below to add your first question.</p>
+      </div>
+    </div>
+    <div class="controls">
+      <button *ngIf="gradingMode !== 'RUBRIC'" (click)="addQuestion('multiple-choice')">+ Multiple Choice</button>
+      <button *ngIf="gradingMode !== 'RUBRIC'" (click)="addQuestion('short-answer')">+ Short Answer</button>
+      <button *ngIf="gradingMode !== 'RUBRIC'" (click)="addQuestion('scale')">+ Scale</button>
+
+      <button *ngIf="gradingMode === 'RUBRIC'" (click)="addQuestion('short-answer')">+ Grading Criteria</button>
+    </div>
+  </div>
+  <div class="action-buttons">
+    <button class="cancel-btn" (click)="cancelEdit()">Cancel</button>
+    <button class="save-btn" (click)="saveAssessment()">
+      {{ isEditMode ? 'Update Assessment' : 'Save Assessment' }}
+    </button>
+  </div>
+</div>

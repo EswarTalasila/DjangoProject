@@ -1,0 +1,58 @@
+<div class="question-card">
+  <div class="question-header">
+    <textarea 
+      class="question-input auto-expand" 
+      placeholder="Short Answer Question"
+      [(ngModel)]="data.prompt"
+      (ngModelChange)="onDataChange()"
+      (input)="autoExpand($event)"
+    ></textarea>
+    <input 
+      type="number" 
+      class="points-input" 
+      placeholder="Points"
+      [(ngModel)]="data.maxPoints"
+      (ngModelChange)="onDataChange()"
+      min="0"
+    />
+    <button class="delete-btn" (click)="onDelete()">Delete</button>
+  </div>
+
+  <div class="image-section">
+    <label class="image-upload-btn">
+      Add Image
+      <input 
+        type="file" 
+        accept="image/*" 
+        (change)="onImageSelected($event)"
+        style="display: none;"
+      />
+    </label>
+    <span class="image-status">
+      {{ data.image ? 'Image uploaded' : 'No image uploaded' }}
+    </span>
+  </div>
+
+  <div class="options-section">
+    <label>
+      <input 
+        type="checkbox" 
+        [(ngModel)]="data.caseSensitive"
+        (ngModelChange)="onDataChange()"
+      />
+      Case sensitive
+    </label>
+    <label>
+      <input 
+        type="checkbox" 
+        [(ngModel)]="data.trim"
+        (ngModelChange)="onDataChange()"
+      />
+      Trim whitespace
+    </label>
+  </div>
+
+  <div class="info-note">
+    <small>Note: Short answer questions require manual grading</small>
+  </div>
+</div>

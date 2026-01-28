@@ -1,0 +1,35 @@
+<div class="assessments-container">
+  <div class="header">
+    <h1>Submissions</h1>
+  </div>
+
+  <div class="assessments-section">
+    <table class="assessments-table">
+      <thead>
+        <tr>
+          <th>Student Name</th>
+          <th>Submitted At</th>
+          <th>Status</th>
+          <th>Score</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let submission of allSubmissions()">
+          <td>{{ submission.studentName }}</td>
+          <td>{{ submission.submittedAt | date: 'short' }}</td>
+          <td>{{ getStatusText(submission.status) }}</td>
+          <td>{{ submission.score}}</td>
+          <td>
+            <button 
+              class="open-button" 
+              (click)="onOpenGrade(submission)"
+              [disabled]="isAuto"
+              [attr.title]="isAuto ? 'This submission is automatically graded' : null"
+              [ngClass]="{'disabled-button': isAuto}">Grade</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>

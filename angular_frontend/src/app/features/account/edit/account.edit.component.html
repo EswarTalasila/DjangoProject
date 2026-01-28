@@ -1,0 +1,47 @@
+<div class="edit-container">
+  <h1>Edit Account</h1>
+  <div class="edit-inputs">
+    <form class="edit-form" (submit)="onSubmit($event)">
+      <div class="form-group">
+        <h2>Role:</h2>
+        <select id="role" name="role" [(ngModel)]="roleValue" required>
+          <option value="admin">Admin</option>
+          <option value="teacher">Teacher</option>
+        </select>
+      </div>
+      <br/>
+      <div class="form-group">
+        <input
+          type="text"
+          id="fname"
+          name="fname"
+          placeholder="first name"
+          [(ngModel)]="firstName"
+          required
+        />
+      </div>
+      <div class="form-group">
+        <input
+          type="text"
+          id="lname"
+          name="lname"
+          placeholder="last name"
+          [(ngModel)]="lastName"
+          required
+        />
+      </div>
+      <div class="form-group">
+        <input
+          type="text"
+          id="email"
+          name="email"
+          placeholder="email"
+          [(ngModel)]="email"
+          required
+        />
+      </div>
+      <br/>
+      <button id="edit-button" type="submit">Save Edit</button>
+    </form>
+  </div>
+</div>

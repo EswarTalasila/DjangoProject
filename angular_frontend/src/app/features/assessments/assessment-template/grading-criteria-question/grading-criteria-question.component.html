@@ -1,0 +1,35 @@
+<div class="question-card">
+  <div class="question-header">
+    <textarea 
+      class="question-input auto-expand" 
+      placeholder="Grading Criteria"
+      [(ngModel)]="data.prompt"
+      (ngModelChange)="onDataChange()"
+      (input)="autoExpand($event)"
+    ></textarea>
+    <input 
+      type="number" 
+      class="points-input" 
+      placeholder="Points"
+      [(ngModel)]="data.maxPoints"
+      (ngModelChange)="onDataChange()"
+      min="0"
+    />
+    <button class="delete-btn" (click)="onDelete()">Delete</button>
+  </div>
+
+  <div class="image-section">
+    <label class="image-upload-btn">
+      Add Image
+      <input 
+        type="file" 
+        accept="image/*" 
+        (change)="onImageSelected($event)"
+        style="display: none;"
+      />
+    </label>
+    <span class="image-status">
+      {{ data.image ? 'Image uploaded' : 'No image uploaded' }}
+    </span>
+  </div>
+</div>
