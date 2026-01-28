@@ -125,6 +125,7 @@ services:
       - eel-network
     command: >
       sh -c "python src/manage.py migrate &&
+             python src/manage.py ensure_admin &&
              python src/manage.py runserver 0.0.0.0:8000"
 
   # ==========================================================================

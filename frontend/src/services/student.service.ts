@@ -19,12 +19,12 @@ export class StudentService {
 
   addStudent(student: Student): Observable<any> {
     console.log('Single student payload:', student);
-    return this.http.post('/api/v1/students', student, {withCredentials: true});
+    return this.http.post('/api/v1/students/', student, {withCredentials: true});
   }
 
   uploadStudents(students: Student[]): Observable<any> {
     console.log('Bulk students payload:', students);
-    return this.http.post('/api/v1/students/bulk', students, {withCredentials: true});
+    return this.http.post('/api/v1/students/bulk/', students, {withCredentials: true});
   }
 
   /**
