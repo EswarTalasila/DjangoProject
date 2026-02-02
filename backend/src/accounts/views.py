@@ -148,7 +148,7 @@ def login(request):
         200: {
             "accessToken": "eyJ...",  # JWT access token
             "tokenType": "Bearer",
-            "role": "STUDENT|TEACHER|ADMIN",
+            "role": "STUDENT|TEACHER|RESEARCHER",
             "id": "123",
             "name": "User Name",
             "username": "user@example.com"
@@ -193,7 +193,7 @@ def login_with_google(request):
         200: {
             "accessToken": "eyJ...",  # JWT access token
             "tokenType": "Bearer",
-            "role": "STUDENT|TEACHER|ADMIN",
+            "role": "STUDENT|TEACHER|RESEARCHER",
             "id": "123"
         }
         400: "accessToken is required" if missing
@@ -297,7 +297,7 @@ def create_user(request):
         {
             "username": "user@example.com",  # Required, must be unique
             "name": "User Name",             # Required
-            "role": "STUDENT|TEACHER|ADMIN", # Optional, defaults to STUDENT
+            "role": "STUDENT|TEACHER|RESEARCHER", # Optional, defaults to STUDENT
             "password": "optional"           # Optional initial password
         }
 
@@ -309,7 +309,7 @@ def create_user(request):
 
     Permission Rules:
         - TEACHER: Can create STUDENT only
-        - ADMIN: Can create any role
+        - Admin (is_staff): Can create RESEARCHER or TEACHER
     """
     serializer = UserInputSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -353,8 +353,8 @@ def edit_user(request, user_id: int):
         404: "User not found" if user_id doesn't exist
 
     Permission Rules:
-        - TEACHER: Can edit own students only, cannot change to ADMIN
-        - ADMIN: Can edit any user and any role
+        - TEACHER: Can edit own students only
+        - Admin (is_staff): Can edit researchers and teachers
     """
     serializer = UserInputSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -400,7 +400,7 @@ def delete_user(request, username: str):
 
     Permission Rules:
         - TEACHER: Can delete own students only
-        - ADMIN: Can delete any user except other admins
+        - Admin (is_staff): Can delete researchers and teachers
 
     Warning:
         This performs a hard delete. Consider implementing soft delete
@@ -419,7 +419,7 @@ def delete_user(request, username: str):
 @permission_classes([IsAdmin])
 def list_teachers_admins(request):
     """
-    List all users with TEACHER or ADMIN roles.
+    List all users with TEACHER or RESEARCHER roles.
 
     Used by the admin dashboard to display staff members who can
     create courses and manage students.
@@ -439,7 +439,7 @@ def list_teachers_admins(request):
         The role field includes the "ROLE_" prefix for compatibility
         with the Angular frontend's role-based routing.
     """
-    users = User.objects.filter(roles__role__in=[Role.TEACHER, Role.ADMIN]).distinct()
+    users = User.objects.filter(roles__role__in=[Role.TEACHER, Role.RESEARCHER]).distinct()
     serializer = UserOutputSerializer(users, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -502,7 +502,7 @@ def reset_password(request, user_id: int):
 
     Permission Rules:
         - TEACHER: Can reset password for own students only
-        - ADMIN: Can reset password for any non-admin user
+        - Admin (is_staff): Can reset password for researchers and teachers
     """
     user = User.objects.filter(id=user_id).first()
     if not user:

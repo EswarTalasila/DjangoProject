@@ -5,7 +5,7 @@ This module provides DRF permission classes and helper functions for
 enforcing role-based access control across API endpoints.
 
 Role Hierarchy (highest to lowest privilege):
-    ADMIN > TEACHER > STUDENT
+    RESEARCHER > TEACHER > STUDENT
 
 Permission Classes (use with @permission_classes decorator):
     IsAdmin: Restricts to admin users only
@@ -23,7 +23,7 @@ Usage:
     @api_view(["GET"])
     @permission_classes([IsTeacherOrAdmin])
     def my_view(request):
-        if primary_role(request.user) == Role.ADMIN:
+        if request.user.is_staff:
             # Admin-specific logic
             pass
 """
@@ -54,17 +54,17 @@ def primary_role(user) -> str:
     """
     Return the user's primary (highest-privilege) role.
 
-    Checks roles in order of privilege: ADMIN > TEACHER > STUDENT.
+    Checks roles in order of privilege: RESEARCHER > TEACHER > STUDENT.
     Returns the first matching role, or STUDENT as fallback.
 
     Args:
         user: User instance
 
     Returns:
-        Role string (ADMIN, TEACHER, or STUDENT)
+        Role string (RESEARCHER, TEACHER, or STUDENT)
     """
     roles = _role_set(user)
-    for role in (Role.ADMIN, Role.TEACHER, Role.STUDENT):
+    for role in (Role.RESEARCHER, Role.TEACHER, Role.STUDENT):
         if role in roles:
             return role
     return Role.STUDENT
@@ -76,7 +76,7 @@ def has_role(user, role: str) -> bool:
 
     Args:
         user: User instance
-        role: Role to check for (e.g., Role.ADMIN)
+        role: Role to check for (e.g., Role.RESEARCHER)
 
     Returns:
         True if user has the role, False otherwise
@@ -111,7 +111,7 @@ class IsAdmin(permissions.BasePermission):
 
     def has_permission(self, request, view):
         """Return True if request user is an admin."""
-        return has_role(request.user, Role.ADMIN)
+        return request.user.is_staff
 
 
 class IsTeacher(permissions.BasePermission):
@@ -144,4 +144,4 @@ class IsTeacherOrAdmin(permissions.BasePermission):
 
     def has_permission(self, request, view):
         """Return True if request user is a teacher or admin."""
-        return has_any_role(request.user, (Role.ADMIN, Role.TEACHER))
+        return request.user.is_staff or has_role(request.user, Role.TEACHER)

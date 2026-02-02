@@ -127,7 +127,7 @@ def can_create_user(request_user: User, requested_role: str) -> bool:
     Check if request_user is allowed to create a user with the requested role.
 
     Permission hierarchy:
-    - Admins can create admins and teachers
+    - Admins (is_staff) can create researchers and teachers
     - Teachers can create students
     - Students cannot create any users
 
@@ -140,8 +140,8 @@ def can_create_user(request_user: User, requested_role: str) -> bool:
     """
     role = _get_role_value(requested_role)
     request_role = primary_role(request_user)
-    if request_role == Role.ADMIN:
-        return role in (Role.ADMIN, Role.TEACHER)
+    if request_user.is_staff: 
+        return role in (Role.RESEARCHER, Role.TEACHER)
     if request_role == Role.TEACHER:
         return role == Role.STUDENT
     return False
@@ -180,7 +180,7 @@ def can_edit_user(request_user: User, target_user: User, requested_role: str) ->
     Check if request_user can edit target_user with the requested role.
 
     Permission rules:
-    - Admins can edit admins and teachers
+    - Admins (is_staff) can edit researchers and teachers
     - Teachers can edit students they own (enrolled in their courses)
     - Students cannot edit any users
 
@@ -194,8 +194,8 @@ def can_edit_user(request_user: User, target_user: User, requested_role: str) ->
     """
     target_role = _get_role_value(requested_role)
     request_role = primary_role(request_user)
-    if request_role == Role.ADMIN:
-        return target_role in (Role.ADMIN, Role.TEACHER)
+    if request_user.is_staff:
+        return target_role in (Role.RESEARCHER, Role.TEACHER)
     if request_role == Role.TEACHER:
         return target_role == Role.STUDENT and teacher_owns_student(request_user, target_user)
     return False
@@ -206,7 +206,7 @@ def can_delete_user(request_user: User, target_user: User) -> bool:
     Check if request_user can delete target_user.
 
     Permission rules:
-    - Admins can delete admins and teachers
+    - Admins (is_staff) can delete researchers and teachers
     - Teachers can delete students they own
     - Students cannot delete any users
 
@@ -219,8 +219,8 @@ def can_delete_user(request_user: User, target_user: User) -> bool:
     """
     request_role = primary_role(request_user)
     target_role = primary_role(target_user)
-    if request_role == Role.ADMIN:
-        return target_role in (Role.ADMIN, Role.TEACHER)
+    if request_user.is_staff:
+        return target_role in (Role.RESEARCHER, Role.TEACHER)
     if request_role == Role.TEACHER:
         return target_role == Role.STUDENT and teacher_owns_student(request_user, target_user)
     return False
@@ -231,7 +231,7 @@ def can_reset_password(request_user: User, target_user: User) -> bool:
     Check if request_user can reset target_user's password.
 
     Permission rules follow the same pattern as can_delete_user:
-    - Admins can reset passwords for admins and teachers
+    - Admins (is_staff) can reset passwords for researchers and teachers
     - Teachers can reset passwords for students they own
     - Students cannot reset anyone's password
 
@@ -244,8 +244,8 @@ def can_reset_password(request_user: User, target_user: User) -> bool:
     """
     request_role = primary_role(request_user)
     target_role = primary_role(target_user)
-    if request_role == Role.ADMIN:
-        return target_role in (Role.ADMIN, Role.TEACHER)
+    if request_user.is_staff:
+        return target_role in (Role.RESEARCHER, Role.TEACHER)
     if request_role == Role.TEACHER:
         return target_role == Role.STUDENT and teacher_owns_student(request_user, target_user)
     return False

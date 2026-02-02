@@ -143,7 +143,7 @@ def list_user(request, user_id: int):
         403: Forbidden if requesting another user's assignments (non-admin)
         404: "User not found"
     """
-    if request.user.id != user_id and primary_role(request.user) != Role.ADMIN:
+    if request.user.id != user_id and not request.user.is_staff:
         return Response(status=status.HTTP_403_FORBIDDEN)
     target = User.objects.filter(id=user_id).first()
     if not target:

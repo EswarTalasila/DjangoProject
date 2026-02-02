@@ -17,7 +17,8 @@ def api_client():
 def admin_user():
     """Test that admin user."""
     user = UserFactory()
-    UserRole.objects.create(user=user, role=Role.ADMIN)
+    user.is_staff=True
+    user.save()
     return user
 
 

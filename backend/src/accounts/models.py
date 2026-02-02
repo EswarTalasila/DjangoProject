@@ -5,9 +5,11 @@ This module defines the core user model and associated profiles that power
 the authentication and role-based access control system. The architecture
 supports three user types:
 
-    ADMIN: Full system access, can manage assessments and view all data
+    RESEARCHER: Can design assessments, oversee studies, view all data
     TEACHER: Can create courses, enroll students, create assignments
     STUDENT: Can view assigned assessments and submit responses
+
+Admin status is determined by the User.is_staff field, not by a role.
 
 User Creation Flows:
     1. Self-registration (register endpoint): Creates user + STUDENT role + StudentProfile
@@ -72,10 +74,10 @@ class UserManager(BaseUserManager):
 
     def create_superuser(self, username, name, password=None, **extra_fields):
         """
-        Create and persist a superuser with admin role.
+        Create and persist a superuser with admin privileges.
 
-        Superusers are automatically granted is_staff and is_superuser flags,
-        and receive the ADMIN role in the user_roles table.
+        Superusers are automatically granted is_staff and is_superuser flags.
+        No user role is assigned — admin status is determined by is_staff.
 
         Args:
             username: Email address for the superuser
@@ -84,7 +86,7 @@ class UserManager(BaseUserManager):
             **extra_fields: Additional fields (is_staff/is_superuser enforced)
 
         Returns:
-            User: The created superuser with ADMIN role
+            User: The created superuser with is_staff=True
 
         Raises:
             ValueError: If is_staff or is_superuser explicitly set to False
@@ -97,7 +99,6 @@ class UserManager(BaseUserManager):
         if extra_fields.get("is_superuser") is not True:
             raise ValueError("Superuser must have is_superuser=True.")
         user = self.create_user(username, name, password, **extra_fields)
-        UserRole.objects.get_or_create(user=user, role=Role.ADMIN)
         return user
 
 
@@ -179,15 +180,15 @@ class Role(models.TextChoices):
     checks typically use the "primary" role (highest privilege).
 
     Role Hierarchy (highest to lowest):
-        ADMIN > TEACHER > STUDENT
+        RESEARCHER > TEACHER > STUDENT
 
     Values:
-        ADMIN: System administrator with full access
+        RESEARCHER: Can design assessments, oversee studies, view all data
         TEACHER: Can create courses, assignments, view student data
         STUDENT: Can view assigned work and submit responses
     """
 
-    ADMIN = "ADMIN", "Admin"
+    RESEARCHER = "RESEARCHER", "Researcher"
     TEACHER = "TEACHER", "Teacher"
     STUDENT = "STUDENT", "Student"
 
@@ -196,12 +197,12 @@ class UserRole(models.Model):
     """
     Join table mapping users to their assigned roles.
 
-    Users can have multiple roles (e.g., a teacher who is also an admin).
+    Users can have multiple roles (e.g., a user with both RESEARCHER and TEACHER).
     The unique constraint ensures no duplicate role assignments.
 
     Attributes:
         user: Foreign key to the User model
-        role: One of the Role enum values (ADMIN, TEACHER, STUDENT)
+        role: One of the Role enum values (RESEARCHER, TEACHER, STUDENT)
 
     Note:
         When checking permissions, the system uses the user's "primary"

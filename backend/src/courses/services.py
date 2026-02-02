@@ -55,9 +55,9 @@ def can_view_course(request_user: User, course: Course) -> bool:
     """
     Check if a user can view a course.
 
-    Admins can view all courses. Teachers can only view their own courses.
+    Admins (is_staff) can view all courses. Teachers can only view their own courses.
     """
-    if has_role(request_user, Role.ADMIN):
+    if request_user.is_staff:
         return True
     owner = _course_owner(course)
     return owner is not None and owner.id == request_user.id
@@ -152,9 +152,9 @@ def list_courses_for_user(user: User) -> list[Course]:
     """
     List courses accessible to a user.
 
-    Admins see all courses. Teachers see only their own courses.
+    Admins (is_staff) see all courses. Teachers see only their own courses.
     """
-    if has_role(user, Role.ADMIN):
+    if user.is_staff:
         return list(Course.objects.all())
     return list(Course.objects.filter(teacher_profile__user=user))
 

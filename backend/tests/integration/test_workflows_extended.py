@@ -4,7 +4,7 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from accounts.models import Role, User, UserRole
+from accounts.models import User
 from assessments.models import Question
 
 
@@ -26,7 +26,8 @@ def step(message: str) -> None:
 
 def create_admin_client(username: str, password: str) -> tuple[User, APIClient]:
     admin = User.objects.create_user(username=username, name="Admin", password=password)
-    UserRole.objects.create(user=admin, role=Role.ADMIN)
+    admin.is_staff = True
+    admin.save()
     client = APIClient()
     login(client, admin.username, password)
     return admin, client
