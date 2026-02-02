@@ -45,6 +45,7 @@ export default function LoginPage() {
       Cookies.set('access_token', accessToken, { expires: 1 });
       if (role) Cookies.set('user_role', role);
 
+      Cookies.set('user_name', name || "Instructor", { expires: 1 });
       toast.success(`Welcome back, ${name || 'Instructor'}!`);
       router.push('/dashboard'); 
 
