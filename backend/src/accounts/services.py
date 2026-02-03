@@ -26,7 +26,7 @@ from .models import (
 )
 
 
-def _get_role_value(role: str | None) -> str:
+def _get_role_value(role: str | None) -> Role:
     """
     Normalize a role string to a valid Role enum value.
 
@@ -37,13 +37,21 @@ def _get_role_value(role: str | None) -> str:
         role: Raw role string, possibly with ROLE_ prefix (e.g., "ROLE_TEACHER")
 
     Returns:
-        Normalized Role enum value (ADMIN, TEACHER, or STUDENT)
+        Normalized Role enum value (RESEARCHER, TEACHER, or STUDENT)
+
+    Raises:
+        ValueError: If the role string is not a valid Role choice
     """
     if not role:
         return Role.STUDENT
     if isinstance(role, str) and role.startswith("ROLE_"):
         role = role.replace("ROLE_", "", 1)
-    return Role(role)
+    
+    try:
+        return Role(role)
+    except ValueError:
+        valid_roles = [r.value for r in Role]
+        raise ValueError(f"Invalid role '{role}'. Must be one of: {valid_roles}")
 
 
 def set_single_role(user: User, role: str) -> None:

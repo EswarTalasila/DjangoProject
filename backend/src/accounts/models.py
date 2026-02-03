@@ -13,16 +13,18 @@ Admin status is determined by the User.is_staff field, not by a role.
 
 User Creation Flows:
     1. Self-registration (register endpoint): Creates user + STUDENT role + StudentProfile
-    2. Teacher creation (admin creates): Creates user + TEACHER role + TeacherProfile
-    3. Student import (teacher imports): Creates user + STUDENT role + StudentProfile
-    4. OAuth login (Google): Creates/links user via OAuthAccount
+    2. Researcher creation (admin creates): Creates user + RESEARCHER role + ResearcherProfile
+    3. Teacher creation (admin creates): Creates user + TEACHER role + TeacherProfile
+    4. Student import (teacher imports): Creates user + STUDENT role + StudentProfile
+    5. OAuth login (Google): Creates/links user via OAuthAccount
 
 Database Tables:
-    app_users        - Core user accounts (email-based authentication)
-    user_roles       - Many-to-many join table for user roles
-    teacher_profiles - Extended data for teacher accounts
-    student_profiles - Extended data for student accounts (includes consent)
-    oauth_accounts   - Linked external identity provider accounts
+    app_users           - Core user accounts (email-based authentication)
+    user_roles          - Many-to-many join table for user roles
+    researcher_profiles - Extended data for researcher accounts
+    teacher_profiles    - Extended data for teacher accounts
+    student_profiles    - Extended data for student accounts (includes consent)
+    oauth_accounts      - Linked external identity provider accounts
 
 Note:
     The User model uses email as the username field. All emails are
@@ -120,6 +122,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     Related Models:
         roles: UserRole instances defining user's permissions
+        researcher_profile: ResearcherProfile if user is a researcher
         teacher_profile: TeacherProfile if user is a teacher
         student_profile: StudentProfile if user is a student
     """
@@ -229,6 +232,44 @@ class UserRole(models.Model):
         """Return a readable string representation."""
         return f"{self.user.username}: {self.role}"
 
+
+class ResearcherProfile(models.Model):
+    """
+    Extended profile data for researcher accounts.
+
+    Every user with the RESEARCHER role should have an associated ResearcherProfile.
+    Researchers design studies and assessments, and oversee the research workflow.
+    This model provides a place to attach researcher-specific fields later
+    (institution, IRB number, research area, etc.).
+
+    Attributes:
+        user: One-to-one link to the User model
+        created_at: When the researcher profile was created
+
+    Related Models:
+        (Future) studies, assessments owned by this researcher
+    """
+
+    # One-to-one link to the user account
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, db_column="user_id", related_name="researcher_profile"
+    )
+
+    # Timestamp for auditing when researcher was onboarded
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        """Database table configuration for ResearcherProfile."""
+
+        db_table = "researcher_profiles"
+        constraints = [
+            models.UniqueConstraint(fields=["user"], name="uq_researcher_user"),
+        ]
+
+    def __str__(self):
+        """Return a readable string representation."""
+        return f"ResearcherProfile({self.user.username})"
+    
 
 class TeacherProfile(models.Model):
     """
