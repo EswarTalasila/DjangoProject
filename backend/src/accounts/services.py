@@ -12,14 +12,16 @@ This module provides business logic for user account management including:
 from django.contrib.auth import authenticate
 from django.db import transaction
 
-from core.permissions import primary_role
+from core.permissions import has_sudo_permission, primary_role
 from courses.models import Enrollment
 
 from .models import (
     OAuthAccount,
     OAuthProvider,
+    ResearcherProfile,
     Role,
     StudentProfile,
+    SudoPermission,
     TeacherProfile,
     User,
     UserRole,
@@ -74,9 +76,10 @@ def ensure_profiles_for_role(user: User, role: str, creator: User | None = None)
     """
     Create the appropriate profile for a user's role if it does not exist.
 
-    Students require a StudentProfile (with consent tracking and creator reference).
-    Teachers require a TeacherProfile.
-    Admins do not require an additional profile.
+    Each role requires a corresponding profile:
+    - RESEARCHER: ResearcherProfile
+    - TEACHER: TeacherProfile
+    - STUDENT: StudentProfile (with consent tracking and creator reference)
 
     Args:
         user: The user who needs a profile
@@ -84,10 +87,12 @@ def ensure_profiles_for_role(user: User, role: str, creator: User | None = None)
         creator: For students, the user who created this student account
     """
     normalized = _get_role_value(role)
-    if normalized == Role.STUDENT and not StudentProfile.objects.filter(user=user).exists():
-        StudentProfile.objects.create(user=user, created_by=creator or user, consent=False)
+    if normalized == Role.RESEARCHER and not ResearcherProfile.objects.filter(user=user).exists():
+        ResearcherProfile.objects.create(user=user)
     if normalized == Role.TEACHER and not TeacherProfile.objects.filter(user=user).exists():
         TeacherProfile.objects.create(user=user)
+    if normalized == Role.STUDENT and not StudentProfile.objects.filter(user=user).exists():
+        StudentProfile.objects.create(user=user, created_by=creator or user, consent=False)
 
 
 def build_user_response(user: User, access_token: str) -> dict:
@@ -136,6 +141,7 @@ def can_create_user(request_user: User, requested_role: str) -> bool:
 
     Permission hierarchy:
     - Admins (is_staff) can create researchers and teachers
+    - Researchers with sudo can create teachers (CREATE_TEACHER) or students (CREATE_STUDENT)
     - Teachers can create students
     - Students cannot create any users
 
@@ -148,10 +154,22 @@ def can_create_user(request_user: User, requested_role: str) -> bool:
     """
     role = _get_role_value(requested_role)
     request_role = primary_role(request_user)
-    if request_user.is_staff: 
+
+    # Admin can create researchers and teachers
+    if request_user.is_staff:
         return role in (Role.RESEARCHER, Role.TEACHER)
+
+    # Researcher with sudo can create teachers/students
+    if request_role == Role.RESEARCHER:
+        if role == Role.TEACHER and has_sudo_permission(request_user, SudoPermission.CREATE_TEACHER):
+            return True
+        if role == Role.STUDENT and has_sudo_permission(request_user, SudoPermission.CREATE_STUDENT):
+            return True
+
+    # Teacher can create students
     if request_role == Role.TEACHER:
         return role == Role.STUDENT
+
     return False
 
 
@@ -189,6 +207,7 @@ def can_edit_user(request_user: User, target_user: User, requested_role: str) ->
 
     Permission rules:
     - Admins (is_staff) can edit researchers and teachers
+    - Researchers with EDIT_USER sudo can edit teachers and students
     - Teachers can edit students they own (enrolled in their courses)
     - Students cannot edit any users
 
@@ -202,10 +221,20 @@ def can_edit_user(request_user: User, target_user: User, requested_role: str) ->
     """
     target_role = _get_role_value(requested_role)
     request_role = primary_role(request_user)
+
+    # Admin can edit researchers and teachers
     if request_user.is_staff:
         return target_role in (Role.RESEARCHER, Role.TEACHER)
+
+    # Researcher with sudo can edit teachers and students
+    if request_role == Role.RESEARCHER:
+        if target_role in (Role.TEACHER, Role.STUDENT) and has_sudo_permission(request_user, SudoPermission.EDIT_USER):
+            return True
+
+    # Teacher can edit students they own
     if request_role == Role.TEACHER:
         return target_role == Role.STUDENT and teacher_owns_student(request_user, target_user)
+
     return False
 
 
@@ -215,6 +244,7 @@ def can_delete_user(request_user: User, target_user: User) -> bool:
 
     Permission rules:
     - Admins (is_staff) can delete researchers and teachers
+    - Researchers with DELETE_USER sudo can delete teachers and students
     - Teachers can delete students they own
     - Students cannot delete any users
 
@@ -227,10 +257,20 @@ def can_delete_user(request_user: User, target_user: User) -> bool:
     """
     request_role = primary_role(request_user)
     target_role = primary_role(target_user)
+
+    # Admin can delete researchers and teachers
     if request_user.is_staff:
         return target_role in (Role.RESEARCHER, Role.TEACHER)
+
+    # Researcher with sudo can delete teachers and students
+    if request_role == Role.RESEARCHER:
+        if target_role in (Role.TEACHER, Role.STUDENT) and has_sudo_permission(request_user, SudoPermission.DELETE_USER):
+            return True
+
+    # Teacher can delete students they own
     if request_role == Role.TEACHER:
         return target_role == Role.STUDENT and teacher_owns_student(request_user, target_user)
+
     return False
 
 
@@ -238,10 +278,9 @@ def can_reset_password(request_user: User, target_user: User) -> bool:
     """
     Check if request_user can reset target_user's password.
 
-    Permission rules follow the same pattern as can_delete_user:
-    - Admins (is_staff) can reset passwords for researchers and teachers
-    - Teachers can reset passwords for students they own
-    - Students cannot reset anyone's password
+    Permission rules:
+    - Only admins (is_staff) can reset passwords
+    - Admins can reset passwords for researchers, teachers, and students
 
     Args:
         request_user: The user making the reset request
@@ -250,12 +289,12 @@ def can_reset_password(request_user: User, target_user: User) -> bool:
     Returns:
         True if the password reset is allowed, False otherwise
     """
-    request_role = primary_role(request_user)
     target_role = primary_role(target_user)
+
+    # Only admin can reset passwords
     if request_user.is_staff:
-        return target_role in (Role.RESEARCHER, Role.TEACHER)
-    if request_role == Role.TEACHER:
-        return target_role == Role.STUDENT and teacher_owns_student(request_user, target_user)
+        return target_role in (Role.RESEARCHER, Role.TEACHER, Role.STUDENT)
+
     return False
 
 

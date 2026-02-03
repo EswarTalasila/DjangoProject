@@ -8,14 +8,17 @@ Role Hierarchy (highest to lowest privilege):
     RESEARCHER > TEACHER > STUDENT
 
 Permission Classes (use with @permission_classes decorator):
-    IsAdmin: Restricts to admin users only
+    IsAdmin: Restricts to admin users only (is_staff)
+    IsResearcher: Restricts to researcher users only
+    IsResearcherOrAdmin: Restricts to researchers or admins
     IsTeacher: Restricts to teacher users only
-    IsTeacherOrAdmin: Restricts to teachers or admins
+    IsTeacherOrAbove: Restricts to teachers, researchers, or admins
 
 Helper Functions (for custom permission logic in views):
     primary_role(user): Get user's highest-privilege role
     has_role(user, role): Check if user has specific role
     has_any_role(user, roles): Check if user has any of the roles
+    has_sudo_permission(user, permission): Check if user has sudo permission
 
 Usage:
     from core.permissions import IsTeacherOrAdmin, primary_role
@@ -43,7 +46,7 @@ def _role_set(user) -> set[str]:
         user: User instance or None
 
     Returns:
-        Set of role strings (e.g., {"ADMIN", "TEACHER"}) or empty set
+        Set of role strings (e.g., {"RESEARCHER", "TEACHER"}) or empty set
     """
     if not user or not getattr(user, "is_authenticated", False):
         return set()
@@ -98,7 +101,31 @@ def has_any_role(user, roles: Iterable[str]) -> bool:
     role_set = _role_set(user)
     return any(role in role_set for role in roles)
 
+def has_sudo_permission(user, permission: str) -> bool:
+    """
+    Check if user is a sudoed researcher with the given permission.
 
+    A user has sudo permission if they have a SudoGrant record and the
+    specific permission is in their permissions list.
+
+    Args:
+        user: User instance to check
+        permission: SudoPermission value (e.g., "CREATE_TEACHER")
+
+    Returns:
+        True if user has the sudo permission, False otherwise
+
+    Example:
+        from accounts.models import SudoPermission
+        if has_sudo_permission(user, SudoPermission.CREATE_TEACHER):
+            # Allow creating teachers
+    """
+    try:
+        sudo_grant = user.sudo_grant
+        return permission in sudo_grant.permissions
+    except AttributeError:
+        return False
+    
 class IsAdmin(permissions.BasePermission):
     """
     DRF permission class restricting access to admin users only.
@@ -113,6 +140,35 @@ class IsAdmin(permissions.BasePermission):
         """Return True if request user is an admin."""
         return request.user.is_staff
 
+class IsResearcher(permissions.BasePermission):
+    """
+    DRF permission class restricting access to researcher users only.
+
+    Usage:
+        @permission_classes([IsResearcher])
+        def researcher_only_view(request):
+            ...
+    """
+
+    def has_permission(self, request, view):
+        """Return True if request user is a researcher."""
+        return has_role(request.user, Role.RESEARCHER)
+
+
+
+class IsResearcherOrAdmin(permissions.BasePermission):
+    """
+    DRF permission class allowing access to researchers or admins.
+
+    Usage:
+        @permission_classes([IsResearcherOrAdmin])
+        def research_management_view(request):
+            ...
+    """
+
+    def has_permission(self, request, view):
+        """Return True if request user is a researcher or admin."""
+        return request.user.is_staff or has_role(request.user, Role.RESEARCHER)
 
 class IsTeacher(permissions.BasePermission):
     """
@@ -129,19 +185,24 @@ class IsTeacher(permissions.BasePermission):
         return has_role(request.user, Role.TEACHER)
 
 
-class IsTeacherOrAdmin(permissions.BasePermission):
+class IsTeacherOrAbove(permissions.BasePermission):
     """
-    DRF permission class allowing access to teachers or admins.
+    DRF permission class allowing access to teachers, researchers, or admins.
 
     This is the most common permission for management endpoints where
-    both teachers and admins should have access.
+    teachers need access and higher-privilege roles should also have access.
+    Follows the role hierarchy: ADMIN > RESEARCHER > TEACHER > STUDENT.
 
     Usage:
-        @permission_classes([IsTeacherOrAdmin])
+        @permission_classes([IsTeacherOrAbove])
         def management_view(request):
             ...
     """
 
     def has_permission(self, request, view):
-        """Return True if request user is a teacher or admin."""
-        return request.user.is_staff or has_role(request.user, Role.TEACHER)
+        """Return True if request user is a teacher, researcher, or admin."""
+        return (
+            request.user.is_staff
+            or has_role(request.user, Role.RESEARCHER)
+            or has_role(request.user, Role.TEACHER)
+        )

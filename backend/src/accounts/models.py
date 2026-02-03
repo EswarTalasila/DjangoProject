@@ -21,6 +21,7 @@ User Creation Flows:
 Database Tables:
     app_users           - Core user accounts (email-based authentication)
     user_roles          - Many-to-many join table for user roles
+    sudo_grants         - Elevated permissions for researchers
     researcher_profiles - Extended data for researcher accounts
     teacher_profiles    - Extended data for teacher accounts
     student_profiles    - Extended data for student accounts (includes consent)
@@ -122,6 +123,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     Related Models:
         roles: UserRole instances defining user's permissions
+        sudo_grant: SudoGrant if user is a sudoed researcher
         researcher_profile: ResearcherProfile if user is a researcher
         teacher_profile: TeacherProfile if user is a teacher
         student_profile: StudentProfile if user is a student
@@ -232,6 +234,100 @@ class UserRole(models.Model):
         """Return a readable string representation."""
         return f"{self.user.username}: {self.role}"
 
+class SudoPermission(models.TextChoices):
+    """
+    Enumeration of elevated permissions that can be granted to researchers.
+
+    Sudo permissions allow researchers to perform admin-level actions without
+    being full system admins. Each permission is granted explicitly and stored
+    in the SudoGrant.permissions JSONField.
+
+    Values:
+        CREATE_TEACHER: Can create teacher accounts
+        CREATE_STUDENT: Can create student accounts
+        EDIT_USER: Can edit user accounts (within user role space)
+        DELETE_USER: Can delete user accounts (within user role space)
+        BULK_CREATE: Can use bulk user creation endpoints
+        RESET_PASSWORD: Can reset passwords for other users
+        GRANT_SUDO: Can grant sudo permissions to other researchers
+
+    Note:
+        Sudo permissions only apply within the user role space (RESEARCHER,
+        TEACHER, STUDENT). A sudoed researcher cannot create, modify, or
+        delete admin accounts regardless of their permissions.
+    """
+
+    CREATE_TEACHER = "CREATE_TEACHER", "Create Teacher"
+    CREATE_STUDENT = "CREATE_STUDENT", "Create Student"
+    EDIT_USER = "EDIT_USER", "Edit User"
+    DELETE_USER = "DELETE_USER", "Delete User"
+    BULK_CREATE = "BULK_CREATE", "Bulk Create"
+    RESET_PASSWORD = "RESET_PASSWORD", "Reset Password"
+    GRANT_SUDO = "GRANT_SUDO", "Grant Sudo"
+
+
+class SudoGrant(models.Model):
+    """
+    Elevated permissions granted to a researcher for admin-level actions.
+
+    A SudoGrant allows a researcher to perform specific admin actions without
+    being a full system admin (is_staff=True). Each researcher can have at most
+    one SudoGrant (OneToOne relationship).
+
+    Attributes:
+        user: The researcher receiving elevated permissions (must have RESEARCHER role)
+        granted_by: Admin or sudoed researcher who created this grant (PROTECT on delete)
+        granted_at: When the grant was created
+        can_grant_sudo: Whether this researcher can grant sudo to other researchers
+        permissions: List of SudoPermission values this researcher holds
+
+    Sudo Rules:
+        - Only an admin (is_staff=True) can grant sudo to a researcher
+        - A sudoed researcher with can_grant_sudo=True can grant sudo to others, but:
+          - They can only delegate a subset of their own permissions (no escalation)
+          - Only an admin can set can_grant_sudo=True (never transitive)
+        - Sudo is default-deny: zero elevated permissions unless explicitly listed
+        - Admin and user role spaces never cross: sudo cannot affect admin accounts
+
+    Example:
+        grant = SudoGrant.objects.create(
+            user=researcher,
+            granted_by=admin,
+            can_grant_sudo=False,
+            permissions=["CREATE_TEACHER", "CREATE_STUDENT"]
+        )
+    """
+
+    # The researcher receiving elevated permissions
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name="sudo_grant"
+    )
+
+    # Admin or sudoed researcher who created this grant
+    # PROTECT prevents deleting the granter if they have active grants
+    granted_by = models.ForeignKey(
+        User, on_delete=models.PROTECT, related_name="sudo_grants_given"
+    )
+
+    # Timestamp for auditing when sudo was granted
+    granted_at = models.DateTimeField(auto_now_add=True)
+
+    # Whether this researcher can grant sudo to other researchers
+    # Only an admin can set this to True
+    can_grant_sudo = models.BooleanField(default=False)
+
+    # List of SudoPermission values (e.g., ["CREATE_TEACHER", "EDIT_USER"])
+    # Validated against SudoPermission enum choices
+    permissions = models.JSONField(default=list)
+
+    class Meta:
+        """Database table configuration for SudoGrant."""
+
+        db_table = "sudo_grants"
+
+    def __str__(self):
+        """Return a readable string representation."""
+        return f"SudoGrant({self.user.username}, permissions={self.permissions})"
 
 class ResearcherProfile(models.Model):
     """
