@@ -185,6 +185,24 @@ class IsTeacher(permissions.BasePermission):
         return has_role(request.user, Role.TEACHER)
 
 
+class IsTeacherOrAdmin(permissions.BasePermission):
+    """
+    DRF permission class allowing access to teachers or admins only.
+
+    Used for user management endpoints where teachers manage their students
+    and admins have full access. Does not include researchers.
+
+    Usage:
+        @permission_classes([IsTeacherOrAdmin])
+        def user_management_view(request):
+            ...
+    """
+
+    def has_permission(self, request, view):
+        """Return True if request user is a teacher or admin."""
+        return request.user.is_staff or has_role(request.user, Role.TEACHER)
+
+
 class IsTeacherOrAbove(permissions.BasePermission):
     """
     DRF permission class allowing access to teachers, researchers, or admins.

@@ -331,7 +331,7 @@ class TestExtendedWorkflows:
         other_student_client = APIClient()
         login(other_student_client, "student-sub-other@example.com", "otherpass")
         draft_response = other_student_client.put(
-            f"/api/v1/students/{other_student_id}/assignments/{assignment_id}/draft",
+            f"/api/v1/students/{other_student_id}/assignments/{assignment_id}/draft/",
             {"answers": []},
             format="json",
         )
@@ -343,7 +343,7 @@ class TestExtendedWorkflows:
 
         step("Student saves draft")
         draft_response = student_client.put(
-            f"/api/v1/students/{student_id}/assignments/{assignment_id}/draft",
+            f"/api/v1/students/{student_id}/assignments/{assignment_id}/draft/",
             {
                 "answers": [
                     {
@@ -420,7 +420,7 @@ class TestExtendedWorkflows:
 
         step("Invalid assignment returns 404")
         missing = student_client.put(
-            f"/api/v1/students/{student_id}/assignments/999999/draft",
+            f"/api/v1/students/{student_id}/assignments/999999/draft/",
             {"answers": []},
             format="json",
         )

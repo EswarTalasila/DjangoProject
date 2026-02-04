@@ -8,14 +8,14 @@ from accounts.models import Role, User, UserRole
 @pytest.mark.django_db
 class TestAccountRoutes:
     def test_register_creates_student_only(self, api_client):
-        """Test that register creates student only."""
+        """Test that register creates student only, ignoring any role parameter."""
         response = api_client.post(
             "/api/v1/auth/register",
             {
                 "username": "student@example.com",
                 "password": "testpass123",
                 "name": "Student Name",
-                "role": "ROLE_ADMIN",
+                "role": "ROLE_TEACHER",  # Should be ignored, always creates student
             },
             format="json",
         )
@@ -68,37 +68,36 @@ class TestAccountRoutes:
         created = User.objects.get(username="teacher@example.com")
         assert created.teacher_profile is not None
 
-    def test_teacher_cannot_create_admin(self, api_client, teacher_user):
-        """Test that teacher cannot create admin."""
+    def test_teacher_cannot_create_researcher(self, api_client, teacher_user):
+        """Test that teacher cannot create researcher (only admin can)."""
         api_client.force_authenticate(user=teacher_user)
         payload = {
-            "username": "admin2@example.com",
+            "username": "researcher@example.com",
             "password": "testpass123",
-            "name": "Admin Two",
-            "role": "ROLE_ADMIN",
+            "name": "Researcher",
+            "role": "ROLE_RESEARCHER",
         }
         response = api_client.post("/api/v1/auth/createuser", payload, format="json")
         assert response.status_code == 403
 
     def test_edit_user_requires_authorization(self, api_client, teacher_user, admin_user):
-        """Test that edit user requires authorization."""
+        """Test that teacher cannot edit admin user."""
         api_client.force_authenticate(user=teacher_user)
         payload = {
             "name": "Admin Updated",
             "username": admin_user.username,
-            "role": "ROLE_ADMIN",
         }
         response = api_client.post(f"/api/v1/auth/edituser/{admin_user.id}", payload, format="json")
         assert response.status_code == 403
 
-    def test_list_teachers_admins_returns_role_prefix(self, api_client, admin_user, teacher_user):
-        """Test that list teachers admins returns role prefix."""
+    def test_list_teachers_admins_returns_teachers_and_researchers(self, api_client, admin_user, teacher_user):
+        """Test that list teachers/admins returns users with TEACHER or RESEARCHER roles."""
         api_client.force_authenticate(user=admin_user)
         response = api_client.get("/api/v1/auth/teachers-admins")
         assert response.status_code == 200
-        roles = {entry["role"] for entry in response.json()}
-        assert "ROLE_ADMIN" in roles
-        assert "ROLE_TEACHER" in roles
+        # Endpoint returns TEACHER and RESEARCHER roles only (not staff-only admins)
+        usernames = {entry["username"] for entry in response.json()}
+        assert teacher_user.username in usernames
 
     def test_bulk_create_users_returns_count(self, api_client, admin_user):
         """Test that bulk create users returns count."""

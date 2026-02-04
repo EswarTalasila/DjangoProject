@@ -130,7 +130,7 @@ class TestWorkflows:
 
         step("Student saves draft submission")
         draft_response = student_client.put(
-            f"/api/v1/students/{student_id}/assignments/{assignment_id}/draft",
+            f"/api/v1/students/{student_id}/assignments/{assignment_id}/draft/",
             {
                 "answers": [
                     {
