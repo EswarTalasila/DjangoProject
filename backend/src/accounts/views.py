@@ -418,13 +418,14 @@ def delete_user(request, username: str):
 
 
 @api_view(["GET"])
-@permission_classes([IsAdmin])
-def list_teachers_admins(request):
+@permission_classes([IsResearcherOrAdmin])
+def list_staff(request):
     """
-    List all users with TEACHER or RESEARCHER roles.
+    List all non-student users (researchers, teachers, and admins).
 
-    Used by the admin dashboard to display staff members who can
-    create courses and manage students.
+    Used by the admin/researcher dashboard to display staff members who can
+    create courses and manage students. Researchers have read access for
+    data oversight; admins have full access.
 
     Returns:
         200: [
