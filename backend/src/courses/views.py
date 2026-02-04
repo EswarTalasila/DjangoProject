@@ -23,7 +23,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from core.errors import error_response
-from core.permissions import IsTeacher, IsTeacherOrAdmin
+from core.permissions import IsTeacher, IsTeacherOrAbove
 
 from .models import Course
 from .serializers import CourseInputSerializer
@@ -41,7 +41,7 @@ from .services import (
 
 
 @api_view(["GET", "POST"])
-@permission_classes([IsTeacherOrAdmin])
+@permission_classes([IsTeacherOrAbove])
 def list_or_create(request):
     """
     List all courses for the user (GET) or create a new course (POST).
@@ -75,7 +75,7 @@ def list_or_create(request):
 
 
 @api_view(["GET", "PUT", "DELETE"])
-@permission_classes([IsTeacherOrAdmin])
+@permission_classes([IsTeacherOrAbove])
 def detail(request, course_id: int):
     """
     Get, update, or delete a specific course.

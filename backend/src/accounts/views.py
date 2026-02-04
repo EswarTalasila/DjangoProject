@@ -36,9 +36,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from core.permissions import IsAdmin, IsTeacherOrAdmin, primary_role
+from core.permissions import IsAdmin, IsResearcherOrAdmin, IsTeacherOrAdmin, has_sudo_permission, primary_role
 
-from .models import OAuthAccount, OAuthProvider, Role
+from .models import OAuthAccount, OAuthProvider, Role, SudoPermission
 from .serializers import CheckEmailSerializer, UserInputSerializer, UserOutputSerializer
 from .services import (
     authenticate_user,
@@ -515,10 +515,10 @@ def reset_password(request, user_id: int):
 
 
 @api_view(["POST"])
-@permission_classes([IsAdmin])
+@permission_classes([IsResearcherOrAdmin])
 def bulk_create(request):
     """
-    Create multiple user accounts in a single request (admin only).
+    Create multiple user accounts in a single request.
 
     Processes a list of user objects and creates valid ones, silently
     skipping invalid entries. Useful for importing users from CSV or
@@ -548,10 +548,17 @@ def bulk_create(request):
         - Invalid serializer data
         - Roles requester cannot create (non-admin trying to create admin)
 
+    Permission Rules:
+        - Admin (is_staff): Full access
+        - Researcher with BULK_CREATE sudo permission: Can bulk create
+
     Note:
         Failed entries are silently skipped. For detailed error reporting,
         use individual create_user calls instead.
     """
+    # Researchers need BULK_CREATE sudo permission
+    if not request.user.is_staff and not has_sudo_permission(request.user, SudoPermission.BULK_CREATE):
+        return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
     if not isinstance(request.data, list):
         return Response("Expected list of users", status=status.HTTP_400_BAD_REQUEST)
     created = 0

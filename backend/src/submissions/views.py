@@ -26,7 +26,7 @@ from accounts.models import Role, User
 from accounts.services import teacher_owns_student
 from assignments.models import Assignment
 from core.errors import error_response, server_error_response
-from core.permissions import primary_role
+from core.permissions import IsTeacher, primary_role
 from courses.models import Enrollment
 
 from .models import Submission
@@ -240,7 +240,7 @@ def assignment_submissions(request, assignment_id: int):
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsTeacher])
 def teacher_self_assess(request, assessment_id: int):
     """
     Submit a teacher's self-assessment for mood meter or reflection.

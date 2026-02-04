@@ -25,7 +25,7 @@ from rest_framework.response import Response
 from accounts.models import Role
 from assignments.models import Assignment
 from core.errors import error_response
-from core.permissions import IsAdmin, IsTeacherOrAdmin, primary_role
+from core.permissions import IsAdmin, IsTeacherOrAbove, primary_role
 from courses.models import Enrollment
 
 from .models import Assessment
@@ -40,7 +40,7 @@ from .services import (
 
 
 @api_view(["GET", "POST"])
-@permission_classes([IsTeacherOrAdmin])
+@permission_classes([IsTeacherOrAbove])
 def list_or_create(request):
     """
     List all assessments (GET) or create a new one (POST, admin only).
