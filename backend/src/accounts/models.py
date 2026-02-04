@@ -35,6 +35,7 @@ Note:
 from typing import cast
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -328,6 +329,23 @@ class SudoGrant(models.Model):
     def __str__(self):
         """Return a readable string representation."""
         return f"SudoGrant({self.user.username}, permissions={self.permissions})"
+
+    def clean(self):
+        """Validate permissions JSONField against SudoPermission enum."""
+        super().clean()
+        if not isinstance(self.permissions, list):
+            raise ValidationError({
+                "permissions": "Permissions must be a list"
+            })
+
+        valid_permissions = {p.value for p in SudoPermission}
+        invalid = [p for p in self.permissions if p not in valid_permissions]
+
+        if invalid:
+            raise ValidationError({
+                "permissions": f"Invalid permissions: {invalid}. Valid values: {list(valid_permissions)}"
+            })
+
 
 class ResearcherProfile(models.Model):
     """
