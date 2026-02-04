@@ -49,7 +49,9 @@ from .services import (
     can_reset_password,
     create_user_from_payload,
     ensure_profiles_for_role,
+    grant_sudo_to_researcher,
     link_or_create_oauth_account,
+    revoke_sudo_grant,
     set_single_role,
 )
 
@@ -577,3 +579,85 @@ def bulk_create(request):
         create_user_from_payload(payload, role_override=requested_role, creator=request.user)
         created += 1
     return Response(created, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsResearcherOrAdmin])
+def grant_sudo(request):
+    """
+    Grant sudo permissions to a researcher.
+
+    Admins can grant any permissions and set can_grant_sudo=True.
+    Sudoed researchers with can_grant_sudo=True can grant a subset of their
+    own permissions, but cannot set can_grant_sudo=True (admin only).
+
+    Request Body:
+        {
+            "user_id": 123,                    # Researcher to grant sudo to
+            "permissions": ["CREATE_TEACHER"], # List of SudoPermission values
+            "can_grant_sudo": false            # Optional, default false
+        }
+
+    Returns:
+        200: {"message": "Sudo granted", "grant_id": N}
+        400: Validation errors (missing user_id, invalid permissions)
+        403: Permission denied (escalation attempt or unauthorized)
+        404: User not found or not a researcher
+
+    Permission Rules:
+        - Admin (is_staff): Can grant any permissions, set can_grant_sudo=True
+        - Researcher with can_grant_sudo: Can grant subset of own permissions
+    """
+    user_id = request.data.get("user_id")
+    permissions = request.data.get("permissions", [])
+    can_grant_sudo_flag = request.data.get("can_grant_sudo", False)
+
+    if not user_id:
+        return Response({"error": "user_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    grantee = User.objects.filter(id=user_id).first()
+    if not grantee:
+        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        grant = grant_sudo_to_researcher(
+            granter=request.user,
+            grantee=grantee,
+            permissions=permissions,
+            can_grant_sudo=can_grant_sudo_flag
+        )
+        return Response({"message": "Sudo granted", "grant_id": grant.id}, status=status.HTTP_200_OK)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except PermissionError as e:
+        return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsResearcherOrAdmin])
+def revoke_sudo(request, grant_id: int):
+    """
+    Revoke a sudo grant.
+
+    Admins can revoke any grant. Sudoed researchers can revoke grants
+    they created (where they are the granted_by user).
+
+    Args:
+        grant_id: ID of the SudoGrant to revoke (path parameter)
+
+    Returns:
+        200: {"message": "Sudo revoked"}
+        403: Permission denied (not authorized to revoke this grant)
+        404: Grant not found
+
+    Permission Rules:
+        - Admin (is_staff): Can revoke any grant
+        - Researcher: Can revoke grants they created
+    """
+    try:
+        revoke_sudo_grant(revoker=request.user, grant_id=grant_id)
+        return Response({"message": "Sudo revoked"}, status=status.HTTP_200_OK)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+    except PermissionError as e:
+        return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)

@@ -16,4 +16,6 @@ urlpatterns = [
     path("users/<int:user_id>/set-password", views.set_password, name="auth-set-password"),
     path("teachers-admins", views.list_teachers_admins, name="auth-teachers-admins"),
     path("user/<str:username>", views.delete_user, name="auth-delete-user"),
+    path("grant-sudo", views.grant_sudo, name="auth-grant-sudo"),
+    path("revoke-sudo/<int:grant_id>", views.revoke_sudo, name="auth-revoke-sudo"),
 ]
