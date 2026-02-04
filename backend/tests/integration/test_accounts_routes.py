@@ -90,10 +90,10 @@ class TestAccountRoutes:
         response = api_client.post(f"/api/v1/auth/edituser/{admin_user.id}", payload, format="json")
         assert response.status_code == 403
 
-    def test_list_teachers_admins_returns_teachers_and_researchers(self, api_client, admin_user, teacher_user):
-        """Test that list teachers/admins returns users with TEACHER or RESEARCHER roles."""
+    def test_list_staff_returns_teachers_and_researchers(self, api_client, admin_user, teacher_user):
+        """Test that list staff returns users with TEACHER or RESEARCHER roles."""
         api_client.force_authenticate(user=admin_user)
-        response = api_client.get("/api/v1/auth/teachers-admins")
+        response = api_client.get("/api/v1/auth/staff")
         assert response.status_code == 200
         # Endpoint returns TEACHER and RESEARCHER roles only (not staff-only admins)
         usernames = {entry["username"] for entry in response.json()}
