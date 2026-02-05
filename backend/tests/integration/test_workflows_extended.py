@@ -4,7 +4,7 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from accounts.models import Role, User, UserRole
+from accounts.models import User
 from assessments.models import Question
 
 
@@ -26,7 +26,8 @@ def step(message: str) -> None:
 
 def create_admin_client(username: str, password: str) -> tuple[User, APIClient]:
     admin = User.objects.create_user(username=username, name="Admin", password=password)
-    UserRole.objects.create(user=admin, role=Role.ADMIN)
+    admin.is_staff = True
+    admin.save()
     client = APIClient()
     login(client, admin.username, password)
     return admin, client
@@ -330,7 +331,7 @@ class TestExtendedWorkflows:
         other_student_client = APIClient()
         login(other_student_client, "student-sub-other@example.com", "otherpass")
         draft_response = other_student_client.put(
-            f"/api/v1/students/{other_student_id}/assignments/{assignment_id}/draft",
+            f"/api/v1/students/{other_student_id}/assignments/{assignment_id}/draft/",
             {"answers": []},
             format="json",
         )
@@ -342,7 +343,7 @@ class TestExtendedWorkflows:
 
         step("Student saves draft")
         draft_response = student_client.put(
-            f"/api/v1/students/{student_id}/assignments/{assignment_id}/draft",
+            f"/api/v1/students/{student_id}/assignments/{assignment_id}/draft/",
             {
                 "answers": [
                     {
@@ -419,7 +420,7 @@ class TestExtendedWorkflows:
 
         step("Invalid assignment returns 404")
         missing = student_client.put(
-            f"/api/v1/students/{student_id}/assignments/999999/draft",
+            f"/api/v1/students/{student_id}/assignments/999999/draft/",
             {"answers": []},
             format="json",
         )

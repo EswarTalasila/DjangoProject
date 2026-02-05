@@ -4,7 +4,7 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from accounts.models import Role, User, UserRole
+from accounts.models import User
 from assessments.models import Question
 
 
@@ -38,7 +38,8 @@ class TestWorkflows:
             name="Admin",
             password="adminpass",
         )
-        UserRole.objects.create(user=admin, role=Role.ADMIN)
+        admin.is_staff = True
+        admin.save()
 
         admin_client = APIClient()
         step("Admin login")
@@ -129,7 +130,7 @@ class TestWorkflows:
 
         step("Student saves draft submission")
         draft_response = student_client.put(
-            f"/api/v1/students/{student_id}/assignments/{assignment_id}/draft",
+            f"/api/v1/students/{student_id}/assignments/{assignment_id}/draft/",
             {
                 "answers": [
                     {

@@ -82,7 +82,7 @@ class TestSubmissionRoutes:
             ]
         }
         response = api_client.put(
-            f"/api/v1/students/{student_user.id}/assignments/{assignment.id}/draft",
+            f"/api/v1/students/{student_user.id}/assignments/{assignment.id}/draft/",
             payload,
             format="json",
         )

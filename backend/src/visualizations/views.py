@@ -20,14 +20,14 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from core.errors import error_response, server_error_response
-from core.permissions import IsTeacherOrAdmin
+from core.permissions import IsTeacherOrAbove
 
 from .serializers import VisualizationFilterSerializer
 from .services import get_visualization_data
 
 
 @api_view(["POST"])
-@permission_classes([IsTeacherOrAdmin])
+@permission_classes([IsTeacherOrAbove])
 def get_visualizations(request):
     """
     Get aggregated visualization data for dashboard charts.

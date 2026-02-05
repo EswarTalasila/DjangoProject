@@ -3,7 +3,7 @@
 import pytest
 from rest_framework.test import APIClient
 
-from accounts.models import Role, StudentProfile, TeacherProfile, UserRole
+from accounts.models import Role, ResearcherProfile, StudentProfile, TeacherProfile, UserRole
 from tests.factories import UserFactory
 
 
@@ -17,7 +17,8 @@ def api_client():
 def admin_user():
     """Test that admin user."""
     user = UserFactory()
-    UserRole.objects.create(user=user, role=Role.ADMIN)
+    user.is_staff=True
+    user.save()
     return user
 
 
@@ -27,6 +28,15 @@ def teacher_user():
     user = UserFactory()
     UserRole.objects.create(user=user, role=Role.TEACHER)
     TeacherProfile.objects.create(user=user)
+    return user
+
+
+@pytest.fixture
+def researcher_user():
+    """Test that researcher user."""
+    user = UserFactory()
+    UserRole.objects.create(user=user, role=Role.RESEARCHER)
+    ResearcherProfile.objects.create(user=user)
     return user
 
 

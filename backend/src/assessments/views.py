@@ -1,9 +1,9 @@
 """
-Assessment management API endpoints (admin only for write operations).
+Assessment management API endpoints.
 
 Assessments are templates containing questions that can be assigned to
-courses. Only admins can create/modify assessments; teachers can view and
-assign them to their courses.
+courses. Researchers and admins can create/modify assessments; teachers
+can view and assign them to their courses.
 
 Question Types Supported:
     - TEXT: Free-text response
@@ -25,7 +25,7 @@ from rest_framework.response import Response
 from accounts.models import Role
 from assignments.models import Assignment
 from core.errors import error_response
-from core.permissions import IsAdmin, IsTeacherOrAdmin, primary_role
+from core.permissions import IsAdmin, IsResearcherOrAdmin, IsTeacherOrAbove, primary_role
 from courses.models import Enrollment
 
 from .models import Assessment
@@ -40,13 +40,13 @@ from .services import (
 
 
 @api_view(["GET", "POST"])
-@permission_classes([IsTeacherOrAdmin])
+@permission_classes([IsTeacherOrAbove])
 def list_or_create(request):
     """
-    List all assessments (GET) or create a new one (POST, admin only).
+    List all assessments (GET) or create a new one (POST, researcher/admin).
 
     GET: Returns all assessments for teachers to browse and assign.
-    POST: Creates a new assessment template (admin only).
+    POST: Creates a new assessment template (researcher or admin).
 
     Request Body (POST):
         {
@@ -62,10 +62,10 @@ def list_or_create(request):
     Returns:
         GET 200: Array of assessment DTOs
         POST 201: Created assessment DTO
-        POST 403: Forbidden if not admin
+        POST 403: Forbidden if not researcher or admin
     """
     if request.method == "POST":
-        if not IsAdmin().has_permission(request, None):
+        if not IsResearcherOrAdmin().has_permission(request, None):
             return Response(status=status.HTTP_403_FORBIDDEN)
         serializer = AssessmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -84,9 +84,9 @@ def detail(request, assessment_id: int):
 
     GET: Returns assessment with all questions. Students can only view
     assessments assigned to courses they're enrolled in.
-    PUT: Updates assessment (admin only). Note: updating after submissions
+    PUT: Updates assessment (researcher/admin). Note: updating after submissions
     exist may corrupt historical data (issue #25).
-    DELETE: Removes assessment (admin only).
+    DELETE: Removes assessment (researcher/admin).
 
     Args:
         assessment_id: Database ID of the assessment (path parameter)
@@ -117,7 +117,7 @@ def detail(request, assessment_id: int):
         return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_200_OK)
 
     if request.method == "PUT":
-        if not IsAdmin().has_permission(request, None):
+        if not IsResearcherOrAdmin().has_permission(request, None):
             return Response(status=status.HTTP_403_FORBIDDEN)
         serializer = AssessmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -127,7 +127,7 @@ def detail(request, assessment_id: int):
             return error_response(exc)
         return Response(assessment_to_dto(updated).model_dump(), status=status.HTTP_200_OK)
 
-    if not IsAdmin().has_permission(request, None):
+    if not IsResearcherOrAdmin().has_permission(request, None):
         return Response(status=status.HTTP_403_FORBIDDEN)
     delete_assessment(assessment)
     return Response("Assessment deleted successfully.", status=status.HTTP_200_OK)

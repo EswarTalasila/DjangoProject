@@ -23,7 +23,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from core.errors import error_response
-from core.permissions import IsTeacher, IsTeacherOrAdmin
+from core.permissions import IsTeacher, IsTeacherOrAbove
 
 from .models import Course
 from .serializers import CourseInputSerializer
@@ -41,7 +41,7 @@ from .services import (
 
 
 @api_view(["GET", "POST"])
-@permission_classes([IsTeacherOrAdmin])
+@permission_classes([IsTeacherOrAbove])
 def list_or_create(request):
     """
     List all courses for the user (GET) or create a new course (POST).
@@ -75,7 +75,7 @@ def list_or_create(request):
 
 
 @api_view(["GET", "PUT", "DELETE"])
-@permission_classes([IsTeacherOrAdmin])
+@permission_classes([IsTeacherOrAbove])
 def detail(request, course_id: int):
     """
     Get, update, or delete a specific course.
@@ -124,7 +124,7 @@ def detail(request, course_id: int):
 
 
 @api_view(["GET"])
-@permission_classes([IsTeacher])
+@permission_classes([IsTeacherOrAbove])
 def list_students(request, course_id: int):
     """
     List all students enrolled in a course.
@@ -137,13 +137,18 @@ def list_students(request, course_id: int):
 
     Returns:
         200: Array of student DTOs with id, name, username
-        403: Forbidden if teacher doesn't own the course
+        403: Forbidden if not authorized to view course
         404: "Course not found"
+
+    Permission Rules:
+        - Admin (is_staff): Can view any course's students
+        - Researcher: Can view any course's students (data oversight)
+        - Teacher: Can view own course's students only
     """
     course = Course.objects.filter(id=course_id).first()
     if not course:
         return Response("Course not found", status=status.HTTP_404_NOT_FOUND)
-    if not can_manage_course(request.user, course):
+    if not can_view_course(request.user, course):
         return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
     students = [s.model_dump() for s in list_students_in_course(course)]
     return Response(students, status=status.HTTP_200_OK)
