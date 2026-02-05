@@ -324,7 +324,9 @@ docker compose exec backend sh -c \"E2E_ADMIN_USERNAME=admin@example.com E2E_ADM
 ```bash
 scripts/diagrams/generate_all.sh --trace /app/Docs/diagrams/otel/trace.jsonl
 ```
-Note: `scripts/diagrams/generate_all.sh` runs the generator and refreshes the index.
+
+>[!TIP]
+>`scripts/diagrams/generate_all.sh` runs the generator and refreshes the index.
 
 ### Refresh the diagrams index
 ```bash
