@@ -18,14 +18,14 @@
 #
 # OPTIONAL PROFILES:
 #   docker compose --profile e2e up   # Include E2E testing container
-#   docker compose --profile proxy up # Include Traefik reverse proxy
+#   docker compose --profile proxy up # Include Nginx reverse proxy
 #
 # SERVICES:
 #   - database:     PostgreSQL 16 (port 5432)
 #   - backend:      Django REST API (port 8000)
 #   - frontend:     Angular dev server (port 4200)
 #   - frontend-e2e: Playwright E2E tests (profile: e2e)
-#   - traefik:      Reverse proxy (profile: proxy, ports 80/8080)
+#   - nginx:        Reverse proxy (profile: proxy, port 80)
 # =============================================================================
 
 services:
@@ -109,6 +109,10 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       - OTEL_EXPORTER_OTLP_HEADERS=${OTEL_EXPORTER_OTLP_HEADERS:-}
       - OTEL_TRACE_FILE=${OTEL_TRACE_FILE:-/app/traces/traces.jsonl}
+      # Admin account seeding (used by ensure_admin management command)
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change-me}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-Admin}
     volumes:
       - ./backend/src:/app/src:cached
       - ./backend/tests:/app/tests:cached
@@ -125,6 +129,7 @@ services:
       - eel-network
     command: >
       sh -c "python src/manage.py migrate &&
+             python src/manage.py ensure_admin &&
              python src/manage.py runserver 0.0.0.0:8000"
 
   # ==========================================================================

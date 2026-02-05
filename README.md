@@ -11,7 +11,7 @@ A web application for managing educational assessments, student submissions, and
 | Database   | PostgreSQL 17                                    |
 | Auth       | JWT (SimpleJWT) + Google OAuth                   |
 | Testing    | pytest (backend, 53 tests), Playwright (E2E)     |
-| Containers | Docker, Docker Compose, Traefik (reverse proxy)  |
+| Containers | Docker, Docker Compose, Nginx (reverse proxy)  |
 
 ## Prerequisites
 
@@ -71,7 +71,7 @@ docker compose exec backend python src/manage.py createsuperuser
 | `backend`      | 8000 | Django REST API                                   |
 | `database`     | 5432 | PostgreSQL 17                                     |
 | `pgadmin`      | 5050 | Database management UI (auto-connects to database)|
-| `traefik`      | 80   | Reverse proxy (production routing)                |
+| `nginx`        | 80   | Reverse proxy (production routing)                |
 | `frontend-e2e` | -    | Playwright E2E test runner with headless Chromium |
 
 ### Roles and Workflows

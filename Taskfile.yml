@@ -221,11 +221,47 @@ tasks:
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.FRONTEND_CONTAINER}} npm test -- --watch=false"
 
+  test:e2e:setup:
+    desc: Seed E2E test users (runs before E2E tests)
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - ./scripts/e2e/seed_e2e.sh
+
   test:e2e:
     desc: Run Playwright E2E tests (requires e2e profile)
-    deps: [_check:docker]
+    deps: [_check:docker, test:e2e:setup]
     cmds:
       - "{{.DOCKER_COMPOSE}} --profile e2e run --rm frontend-e2e npx playwright test"
+
+  test:e2e-record:
+    desc: Record E2E tests with video by role (headed, slow-mo)
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - ./scripts/record-e2e.sh {{.CLI_ARGS}}
+
+  test:e2e-record-admin:
+    desc: Record admin role walkthrough
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - ./scripts/record-e2e.sh admin --no-cleanup
+
+  test:e2e-record-teacher:
+    desc: Record teacher role walkthrough
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - ./scripts/record-e2e.sh teacher --no-cleanup
+
+  test:e2e-record-student:
+    desc: Record student role walkthrough
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - ./scripts/record-e2e.sh student --no-cleanup
+
+  test:e2e-record-errors:
+    desc: Record error paths walkthrough
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - ./scripts/record-e2e.sh errors --no-cleanup
 
   # ===========================================================================
   # Code Quality

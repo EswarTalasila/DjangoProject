@@ -75,7 +75,7 @@ export class AssignmentService {
   }
 
   getSubmissionByStudentId(studentId: number): Observable<SubmissionDTO[]> {
-    return this.http.get<SubmissionDTO[]>(`${this.baseUrl}/students/${studentId}/submissions`);
+    return this.http.get<SubmissionDTO[]>(`${this.baseUrl}/students/${studentId}/submissions/`);
   }
 
   /**
@@ -126,7 +126,7 @@ export class AssignmentService {
     assignmentId: number
   ): Observable<SubmissionDTO | null> {
     return this.http.get<SubmissionDTO>(
-      `${this.baseUrl}/students/${studentId}/assignments/${assignmentId}/submission`,
+      `${this.baseUrl}/students/${studentId}/assignments/${assignmentId}/submission/`,
       { withCredentials: true }
     );
   }
@@ -192,7 +192,7 @@ export class AssignmentService {
     answers: AnswerDTO[]
   ): Observable<any> {
     return this.http.put(
-      `${this.baseUrl}/students/${studentId}/assignments/${assignmentId}/draft`,
+      `${this.baseUrl}/students/${studentId}/assignments/${assignmentId}/draft/`,
       { answers },
       { withCredentials: true }
     );
