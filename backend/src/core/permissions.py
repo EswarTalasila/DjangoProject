@@ -66,6 +66,10 @@ def primary_role(user) -> str:
     Returns:
         Role string (RESEARCHER, TEACHER, or STUDENT)
     """
+
+    if user.is_staff:
+        return "ADMIN"
+    
     roles = _role_set(user)
     for role in (Role.RESEARCHER, Role.TEACHER, Role.STUDENT):
         if role in roles:
