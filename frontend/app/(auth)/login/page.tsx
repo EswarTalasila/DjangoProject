@@ -8,16 +8,16 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Cookies from 'js-cookie';
 import api from '@/lib/api';
-import { toast } from 'sonner';
+
+// OAuth Imports
+import { GoogleOAuthProvider, useGoogleLogin } from '@react-oauth/google';
 
 // UI Components
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-
-// Icons
-import { Loader2 } from 'lucide-react';
-import Image from 'next/image'; // For Google Icon
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Loader2, AlertCircle } from 'lucide-react';
 
 const loginSchema = z.object({
   username: z.string().email("Please enter a valid email address"),
@@ -26,39 +26,89 @@ const loginSchema = z.object({
 
 type LoginForm = z.infer<typeof loginSchema>;
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [generalError, setGeneralError] = useState<string | null>(null);
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: { username: "", password: "" },
   });
 
+  // Shared success handler for both Email and Google login
+  const handleLoginSuccess = (data: any) => {
+    const { accessToken, role, name } = data;
+
+    Cookies.set('access_token', accessToken, { expires: 1 });
+    if (role) Cookies.set('user_role', role);
+    Cookies.set('user_name', name || "Instructor", { expires: 1 });
+
+    router.push('/dashboard');
+  };
+
+  const handleLoginError = (error: any) => {
+    const errorData = error.response?.data;
+
+    // 1. Handle DRF Field Errors (e.g. { username: ["Invalid email"] })
+    if (typeof errorData === 'object' && errorData !== null && !Array.isArray(errorData)) {
+      let hasFieldError = false;
+      Object.entries(errorData).forEach(([field, messages]) => {
+        // @ts-ignore - dynamic field access
+        if (form.getValues(field) !== undefined) {
+           // @ts-ignore - messages is array of strings or string
+          form.setError(field as any, {
+            type: 'manual',
+            message: Array.isArray(messages) ? messages[0] : messages
+          });
+          hasFieldError = true;
+        }
+      });
+      if (hasFieldError) return;
+    }
+
+    // 2. Handle Generic/Detail Errors
+    const errorMessage = typeof errorData === 'string'
+      ? errorData
+      : errorData?.detail || "Authentication failed. Please check your credentials.";
+
+    setGeneralError(errorMessage);
+  };
+
+  // Standard Email/Password Login
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true);
+    setGeneralError(null);
     try {
       const res = await api.post('/auth/login', data);
-      
-      const { accessToken, role, name } = res.data;
-      
-      Cookies.set('access_token', accessToken, { expires: 1 });
-      if (role) Cookies.set('user_role', role);
-
-      Cookies.set('user_name', name || "Instructor", { expires: 1 });
-      toast.success(`Welcome back, ${name || 'Instructor'}!`);
-      router.push('/dashboard'); 
-
+      handleLoginSuccess(res.data);
     } catch (error: any) {
-      const errorMessage = typeof error.response?.data === 'string' 
-        ? error.response.data 
-        : error.response?.data?.detail || "Invalid credentials.";
-      
-      toast.error(errorMessage);
+      handleLoginError(error);
     } finally {
       setIsLoading(false);
     }
   };
+
+  const loginGoogle = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      setIsLoading(true);
+      setGeneralError(null);
+      try {
+        const res = await api.post('/auth/google', {
+          accessToken: tokenResponse.access_token
+        });
+        handleLoginSuccess(res.data);
+      } catch (error: any) {
+        setGeneralError(error.response?.data?.detail || "Google login failed.");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    onError: () => {
+      setGeneralError("Google login failed to initialize.");
+      setIsLoading(false);
+    }
+  });
 
   return (
     <>
@@ -72,9 +122,18 @@ export default function LoginPage() {
       </div>
 
       <div className="grid gap-6">
+        {/* General Error Alert */}
+        {generalError && (
+          <Alert variant="destructive" className="bg-red-50 text-red-900 border-red-200">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{generalError}</AlertDescription>
+          </Alert>
+        )}
+
         <form onSubmit={form.handleSubmit(onSubmit)}>
           <div className="grid gap-4">
-            
+
             {/* Username / Email */}
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
@@ -86,10 +145,12 @@ export default function LoginPage() {
                 autoComplete="email"
                 autoCorrect="off"
                 disabled={isLoading}
+                className={form.formState.errors.username ? 'border-red-500 focus-visible:ring-red-500' : ''}
                 {...form.register('username')}
               />
               {form.formState.errors.username && (
-                <p className="text-xs text-red-500">
+                <p className="text-xs font-medium text-red-500 flex items-center mt-1">
+                  <AlertCircle className="w-3 h-3 mr-1" />
                   {form.formState.errors.username.message}
                 </p>
               )}
@@ -99,8 +160,8 @@ export default function LoginPage() {
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-                <Link 
-                  href="/forgot-password" 
+                <Link
+                  href="/forgot-password"
                   className="text-xs text-blue-600 hover:text-blue-500 hover:underline"
                 >
                   Forgot password?
@@ -112,10 +173,12 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 autoComplete="current-password"
                 disabled={isLoading}
+                className={form.formState.errors.password ? 'border-red-500 focus-visible:ring-red-500' : ''}
                 {...form.register('password')}
               />
               {form.formState.errors.password && (
-                <p className="text-xs text-red-500">
+                <p className="text-xs font-medium text-red-500 flex items-center mt-1">
+                  <AlertCircle className="w-3 h-3 mr-1" />
                   {form.formState.errors.password.message}
                 </p>
               )}
@@ -142,10 +205,12 @@ export default function LoginPage() {
         </div>
 
         {/* Google Login Button */}
-        {/* Note: This requires the Google SVG in public/google.svg */}
-        <Button variant="outline" type="button" disabled={isLoading} onClick={() => alert("Wire up to /api/auth/google")}>
-          {/* If you don't have the SVG yet, use text */}
-          {/* <Image src="/google.svg" alt="Google" width={16} height={16} className="mr-2" /> */}
+        <Button
+          variant="outline"
+          type="button"
+          disabled={isLoading}
+          onClick={() => loginGoogle()}
+        >
           <svg className="mr-2 h-4 w-4" aria-hidden="true" focusable="false" data-prefix="fab" data-icon="google" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 488 512">
             <path fill="currentColor" d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"></path>
           </svg>
@@ -154,13 +219,22 @@ export default function LoginPage() {
       </div>
 
       <p className="px-8 text-center text-sm text-slate-500">
-        <Link 
-          href="/register" 
+        <Link
+          href="/register"
           className="hover:text-brand underline underline-offset-4"
         >
           Don&apos;t have an account? Sign Up
         </Link>
       </p>
     </>
+  );
+}
+
+// Wrapper component to provide OAuth context
+export default function LoginPage() {
+  return (
+    <GoogleOAuthProvider clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ""}>
+      <LoginPageContent />
+    </GoogleOAuthProvider>
   );
 }
