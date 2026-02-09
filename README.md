@@ -6,12 +6,12 @@ A web application for managing educational assessments, student submissions, and
 
 | Layer      | Technology                                       |
 |------------|--------------------------------------------------|
-| Frontend   | Angular 21, TypeScript, SCSS                     |
+| Frontend   | Next.js, TypeScript, Tailwind                     |
 | Backend    | Django 5, Django REST Framework, Python 3.12     |
 | Database   | PostgreSQL 17                                    |
 | Auth       | JWT (SimpleJWT) + Google OAuth                   |
 | Testing    | pytest (backend, 53 tests), Playwright (E2E)     |
-| Containers | Docker, Docker Compose, Nginx (reverse proxy)  |
+| Containers | Docker, Docker Compose, Nginx (reverse proxy)    |
 
 ## Prerequisites
 
@@ -67,7 +67,7 @@ docker compose exec backend python src/manage.py createsuperuser
 
 | Service        | Port | Description                                       |
 |----------------|------|---------------------------------------------------|
-| `frontend`     | 4200 | Angular dev server with hot reload                |
+| `frontend`     | 3000 | Nextjs dev server                                 |
 | `backend`      | 8000 | Django REST API                                   |
 | `database`     | 5432 | PostgreSQL 17                                     |
 | `pgadmin`      | 5050 | Database management UI (auto-connects to database)|
@@ -76,6 +76,7 @@ docker compose exec backend python src/manage.py createsuperuser
 
 ### Roles and Workflows
 - Admin: creates assessments and manages users.
+- Researcher:
 - Teacher: creates courses and assignments, reviews submissions.
 - Student: completes assignments and submits answers.
 - See `Docs/Specs/01-User-Stories.md` for detailed flows.
@@ -83,8 +84,8 @@ docker compose exec backend python src/manage.py createsuperuser
 ## Developer Guide
 
 ### Node Version Manager (nvm)
-
-This project uses [nvm](https://github.com/nvm-sh/nvm) to manage Node.js versions. The required version is specified in `.nvmrc`.
+>[!TIP]
+>This project uses [nvm](https://github.com/nvm-sh/nvm) to manage Node.js versions. The required version is specified in `.nvmrc`.
 
 ```bash
 # Install nvm (macOS/Linux)
@@ -136,8 +137,8 @@ pre-commit autoupdate
 Unsafe fixes (removing unused imports, code simplification) are reported as warnings for manual review but not auto-applied.
 
 ## Task Runner
-
-This project uses [Task](https://taskfile.dev/) for running common commands. Task is a modern alternative to Make with simpler syntax.
+>[!TIP]
+>This project uses [Task](https://taskfile.dev/) for running common commands. Task is a modern alternative to Make with simpler syntax.
 
 ### Installing Task
 

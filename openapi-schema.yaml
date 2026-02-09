@@ -1,0 +1,1423 @@
+openapi: 3.0.3
+info:
+  title: EE Lab Data Dashboard API
+  version: 1.0.0
+  description: API for managing educational assessments, submissions, and visualization.
+paths:
+  /api/v1/assessments/:
+    get:
+      operationId: v1_assessments_retrieve
+      description: |-
+        List all assessments (GET) or create a new one (POST, admin only).
+
+        GET: Returns all assessments for teachers to browse and assign.
+        POST: Creates a new assessment template (admin only).
+
+        Request Body (POST):
+            {
+                "title": "Assessment Title",
+                "description": "Optional description",
+                "gradingMode": "MANUAL|AUTO",
+                "questions": [
+                    {"type": "TEXT", "text": "Question text", "required": true},
+                    ...
+                ]
+            }
+
+        Returns:
+            GET 200: Array of assessment DTOs
+            POST 201: Created assessment DTO
+            POST 403: Forbidden if not admin
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_assessments_create
+      description: |-
+        List all assessments (GET) or create a new one (POST, admin only).
+
+        GET: Returns all assessments for teachers to browse and assign.
+        POST: Creates a new assessment template (admin only).
+
+        Request Body (POST):
+            {
+                "title": "Assessment Title",
+                "description": "Optional description",
+                "gradingMode": "MANUAL|AUTO",
+                "questions": [
+                    {"type": "TEXT", "text": "Question text", "required": true},
+                    ...
+                ]
+            }
+
+        Returns:
+            GET 200: Array of assessment DTOs
+            POST 201: Created assessment DTO
+            POST 403: Forbidden if not admin
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assessments/{assessment_id}:
+    get:
+      operationId: v1_assessments_retrieve_2
+      description: |-
+        Get, update, or delete a specific assessment.
+
+        GET: Returns assessment with all questions. Students can only view
+        assessments assigned to courses they're enrolled in.
+        PUT: Updates assessment (admin only). Note: updating after submissions
+        exist may corrupt historical data (issue #25).
+        DELETE: Removes assessment (admin only).
+
+        Args:
+            assessment_id: Database ID of the assessment (path parameter)
+
+        Returns:
+            GET 200: Assessment DTO with questions
+            PUT 200: Updated assessment DTO
+            DELETE 200: "Assessment deleted successfully."
+            403: Forbidden based on role/permission
+            404: "Assessment not found"
+      parameters:
+      - in: path
+        name: assessment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    put:
+      operationId: v1_assessments_update
+      description: |-
+        Get, update, or delete a specific assessment.
+
+        GET: Returns assessment with all questions. Students can only view
+        assessments assigned to courses they're enrolled in.
+        PUT: Updates assessment (admin only). Note: updating after submissions
+        exist may corrupt historical data (issue #25).
+        DELETE: Removes assessment (admin only).
+
+        Args:
+            assessment_id: Database ID of the assessment (path parameter)
+
+        Returns:
+            GET 200: Assessment DTO with questions
+            PUT 200: Updated assessment DTO
+            DELETE 200: "Assessment deleted successfully."
+            403: Forbidden based on role/permission
+            404: "Assessment not found"
+      parameters:
+      - in: path
+        name: assessment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: v1_assessments_destroy
+      description: |-
+        Get, update, or delete a specific assessment.
+
+        GET: Returns assessment with all questions. Students can only view
+        assessments assigned to courses they're enrolled in.
+        PUT: Updates assessment (admin only). Note: updating after submissions
+        exist may corrupt historical data (issue #25).
+        DELETE: Removes assessment (admin only).
+
+        Args:
+            assessment_id: Database ID of the assessment (path parameter)
+
+        Returns:
+            GET 200: Assessment DTO with questions
+            PUT 200: Updated assessment DTO
+            DELETE 200: "Assessment deleted successfully."
+            403: Forbidden based on role/permission
+            404: "Assessment not found"
+      parameters:
+      - in: path
+        name: assessment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/assessments/{assessment_id}/teacher-self-assess:
+    post:
+      operationId: v1_assessments_teacher_self_assess_create
+      description: |-
+        Submit a teacher's self-assessment for mood meter or reflection.
+
+        Teachers complete self-assessments that aren't tied to specific
+        assignments. This creates a submission with the teacher as both
+        creator and subject.
+
+        Args:
+            assessment_id: ID of the assessment being completed (path parameter)
+
+        Request Body:
+            [
+                {"questionId": 1, "value": "response text"},
+                {"questionId": 2, "value": "5"},
+                ...
+            ]
+
+        Returns:
+            201: Submission DTO
+            400: "Expected list of answers" if body isn't an array
+            400: ValueError message if validation fails
+      parameters:
+      - in: path
+        name: assessment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignments/:
+    post:
+      operationId: v1_assignments_create
+      description: |-
+        Create a new assignment from an assessment.
+
+        When creating a COURSE assignment, empty submissions are automatically
+        created for all students enrolled in the course.
+
+        Request Body:
+            {
+                "assessmentId": 123,
+                "audienceType": "COURSE",  # or "TEACHER"
+                "courseId": 456            # Required for COURSE type
+            }
+
+        Returns:
+            201: Assignment DTO with id, assessmentId, courseId, teacherId
+            400: ValueError if validation fails (missing courseId for COURSE, etc.)
+            403: Forbidden if not a teacher
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignments/{assignment_id}:
+    get:
+      operationId: v1_assignments_retrieve
+      description: |-
+        Get or delete a specific assignment.
+
+        GET: Returns assignment details. Students must be enrolled in the
+        course; teachers/admins can view any assignment.
+        DELETE: Removes assignment and all associated submissions (teacher only).
+
+        Args:
+            assignment_id: Database ID of the assignment (path parameter)
+
+        Returns:
+            GET 200: Assignment DTO
+            DELETE 200: "Assignment deleted successfully."
+            403: Forbidden if student not enrolled or not a teacher for DELETE
+            404: "Assignment not found"
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: v1_assignments_destroy
+      description: |-
+        Get or delete a specific assignment.
+
+        GET: Returns assignment details. Students must be enrolled in the
+        course; teachers/admins can view any assignment.
+        DELETE: Removes assignment and all associated submissions (teacher only).
+
+        Args:
+            assignment_id: Database ID of the assignment (path parameter)
+
+        Returns:
+            GET 200: Assignment DTO
+            DELETE 200: "Assignment deleted successfully."
+            403: Forbidden if student not enrolled or not a teacher for DELETE
+            404: "Assignment not found"
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/assignments/{assignment_id}/submissions:
+    get:
+      operationId: v1_assignments_submissions_retrieve
+      description: |-
+        List all submissions for an assignment (GET) or create a new one (POST).
+
+        GET: Returns all submissions for the assignment (teachers/admins only).
+        POST: Creates a new submission (students only, for their own work).
+
+        Args:
+            assignment_id: ID of the assignment (path parameter)
+
+        GET Returns:
+            200: Array of submission DTOs
+            403: Forbidden if student (they should use get_student_submission)
+            403: Forbidden if teacher doesn't own the assignment
+            404: "Assignment not found"
+
+        POST: See create_for_assignment for request/response format
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_assignments_submissions_create
+      description: |-
+        List all submissions for an assignment (GET) or create a new one (POST).
+
+        GET: Returns all submissions for the assignment (teachers/admins only).
+        POST: Creates a new submission (students only, for their own work).
+
+        Args:
+            assignment_id: ID of the assignment (path parameter)
+
+        GET Returns:
+            200: Array of submission DTOs
+            403: Forbidden if student (they should use get_student_submission)
+            403: Forbidden if teacher doesn't own the assignment
+            404: "Assignment not found"
+
+        POST: See create_for_assignment for request/response format
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignments/courses/{course_id}:
+    get:
+      operationId: v1_assignments_courses_retrieve
+      description: |-
+        List all assignments for a specific course.
+
+        Used by teachers to view all assignments they've created for a course.
+
+        Args:
+            course_id: Database ID of the course (path parameter)
+
+        Returns:
+            200: Array of assignment DTOs
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignments/users/{user_id}:
+    get:
+      operationId: v1_assignments_users_retrieve
+      description: |-
+        List all assignments for a specific user.
+
+        For students: Returns assignments from courses they're enrolled in.
+        For teachers: Returns assignments they created.
+        Users can only view their own assignments unless they're an admin.
+
+        Args:
+            user_id: Database ID of the user (path parameter)
+
+        Returns:
+            200: Array of assignment DTOs
+            403: Forbidden if requesting another user's assignments (non-admin)
+            404: "User not found"
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/check-email:
+    post:
+      operationId: v1_auth_check_email_create
+      description: |-
+        Check if an email address exists in the system and if password is set.
+
+        Used by the frontend during login flow to determine whether to show
+        password input or first-time password setup screen.
+
+        Request Body:
+            {
+                "email": "user@example.com"  # Email to check
+            }
+
+        Returns:
+            200: {
+                "exists": true,
+                "userId": 123,           # User's database ID
+                "needsPassword": false   # True if user has no password set
+            }
+            404: {"exists": false, "userId": -1, "needsPassword": false} if not found
+
+        Security Note:
+            This endpoint enables user enumeration. Consider adding rate limiting
+            or captcha for production deployments (tracked in issue #18).
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/create/bulk:
+    post:
+      operationId: v1_auth_create_bulk_create
+      description: |-
+        Create multiple user accounts in a single request (admin only).
+
+        Processes a list of user objects and creates valid ones, silently
+        skipping invalid entries. Useful for importing users from CSV or
+        spreadsheet exports.
+
+        Request Body:
+            [
+                {
+                    "username": "user1@example.com",
+                    "name": "User One",
+                    "role": "STUDENT",     # Optional, defaults to STUDENT
+                    "password": "optional" # Optional
+                },
+                {
+                    "username": "user2@example.com",
+                    "name": "User Two"
+                },
+                ...
+            ]
+
+        Returns:
+            200: Integer count of successfully created users
+
+        Skipped Entries:
+            - Missing required fields (username, name)
+            - Duplicate usernames (already exist)
+            - Invalid serializer data
+            - Roles requester cannot create (non-admin trying to create admin)
+
+        Note:
+            Failed entries are silently skipped. For detailed error reporting,
+            use individual create_user calls instead.
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/createuser:
+    post:
+      operationId: v1_auth_createuser_create
+      description: |-
+        Create a new user account with specified role (privileged operation).
+
+        Teachers can create students only. Admins can create users of any role.
+        The created user will have no password set initially - they must use
+        the set_password endpoint or Google OAuth on first login.
+
+        Request Body:
+            {
+                "username": "user@example.com",  # Required, must be unique
+                "name": "User Name",             # Required
+                "role": "STUDENT|TEACHER|ADMIN", # Optional, defaults to STUDENT
+                "password": "optional"           # Optional initial password
+            }
+
+        Returns:
+            200: "User created successfully."
+            400: "name and username are required" if missing fields
+            400: "Username already taken" if email exists
+            403: "Forbidden" if requester lacks permission for requested role
+
+        Permission Rules:
+            - TEACHER: Can create STUDENT only
+            - ADMIN: Can create any role
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/edituser/{user_id}:
+    post:
+      operationId: v1_auth_edituser_create
+      description: |-
+        Update an existing user's profile, role, or password.
+
+        Enforces ownership rules: teachers can only edit their own students,
+        admins can edit any user. Role changes trigger profile creation
+        (e.g., promoting to teacher creates TeacherProfile).
+
+        Args:
+            user_id: Database ID of the user to update (path parameter)
+
+        Request Body:
+            {
+                "name": "New Name",              # Optional
+                "username": "new@example.com",   # Optional, must be unique
+                "password": "newpassword",       # Optional
+                "role": "STUDENT|TEACHER|ADMIN"  # Optional, changes user's role
+            }
+
+        Returns:
+            200: "User edited successfully."
+            400: "Username already taken" if new username exists
+            403: "Forbidden" if requester lacks permission
+            404: "User not found" if user_id doesn't exist
+
+        Permission Rules:
+            - TEACHER: Can edit own students only, cannot change to ADMIN
+            - ADMIN: Can edit any user and any role
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/google:
+    post:
+      operationId: v1_auth_google_create
+      description: |-
+        Authenticate a user via Google OAuth, returning a JWT token.
+
+        The frontend completes Google Sign-In and sends the access token here.
+        This endpoint verifies the token with Google, then either:
+        1. Links to an existing OAuth account and logs in, or
+        2. Links to an existing user account by email (first Google login), or
+        3. Returns an error if no matching account exists.
+
+        Note: Users must be pre-created in the system before using Google login.
+        This endpoint does NOT create new accounts - use register or create_user.
+
+        Request Body:
+            {
+                "accessToken": "ya29.a0..."  # Google OAuth access token from frontend
+            }
+
+        Returns:
+            200: {
+                "accessToken": "eyJ...",  # JWT access token
+                "tokenType": "Bearer",
+                "role": "STUDENT|TEACHER|ADMIN",
+                "id": "123"
+            }
+            400: "accessToken is required" if missing
+            401: "Access token verification failed" if Google rejects token
+            401: "Invalid Google userinfo" if response missing required fields
+            401: "No account associated with this Google email" if user not found
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/login:
+    post:
+      operationId: v1_auth_login_create
+      description: |-
+        Authenticate a user with username and password, returning a JWT token.
+
+        Validates credentials against the database and returns a JWT access token
+        on success. The token should be included in subsequent requests via the
+        Authorization header: "Bearer <token>".
+
+        Request Body:
+            {
+                "username": "user@example.com",  # Required
+                "password": "userpassword"       # Required
+            }
+
+        Returns:
+            200: {
+                "accessToken": "eyJ...",  # JWT access token
+                "tokenType": "Bearer",
+                "role": "STUDENT|TEACHER|ADMIN",
+                "id": "123",
+                "name": "User Name",
+                "username": "user@example.com"
+            }
+            400: "username and password are required" if missing fields
+            401: "Invalid username or password" if credentials invalid
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/register:
+    post:
+      operationId: v1_auth_register_create
+      description: |-
+        Register a new user account via public self-registration.
+
+        This endpoint allows anyone to create a new account. For security,
+        all self-registered users are assigned the STUDENT role regardless
+        of any role specified in the request payload.
+
+        Request Body:
+            {
+                "username": "user@example.com",  # Required, must be unique email
+                "password": "securepassword",    # Required
+                "name": "User Name"              # Required, display name
+            }
+
+        Returns:
+            200: "User registered" on success
+            400: "name, username, and password are required" if missing fields
+            400: "Username already taken" if email exists
+
+        Security Note:
+            Role is forced to STUDENT to prevent privilege escalation.
+            Use /api/v1/users endpoint for creating teachers/admins.
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/reset/{user_id}:
+    put:
+      operationId: v1_auth_reset_update
+      description: |-
+        Reset a user's password, requiring them to set a new one on next login.
+
+        Sets the user's password to null, which forces them through the
+        first-login password setup flow. Teachers can reset passwords for
+        their students; admins can reset any non-admin user's password.
+
+        Args:
+            user_id: Database ID of the user (path parameter)
+
+        Returns:
+            200: "Password reset successfully."
+            403: "Forbidden" if requester lacks permission
+            404: "User not found" if user_id doesn't exist
+
+        Permission Rules:
+            - TEACHER: Can reset password for own students only
+            - ADMIN: Can reset password for any non-admin user
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/teachers-admins:
+    get:
+      operationId: v1_auth_teachers_admins_retrieve
+      description: |-
+        List all users with TEACHER or ADMIN roles.
+
+        Used by the admin dashboard to display staff members who can
+        create courses and manage students.
+
+        Returns:
+            200: [
+                {
+                    "id": 123,
+                    "name": "Teacher Name",
+                    "username": "teacher@example.com",
+                    "role": "ROLE_TEACHER"  # Includes ROLE_ prefix for frontend
+                },
+                ...
+            ]
+
+        Note:
+            The role field includes the "ROLE_" prefix for compatibility
+            with the Angular frontend's role-based routing.
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/user/{username}:
+    delete:
+      operationId: v1_auth_user_destroy
+      description: |-
+        Permanently delete a user account from the system.
+
+        This is a hard delete - the user and all associated data (profiles,
+        enrollments, submissions) are permanently removed. Teachers can only
+        delete their own students; admins can delete any non-admin user.
+
+        Args:
+            username: Email/username of the user to delete (path parameter)
+
+        Returns:
+            200: "User deleted successfully."
+            403: "Forbidden" if requester lacks permission
+            404: "User not found" if username doesn't exist
+
+        Permission Rules:
+            - TEACHER: Can delete own students only
+            - ADMIN: Can delete any user except other admins
+
+        Warning:
+            This performs a hard delete. Consider implementing soft delete
+            for audit trail purposes (tracked in issue #24).
+      parameters:
+      - in: path
+        name: username
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/auth/users/{user_id}/set-password:
+    post:
+      operationId: v1_auth_users_set_password_create
+      description: |-
+        Set password for a user's first login (initial password setup).
+
+        This endpoint is used when a user is created without a password
+        (e.g., by a teacher/admin) and needs to set their password on
+        first login. The frontend calls this after check_email returns
+        needsPassword=true.
+
+        Args:
+            user_id: Database ID of the user (path parameter)
+
+        Request Body:
+            Raw text string containing the new password (not JSON)
+
+        Returns:
+            200: "Password set succesfully."
+            400: "Password is required" if body is empty
+            404: "User not found" if user_id doesn't exist
+
+        Security Warning:
+            This endpoint is currently unauthenticated, allowing anyone who
+            knows a user ID to set their password. This should be secured
+            with a time-limited, single-use token (tracked in issue #17).
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/courses/:
+    get:
+      operationId: v1_courses_retrieve
+      description: |-
+        List all courses for the user (GET) or create a new course (POST).
+
+        GET: Returns courses the user can access (teachers see own, admins see all).
+        POST: Creates a new course owned by the requesting teacher.
+
+        Request Body (POST):
+            {"name": "Course Name"}
+
+        Returns:
+            GET 200: Array of course DTOs with id, name, teacherId
+            POST 200: Created course DTO
+            POST 403: Forbidden if not a teacher (admins cannot create courses)
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_courses_create
+      description: |-
+        List all courses for the user (GET) or create a new course (POST).
+
+        GET: Returns courses the user can access (teachers see own, admins see all).
+        POST: Creates a new course owned by the requesting teacher.
+
+        Request Body (POST):
+            {"name": "Course Name"}
+
+        Returns:
+            GET 200: Array of course DTOs with id, name, teacherId
+            POST 200: Created course DTO
+            POST 403: Forbidden if not a teacher (admins cannot create courses)
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/courses/{course_id}:
+    get:
+      operationId: v1_courses_retrieve_2
+      description: |-
+        Get, update, or delete a specific course.
+
+        GET: Returns course details (requires view permission).
+        PUT: Updates course name (requires manage permission).
+        DELETE: Deletes course and all enrollments (requires manage permission).
+
+        Args:
+            course_id: Database ID of the course (path parameter)
+
+        Request Body (PUT):
+            {"name": "New Course Name"}
+
+        Returns:
+            GET/PUT 200: Course DTO
+            DELETE 204: No content on success
+            403: Forbidden if user lacks permission
+            404: "Course not found"
+
+        Warning:
+            DELETE performs a hard delete of the course and all student
+            enrollments. Student users created for this course are also deleted.
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    put:
+      operationId: v1_courses_update
+      description: |-
+        Get, update, or delete a specific course.
+
+        GET: Returns course details (requires view permission).
+        PUT: Updates course name (requires manage permission).
+        DELETE: Deletes course and all enrollments (requires manage permission).
+
+        Args:
+            course_id: Database ID of the course (path parameter)
+
+        Request Body (PUT):
+            {"name": "New Course Name"}
+
+        Returns:
+            GET/PUT 200: Course DTO
+            DELETE 204: No content on success
+            403: Forbidden if user lacks permission
+            404: "Course not found"
+
+        Warning:
+            DELETE performs a hard delete of the course and all student
+            enrollments. Student users created for this course are also deleted.
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: v1_courses_destroy
+      description: |-
+        Get, update, or delete a specific course.
+
+        GET: Returns course details (requires view permission).
+        PUT: Updates course name (requires manage permission).
+        DELETE: Deletes course and all enrollments (requires manage permission).
+
+        Args:
+            course_id: Database ID of the course (path parameter)
+
+        Request Body (PUT):
+            {"name": "New Course Name"}
+
+        Returns:
+            GET/PUT 200: Course DTO
+            DELETE 204: No content on success
+            403: Forbidden if user lacks permission
+            404: "Course not found"
+
+        Warning:
+            DELETE performs a hard delete of the course and all student
+            enrollments. Student users created for this course are also deleted.
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/courses/{course_id}/students:
+    get:
+      operationId: v1_courses_students_retrieve
+      description: |-
+        List all students enrolled in a course.
+
+        Returns student user information for each enrollment, used by the
+        teacher dashboard to view and manage class rosters.
+
+        Args:
+            course_id: Database ID of the course (path parameter)
+
+        Returns:
+            200: Array of student DTOs with id, name, username
+            403: Forbidden if teacher doesn't own the course
+            404: "Course not found"
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/courses/{course_id}/students/{student_user_id}:
+    delete:
+      operationId: v1_courses_students_destroy
+      description: |-
+        Remove a student from a course (and delete their user account).
+
+        Unenrolls the student and permanently deletes their user account.
+        This is typically used when a student is removed from a class roster.
+
+        Args:
+            course_id: Database ID of the course (path parameter)
+            student_user_id: User ID of the student to remove (path parameter)
+
+        Returns:
+            200: "Student removed successfully"
+            403: Forbidden if teacher doesn't own the course
+            404: "Course not found" or "Student not found in course"
+
+        Warning:
+            This performs a hard delete of the student user account and
+            all their submissions. Consider soft delete for data retention.
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: student_user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/export/:
+    post:
+      operationId: v1_export_create
+      description: |-
+        Placeholder endpoint for data export functionality.
+
+        Returns 501 Not Implemented as export features are planned for
+        future development.
+
+        Permissions:
+            Requires TEACHER or ADMIN role
+
+        Returns:
+            501: Export endpoints are not implemented
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/students/:
+    post:
+      operationId: v1_students_create
+      description: |-
+        Add a single student to a course.
+
+        Creates a new student user account and enrolls them in the specified
+        course. If assignments exist for the course, empty submissions are
+        created for the new student.
+
+        Request Body:
+            {
+                "name": "Student Name",
+                "username": "student@school.edu",
+                "courseId": 123,
+                "consent": true,        # Optional
+                "password": "secret"    # Optional, generated if not provided
+            }
+
+        Returns:
+            200: Student DTO with enrollment info
+            400: Validation error or business rule violation
+
+        Permissions:
+            Requires TEACHER role
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/students/{student_id}/assignments/{assignment_id}/draft/:
+    put:
+      operationId: v1_students_assignments_draft_update
+      description: |-
+        Save a draft submission (work in progress, not yet submitted).
+
+        Students use this to save partial work before final submission.
+        Creates or updates a submission with IN_PROGRESS status.
+
+        Args:
+            student_id: User ID of the student (path parameter)
+            assignment_id: ID of the assignment (path parameter)
+
+        Request Body:
+            {
+                "answers": [
+                    {"questionId": 1, "value": "partial answer"},
+                    ...
+                ]
+            }
+
+        Returns:
+            200: Submission DTO with IN_PROGRESS status
+            403: Forbidden if student saving another's draft
+            403: Forbidden if not enrolled in assignment's course
+            404: "Assignment not found"
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: student_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/students/{student_id}/assignments/{assignment_id}/submission/:
+    get:
+      operationId: v1_students_assignments_submission_retrieve
+      description: |-
+        Get a specific student's submission for a specific assignment.
+
+        Used by the frontend to load a student's work for viewing or editing.
+        Students can only access their own; teachers access via ownership.
+
+        Args:
+            student_id: User ID of the student (path parameter)
+            assignment_id: ID of the assignment (path parameter)
+
+        Returns:
+            200: Submission DTO with all answers
+            403: Forbidden if student accessing another's submission
+            403: Forbidden if teacher doesn't own the assignment
+            403: Forbidden if student not enrolled in assignment's course
+            404: "Assignment not found" or "Submission not found"
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: student_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/students/{student_id}/submissions/:
+    get:
+      operationId: v1_students_submissions_retrieve
+      description: |-
+        List all submissions by a specific student.
+
+        Students can only view their own submissions. Teachers can view
+        submissions from students they created. Admins can view any student's.
+
+        Args:
+            student_id: User ID of the student (path parameter)
+
+        Returns:
+            200: Array of submission DTOs
+            403: Forbidden if requesting other student's data (as student)
+            403: Forbidden if teacher doesn't own this student
+      parameters:
+      - in: path
+        name: student_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/students/bulk/:
+    post:
+      operationId: v1_students_bulk_create
+      description: |-
+        Bulk import students from a list (CSV import).
+
+        Creates multiple student accounts and enrolls them in their specified
+        courses. Invalid entries are silently skipped. Used for CSV roster import.
+
+        Request Body:
+            [
+                {"name": "Student 1", "username": "s1@school.edu", "courseId": 123},
+                {"name": "Student 2", "username": "s2@school.edu", "courseId": 123},
+                ...
+            ]
+
+        Returns:
+            200: List of created student DTOs (skipped entries not included)
+            400: If request body is not a list
+
+        Permissions:
+            Requires TEACHER role
+
+        Note:
+            Invalid entries are silently skipped to allow partial imports.
+            Check the response count against input count to detect skips.
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/submissions/:
+    put:
+      operationId: v1_submissions_update
+      description: |-
+        Update an existing submission (answers and/or status).
+
+        Used by students to modify their submission before final submit,
+        or by teachers to update grading information.
+
+        Request Body:
+            {
+                "assignmentId": 123,
+                "studentId": 456,         # For student submissions
+                "teacherId": 789,         # For teacher self-assessments
+                "status": "SUBMITTED",    # Optional status update
+                "answers": [...]          # Updated answers
+            }
+
+        Returns:
+            200: Updated submission DTO
+            403: Forbidden if student editing another's submission
+            403: Forbidden if teacher editing submission they don't own
+            404: "Assignment not found"
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/submissions/{submission_id}:
+    get:
+      operationId: v1_submissions_retrieve
+      description: |-
+        Retrieve a single submission by its ID.
+
+        Returns the full submission with all answers. Access is controlled
+        by role: students see only their own, teachers see their assignments'.
+
+        Args:
+            submission_id: Database ID of the submission (path parameter)
+
+        Returns:
+            200: Full submission DTO with answers
+            403: Forbidden if user cannot access this submission
+            404: "Submission not found" if ID invalid
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/submissions/{submission_id}/override-score:
+    patch:
+      operationId: v1_submissions_override_score_partial_update
+      description: |-
+        Override scores for individual answers in a submission (teacher grading).
+
+        Teachers use this to manually grade or adjust scores for student answers.
+        Only teachers who own the assignment or admins can override scores.
+
+        Args:
+            submission_id: ID of the submission to grade (path parameter)
+
+        Request Body:
+            [
+                {"answerId": 1, "score": 10},
+                {"answerId": 2, "score": 8},
+                ...
+            ]
+
+        Returns:
+            200: Updated submission DTO with new scores
+            400: "Expected list of scores" if body isn't an array
+            403: Forbidden if not teacher/admin or doesn't own assignment
+            404: "Submission not found"
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/submissions/mine:
+    get:
+      operationId: v1_submissions_mine_retrieve
+      description: |-
+        List submissions for the authenticated user with optional status filter.
+
+        Used by the dashboard to show the user's own submissions. Supports
+        filtering by status (e.g., only IN_PROGRESS or only SUBMITTED).
+
+        Query Parameters:
+            userId: Required - User ID to fetch submissions for
+            status: Optional - Filter by submission status (IN_PROGRESS, SUBMITTED, etc.)
+
+        Returns:
+            200: Array of submission summary DTOs (lighter than full DTOs)
+            400: Bad request if userId not provided
+            403: Forbidden if requesting another user's submissions (non-admin)
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/teachers/{teacher_id}/submissions:
+    get:
+      operationId: v1_teachers_submissions_retrieve
+      description: |-
+        List all submissions created by a specific teacher (self-assessments).
+
+        Returns teacher self-assessment submissions. Teachers can only view
+        their own; admins can view any teacher's.
+
+        Args:
+            teacher_id: User ID of the teacher (path parameter)
+
+        Returns:
+            200: Array of submission DTOs
+            403: Forbidden if teacher requesting another teacher's data
+            403: Forbidden if student (no access to teacher submissions)
+      parameters:
+      - in: path
+        name: teacher_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/visualization/:
+    post:
+      operationId: v1_visualization_create
+      description: |-
+        Get aggregated visualization data for dashboard charts.
+
+        Accepts filter criteria and returns aggregated submission data
+        suitable for rendering charts and graphs. Teachers see data for
+        their own courses; admins see all data.
+
+        Request Body:
+            {
+                "courseId": 123,       # Optional: filter by course
+                "assessmentId": 456,   # Optional: filter by assessment
+                "studentId": 789,      # Optional: filter by student
+                "startDate": "2024-01-01",  # Optional: date range start
+                "endDate": "2024-12-31"     # Optional: date range end
+            }
+
+        Returns:
+            200: {
+                "submissions": [...],  # Aggregated submission data
+                "summary": {...}       # Summary statistics
+            }
+            400: ValueError if invalid filters
+            500: Server error on processing failure
+      tags:
+      - v1
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+components:
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
