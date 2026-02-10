@@ -280,8 +280,8 @@ def can_reset_password(request_user: User, target_user: User) -> bool:
     Check if request_user can reset target_user's password.
 
     Permission rules:
-    - Only admins (is_staff) can reset passwords
-    - Admins can reset passwords for researchers, teachers, and students
+    - Admins (is_staff) can reset passwords for researchers, teachers, and students
+    - Researchers with RESET_PASSWORD sudo can reset passwords for researchers, teachers, and students
 
     Args:
         request_user: The user making the reset request
@@ -292,8 +292,14 @@ def can_reset_password(request_user: User, target_user: User) -> bool:
     """
     target_role = primary_role(target_user)
 
-    # Only admin can reset passwords
     if request_user.is_staff:
+        return target_role in (Role.RESEARCHER, Role.TEACHER, Role.STUDENT)
+
+    # Sudoed researchers can reset passwords within user space
+    if (
+        primary_role(request_user) == Role.RESEARCHER
+        and has_sudo_permission(request_user, SudoPermission.RESET_PASSWORD)
+    ):
         return target_role in (Role.RESEARCHER, Role.TEACHER, Role.STUDENT)
 
     return False
