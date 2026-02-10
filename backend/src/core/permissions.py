@@ -64,7 +64,7 @@ def primary_role(user) -> str:
         user: User instance
 
     Returns:
-        Role string (RESEARCHER, TEACHER, or STUDENT)
+        Role string (ADMIN for is_staff users, otherwise RESEARCHER/TEACHER/STUDENT)
     """
 
     if user.is_staff:
@@ -213,7 +213,7 @@ class IsTeacherOrAbove(permissions.BasePermission):
 
     This is the most common permission for management endpoints where
     teachers need access and higher-privilege roles should also have access.
-    Follows the role hierarchy: ADMIN > RESEARCHER > TEACHER > STUDENT.
+    Follows the role hierarchy: ADMIN (is_staff) > RESEARCHER > TEACHER > STUDENT.
 
     Usage:
         @permission_classes([IsTeacherOrAbove])

@@ -15,12 +15,12 @@ Endpoints:
     POST /api/v1/auth/login         - Username/password authentication
     POST /api/v1/auth/login/google  - Google OAuth authentication
     POST /api/v1/auth/check-email   - Check if email exists in system
-    POST /api/v1/users              - Create user (teacher/admin only)
-    POST /api/v1/users/{id}         - Update user (teacher/admin only)
-    DELETE /api/v1/users/{username} - Delete user (teacher/admin only)
-    GET /api/v1/users/staff         - List teachers and admins (admin only)
+    POST /api/v1/users              - Create user (teacher/admin, sudoed researcher)
+    POST /api/v1/users/{id}         - Update user (teacher/admin, sudoed researcher)
+    DELETE /api/v1/users/{username} - Delete user (teacher/admin, sudoed researcher)
+    GET /api/v1/users/staff         - List staff (researcher/admin)
     POST /api/v1/users/{id}/password - Set initial password (first login flow)
-    PUT /api/v1/users/{id}/password/reset - Reset password (teacher/admin only)
+    PUT /api/v1/users/{id}/password/reset - Reset password (admin, sudoed researcher)
     POST /api/v1/users/bulk         - Bulk create users (admin only)
 """
 
@@ -36,7 +36,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from core.permissions import IsAdmin, IsResearcherOrAdmin, IsTeacherOrAdmin, has_sudo_permission, primary_role
+from core.permissions import IsResearcherOrAdmin, IsTeacherOrAbove, has_sudo_permission, primary_role
 
 from .models import OAuthAccount, OAuthProvider, Role, SudoPermission
 from .serializers import CheckEmailSerializer, UserInputSerializer, UserOutputSerializer
@@ -286,7 +286,7 @@ def check_email(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsTeacherOrAdmin])
+@permission_classes([IsTeacherOrAbove])
 def create_user(request):
     """
     Create a new user account with specified role (privileged operation).
@@ -311,6 +311,7 @@ def create_user(request):
 
     Permission Rules:
         - TEACHER: Can create STUDENT only
+        - Researcher with CREATE_TEACHER/CREATE_STUDENT sudo permission
         - Admin (is_staff): Can create RESEARCHER or TEACHER
     """
     serializer = UserInputSerializer(data=request.data)
@@ -328,7 +329,7 @@ def create_user(request):
 
 
 @api_view(["POST"])
-@permission_classes([IsTeacherOrAdmin])
+@permission_classes([IsTeacherOrAbove])
 def edit_user(request, user_id: int):
     """
     Update an existing user's profile, role, or password.
@@ -345,7 +346,7 @@ def edit_user(request, user_id: int):
             "name": "New Name",              # Optional
             "username": "new@example.com",   # Optional, must be unique
             "password": "newpassword",       # Optional
-            "role": "STUDENT|TEACHER|ADMIN"  # Optional, changes user's role
+            "role": "STUDENT|TEACHER|RESEARCHER"  # Optional, changes user's role
         }
 
     Returns:
@@ -356,6 +357,7 @@ def edit_user(request, user_id: int):
 
     Permission Rules:
         - TEACHER: Can edit own students only
+        - Researcher with EDIT_USER sudo permission
         - Admin (is_staff): Can edit researchers and teachers
     """
     serializer = UserInputSerializer(data=request.data)
@@ -383,7 +385,7 @@ def edit_user(request, user_id: int):
 
 
 @api_view(["DELETE"])
-@permission_classes([IsTeacherOrAdmin])
+@permission_classes([IsTeacherOrAbove])
 def delete_user(request, username: str):
     """
     Permanently delete a user account from the system.
@@ -402,6 +404,7 @@ def delete_user(request, username: str):
 
     Permission Rules:
         - TEACHER: Can delete own students only
+        - Researcher with DELETE_USER sudo permission
         - Admin (is_staff): Can delete researchers and teachers
 
     Warning:
@@ -486,7 +489,7 @@ def set_password(request, user_id: int):
 
 
 @api_view(["PUT"])
-@permission_classes([IsTeacherOrAdmin])
+@permission_classes([IsTeacherOrAbove])
 def reset_password(request, user_id: int):
     """
     Reset a user's password, requiring them to set a new one on next login.
@@ -504,7 +507,7 @@ def reset_password(request, user_id: int):
         404: "User not found" if user_id doesn't exist
 
     Permission Rules:
-        - TEACHER: Can reset password for own students only
+        - Researcher with RESET_PASSWORD sudo permission
         - Admin (is_staff): Can reset password for researchers and teachers
     """
     user = User.objects.filter(id=user_id).first()
