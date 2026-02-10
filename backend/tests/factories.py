@@ -4,7 +4,7 @@ import factory
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 
-from accounts.models import Role, StudentProfile, TeacherProfile, User, UserRole
+from accounts.models import Role, StudentProfile, SudoGrant, SudoPermission, TeacherProfile, User, UserRole
 from assessments.models import (
     Assessment,
     GradingMode,
@@ -118,3 +118,24 @@ class McqChoiceFactory(factory.django.DjangoModelFactory):
     question = factory.SubFactory(QuestionFactory)
     choice_text = factory.Sequence(lambda n: f"Choice {n}")
     points = 1
+
+
+class SudoGrantFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = SudoGrant
+
+    user = factory.SubFactory(UserFactory)
+    granted_by = factory.SubFactory(UserFactory)
+    permissions = []
+    can_grant_sudo = False
+
+    class Params:
+        full_user_management = factory.Trait(
+            permissions=[
+                SudoPermission.CREATE_TEACHER.value,
+                SudoPermission.CREATE_STUDENT.value,
+                SudoPermission.EDIT_USER.value,
+                SudoPermission.DELETE_USER.value,
+            ]
+        )
+        with_grant_ability = factory.Trait(can_grant_sudo=True)

@@ -97,7 +97,7 @@ class TestCourseRoutes:
                 "consent": False,
             },
         ]
-        response = api_client.post("/api/v1/students/bulk", payload, format="json")
+        response = api_client.post("/api/v1/students/bulk/", payload, format="json")
         assert response.status_code == 200
         assert response.json() == 2
 

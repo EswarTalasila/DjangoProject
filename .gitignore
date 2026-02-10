@@ -71,6 +71,10 @@ frontend/playwright-report/
 frontend/test-results/
 frontend/blob-report/
 
+# Next.js
+frontend/.next/
+frontend/next-env.d.ts
+
 # Docker
 *.log
 

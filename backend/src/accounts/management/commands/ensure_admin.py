@@ -5,8 +5,6 @@ import os
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
-from accounts.models import Role
-from accounts.services import ensure_profiles_for_role, set_single_role
 
 User = get_user_model()
 
@@ -32,6 +30,7 @@ class Command(BaseCommand):
             name=admin_name,
             password=admin_password,
         )
-        set_single_role(user, Role.ADMIN)
-        ensure_profiles_for_role(user, Role.ADMIN, creator=user)
+        user.is_staff=True
+        user.is_superuser=True
+        user.save()
         self.stdout.write(self.style.SUCCESS(f"Created admin user: {admin_email}"))

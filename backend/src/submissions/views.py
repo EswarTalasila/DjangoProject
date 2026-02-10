@@ -14,7 +14,7 @@ Submissions go through a lifecycle:
 Permission Model:
     - Students can only access/modify their own submissions
     - Teachers can access submissions for assignments they own
-    - Admins can access all submissions
+    - Admins (is_staff) can access all submissions
 """
 
 from rest_framework import status
@@ -23,10 +23,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import Role, User
+from core.permissions import has_role
 from accounts.services import teacher_owns_student
 from assignments.models import Assignment
 from core.errors import error_response, server_error_response
-from core.permissions import primary_role
+from core.permissions import IsTeacher, primary_role
 from courses.models import Enrollment
 
 from .models import Submission
@@ -112,7 +113,8 @@ def _can_access_submission(user, submission) -> bool:
     Determine if a user has permission to access a submission.
 
     Access rules by role:
-        - ADMIN: Full access to all submissions
+        - Admin (is_staff): Full access to all submissions
+        - RESEARCHER: Full read access to all submissions (data oversight)
         - STUDENT: Can only access their own submissions
         - TEACHER: Can access submissions for assignments they own
 
@@ -124,7 +126,9 @@ def _can_access_submission(user, submission) -> bool:
         True if user can access the submission, False otherwise
     """
     role = primary_role(user)
-    if role == Role.ADMIN:
+    if user.is_staff:
+        return True
+    if has_role(user, Role.RESEARCHER):
         return True
     if role == Role.STUDENT:
         return bool(submission.student_id == user.id)
@@ -233,14 +237,17 @@ def assignment_submissions(request, assignment_id: int):
     role = primary_role(request.user)
     if role == Role.STUDENT:
         return Response(status=status.HTTP_403_FORBIDDEN)
-    if role == Role.TEACHER and not _teacher_owns_assignment(request.user, assignment):
-        return Response(status=status.HTTP_403_FORBIDDEN)
+    # Admins and researchers can view any assignment's submissions
+    if not request.user.is_staff and not has_role(request.user, Role.RESEARCHER):
+        # Teachers can only view their own assignments
+        if role == Role.TEACHER and not _teacher_owns_assignment(request.user, assignment):
+            return Response(status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
     return Response([submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsTeacher])
 def teacher_self_assess(request, assessment_id: int):
     """
     Submit a teacher's self-assessment for mood meter or reflection.
@@ -314,8 +321,8 @@ def get_by_assignment_id(request, assignment_id: int):
     """
     List all submissions for a specific assignment.
 
-    Teachers and admins can view all submissions for an assignment
-    to review student work and grades.
+    Teachers, researchers, and admins can view all submissions for an
+    assignment to review student work and grades.
 
     Args:
         assignment_id: ID of the assignment (path parameter)
@@ -331,8 +338,11 @@ def get_by_assignment_id(request, assignment_id: int):
     role = primary_role(request.user)
     if role == Role.STUDENT:
         return Response(status=status.HTTP_403_FORBIDDEN)
-    if role == Role.TEACHER and not _teacher_owns_assignment(request.user, assignment):
-        return Response(status=status.HTTP_403_FORBIDDEN)
+    # Admins and researchers can view any assignment's submissions
+    if not request.user.is_staff and not has_role(request.user, Role.RESEARCHER):
+        # Teachers can only view their own assignments
+        if role == Role.TEACHER and not _teacher_owns_assignment(request.user, assignment):
+            return Response(status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
     return Response([submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK)
 
@@ -344,7 +354,8 @@ def get_by_student_id(request, student_id: int):
     List all submissions by a specific student.
 
     Students can only view their own submissions. Teachers can view
-    submissions from students they created. Admins can view any student's.
+    submissions from students they own. Researchers and admins can view
+    any student's submissions.
 
     Args:
         student_id: User ID of the student (path parameter)
@@ -355,8 +366,10 @@ def get_by_student_id(request, student_id: int):
         403: Forbidden if teacher doesn't own this student
     """
     role = primary_role(request.user)
-    if role == Role.ADMIN:
+    if request.user.is_staff:
         pass
+    elif has_role(request.user, Role.RESEARCHER):
+        pass  # Researchers can view any student's submissions
     elif role == Role.STUDENT:
         if request.user.id != student_id:
             return Response(status=status.HTTP_403_FORBIDDEN)
@@ -377,7 +390,7 @@ def get_by_teacher_id(request, teacher_id: int):
     List all submissions created by a specific teacher (self-assessments).
 
     Returns teacher self-assessment submissions. Teachers can only view
-    their own; admins can view any teacher's.
+    their own; researchers and admins can view any teacher's.
 
     Args:
         teacher_id: User ID of the teacher (path parameter)
@@ -388,8 +401,10 @@ def get_by_teacher_id(request, teacher_id: int):
         403: Forbidden if student (no access to teacher submissions)
     """
     role = primary_role(request.user)
-    if role == Role.ADMIN:
+    if request.user.is_staff:
         pass
+    elif has_role(request.user, Role.RESEARCHER):
+        pass  # Researchers can view any teacher's submissions
     elif role == Role.TEACHER:
         if request.user.id != teacher_id:
             return Response(status=status.HTTP_403_FORBIDDEN)
@@ -406,7 +421,8 @@ def get_student_submission(request, student_id: int, assignment_id: int):
     Get a specific student's submission for a specific assignment.
 
     Used by the frontend to load a student's work for viewing or editing.
-    Students can only access their own; teachers access via ownership.
+    Students can only access their own; teachers access via ownership;
+    researchers and admins can access any submission.
 
     Args:
         student_id: User ID of the student (path parameter)
@@ -423,8 +439,10 @@ def get_student_submission(request, student_id: int, assignment_id: int):
     assignment = _assignment_for(assignment_id)
     if not assignment:
         return error_response("Assignment not found", status.HTTP_404_NOT_FOUND)
-    if role == Role.ADMIN:
+    if request.user.is_staff:
         pass
+    elif has_role(request.user, Role.RESEARCHER):
+        pass  # Researchers can view any submission
     elif role == Role.STUDENT:
         if request.user.id != student_id:
             return Response(status=status.HTTP_403_FORBIDDEN)
@@ -475,7 +493,7 @@ def save_draft(request, student_id: int, assignment_id: int):
     assignment = _assignment_for(assignment_id)
     if not assignment:
         return error_response("Assignment not found", status.HTTP_404_NOT_FOUND)
-    if role == Role.ADMIN:
+    if request.user.is_staff:
         pass
     elif role == Role.STUDENT:
         if request.user.id != student_id:
@@ -504,10 +522,11 @@ def save_draft(request, student_id: int, assignment_id: int):
 @permission_classes([IsAuthenticated])
 def list_mine_view(request):
     """
-    List submissions for the authenticated user with optional status filter.
+    List submissions for a user with optional status filter.
 
-    Used by the dashboard to show the user's own submissions. Supports
-    filtering by status (e.g., only IN_PROGRESS or only SUBMITTED).
+    Used by the dashboard to show submissions. Supports filtering by status
+    (e.g., only IN_PROGRESS or only SUBMITTED). Researchers and admins can
+    view any user's submissions.
 
     Query Parameters:
         userId: Required - User ID to fetch submissions for
@@ -516,12 +535,13 @@ def list_mine_view(request):
     Returns:
         200: Array of submission summary DTOs (lighter than full DTOs)
         400: Bad request if userId not provided
-        403: Forbidden if requesting another user's submissions (non-admin)
+        403: Forbidden if requesting another user's submissions (non-admin/researcher)
     """
     user_id = request.query_params.get("userId")
     if user_id is None:
         return Response(status=status.HTTP_400_BAD_REQUEST)
-    if request.user.id != int(user_id) and primary_role(request.user) != Role.ADMIN:
+    # Allow admins and researchers to view any user's submissions
+    if request.user.id != int(user_id) and not request.user.is_staff and not has_role(request.user, Role.RESEARCHER):
         return Response(status=status.HTTP_403_FORBIDDEN)
     status_filter = request.query_params.get("status")
     return Response(list_mine(int(user_id), status_filter), status=status.HTTP_200_OK)
@@ -560,7 +580,7 @@ def edit(request):
     if not assignment:
         return error_response("Assignment not found", status.HTTP_404_NOT_FOUND)
     role = primary_role(request.user)
-    if role == Role.ADMIN:
+    if request.user.is_staff:
         pass
     elif role == Role.STUDENT:
         if request.user.id != student_id:
@@ -611,7 +631,7 @@ def override_score_view(request, submission_id: int):
     if not isinstance(request.data, list):
         return Response("Expected list of scores", status=status.HTTP_400_BAD_REQUEST)
     role = primary_role(request.user)
-    if role not in (Role.ADMIN, Role.TEACHER):
+    if not request.user.is_staff and role != Role.TEACHER:
         return Response(status=status.HTTP_403_FORBIDDEN)
     submission = Submission.objects.filter(id=submission_id).select_related("assignment").first()
     if not submission:

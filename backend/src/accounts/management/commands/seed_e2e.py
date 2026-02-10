@@ -42,7 +42,7 @@ class Command(BaseCommand):
         student_username = os.environ.get("E2E_STUDENT_USERNAME")
         student_password = os.environ.get("E2E_STUDENT_PASSWORD", "studentpass")
 
-        self._ensure_user(admin_username, admin_name, admin_password, Role.ADMIN, force_password)
+        self._ensure_admin(admin_username, admin_name, admin_password, force_password)
 
         if teacher_username:
             self._ensure_user(
@@ -63,6 +63,32 @@ class Command(BaseCommand):
             )
 
         self.stdout.write(self.style.SUCCESS("E2E seed completed"))
+
+    def _ensure_admin(self, username, name, password, force_password):
+        """Create or update an admin user (is_staff, no user role)."""
+        user = User.objects.filter(username__iexact=username).first()
+        if user:
+            updated = False
+            if user.name != name:
+                user.name = name
+                updated = True
+            if not user.is_staff:
+                user.is_staff = True
+                user.is_superuser = True
+                updated = True
+            if password and force_password:
+                user.set_password(password)
+                updated = True
+            if updated:
+                user.save()
+            self.stdout.write(f"Updated admin user: {username}")
+            return
+
+        user = User.objects.create_user(username=username, name=name, password=password)
+        user.is_staff = True
+        user.is_superuser = True
+        user.save()
+        self.stdout.write(f"Created admin user: {username}")
 
     def _ensure_user(self, username, name, password, role, force_password):
         """Create or update a user with the requested role."""

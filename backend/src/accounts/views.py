@@ -36,9 +36,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from core.permissions import IsAdmin, IsTeacherOrAdmin, primary_role
+from core.permissions import IsAdmin, IsResearcherOrAdmin, IsTeacherOrAdmin, has_sudo_permission, primary_role
 
-from .models import OAuthAccount, OAuthProvider, Role
+from .models import OAuthAccount, OAuthProvider, Role, SudoPermission
 from .serializers import CheckEmailSerializer, UserInputSerializer, UserOutputSerializer
 from .services import (
     authenticate_user,
@@ -49,7 +49,9 @@ from .services import (
     can_reset_password,
     create_user_from_payload,
     ensure_profiles_for_role,
+    grant_sudo_to_researcher,
     link_or_create_oauth_account,
+    revoke_sudo_grant,
     set_single_role,
 )
 
@@ -148,7 +150,7 @@ def login(request):
         200: {
             "accessToken": "eyJ...",  # JWT access token
             "tokenType": "Bearer",
-            "role": "STUDENT|TEACHER|ADMIN",
+            "role": "STUDENT|TEACHER|RESEARCHER",
             "id": "123",
             "name": "User Name",
             "username": "user@example.com"
@@ -193,7 +195,7 @@ def login_with_google(request):
         200: {
             "accessToken": "eyJ...",  # JWT access token
             "tokenType": "Bearer",
-            "role": "STUDENT|TEACHER|ADMIN",
+            "role": "STUDENT|TEACHER|RESEARCHER",
             "id": "123"
         }
         400: "accessToken is required" if missing
@@ -297,7 +299,7 @@ def create_user(request):
         {
             "username": "user@example.com",  # Required, must be unique
             "name": "User Name",             # Required
-            "role": "STUDENT|TEACHER|ADMIN", # Optional, defaults to STUDENT
+            "role": "STUDENT|TEACHER|RESEARCHER", # Optional, defaults to STUDENT
             "password": "optional"           # Optional initial password
         }
 
@@ -309,7 +311,7 @@ def create_user(request):
 
     Permission Rules:
         - TEACHER: Can create STUDENT only
-        - ADMIN: Can create any role
+        - Admin (is_staff): Can create RESEARCHER or TEACHER
     """
     serializer = UserInputSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -353,8 +355,8 @@ def edit_user(request, user_id: int):
         404: "User not found" if user_id doesn't exist
 
     Permission Rules:
-        - TEACHER: Can edit own students only, cannot change to ADMIN
-        - ADMIN: Can edit any user and any role
+        - TEACHER: Can edit own students only
+        - Admin (is_staff): Can edit researchers and teachers
     """
     serializer = UserInputSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -400,7 +402,7 @@ def delete_user(request, username: str):
 
     Permission Rules:
         - TEACHER: Can delete own students only
-        - ADMIN: Can delete any user except other admins
+        - Admin (is_staff): Can delete researchers and teachers
 
     Warning:
         This performs a hard delete. Consider implementing soft delete
@@ -416,13 +418,14 @@ def delete_user(request, username: str):
 
 
 @api_view(["GET"])
-@permission_classes([IsAdmin])
-def list_teachers_admins(request):
+@permission_classes([IsResearcherOrAdmin])
+def list_staff(request):
     """
-    List all users with TEACHER or ADMIN roles.
+    List all non-student users (researchers, teachers, and admins).
 
-    Used by the admin dashboard to display staff members who can
-    create courses and manage students.
+    Used by the admin/researcher dashboard to display staff members who can
+    create courses and manage students. Researchers have read access for
+    data oversight; admins have full access.
 
     Returns:
         200: [
@@ -439,7 +442,7 @@ def list_teachers_admins(request):
         The role field includes the "ROLE_" prefix for compatibility
         with the Angular frontend's role-based routing.
     """
-    users = User.objects.filter(roles__role__in=[Role.TEACHER, Role.ADMIN]).distinct()
+    users = User.objects.filter(roles__role__in=[Role.TEACHER, Role.RESEARCHER]).distinct()
     serializer = UserOutputSerializer(users, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -502,7 +505,7 @@ def reset_password(request, user_id: int):
 
     Permission Rules:
         - TEACHER: Can reset password for own students only
-        - ADMIN: Can reset password for any non-admin user
+        - Admin (is_staff): Can reset password for researchers and teachers
     """
     user = User.objects.filter(id=user_id).first()
     if not user:
@@ -515,10 +518,10 @@ def reset_password(request, user_id: int):
 
 
 @api_view(["POST"])
-@permission_classes([IsAdmin])
+@permission_classes([IsResearcherOrAdmin])
 def bulk_create(request):
     """
-    Create multiple user accounts in a single request (admin only).
+    Create multiple user accounts in a single request.
 
     Processes a list of user objects and creates valid ones, silently
     skipping invalid entries. Useful for importing users from CSV or
@@ -548,10 +551,17 @@ def bulk_create(request):
         - Invalid serializer data
         - Roles requester cannot create (non-admin trying to create admin)
 
+    Permission Rules:
+        - Admin (is_staff): Full access
+        - Researcher with BULK_CREATE sudo permission: Can bulk create
+
     Note:
         Failed entries are silently skipped. For detailed error reporting,
         use individual create_user calls instead.
     """
+    # Researchers need BULK_CREATE sudo permission
+    if not request.user.is_staff and not has_sudo_permission(request.user, SudoPermission.BULK_CREATE):
+        return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
     if not isinstance(request.data, list):
         return Response("Expected list of users", status=status.HTTP_400_BAD_REQUEST)
     created = 0
@@ -570,3 +580,85 @@ def bulk_create(request):
         create_user_from_payload(payload, role_override=requested_role, creator=request.user)
         created += 1
     return Response(created, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsResearcherOrAdmin])
+def grant_sudo(request):
+    """
+    Grant sudo permissions to a researcher.
+
+    Admins can grant any permissions and set can_grant_sudo=True.
+    Sudoed researchers with can_grant_sudo=True can grant a subset of their
+    own permissions, but cannot set can_grant_sudo=True (admin only).
+
+    Request Body:
+        {
+            "user_id": 123,                    # Researcher to grant sudo to
+            "permissions": ["CREATE_TEACHER"], # List of SudoPermission values
+            "can_grant_sudo": false            # Optional, default false
+        }
+
+    Returns:
+        200: {"message": "Sudo granted", "grant_id": N}
+        400: Validation errors (missing user_id, invalid permissions)
+        403: Permission denied (escalation attempt or unauthorized)
+        404: User not found or not a researcher
+
+    Permission Rules:
+        - Admin (is_staff): Can grant any permissions, set can_grant_sudo=True
+        - Researcher with can_grant_sudo: Can grant subset of own permissions
+    """
+    user_id = request.data.get("user_id")
+    permissions = request.data.get("permissions", [])
+    can_grant_sudo_flag = request.data.get("can_grant_sudo", False)
+
+    if not user_id:
+        return Response({"error": "user_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    grantee = User.objects.filter(id=user_id).first()
+    if not grantee:
+        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        grant = grant_sudo_to_researcher(
+            granter=request.user,
+            grantee=grantee,
+            permissions=permissions,
+            can_grant_sudo=can_grant_sudo_flag
+        )
+        return Response({"message": "Sudo granted", "grant_id": grant.id}, status=status.HTTP_200_OK)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except PermissionError as e:
+        return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsResearcherOrAdmin])
+def revoke_sudo(request, grant_id: int):
+    """
+    Revoke a sudo grant.
+
+    Admins can revoke any grant. Sudoed researchers can revoke grants
+    they created (where they are the granted_by user).
+
+    Args:
+        grant_id: ID of the SudoGrant to revoke (path parameter)
+
+    Returns:
+        200: {"message": "Sudo revoked"}
+        403: Permission denied (not authorized to revoke this grant)
+        404: Grant not found
+
+    Permission Rules:
+        - Admin (is_staff): Can revoke any grant
+        - Researcher: Can revoke grants they created
+    """
+    try:
+        revoke_sudo_grant(revoker=request.user, grant_id=grant_id)
+        return Response({"message": "Sudo revoked"}, status=status.HTTP_200_OK)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+    except PermissionError as e:
+        return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)

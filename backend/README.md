@@ -151,7 +151,7 @@ Base URL: `/api/v1/`
 | `/auth/createuser` | POST | Teacher/Admin | Create user with role |
 | `/auth/edituser/{id}` | POST | Teacher/Admin | Edit user |
 | `/auth/deleteuser/{username}` | DELETE | Teacher/Admin | Delete user |
-| `/assessments/` | GET, POST | Admin | List/create assessments |
+| `/assessments/` | GET, POST | Teacher/Researcher/Admin | List/create assessments |
 | `/assessments/{id}` | GET, PUT, DELETE | Admin | Assessment CRUD |
 | `/assignments/` | GET, POST | Teacher | List/create assignments |
 | `/assignments/{id}` | GET, DELETE | Teacher | Assignment detail/delete |
@@ -161,7 +161,7 @@ Base URL: `/api/v1/`
 | `/submissions/` | POST | Student/Teacher | Create submission |
 | `/submissions/{id}` | GET | Owner | Get submission |
 | `/submissions/{id}/override-score` | PATCH | Teacher | Override score |
-| `/visualizations/` | POST | Teacher/Admin | Get visualization data |
+| `/visualizations/` | POST | Teacher/Researcher/Admin | Get visualization data |
 
 ## Environment Variables
 

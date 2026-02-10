@@ -55,7 +55,7 @@ class TestSubmissionErrors:
         )
         api_client.force_authenticate(user=student_user)
         response = api_client.get(
-            f"/api/v1/students/{student_user.id}/assignments/{assignment.id}/submission"
+            f"/api/v1/students/{student_user.id}/assignments/{assignment.id}/submission/"
         )
         assert response.status_code == 404
         assert b"Submission not found" in response.content
