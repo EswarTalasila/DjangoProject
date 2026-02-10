@@ -28,8 +28,8 @@ class RoleChoiceField(serializers.ChoiceField):
     """
     Custom choice field that normalizes legacy role strings.
 
-    The Java API used ROLE_ADMIN, ROLE_TEACHER, ROLE_STUDENT format.
-    This field accepts both formats and normalizes to ADMIN, TEACHER, STUDENT.
+    The Java API used ROLE_* format (ROLE_TEACHER, ROLE_STUDENT).
+    This field accepts both formats and normalizes to RESEARCHER, TEACHER, STUDENT.
 
     Example:
         "ROLE_TEACHER" -> "TEACHER"
@@ -58,7 +58,7 @@ class UserInputSerializer(serializers.Serializer):
         name: Display name (max 255 chars)
         username: Email address (max 320 chars)
         password: Plain-text password (hashed by service layer)
-        role: User role (ADMIN, TEACHER, STUDENT)
+        role: User role (RESEARCHER, TEACHER, STUDENT)
 
     Note:
         All fields are optional to support partial updates.
@@ -89,7 +89,7 @@ class UserOutputSerializer(serializers.ModelSerializer):
         id: User's database ID
         name: Display name
         username: Email address
-        role: Role as ROLE_ADMIN, ROLE_TEACHER, or ROLE_STUDENT
+        role: Role as ROLE_RESEARCHER, ROLE_TEACHER, or ROLE_STUDENT
     """
 
     role = serializers.SerializerMethodField()
@@ -148,7 +148,7 @@ class UserRoleSerializer(serializers.ModelSerializer):
     Used when listing all roles assigned to a user.
 
     Fields:
-        role: The role value (ADMIN, TEACHER, or STUDENT)
+        role: The role value (RESEARCHER, TEACHER, or STUDENT)
     """
 
     class Meta:

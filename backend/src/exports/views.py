@@ -31,7 +31,7 @@ def export_stub(request):
     future development.
 
     Permissions:
-        Requires TEACHER or ADMIN role
+        Requires TEACHER or above (researcher/admin allowed)
 
     Returns:
         501: Export endpoints are not implemented
