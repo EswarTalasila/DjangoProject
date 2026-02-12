@@ -23,11 +23,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import Role, User
-from core.permissions import has_role
 from accounts.services import teacher_owns_student
 from assignments.models import Assignment
 from core.errors import error_response, server_error_response
-from core.permissions import IsTeacher, primary_role
+from core.permissions import IsTeacher, has_role, primary_role
 from courses.models import Enrollment
 
 from .models import Submission
@@ -238,12 +237,17 @@ def assignment_submissions(request, assignment_id: int):
     if role == Role.STUDENT:
         return Response(status=status.HTTP_403_FORBIDDEN)
     # Admins and researchers can view any assignment's submissions
-    if not request.user.is_staff and not has_role(request.user, Role.RESEARCHER):
-        # Teachers can only view their own assignments
-        if role == Role.TEACHER and not _teacher_owns_assignment(request.user, assignment):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+    if (
+        not request.user.is_staff
+        and not has_role(request.user, Role.RESEARCHER)
+        and role == Role.TEACHER
+        and not _teacher_owns_assignment(request.user, assignment)
+    ):
+        return Response(status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
-    return Response([submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK)
+    return Response(
+        [submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK
+    )
 
 
 @api_view(["POST"])
@@ -339,12 +343,17 @@ def get_by_assignment_id(request, assignment_id: int):
     if role == Role.STUDENT:
         return Response(status=status.HTTP_403_FORBIDDEN)
     # Admins and researchers can view any assignment's submissions
-    if not request.user.is_staff and not has_role(request.user, Role.RESEARCHER):
-        # Teachers can only view their own assignments
-        if role == Role.TEACHER and not _teacher_owns_assignment(request.user, assignment):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+    if (
+        not request.user.is_staff
+        and not has_role(request.user, Role.RESEARCHER)
+        and role == Role.TEACHER
+        and not _teacher_owns_assignment(request.user, assignment)
+    ):
+        return Response(status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
-    return Response([submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK)
+    return Response(
+        [submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK
+    )
 
 
 @api_view(["GET"])
@@ -380,7 +389,9 @@ def get_by_student_id(request, student_id: int):
     else:
         return Response(status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_student(student_id)
-    return Response([submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK)
+    return Response(
+        [submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK
+    )
 
 
 @api_view(["GET"])
@@ -411,7 +422,9 @@ def get_by_teacher_id(request, teacher_id: int):
     else:
         return Response(status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_teacher(teacher_id)
-    return Response([submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK)
+    return Response(
+        [submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK
+    )
 
 
 @api_view(["GET"])
@@ -541,7 +554,11 @@ def list_mine_view(request):
     if user_id is None:
         return Response(status=status.HTTP_400_BAD_REQUEST)
     # Allow admins and researchers to view any user's submissions
-    if request.user.id != int(user_id) and not request.user.is_staff and not has_role(request.user, Role.RESEARCHER):
+    if (
+        request.user.id != int(user_id)
+        and not request.user.is_staff
+        and not has_role(request.user, Role.RESEARCHER)
+    ):
         return Response(status=status.HTTP_403_FORBIDDEN)
     status_filter = request.query_params.get("status")
     return Response(list_mine(int(user_id), status_filter), status=status.HTTP_200_OK)

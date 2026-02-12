@@ -36,7 +36,12 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from core.permissions import IsResearcherOrAdmin, IsTeacherOrAbove, has_sudo_permission, primary_role
+from core.permissions import (
+    IsResearcherOrAdmin,
+    IsTeacherOrAbove,
+    has_sudo_permission,
+    primary_role,
+)
 
 from .models import OAuthAccount, OAuthProvider, Role, SudoPermission
 from .serializers import CheckEmailSerializer, UserInputSerializer, UserOutputSerializer
@@ -87,7 +92,7 @@ def _google_userinfo(access_token: str) -> dict[str, Any]:
         headers={"Authorization": f"Bearer {access_token}"},
     )
     with urlopen(request, timeout=10) as response:  # noqa: S310
-        return cast(dict[str, Any], json.loads(response.read().decode("utf-8")))
+        return cast("dict[str, Any]", json.loads(response.read().decode("utf-8")))
 
 
 @api_view(["POST"])
@@ -563,7 +568,9 @@ def bulk_create(request):
         use individual create_user calls instead.
     """
     # Researchers need BULK_CREATE sudo permission
-    if not request.user.is_staff and not has_sudo_permission(request.user, SudoPermission.BULK_CREATE):
+    if not request.user.is_staff and not has_sudo_permission(
+        request.user, SudoPermission.BULK_CREATE
+    ):
         return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
     if not isinstance(request.data, list):
         return Response("Expected list of users", status=status.HTTP_400_BAD_REQUEST)
@@ -628,9 +635,11 @@ def grant_sudo(request):
             granter=request.user,
             grantee=grantee,
             permissions=permissions,
-            can_grant_sudo=can_grant_sudo_flag
+            can_grant_sudo=can_grant_sudo_flag,
         )
-        return Response({"message": "Sudo granted", "grant_id": grant.id}, status=status.HTTP_200_OK)
+        return Response(
+            {"message": "Sudo granted", "grant_id": grant.id}, status=status.HTTP_200_OK
+        )
     except ValueError as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except PermissionError as e:

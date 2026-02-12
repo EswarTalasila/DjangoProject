@@ -49,12 +49,12 @@ def _get_role_value(role: str | None) -> Role:
         return Role.STUDENT
     if isinstance(role, str) and role.startswith("ROLE_"):
         role = role.replace("ROLE_", "", 1)
-    
+
     try:
         return Role(role)
-    except ValueError:
+    except ValueError as err:
         valid_roles = [r.value for r in Role]
-        raise ValueError(f"Invalid role '{role}'. Must be one of: {valid_roles}")
+        raise ValueError(f"Invalid role '{role}'. Must be one of: {valid_roles}") from err
 
 
 def set_single_role(user: User, role: str) -> None:
@@ -162,9 +162,13 @@ def can_create_user(request_user: User, requested_role: str) -> bool:
 
     # Researcher with sudo can create teachers/students
     if request_role == Role.RESEARCHER:
-        if role == Role.TEACHER and has_sudo_permission(request_user, SudoPermission.CREATE_TEACHER):
+        if role == Role.TEACHER and has_sudo_permission(
+            request_user, SudoPermission.CREATE_TEACHER
+        ):
             return True
-        if role == Role.STUDENT and has_sudo_permission(request_user, SudoPermission.CREATE_STUDENT):
+        if role == Role.STUDENT and has_sudo_permission(
+            request_user, SudoPermission.CREATE_STUDENT
+        ):
             return True
 
     # Teacher can create students
@@ -220,7 +224,14 @@ def can_edit_user(request_user: User, target_user: User, requested_role: str) ->
     Returns:
         True if the edit is allowed, False otherwise
     """
-    target_role = _get_role_value(requested_role)
+    # Admin/staff accounts are not editable through role-assignment flows.
+    if target_user.is_staff:
+        return False
+
+    try:
+        target_role = _get_role_value(requested_role)
+    except ValueError:
+        return False
     request_role = primary_role(request_user)
 
     # Admin can edit researchers and teachers
@@ -228,9 +239,16 @@ def can_edit_user(request_user: User, target_user: User, requested_role: str) ->
         return target_role in (Role.RESEARCHER, Role.TEACHER)
 
     # Researcher with sudo can edit teachers and students
-    if request_role == Role.RESEARCHER:
-        if target_role in (Role.TEACHER, Role.STUDENT) and has_sudo_permission(request_user, SudoPermission.EDIT_USER):
-            return True
+    if (
+        request_role == Role.RESEARCHER
+        and target_role
+        in (
+            Role.TEACHER,
+            Role.STUDENT,
+        )
+        and has_sudo_permission(request_user, SudoPermission.EDIT_USER)
+    ):
+        return True
 
     # Teacher can edit students they own
     if request_role == Role.TEACHER:
@@ -264,9 +282,16 @@ def can_delete_user(request_user: User, target_user: User) -> bool:
         return target_role in (Role.RESEARCHER, Role.TEACHER)
 
     # Researcher with sudo can delete teachers and students
-    if request_role == Role.RESEARCHER:
-        if target_role in (Role.TEACHER, Role.STUDENT) and has_sudo_permission(request_user, SudoPermission.DELETE_USER):
-            return True
+    if (
+        request_role == Role.RESEARCHER
+        and target_role
+        in (
+            Role.TEACHER,
+            Role.STUDENT,
+        )
+        and has_sudo_permission(request_user, SudoPermission.DELETE_USER)
+    ):
+        return True
 
     # Teacher can delete students they own
     if request_role == Role.TEACHER:
@@ -281,7 +306,8 @@ def can_reset_password(request_user: User, target_user: User) -> bool:
 
     Permission rules:
     - Admins (is_staff) can reset passwords for researchers, teachers, and students
-    - Researchers with RESET_PASSWORD sudo can reset passwords for researchers, teachers, and students
+    - Researchers with RESET_PASSWORD sudo can reset passwords for
+      researchers, teachers, and students
 
     Args:
         request_user: The user making the reset request
@@ -296,9 +322,8 @@ def can_reset_password(request_user: User, target_user: User) -> bool:
         return target_role in (Role.RESEARCHER, Role.TEACHER, Role.STUDENT)
 
     # Sudoed researchers can reset passwords within user space
-    if (
-        primary_role(request_user) == Role.RESEARCHER
-        and has_sudo_permission(request_user, SudoPermission.RESET_PASSWORD)
+    if primary_role(request_user) == Role.RESEARCHER and has_sudo_permission(
+        request_user, SudoPermission.RESET_PASSWORD
     ):
         return target_role in (Role.RESEARCHER, Role.TEACHER, Role.STUDENT)
 
@@ -364,7 +389,9 @@ def link_or_create_oauth_account(user: User, subject: str, email: str) -> OAuthA
     return account
 
 
-def _can_grant_permissions(granter: User, permissions: list[str], can_grant_sudo: bool) -> tuple[bool, str]:
+def _can_grant_permissions(
+    granter: User, permissions: list[str], can_grant_sudo: bool
+) -> tuple[bool, str]:
     """
     Check if granter can grant the specified permissions.
 
@@ -474,8 +501,8 @@ def revoke_sudo_grant(revoker: User, grant_id: int) -> None:
     """
     try:
         grant = SudoGrant.objects.get(id=grant_id)
-    except SudoGrant.DoesNotExist:
-        raise ValueError(f"SudoGrant with id {grant_id} not found")
+    except SudoGrant.DoesNotExist as err:
+        raise ValueError(f"SudoGrant with id {grant_id} not found") from err
 
     # Verify revoker is authorized
     if revoker.is_staff:

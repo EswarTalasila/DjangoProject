@@ -11,8 +11,8 @@ UC Ranges:
 
 import pytest
 
-from accounts.models import Role, SudoGrant, SudoPermission, UserRole, ResearcherProfile
-from tests.factories import UserFactory, SudoGrantFactory
+from accounts.models import ResearcherProfile, Role, SudoGrant, SudoPermission, UserRole
+from tests.factories import SudoGrantFactory, UserFactory
 
 
 @pytest.mark.django_db
