@@ -490,6 +490,7 @@ npm run dev
 │   └── tests/e2e/           # Playwright E2E tests
 ├── Docs/
 │   ├── Specs/               # Technical specifications
+│   ├── Wiki/                # Active FR/NFR/testing docs and indexes
 │   └── diagrams/            # PlantUML and OpenTelemetry diagrams
 ├── Deployment/templates/    # Docker and CI/CD templates
 ├── scripts/                 # Utility scripts
@@ -760,6 +761,8 @@ enrollment.course                   # Backward: enrollment -> course
 ## Documentation
 
 - `Docs/Specs/` - Technical specifications and architecture decisions
+- `Docs/Wiki/` - Active requirements, NFRs, testing indexes, and task/diagnostics contracts
+- `Docs/Wiki/Home.md` - Wiki navigation entry point
 - `Docs/Specs/08-Migration-Plan.md` - Migration status and known issues
 - `Docs/Specs/10-Development-Workflow.md` - Detailed development setup
 - `Docs/Specs/11-Code-Style-and-Architecture.md` - Code conventions
