@@ -44,6 +44,7 @@ function LoginPageContent() {
     if (role) Cookies.set('user_role', role);
     Cookies.set('user_name', name || "Instructor", { expires: 1 });
 
+    router.refresh();
     router.push('/dashboard');
   };
 
