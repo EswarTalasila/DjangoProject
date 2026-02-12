@@ -17,9 +17,139 @@ tasks:
   # Default
   # ===========================================================================
   default:
-    desc: List all available tasks
+    desc: Show structured command guide
     cmds:
-      - task --list
+      - task: help
+
+  help:
+    desc: Show structured command guide (grouped)
+    silent: true
+    cmds:
+      - |
+        if [ -n "${FORCE_COLOR:-}" ] || { [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; }; then
+          C_RESET="$(printf '\033[0m')"
+          C_BOLD="$(printf '\033[1m')"
+          C_DIM="$(printf '\033[2m')"
+          C_CYAN="$(printf '\033[36m')"
+          C_GREEN="$(printf '\033[32m')"
+          C_YELLOW="$(printf '\033[33m')"
+          C_MAGENTA="$(printf '\033[35m')"
+          C_BLUE="$(printf '\033[34m')"
+        else
+          C_RESET=""
+          C_BOLD=""
+          C_DIM=""
+          C_CYAN=""
+          C_GREEN=""
+          C_YELLOW=""
+          C_MAGENTA=""
+          C_BLUE=""
+        fi
+
+        CMD_WIDTH=62
+        print_section() {
+          printf "%s%s%s%s\n" "${C_BOLD}" "$1" "$2" "${C_RESET}"
+        }
+        print_cmd() {
+          printf "  %s%-${CMD_WIDTH}s%s %s->%s %s\n" "${C_BOLD}" "$1" "${C_RESET}" "${C_DIM}" "${C_RESET}" "$2"
+        }
+
+        printf "%s%sTask Interface v2%s\n" "${C_BOLD}" "${C_CYAN}" "${C_RESET}"
+
+        print_section "${C_GREEN}" "Profiles"
+        print_cmd "task up" "alias for up:dev"
+        print_cmd "task up:dev" "development profile + diagnostics"
+        print_cmd "task up:test" "testing profile + auto seed + diagnostics"
+        print_cmd "task up:prod" "production profile + fail-fast diagnostics"
+        print_cmd "task down" "stop stack"
+        printf "\n"
+
+        print_section "${C_YELLOW}" "Overlays (running stack)"
+        print_cmd "task otel" "enable OTEL and preserve current profile"
+        print_cmd "task otel:off" "disable OTEL and preserve current profile"
+        print_cmd "task proxy" "start nginx proxy overlay"
+        print_cmd "task proxy:off" "stop nginx proxy overlay"
+        print_cmd "task debug" "run backend in foreground (current profile)"
+        printf "\n"
+
+        print_section "${C_MAGENTA}" "Testing"
+        print_cmd "task test" "full pipeline"
+        print_cmd "task test:unit" "backend + frontend unit"
+        print_cmd "task test:unit:backend" "backend unit only"
+        print_cmd "task test:unit:frontend" "frontend unit only (skip-safe)"
+        print_cmd "task test:integration" "backend integration + frontend placeholder"
+        print_cmd "task test:integration:backend" "backend integration tests only"
+        print_cmd "task test:integration:frontend" "frontend integration placeholder"
+        print_cmd "task test:integration:role -- <admin|teacher|student|error>" "role-filtered backend integration tests"
+        print_cmd "task test:security" "marker-based security tests (skip-safe)"
+        print_cmd "task test:e2e" "Playwright flow (testing profile)"
+        printf "\n"
+
+        print_section "${C_BLUE}" "Quality"
+        print_cmd "task check" "lint + format-check + mypy"
+        print_cmd "task check:env" "FR-12 env/runtime scoped checks"
+        print_cmd "task lint" "ruff lint (check-only)"
+        print_cmd "task lint:fix" "ruff lint with auto-fixes"
+        print_cmd "task format" "ruff format"
+        print_cmd "task typecheck" "mypy type checks"
+        print_cmd "task hooks:run" "run pre-commit hooks"
+        print_cmd "task hooks:install" "install pre-commit hooks"
+        print_cmd "task hooks:update" "update pre-commit hook versions"
+        printf "\n"
+
+        print_section "${C_YELLOW}" "Docker"
+        print_cmd "task docker:logs" "follow all service logs"
+        print_cmd "task docker:logs-backend" "follow backend logs"
+        print_cmd "task docker:shell" "backend container shell"
+        print_cmd "task docker:db-shell" "database psql shell"
+        print_cmd "task docker:pgadmin" "open pgAdmin in browser"
+        print_cmd "task docker:rebuild" "full rebuild and restart"
+        print_cmd "task docker:rebuild-clean" "clean + no-cache rebuild"
+        print_cmd "task docker:rebuild-backend" "rebuild backend container"
+        print_cmd "task docker:rebuild-frontend" "rebuild frontend container"
+        print_cmd "task docker:clean" "remove containers/volumes/orphans"
+        print_cmd "task docker:volume-clean" "remove project volumes only"
+        print_cmd "task down:proxy" "stop stack including nginx profile"
+        printf "\n"
+
+        print_section "${C_GREEN}" "Django"
+        print_cmd "task migrate" "apply Django migrations"
+        print_cmd "task makemigrations" "create migration files"
+        print_cmd "task django:shell" "open Django shell"
+        print_cmd "task django:shell-plus" "enhanced shell (django-extensions)"
+        print_cmd "task django:show-urls" "list URL routes"
+        print_cmd "task django:createsuperuser" "interactive superuser creation"
+        print_cmd "task django:graph-models" "generate model graph (Graphviz)"
+        printf "\n"
+
+        print_section "${C_MAGENTA}" "Docs & Diagrams"
+        print_cmd "task docs" "open API docs (Swagger UI)"
+        print_cmd "task docs:schema" "export OpenAPI schema YAML"
+        print_cmd "task diagrams:generate" "generate PlantUML from OTEL traces"
+        print_cmd "task diagrams:generate-from -- <trace.jsonl>" "generate diagrams from specific trace"
+        print_cmd "task diagrams:index" "regenerate diagrams index"
+        printf "\n"
+
+        print_section "${C_CYAN}" "Local"
+        print_cmd "task local:venv" "create local virtual environment"
+        print_cmd "task local:sync" "install backend deps locally for IDE"
+        printf "\n"
+
+        print_section "${C_CYAN}" "Utilities"
+        print_cmd "task list" "raw task list"
+        print_cmd "task list:json" "machine-readable task list (JSON)"
+
+  list:
+    desc: Show raw task list
+    silent: true
+    cmds:
+      - task --list --sort alphanumeric
+
+  list:json:
+    desc: Show task list as JSON (for tooling/automation)
+    silent: true
+    cmds:
+      - task --list-all --json
 
   # ===========================================================================
   # Validation (internal tasks, not shown in --list)
@@ -41,27 +171,100 @@ tasks:
 
   _check:backend-running:
     internal: true
-    desc: Verify backend container is running
+    desc: Verify backend container is running (with short wait)
     preconditions:
-      - sh: docker compose ps --status running | grep -q backend
+      - sh: |
+          for i in $(seq 1 15); do
+            if docker compose ps --status running --services | grep -qx backend; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
         msg: "Backend container is not running. Run 'task up' first."
+
+  _check:frontend-running:
+    internal: true
+    desc: Verify frontend container is running (with short wait)
+    preconditions:
+      - sh: |
+          for i in $(seq 1 15); do
+            if docker compose ps --status running --services | grep -qx frontend; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+        msg: "Frontend container is not running. Run 'task up:dev' first."
 
   _check:otel-traces:
     internal: true
     desc: Verify OTEL trace file exists
     preconditions:
       - sh: test -f {{.OTEL_TRACE_DIR}}/traces.jsonl
-        msg: "No OTEL traces found at {{.OTEL_TRACE_DIR}}/traces.jsonl. Run 'task up:otel' and exercise the API first."
+        msg: "No OTEL traces found at {{.OTEL_TRACE_DIR}}/traces.jsonl. Run 'task otel' and exercise the API first."
+
+  _check:precommit:
+    internal: true
+    desc: Verify pre-commit is installed
+    preconditions:
+      - sh: command -v pre-commit > /dev/null 2>&1
+        msg: "pre-commit is not installed. Install with: pip install pre-commit"
+
+  _check:profile-resolvable:
+    internal: true
+    desc: Verify runtime profile can be resolved from running backend
+    preconditions:
+      - sh: '{{.DOCKER_COMPOSE}} exec -T {{.BACKEND_CONTAINER}} sh -c ''printenv ENVIRONMENT | grep -Eq "^(development|testing|production)$"'''
+        msg: "Could not resolve ENVIRONMENT from running backend. Start stack with task up:dev, up:test, or up:prod."
+
+  _check:testing-profile:
+    internal: true
+    desc: Verify running backend is using testing profile
+    preconditions:
+      - sh: "{{.DOCKER_COMPOSE}} exec -T {{.BACKEND_CONTAINER}} sh -c 'printenv ENVIRONMENT | grep -qx testing'"
+        msg: "Testing commands require ENVIRONMENT=testing. Run 'task up:test' first."
+
+  _check:e2e-ready:
+    internal: true
+    desc: Verify backend/frontend are running in testing profile for E2E
+    deps:
+      [
+        _check:docker,
+        _check:backend-running,
+        _check:frontend-running,
+        _check:testing-profile,
+      ]
 
   # ===========================================================================
   # Service Management
   # Start/stop the application stack
   # ===========================================================================
   up:
-    desc: Start all services (database, backend, frontend)
-    deps: [_check:docker]
+    desc: Start all services using development profile
     cmds:
-      - "{{.DOCKER_COMPOSE}} up -d"
+      - task up:dev
+
+  up:dev:
+    desc: Start all services with development profile
+    deps: [_check:docker, _check:env]
+    cmds:
+      - "ENVIRONMENT=development {{.DOCKER_COMPOSE}} up -d"
+      - "./scripts/runtime/profile_guard.py --profile development --wait 10"
+
+  up:test:
+    desc: Start all services with testing profile (auto seeds E2E fixtures)
+    deps: [_check:docker, _check:env]
+    cmds:
+      - "ENVIRONMENT=testing {{.DOCKER_COMPOSE}} up -d"
+      - "./scripts/runtime/profile_guard.py --profile testing --wait 10"
+
+  up:prod:
+    desc: Start all services with production profile (strict fail-fast validation)
+    deps: [_check:docker, _check:env]
+    cmds:
+      - "ENVIRONMENT=production {{.DOCKER_COMPOSE}} up -d"
+      - "./scripts/runtime/profile_guard.py --profile production --wait 10"
 
   down:
     desc: Stop all services
@@ -75,29 +278,61 @@ tasks:
     cmds:
       - "{{.DOCKER_COMPOSE}} --profile proxy down"
 
-  up:debug:
-    desc: Start backend with debug toolbar and verbose logging
-    deps: [_check:docker]
-    cmds:
-      - "{{.DOCKER_COMPOSE}} up -d database"
-      - "{{.DOCKER_COMPOSE}} up -d frontend"
-      - "DJANGO_DEBUG=true {{.DOCKER_COMPOSE}} up backend"
-    # Runs backend in foreground to see all debug output
-
-  up:otel:
-    desc: Start with OpenTelemetry tracing enabled (writes to Docs/diagrams/otel/)
-    deps: [_check:docker]
+  otel:
+    desc: Enable OpenTelemetry tracing on running backend (preserves current profile)
+    deps: [_check:docker, _check:backend-running, _check:profile-resolvable]
+    vars:
+      CURRENT_PROFILE:
+        sh: "{{.DOCKER_COMPOSE}} exec -T {{.BACKEND_CONTAINER}} sh -c 'printenv ENVIRONMENT'"
     cmds:
       - mkdir -p {{.OTEL_TRACE_DIR}}
-      - "OTEL_ENABLED=true {{.DOCKER_COMPOSE}} up -d"
-      - 'echo "Traces will be written to {{.OTEL_TRACE_DIR}}/traces.jsonl"'
-      - 'echo "Exercise the API, then run: task diagrams:generate"'
+      - "ENVIRONMENT={{.CURRENT_PROFILE}} OTEL_ENABLED=true {{.DOCKER_COMPOSE}} up -d --force-recreate {{.BACKEND_CONTAINER}}"
+      - "./scripts/runtime/profile_guard.py --profile {{.CURRENT_PROFILE}} --wait 10"
+      - 'echo "OTEL enabled (profile: {{.CURRENT_PROFILE}}). Traces -> {{.OTEL_TRACE_DIR}}/traces.jsonl"'
 
-  up:proxy:
-    desc: Start with Nginx proxy enabled, exposing port 80. Assumes frontend is on port 4200 and the backend is on port 8000
+  otel:off:
+    desc: Disable OpenTelemetry tracing on running backend (preserves current profile)
+    deps: [_check:docker, _check:backend-running, _check:profile-resolvable]
+    vars:
+      CURRENT_PROFILE:
+        sh: "{{.DOCKER_COMPOSE}} exec -T {{.BACKEND_CONTAINER}} sh -c 'printenv ENVIRONMENT'"
+    cmds:
+      - "ENVIRONMENT={{.CURRENT_PROFILE}} OTEL_ENABLED= {{.DOCKER_COMPOSE}} up -d --force-recreate {{.BACKEND_CONTAINER}}"
+      - "./scripts/runtime/profile_guard.py --profile {{.CURRENT_PROFILE}} --wait 10"
+      - 'echo "OTEL disabled (profile: {{.CURRENT_PROFILE}})."'
+
+  proxy:
+    desc: Start Nginx reverse proxy alongside running stack
+    deps:
+      [
+        _check:docker,
+        _check:backend-running,
+        _check:frontend-running,
+        _check:profile-resolvable,
+      ]
+    vars:
+      CURRENT_PROFILE:
+        sh: "{{.DOCKER_COMPOSE}} exec -T {{.BACKEND_CONTAINER}} sh -c 'printenv ENVIRONMENT'"
+    cmds:
+      - "ENVIRONMENT={{.CURRENT_PROFILE}} {{.DOCKER_COMPOSE}} --profile proxy up -d --no-deps --force-recreate nginx"
+      - 'echo "Proxy running on http://localhost:80 (profile: {{.CURRENT_PROFILE}})."'
+
+  proxy:off:
+    desc: Stop Nginx reverse proxy
     deps: [_check:docker]
     cmds:
-      - "{{.DOCKER_COMPOSE}} --profile proxy up -d"
+      - "{{.DOCKER_COMPOSE}} stop nginx || true"
+      - 'echo "Proxy stopped."'
+
+  debug:
+    desc: Restart backend in foreground (preserves current profile; Ctrl+C to stop)
+    deps: [_check:docker, _check:backend-running, _check:profile-resolvable]
+    vars:
+      CURRENT_PROFILE:
+        sh: "{{.DOCKER_COMPOSE}} exec -T {{.BACKEND_CONTAINER}} sh -c 'printenv ENVIRONMENT'"
+    cmds:
+      - "{{.DOCKER_COMPOSE}} stop {{.BACKEND_CONTAINER}}"
+      - "ENVIRONMENT={{.CURRENT_PROFILE}} {{.DOCKER_COMPOSE}} up {{.BACKEND_CONTAINER}}"
   # ===========================================================================
   # Docker: Container Management
   # ===========================================================================
@@ -120,7 +355,8 @@ tasks:
     deps: [_check:docker, docker:clean]
     cmds:
       - "{{.DOCKER_COMPOSE}} build --no-cache"
-      - "{{.DOCKER_COMPOSE}} up -d"
+      - "ENVIRONMENT=development {{.DOCKER_COMPOSE}} up -d"
+      - "./scripts/runtime/profile_guard.py --profile development --wait 10"
       - 'echo "Clean rebuild complete. All services started fresh."'
 
   docker:rebuild:
@@ -129,19 +365,20 @@ tasks:
     cmds:
       - "{{.DOCKER_COMPOSE}} down -v"
       - "{{.DOCKER_COMPOSE}} build --no-cache"
-      - "{{.DOCKER_COMPOSE}} up -d"
+      - "ENVIRONMENT=development {{.DOCKER_COMPOSE}} up -d"
+      - "./scripts/runtime/profile_guard.py --profile development --wait 10"
 
   docker:rebuild-backend:
     desc: Rebuild only the backend container
     deps: [_check:docker]
     cmds:
-      - "{{.DOCKER_COMPOSE}} up -d --build {{.BACKEND_CONTAINER}}"
+      - "ENVIRONMENT=development {{.DOCKER_COMPOSE}} up -d --build {{.BACKEND_CONTAINER}}"
 
   docker:rebuild-frontend:
     desc: Rebuild only the frontend container
     deps: [_check:docker]
     cmds:
-      - "{{.DOCKER_COMPOSE}} up -d --build {{.FRONTEND_CONTAINER}}"
+      - "ENVIRONMENT=development {{.DOCKER_COMPOSE}} up -d --build {{.FRONTEND_CONTAINER}}"
 
   docker:logs:
     desc: Follow logs for all services
@@ -165,7 +402,7 @@ tasks:
     desc: Open psql shell in the database container
     deps: [_check:docker]
     cmds:
-      - "{{.DOCKER_COMPOSE}} exec {{.DATABASE_CONTAINER}} psql -U datadash -d datadash"
+      - '{{.DOCKER_COMPOSE}} exec {{.DATABASE_CONTAINER}} sh -c ''psql -U "$${POSTGRES_USER:-datadash}" -d "$${POSTGRES_DB:-datadash}"'''
 
   docker:pgadmin:
     desc: Open pgAdmin in browser (database management UI)
@@ -179,13 +416,63 @@ tasks:
   # Requires backend container to be running: task up
   # ===========================================================================
   test:
-    desc: Run all backend tests
+    desc: Run full test pipeline (unit + integration + security + e2e)
+    cmds:
+      - task: test:all
+
+  test:all:
+    desc: Run all test layers (unit + integration + security + e2e)
+    deps: [_check:docker]
+    cmds:
+      - task: test:unit
+      - task: test:integration
+      - task: test:security
+      - task: test:e2e
+
+  test:unit:
+    desc: Run backend + frontend unit tests
+    deps: [_check:docker]
+    cmds:
+      - task: test:unit:backend
+      - task: test:unit:frontend
+
+  test:unit:backend:
+    desc: Run backend unit tests only
     deps: [_check:docker, _check:backend-running]
     cmds:
-      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest"
+      - >
+        sh -c '{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest tests/unit -v;
+        rc=$?;
+        if [ "$rc" -eq 5 ]; then
+          echo "SKIP: no backend unit tests collected.";
+          exit 0;
+        fi;
+        exit "$rc"'
+
+  test:unit:frontend:
+    desc: Run frontend unit tests only
+    deps: [_check:docker]
+    cmds:
+      - >
+        sh -c 'if ! rg -q "\"test\"\\s*:" frontend/package.json; then
+          echo "SKIP: frontend test script is not configured in frontend/package.json.";
+          exit 0;
+        fi;
+        if ! {{.DOCKER_COMPOSE}} ps --status running --services | grep -qx {{.FRONTEND_CONTAINER}}; then
+          echo "Frontend container is not running. Run task up:dev first.";
+          exit 1;
+        fi;
+        {{.DOCKER_COMPOSE}} exec {{.FRONTEND_CONTAINER}} npm test -- --watch=false'
+
+  test:integration:
+    desc: Run integration tests (backend now; frontend placeholder)
+    deps: [_check:docker, _check:testing-profile]
+    cmds:
+      - task: test:integration:backend
+      - task: test:integration:frontend
 
   test:verbose:
-    desc: Run all backend tests with verbose output
+    desc: Run full backend pytest suite (compatibility command)
     deps: [_check:docker, _check:backend-running]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -v"
@@ -203,33 +490,87 @@ tasks:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest --cov=src --cov-report=html"
       - 'echo "Coverage report generated at backend/htmlcov/index.html"'
 
-  test:integration:
-    desc: Run integration tests only
-    deps: [_check:docker, _check:backend-running]
+  test:integration:backend:
+    desc: Run backend integration tests only
+    deps: [_check:docker, _check:backend-running, _check:testing-profile]
     cmds:
-      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest tests/integration -v"
+      - >
+        sh -c '{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest tests/integration -v;
+        rc=$?;
+        if [ "$rc" -eq 5 ]; then
+          echo "SKIP: no backend integration tests collected.";
+          exit 0;
+        fi;
+        exit "$rc"'
+
+  test:integration:frontend:
+    desc: Run frontend integration tests only (placeholder)
+    deps: [_check:docker, _check:testing-profile]
+    cmds:
+      - 'echo "SKIP: frontend integration test surface not implemented yet."'
+
+  test:integration:role:
+    desc: "Run role-filtered backend integration tests (usage: task test:integration:role -- teacher)"
+    deps: [_check:docker, _check:backend-running, _check:testing-profile]
+    cmds:
+      - >
+        sh -c 'role="{{.CLI_ARGS}}";
+        if [ -z "$role" ]; then
+          echo "Usage: task test:integration:role -- <admin|teacher|student|error>";
+          exit 1;
+        fi;
+        case "$role" in
+          admin) marker="workflow_admin" ;;
+          teacher) marker="workflow_teacher" ;;
+          student) marker="workflow_student" ;;
+          error) marker="workflow_error" ;;
+          *)
+            echo "Invalid role filter: $role";
+            echo "Allowed: admin, teacher, student, error";
+            exit 1
+            ;;
+        esac;
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest tests/integration -m "$marker" -v;
+        rc=$?;
+        if [ "$rc" -eq 5 ]; then
+          echo "SKIP: no integration tests collected for role=$role (marker=$marker).";
+          exit 0;
+        fi;
+        exit "$rc"'
+
+  test:security:
+    desc: Run security tests (skip cleanly if none collected)
+    deps: [_check:docker, _check:backend-running, _check:testing-profile]
+    cmds:
+      - >
+        sh -c '{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -m security -v;
+        rc=$?;
+        if [ "$rc" -eq 5 ]; then
+          echo "SKIP: no security tests collected.";
+          exit 0;
+        fi;
+        exit "$rc"'
 
   test:workflow:
-    desc: Run workflow tests only
-    deps: [_check:docker, _check:backend-running]
+    desc: Run workflow-marked integration tests (compatibility command)
+    deps: [_check:docker, _check:backend-running, _check:testing-profile]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -m workflow -v"
 
   test:frontend:
-    desc: Run frontend unit tests
-    deps: [_check:docker]
+    desc: Run frontend unit tests (compatibility alias)
     cmds:
-      - "{{.DOCKER_COMPOSE}} exec {{.FRONTEND_CONTAINER}} npm test -- --watch=false"
+      - task: test:unit:frontend
 
   test:e2e:setup:
     desc: Seed E2E test users (runs before E2E tests)
-    deps: [_check:docker, _check:backend-running]
+    deps: [_check:e2e-ready]
     cmds:
       - ./scripts/e2e/seed_e2e.sh
 
   test:e2e:
     desc: Run Playwright E2E tests (requires e2e profile)
-    deps: [_check:docker, test:e2e:setup]
+    deps: [_check:e2e-ready, test:e2e:setup]
     cmds:
       - "{{.DOCKER_COMPOSE}} --profile e2e run --rm frontend-e2e npx playwright test"
 
@@ -310,21 +651,32 @@ tasks:
       - task: format:check
       - task: typecheck
 
+  check:env:
+    desc: Run env/runtime quality checks for FR-12 changes
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} ruff check src/config/env.py src/config/settings.py src/config/urls.py src/core/management/commands/env_report.py"
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} mypy src/config/env.py src/config/urls.py"
+      - python3 -m py_compile scripts/runtime/profile_guard.py
+
   # ===========================================================================
   # Pre-commit
   # ===========================================================================
   hooks:install:
     desc: Install pre-commit hooks
+    deps: [_check:precommit]
     cmds:
       - pre-commit install
 
   hooks:run:
     desc: Run all pre-commit hooks on all files
+    deps: [_check:precommit]
     cmds:
       - pre-commit run --all-files
 
   hooks:update:
     desc: Update pre-commit hooks to latest versions
+    deps: [_check:precommit]
     cmds:
       - pre-commit autoupdate
 
@@ -410,7 +762,7 @@ tasks:
       - task: diagrams:index
 
   diagrams:generate-from:
-    desc: Generate diagrams from specific trace file (usage':' task diagrams:generate-from -- /path/to/trace.jsonl)
+    desc: "Generate diagrams from specific trace file (usage: task diagrams:generate-from -- /path/to/trace.jsonl)"
     deps: [_check:docker]
     cmds:
       - "{{.DOCKER_COMPOSE}} run --rm {{.BACKEND_CONTAINER}} sh -c 'PYTHONPATH=/app/src python /app/scripts/diagrams/generate_all.py --trace {{.CLI_ARGS}}'"

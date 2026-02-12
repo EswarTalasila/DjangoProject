@@ -1,6 +1,6 @@
 # EE Lab Data Dashboard
 
-A web application for managing educational assessments, student submissions, and data visualization. This is a Python/Django rewrite of the original Spring Boot application, maintaining full API compatibility with the existing Angular frontend.
+A web application for managing educational assessments, student submissions, and data visualization. This is a Python/Django rewrite of the original Spring Boot application.
 
 ## Technology Stack
 
@@ -38,14 +38,17 @@ cp .env.template .env
 
 Edit `.env` and set at minimum:
 ```env
+ENVIRONMENT=development
 POSTGRES_PASSWORD=your-secure-password
 DJANGO_SECRET_KEY=your-secure-random-string
-JWT_SECRET_KEY=your-secure-random-string
+GOOGLE_CLIENT_ID=your-google-oauth-client-id
+GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-oauth-client-id
 ```
 
 3. Start all services:
 ```bash
-docker compose up -d
+task up:dev
 ```
 
 4. Run database migrations:
@@ -59,7 +62,7 @@ docker compose exec backend python src/manage.py createsuperuser
 ```
 
 6. Access the application:
-- Frontend: http://localhost:4200
+- Frontend: http://localhost:3000
 - Backend API: http://localhost:8000/api/v1/
 - Django Admin: http://localhost:8000/admin/
 
@@ -164,21 +167,40 @@ choco install go-task
 
 ### Available Tasks
 
-Run `task --list` to see all available commands. Key tasks:
+Run `task help` for a grouped command guide or `task list` for the raw list. Key tasks:
 
 | Task                       | Description                                |
 |----------------------------|--------------------------------------------|
+| `task help`                | Show grouped command guide                 |
+| `task list`                | Show raw task list (alphanumeric sort)     |
+| `task list:json`           | Show task list in JSON                     |
 | `task up`                  | Start all services                         |
+| `task up:dev`              | Start services in development profile       |
+| `task up:test`             | Start services in testing profile + auto-seed |
+| `task up:prod`             | Start services in production profile + strict fail-fast |
 | `task down`                | Stop all services                          |
-| `task up:debug`            | Start backend with verbose debug output    |
-| `task up:otel`             | Start with OpenTelemetry tracing enabled   |
-| `task test`                | Run all backend tests                      |
+| `task otel`                | Enable OpenTelemetry on running backend    |
+| `task otel:off`            | Disable OpenTelemetry on running backend   |
+| `task proxy`               | Start reverse proxy overlay                |
+| `task proxy:off`           | Stop reverse proxy overlay                 |
+| `task debug`               | Restart backend in foreground (current profile) |
+| `task test`                | Run full test pipeline                     |
+| `task test:all`            | Run all test layers                        |
+| `task test:unit`           | Run unit tests across backend + frontend   |
+| `task test:unit:backend`   | Run backend unit tests                     |
+| `task test:unit:frontend`  | Run frontend unit tests (skip if not configured) |
+| `task test:integration`    | Run integration tests (backend + frontend placeholder) |
+| `task test:integration:backend` | Run backend integration tests         |
+| `task test:integration:frontend` | Frontend integration placeholder      |
+| `task test:integration:role` | Run role-filtered backend integration tests |
+| `task test:security`       | Run security tests (skip if none)          |
 | `task test:coverage`       | Run tests with coverage report             |
 | `task lint`                | Run ruff linter                            |
 | `task lint:fix`            | Run linter with safe auto-fixes            |
 | `task format`              | Format code with ruff                      |
 | `task typecheck`           | Run mypy type checker                      |
 | `task check`               | Run all checks (lint + format + typecheck) |
+| `task check:env`           | Run FR-12 env/runtime quality checks       |
 | `task docker:rebuild`      | Full rebuild with volume reset             |
 | `task docker:rebuild-clean`| Clean everything then rebuild from scratch |
 | `task docker:volume-clean` | Remove project volumes (clear cached data) |
@@ -198,15 +220,25 @@ Run `task --list` to see all available commands. Key tasks:
 
 ### Task Groups
 
-- `up`, `down`, `up:*` - Service management (start, stop, debug modes)
+- `up`, `down`, `up:*` - Profile startup and teardown
+- `otel`, `otel:off`, `proxy`, `proxy:off`, `debug` - Runtime overlays on a running stack
 - `docker:*` - Container management (rebuild, logs, shell)
-- `test:*` - Testing (unit, integration, coverage, e2e)
+- `test:*` - Testing (unit, integration, role-filtered, security, e2e)
 - `lint`, `format`, `typecheck`, `check` - Code quality
 - `hooks:*` - Pre-commit hook management
 - `django:*` - Django management commands and extensions
 - `docs:*` - API documentation
 - `diagrams:*` - PlantUML diagram generation from OTEL traces
 - `local:*` - Local development (IDE support)
+
+### Profile Diagnostics Output
+
+Startup profile tasks (`task up:dev`, `task up:test`, `task up:prod`) run `scripts/runtime/profile_guard.py`, which calls backend diagnostics (`python src/manage.py env_report`) and prints concise `ENV-*` / `ENV-P*` messages with fix hints.
+
+- Development/testing: warnings are non-blocking
+- Production: strict errors fail startup
+
+Backend-recreate overlays (`task otel`, `task otel:off`) preserve the current runtime profile from the running backend container and then run the same diagnostics guard.
 
 ## Common Commands
 
@@ -280,19 +312,10 @@ See `backend/tests/README.md` for test layout and markers.
 
 #### Frontend Tests
 ```bash
-# Install frontend deps (Docker)
-docker compose run --rm frontend npm install
-
-# Unit tests
-docker compose run --rm frontend npm test
-
-# Unit tests (watch mode)
-docker compose run --rm frontend npm run test:watch
-
 # E2E tests (requires running services)
 scripts/e2e/run_playwright.sh
 ```
-See `frontend/tests/e2e/README.md` for E2E structure and specs.
+Frontend unit/integration task commands are being standardized in the testing-task cleanup pass.
 
 #### E2E Test Setup
 ```bash
@@ -300,7 +323,7 @@ See `frontend/tests/e2e/README.md` for E2E structure and specs.
 ./scripts/e2e/seed_e2e.sh
 
 # Run Playwright tests
-E2E_BASE_URL=http://eel-frontend:4200 \
+E2E_BASE_URL=http://eel-frontend:3000 \
 E2E_API_URL=http://eel-backend:8000/api/v1 \
 scripts/e2e/run_playwright.sh
 ```
@@ -390,7 +413,7 @@ uv pip install -e ".[dev]"
 # Set environment variables (or use .env file)
 export DATABASE_URL=postgres://user:pass@localhost:5432/datadash
 export DJANGO_SECRET_KEY=local-dev-secret
-export DJANGO_DEBUG=true
+export ENVIRONMENT=development
 
 # Run migrations
 python src/manage.py migrate
@@ -420,7 +443,7 @@ pip install -e ".[dev]"
 # Set environment variables (or use .env file)
 export DATABASE_URL=postgres://user:pass@localhost:5432/datadash
 export DJANGO_SECRET_KEY=local-dev-secret
-export DJANGO_DEBUG=true
+export ENVIRONMENT=development
 
 # Run migrations
 python src/manage.py migrate
@@ -441,7 +464,7 @@ nvm use
 npm install
 
 # Start development server (with API proxy)
-npm start
+npm run dev
 ```
 
 ## Project Structure
@@ -460,11 +483,10 @@ npm start
 │   │   ├── core/            # Shared utilities and permissions
 │   │   └── config/          # Django settings and URLs
 │   └── tests/               # pytest test suite
-├── frontend/                # Angular SPA
-│   ├── src/
-│   │   ├── app/             # Components and routing
-│   │   ├── services/        # API client services
-│   │   └── models/          # TypeScript interfaces
+├── frontend/                # Next.js frontend
+│   ├── app/                 # App Router pages and routes
+│   ├── components/          # Shared UI components
+│   ├── lib/                 # API client and frontend utilities
 │   └── tests/e2e/           # Playwright E2E tests
 ├── Docs/
 │   ├── Specs/               # Technical specifications
@@ -481,15 +503,18 @@ See `.env.template` for the full list. Key variables:
 
 | Variable                       | Description                                  | Required   |
 |--------------------------------|----------------------------------------------|------------|
+| `ENVIRONMENT`                  | Runtime profile (`development/testing/production`) | Yes |
 | `POSTGRES_PASSWORD`            | Database password                            | Yes        |
 | `DJANGO_SECRET_KEY`            | Django secret for sessions/CSRF              | Yes        |
-| `JWT_SECRET_KEY`               | JWT signing key                              | Yes        |
-| `DJANGO_DEBUG`                 | Enable debug mode (false in prod)            | No         |
 | `DJANGO_ALLOWED_HOSTS`         | Comma-separated allowed hosts                | Yes (prod) |
 | `DJANGO_CORS_ALLOWED_ORIGINS`  | Comma-separated CORS origins                 | Yes (prod) |
-| `GOOGLE_OAUTH_CLIENT_ID`       | Google OAuth client ID                       | No         |
-| `GOOGLE_OAUTH_CLIENT_SECRET`   | Google OAuth client secret                   | No         |
+| `GOOGLE_CLIENT_ID`             | Backend Google OAuth client ID               | Yes (prod) |
+| `GOOGLE_CLIENT_SECRET`         | Backend Google OAuth client secret           | Yes (prod) |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Frontend Google OAuth client ID              | Yes (prod) |
+| `NEXT_PUBLIC_API_URL`          | Frontend API base URL                        | Yes        |
 | `OTEL_TRACE_FILE`              | Local OTEL JSONL trace output (do not commit)| No         |
+
+`DJANGO_DEBUG` is intentionally profile-derived from `ENVIRONMENT` in Docker workflows.
 
 ## API Endpoints
 
@@ -607,7 +632,7 @@ The interactive API documentation at `/api/docs/` supports JWT authentication:
 
 **CORS errors in browser:**
 - Check `DJANGO_CORS_ALLOWED_ORIGINS` includes your frontend URL
-- Default: `http://localhost:4200`
+- Default: `http://localhost:3000`
 
 ## Django Patterns Reference
 
