@@ -188,13 +188,14 @@ Run `task help` for a grouped command guide or `task list` for the raw list. Key
 | `task test:all`            | Run all test layers                        |
 | `task test:unit`           | Run unit tests across backend + frontend   |
 | `task test:unit:backend`   | Run backend unit tests                     |
-| `task test:unit:frontend`  | Run frontend unit tests (skip if not configured) |
-| `task test:integration`    | Run integration tests (backend + frontend placeholder) |
+| `task test:unit:frontend`  | Run frontend unit tests (Vitest)          |
+| `task test:integration`    | Run integration tests (backend + frontend deferred to E2E) |
 | `task test:integration:backend` | Run backend integration tests         |
-| `task test:integration:frontend` | Frontend integration placeholder      |
+| `task test:integration:frontend` | Frontend integration deferred to E2E |
 | `task test:integration:role` | Run role-filtered backend integration tests |
-| `task test:security`       | Run security tests (skip if none)          |
-| `task test:coverage`       | Run tests with coverage report             |
+| `task test:security`       | Run backend security marker tests          |
+| `task test:coverage`       | Run backend coverage report                |
+| `task test:coverage:frontend` | Run frontend coverage report            |
 | `task lint`                | Run ruff linter                            |
 | `task lint:fix`            | Run linter with safe auto-fixes            |
 | `task format`              | Format code with ruff                      |
@@ -315,7 +316,17 @@ See `backend/tests/README.md` for test layout and markers.
 # E2E tests (requires running services)
 scripts/e2e/run_playwright.sh
 ```
-Frontend unit/integration task commands are being standardized in the testing-task cleanup pass.
+Frontend unit tests run with Vitest:
+```bash
+docker compose exec frontend npm run test
+docker compose exec frontend npm run test:coverage
+```
+
+Frontend integration for async Server Components remains E2E-first:
+```bash
+task test:integration:frontend
+task test:e2e
+```
 
 #### E2E Test Setup
 ```bash

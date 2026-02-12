@@ -287,17 +287,11 @@ Configured in `frontend/vitest.config.ts`:
 ```typescript
 coverage: {
   provider: 'v8',
-  reporter: ['text', 'lcov', 'html'],
-  thresholds: {
-    lines: 80,
-    functions: 80,
-    branches: 80,
-    statements: 80
-  }
+  reporter: ['text', 'lcov', 'html']
 }
 ```
 
-Run via: `npm run test:coverage`
+Run via: `npm run test:coverage` (report-only during bootstrap; threshold ratchets in Section 8 table).
 
 ### CI Behavior
 
@@ -369,12 +363,12 @@ pytest -m security
 
 **On every PR and push to development/master:**
 
-1. **Vitest with coverage** — Runs all frontend unit tests with coverage threshold enforcement
+1. **Vitest with coverage** — Runs all frontend unit tests and publishes coverage reports
 2. **ESLint security plugin check** — Lints TypeScript/JavaScript for security issues (eval, secrets, injection)
 
 **Commands:**
 ```bash
-npm run test:coverage  # Vitest with 80% threshold enforcement
+npm run test:coverage  # Vitest coverage report
 npx eslint --max-warnings 0  # ESLint with security plugins
 ```
 

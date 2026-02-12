@@ -143,10 +143,10 @@ services:
   # Frontend (Next.js) - Development
   # ==========================================================================
   # Hot reload is enabled via volume mount. The node_modules volume persists
-  # dependencies across container restarts. npm install runs on startup to
-  # ensure dependencies are in sync with package.json (the volume may contain
-  # stale packages if package.json was updated). A separate npm cache volume
-  # reduces repeated download time when node_modules is rebuilt.
+  # dependencies across container restarts. npm ci runs only when required
+  # tool binaries are missing (protects against stale/partial node_modules
+  # after package-lock updates). A separate npm cache volume reduces repeated
+  # download time when node_modules is rebuilt.
   # ==========================================================================
   frontend:
     build:
@@ -173,7 +173,7 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
     command: >
-      sh -c "if [ ! -d node_modules ] || [ -z \"$(ls -A node_modules 2>/dev/null)\" ]; then
+      sh -c "if [ ! -x node_modules/.bin/next ] || [ ! -x node_modules/.bin/vitest ]; then
                npm ci --prefer-offline --no-audit;
              fi &&
              npm run dev"
