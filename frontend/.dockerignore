@@ -1,0 +1,9 @@
+node_modules
+.next
+coverage
+dist
+test-results
+playwright-report
+blob-report
+*.log
+.DS_Store

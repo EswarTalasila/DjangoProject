@@ -14,14 +14,14 @@ Debug toolbar (development only):
 
 from django.conf import settings
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import URLPattern, URLResolver, include, path
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
 
-urlpatterns = [
+urlpatterns: list[URLPattern | URLResolver] = [
     path("admin/", admin.site.urls),
     # Versioned API routes
     path("api/v1/auth/", include("accounts.urls")),
@@ -33,11 +33,15 @@ urlpatterns = [
     path("api/v1/teachers/", include("accounts.urls_teachers")),
     path("api/v1/visualization/", include("visualizations.urls")),
     path("api/v1/export/", include("exports.urls")),
-    # OpenAPI schema and documentation
-    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
-    path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
 ]
+
+if settings.DEBUG or getattr(settings, "ENVIRONMENT", "development") in ("development", "testing"):
+    urlpatterns += [
+        # OpenAPI schema and documentation
+        path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+        path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+        path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    ]
 
 # Debug toolbar URLs (development only)
 if settings.DEBUG:
