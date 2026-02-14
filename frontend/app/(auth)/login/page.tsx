@@ -52,6 +52,7 @@ function LoginPageContent() {
     Cookies.set("user_name", name || "Instructor", { expires: 1 });
 
     router.push("/dashboard");
+
   };
 
   const handleLoginError = (error: ApiError) => {
