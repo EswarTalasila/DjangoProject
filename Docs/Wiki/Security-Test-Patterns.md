@@ -46,7 +46,7 @@ def test_brute_force_login_rate_limiting(api_client):
     # Perform 10 failed login attempts
     for i in range(10):
         response = api_client.post(
-            '/api/auth/login/',
+            '/api/v1/auth/sessions',
             {'email': 'test@example.com', 'password': 'WrongPassword123!'},
             format='json'
         )
@@ -54,7 +54,7 @@ def test_brute_force_login_rate_limiting(api_client):
 
     # 11th attempt should be rate limited
     response = api_client.post(
-        '/api/auth/login/',
+        '/api/v1/auth/sessions',
         {'email': 'test@example.com', 'password': 'WrongPassword123!'},
         format='json'
     )
@@ -92,7 +92,7 @@ def test_jwt_token_manipulation(api_client, django_user_model):
 
     # Get valid token via login
     response = api_client.post(
-        '/api/auth/login/',
+        '/api/v1/auth/sessions',
         {'email': 'student@example.com', 'password': 'SecurePass123!'},
         format='json'
     )
@@ -188,7 +188,7 @@ def test_session_fixation_prevention(api_client, django_user_model):
 
     # Authenticate
     response = api_client.post(
-        '/api/auth/login/',
+        '/api/v1/auth/sessions',
         {'email': 'test@example.com', 'password': 'SecurePass123!'},
         format='json'
     )

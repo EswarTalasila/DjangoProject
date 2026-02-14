@@ -23,7 +23,7 @@ from rest_framework.response import Response
 
 from accounts.models import Role, User
 from core.errors import error_response
-from core.permissions import IsTeacher, IsTeacherOrAdmin, primary_role
+from core.permissions import IsTeacher, IsTeacherOrAbove, has_role, primary_role
 from courses.models import Enrollment
 
 from .serializers import AssignmentSerializer
@@ -108,7 +108,7 @@ def detail(request, assignment_id: int):
 
 
 @api_view(["GET"])
-@permission_classes([IsTeacherOrAdmin])
+@permission_classes([IsTeacherOrAbove])
 def list_course(request, course_id: int):
     """
     List all assignments for a specific course.
@@ -135,17 +135,22 @@ def list_user(request, user_id: int):
 
     For students: Returns assignments from courses they're enrolled in.
     For teachers: Returns assignments they created.
-    Users can only view their own assignments unless they're an admin.
+    Researchers and admins can view assignments for any user.
+    Non-researchers can only view their own assignments.
 
     Args:
         user_id: Database ID of the user (path parameter)
 
     Returns:
         200: Array of assignment DTOs
-        403: Forbidden if requesting another user's assignments (non-admin)
+        403: Forbidden if requesting another user's assignments
         404: "User not found"
     """
-    if request.user.id != user_id and not request.user.is_staff:
+    if (
+        request.user.id != user_id
+        and not request.user.is_staff
+        and not has_role(request.user, Role.RESEARCHER)
+    ):
         return Response(status=status.HTTP_403_FORBIDDEN)
     target = User.objects.filter(id=user_id).first()
     if not target:

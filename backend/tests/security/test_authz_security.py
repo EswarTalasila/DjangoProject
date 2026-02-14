@@ -30,7 +30,7 @@ class TestAuthorizationSecurity:
         """Teacher role cannot assign elevated sudo grants."""
         api_client.force_authenticate(user=teacher_user)
         response = api_client.post(
-            "/api/v1/users/sudo",
+            "/api/v1/sudo-grants",
             {
                 "user_id": researcher_user.id,
                 "permissions": [SudoPermission.CREATE_TEACHER.value],

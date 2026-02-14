@@ -31,6 +31,11 @@ urlpatterns: list[URLPattern | URLResolver] = [
     # Collection aliases without trailing slash to match API standard.
     path("api/v1/users", account_views.create_user),
     path("api/v1/users/", include("accounts.urls_users")),
+    # Top-level resources (moved from nested paths)
+    path("api/v1/enrollments", account_views.join_course_with_code),
+    path("api/v1/user-batches", account_views.bulk_create),
+    path("api/v1/sudo-grants", account_views.grant_sudo),
+    path("api/v1/sudo-grants/<int:grant_id>", account_views.revoke_sudo),
     # Collection aliases without trailing slash to match API standard.
     path("api/v1/codes", account_views.codes_collection),
     path("api/v1/codes/", include("accounts.urls_codes")),

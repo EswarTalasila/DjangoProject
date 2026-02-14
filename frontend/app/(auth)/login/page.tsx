@@ -96,7 +96,7 @@ function LoginPageContent() {
     setIsLoading(true);
     setGeneralError(null);
     try {
-      const res = await api.post("/auth/login", data);
+      const res = await api.post("/auth/sessions", data);
       handleLoginSuccess(res.data);
     } catch (error: unknown) {
       handleLoginError(error as ApiError);
@@ -110,7 +110,7 @@ function LoginPageContent() {
       setIsLoading(true);
       setGeneralError(null);
       try {
-        const res = await api.post("/auth/oauth/google", {
+        const res = await api.post("/auth/sessions/oauth", {
           accessToken: tokenResponse.access_token,
         });
         handleLoginSuccess(res.data);

@@ -139,10 +139,10 @@ sequenceDiagram
   participant DB
 
   Student->>UI: Enter access code
-  UI->>API: POST /registration/validate-code
+  UI->>API: POST /registration/code-validations
   API->>DB: validate code + state + expiry
   DB-->>API: valid + course_id
-  UI->>API: POST /registration/local
+  UI->>API: POST /registration/accounts (method=LOCAL)
   API->>DB: create user + decrement uses + enroll
   DB-->>API: OK
   API-->>UI: session + redirect

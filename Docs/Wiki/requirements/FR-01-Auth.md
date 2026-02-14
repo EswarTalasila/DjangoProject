@@ -132,18 +132,29 @@
 - test_AUTH_UC_01_E2
 - test_AUTH_UC_01_E3
 - test_AUTH_CN_04 (no enumeration)
+- test_AUTH_CN_12 (role-based identifier policy)
 
 **Frontend Unit:**
 - test_AUTH_UC_01_form_validation
 - test_AUTH_UC_01_error_display
 
-**Integration:**
+**Backend Integration:**
 - test_AUTH_UC_01_login_flow
 - test_AUTH_UC_01a_admin_login_flow
+
+**Frontend Integration:**
+- N/A (covered by E2E for full auth flow)
+
+**Security:**
+- N/A (covered by backend constraint and error-path tests)
 
 **E2E (Playwright):**
 - test_AUTH_UC_01_e2e_login
 - test_AUTH_UC_01a_e2e_admin_login
+
+**System Tests (Black Box):**
+- ST-AUTH-UC-01
+- ST-AUTH-UC-01-E1
 
 ---
 
@@ -191,11 +202,21 @@
 **Frontend Unit:**
 - test_AUTH_UC_02_oauth_button
 
-**Integration:**
+**Backend Integration:**
 - test_AUTH_UC_02_oauth_flow
+
+**Frontend Integration:**
+- N/A (covered by E2E for full OAuth flow)
+
+**Security:**
+- N/A (covered by backend eligibility and role-gate tests)
 
 **E2E (Playwright):**
 - test_AUTH_UC_02_e2e_oauth_login
+
+**System Tests (Black Box):**
+- ST-AUTH-UC-02
+- ST-AUTH-UC-02-E2
 
 ---
 
@@ -227,6 +248,24 @@
 - test_AUTH_UC_03_TEACHER
 - test_AUTH_UC_03_STUDENT
 - test_AUTH_CN_02 (JWT lifetimes)
+
+**Frontend Unit:**
+- N/A (backend-only use case)
+
+**Backend Integration:**
+- N/A (covered by backend API/integration auth suite)
+
+**Frontend Integration:**
+- N/A (backend-only use case)
+
+**Security:**
+- N/A (covered by backend token validation and auth guard tests)
+
+**E2E (Playwright):**
+- N/A (backend-only use case)
+
+**System Tests (Black Box):**
+- ST-AUTH-UC-03
 
 ---
 
@@ -261,8 +300,20 @@
 **Frontend Unit:**
 - test_AUTH_UC_08_logout_button
 
+**Backend Integration:**
+- N/A (covered by backend logout/blacklist flow tests)
+
+**Frontend Integration:**
+- N/A (covered by E2E logout flow)
+
+**Security:**
+- N/A (covered by backend token invalidation tests)
+
 **E2E (Playwright):**
 - test_AUTH_UC_08_e2e_logout
+
+**System Tests (Black Box):**
+- ST-AUTH-UC-08
 
 ---
 
@@ -319,11 +370,21 @@
 - test_AUTH_UC_04_form_validation
 - test_AUTH_UC_04_password_strength_indicator
 
-**Integration:**
+**Backend Integration:**
 - test_AUTH_UC_04_change_password_flow
+
+**Frontend Integration:**
+- N/A (covered by E2E password-change flow)
+
+**Security:**
+- N/A (covered by backend policy/session-invalidation tests)
 
 **E2E (Playwright):**
 - test_AUTH_UC_04_e2e_change_password
+
+**System Tests (Black Box):**
+- ST-AUTH-UC-04
+- ST-AUTH-UC-04-E1
 
 ---
 
@@ -415,6 +476,7 @@
 - test_AUTH_CN_08 (transactional)
 - test_AUTH_CN_09 (cleanup purge of expired/used reset codes)
 - test_AUTH_CN_10 (request token, non-student)
+- test_AUTH_CN_05_STUDENT (student reset flow excludes request/status queue)
 
 **Frontend Unit:**
 - test_AUTH_UC_05_request_form (non-student)
@@ -422,15 +484,25 @@
 - test_AUTH_UC_05_reset_code_form
 - test_AUTH_UC_05_new_password_form
 
-**Integration:**
+**Backend Integration:**
 - test_AUTH_UC_05_full_reset_flow_teacher
 - test_AUTH_UC_05_full_reset_flow_researcher
 - test_AUTH_UC_05_teacher_initiated_student_reset
+
+**Frontend Integration:**
+- N/A (covered by E2E reset flows)
+
+**Security:**
+- N/A (covered by backend reset-token/code and rate-limit tests)
 
 **E2E (Playwright):**
 - test_AUTH_UC_05_e2e_reset_request (non-student)
 - test_AUTH_UC_05_e2e_reset_complete
 - test_AUTH_UC_05_e2e_teacher_student_reset
+
+**System Tests (Black Box):**
+- ST-AUTH-UC-05
+- ST-AUTH-UC-05-E3
 
 ---
 
@@ -483,11 +555,21 @@
 **Frontend Unit:**
 - test_AUTH_UC_06_status_display
 
-**Integration:**
+**Backend Integration:**
 - test_AUTH_UC_06_lookup_flow
+
+**Frontend Integration:**
+- N/A (covered by E2E status-lookup flow)
+
+**Security:**
+- N/A (covered by backend token + rate-limit tests)
 
 **E2E (Playwright):**
 - test_AUTH_UC_06_e2e_status_lookup
+
+**System Tests (Black Box):**
+- ST-AUTH-UC-06
+- ST-AUTH-UC-06-E1
 
 ---
 
@@ -563,16 +645,26 @@
 - test_AUTH_UC_07_teacher_student_roster
 - test_AUTH_UC_07_teacher_generate_code
 
-**Integration:**
+**Backend Integration:**
 - test_AUTH_UC_07_approve_flow
 - test_AUTH_UC_07_deny_flow
 - test_AUTH_UC_07_chain_enforcement
 - test_AUTH_UC_07_teacher_direct_student_reset
 
+**Frontend Integration:**
+- N/A (covered by E2E approval and teacher-issued reset flows)
+
+**Security:**
+- N/A (covered by backend approval-chain and permission tests)
+
 **E2E (Playwright):**
 - test_AUTH_UC_07_e2e_approve_teacher_reset
 - test_AUTH_UC_07_e2e_deny_request
 - test_AUTH_UC_07_e2e_teacher_student_reset
+
+**System Tests (Black Box):**
+- ST-AUTH-UC-07
+- ST-AUTH-UC-07-E1
 
 ---
 
@@ -706,23 +798,23 @@ Applies to all roles. For students, codes are generated directly by the teacher 
 
 | Method | Path | Auth | UC |
 |--------|------|------|----|
-| POST | `/api/v1/auth/login` | None | AUTH-UC-01 |
-| POST | `/api/v1/auth/oauth/google` | None | AUTH-UC-02 |
-| POST | `/api/v1/auth/refresh` | Refresh token | AUTH-UC-03 |
-| POST | `/api/v1/auth/logout` | Access token | AUTH-UC-08 |
+| POST | `/api/v1/auth/sessions` | None | AUTH-UC-01 |
+| POST | `/api/v1/auth/sessions/oauth` | None | AUTH-UC-02 |
+| POST | `/api/v1/auth/token-exchanges` | Refresh token | AUTH-UC-03 |
+| POST | `/api/v1/auth/session-revocations` | Access token | AUTH-UC-08 |
 
 ### Password Change
 
 | Method | Path | Auth | UC |
 |--------|------|------|----|
-| POST | `/api/v1/auth/password/change` | Access token | AUTH-UC-04 |
+| PATCH | `/api/v1/auth/password` | Access token | AUTH-UC-04 |
 
 ### Approval-Based Reset (Non-Student)
 
 | Method | Path | Auth | UC |
 |--------|------|------|----|
 | POST | `/api/v1/auth/reset-requests` | None | AUTH-UC-05 |
-| POST | `/api/v1/auth/reset-requests/status` | None | AUTH-UC-06 |
+| POST | `/api/v1/auth/reset-request-lookups` | None | AUTH-UC-06 |
 | PATCH | `/api/v1/auth/reset-requests/{id}` | Approver | AUTH-UC-07 |
 
 **PATCH payload examples (state-driven):**
@@ -743,13 +835,13 @@ Notes:
 
 | Method | Path | Auth | UC |
 |--------|------|------|----|
-| POST | `/api/v1/auth/reset-codes/verify` | None | AUTH-UC-05 |
-| POST | `/api/v1/auth/reset-codes/complete` | None | AUTH-UC-05 |
+| POST | `/api/v1/auth/reset-code-validations` | None | AUTH-UC-05 |
+| POST | `/api/v1/auth/password-resets` | None | AUTH-UC-05 |
 
 Notes:
-- `/api/v1/auth/oauth/google` is for ADMIN/RESEARCHER/TEACHER only; STUDENT attempts must be rejected per AUTH-CN-13.
+- `/api/v1/auth/sessions/oauth` is for ADMIN/RESEARCHER/TEACHER only; STUDENT attempts must be rejected per AUTH-CN-13.
 - Researcher/admin approvals may set optional `expires_at`; default is 30 minutes when omitted.
-- Students do not use `/api/v1/auth/reset-requests` or `/api/v1/auth/reset-requests/status`.
+- Students do not use `/api/v1/auth/reset-requests` or `/api/v1/auth/reset-request-lookups`.
 
 ### Admin Panel
 

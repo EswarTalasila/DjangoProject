@@ -10,7 +10,7 @@ class TestAuthErrors:
     def test_AUTH_UC_01_E1(self, api_client):
         """AUTH-UC-01-E1: invalid credentials return 401 without enumeration."""
         response = api_client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/sessions",
             {"identifier": "missing@example.com", "password": "bad"},
             format="json",
         )
@@ -19,14 +19,14 @@ class TestAuthErrors:
 
     def test_AUTH_UC_02_E1(self, api_client):
         """AUTH-UC-02-E1: OAuth login requires provider access token."""
-        response = api_client.post("/api/v1/auth/oauth/google", {}, format="json")
+        response = api_client.post("/api/v1/auth/sessions/oauth", {}, format="json")
         assert response.status_code == 400
         assert "accessToken" in response.json()
 
     def test_AUTH_UC_06_E1(self, api_client):
         """AUTH-UC-06-E1: reset status lookup rejects invalid identifier/token pair."""
         response = api_client.post(
-            "/api/v1/auth/reset-requests/status",
+            "/api/v1/auth/reset-request-lookups",
             {"identifier": "none@example.com", "requestToken": "REQ-INVALID"},
             format="json",
         )
@@ -53,7 +53,7 @@ class TestAuthErrors:
         )
 
         response = api_client.post(
-            "/api/v1/auth/oauth/google",
+            "/api/v1/auth/sessions/oauth",
             {"accessToken": "valid-token"},
             format="json",
         )

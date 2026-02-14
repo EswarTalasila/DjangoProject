@@ -11,27 +11,28 @@ All endpoints return JSON responses. Authentication uses JWT tokens via
 SimpleJWT. Role-based access control is enforced via permission classes.
 
 Endpoints:
-    POST /api/v1/auth/login         - Username/password authentication
-    POST /api/v1/auth/oauth/google  - Google OAuth authentication
-    POST /api/v1/auth/refresh       - Refresh access token
-    POST /api/v1/auth/logout        - Logout (refresh token blacklist)
-    POST /api/v1/auth/password/change - Self-service password change
-    POST /api/v1/auth/reset-requests - Create non-student approval-based reset request
-    POST /api/v1/auth/reset-requests/status - Lookup non-student reset request status
-    PATCH /api/v1/auth/reset-requests/{id} - Approve/deny non-student reset request
-    POST /api/v1/auth/reset-codes/verify - Verify reset code
-    POST /api/v1/auth/reset-codes/complete - Complete password reset
-    POST /api/v1/registration/local - Public local registration (FR-02)
-    POST /api/v1/registration/oauth - Public non-student OAuth registration (FR-02)
-    POST /api/v1/registration/validate-code - Public invite code validation (FR-02)
-    POST /api/v1/registration/student/join-course - Authenticated student course join (FR-02)
-    GET/POST /api/v1/codes          - List/create registration codes (FR-02)
-    GET/PATCH /api/v1/codes/{id}    - Code detail + lifecycle transitions (FR-02)
-    POST /api/v1/users              - Create user (teacher/admin, sudoed researcher)
-    PATCH /api/v1/users/{id}        - Update user (teacher/admin, sudoed researcher)
-    DELETE /api/v1/users/{username} - Delete user (teacher/admin, sudoed researcher)
-    GET /api/v1/users/staff         - List staff (researcher/admin)
-    POST /api/v1/users/bulk         - Bulk create users (admin only)
+    POST /api/v1/auth/sessions          - Username/password authentication
+    POST /api/v1/auth/sessions/oauth    - Google OAuth authentication
+    POST /api/v1/auth/token-exchanges   - Refresh access token
+    POST /api/v1/auth/session-revocations - Logout (refresh token blacklist)
+    PATCH /api/v1/auth/password         - Self-service password change
+    POST /api/v1/auth/reset-requests    - Create non-student approval-based reset request
+    POST /api/v1/auth/reset-request-lookups - Lookup non-student reset request status
+    PATCH /api/v1/auth/reset-requests/{id}  - Approve/deny non-student reset request
+    POST /api/v1/auth/reset-code-validations - Verify reset code
+    POST /api/v1/auth/password-resets   - Complete password reset
+    POST /api/v1/registration/accounts  - Unified registration (method: LOCAL|OAUTH)
+    POST /api/v1/registration/code-validations - Public invite code validation (FR-02)
+    POST /api/v1/enrollments            - Authenticated student course join (FR-02)
+    GET/POST /api/v1/codes              - List/create registration codes (FR-02)
+    GET/PATCH /api/v1/codes/{id}        - Code detail + lifecycle transitions (FR-02)
+    POST /api/v1/users                  - Create user (teacher/admin, sudoed researcher)
+    PATCH /api/v1/users/{id}            - Update user (teacher/admin, sudoed researcher)
+    DELETE /api/v1/users/{id}           - Delete user (teacher/admin, sudoed researcher)
+    GET /api/v1/users/staff             - List staff (researcher/admin)
+    POST /api/v1/user-batches           - Bulk create users (admin only)
+    POST /api/v1/sudo-grants            - Grant sudo permissions
+    DELETE /api/v1/sudo-grants/{id}     - Revoke sudo grant
 """
 
 import json
@@ -174,43 +175,41 @@ def _google_userinfo(access_token: str) -> dict[str, Any]:
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
-def register_local(request):
+def register_account(request):
     """
-    Register a new account using a local invite-code flow.
+    Unified registration endpoint.
+
+    Dispatches to LOCAL or OAUTH registration based on the ``method`` field.
 
     Request Body:
-        Student code flow:
-        {
-            "code": "AB12CD",
-            "password": "securepassword",
-            "name": "User Name"
-        }
-
-        Non-student code flow:
-        {
-            "code": "AB12CD",
-            "password": "securepassword",
-            "name": "User Name",
-            "username": "teacher-user",
-            "email": "teacher@example.com"
-        }
+        { "method": "LOCAL", ...local fields... }
+        { "method": "OAUTH", ...oauth fields... }
 
     Returns:
-        200: Registration payload (students include course enrollment context;
-             non-students include auth tokens via standard auth response shape)
-        400: Invalid code or missing required fields
+        400 if method is missing or invalid.
     """
-    serializer = StudentInviteRegisterSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    payload = serializer.validated_data
+    method = (request.data.get("method") or "").upper()
+    payload = {k: v for k, v in request.data.items() if k != "method"}
+    if method == "LOCAL":
+        return _register_local(request, payload)
+    if method == "OAUTH":
+        return _register_oauth(request, payload)
+    return Response({"detail": "method must be LOCAL or OAUTH"}, status=status.HTTP_400_BAD_REQUEST)
 
-    record = validate_registration_code(payload["code"])
+
+def _register_local(request, payload):
+    """Register a new account using a local invite-code flow."""
+    serializer = StudentInviteRegisterSerializer(data=payload)
+    serializer.is_valid(raise_exception=True)
+    validated = serializer.validated_data
+
+    record = validate_registration_code(validated["code"])
     if not record:
         return Response({"detail": "Invalid or expired code"}, status=status.HTTP_400_BAD_REQUEST)
 
     if record.code_type == RegistrationCodeType.STUDENT:
         try:
-            user, enrollment = redeem_student_invite(payload)
+            user, enrollment = redeem_student_invite(validated)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -227,7 +226,7 @@ def register_local(request):
         )
 
     try:
-        user = redeem_non_student_local_invite(payload)
+        user = redeem_non_student_local_invite(validated)
     except ValueError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -240,16 +239,14 @@ def register_local(request):
     return Response(body, status=status.HTTP_200_OK)
 
 
-@api_view(["POST"])
-@permission_classes([AllowAny])
-def register_oauth(request):
+def _register_oauth(request, payload):
     """Register a non-student account with invite code + Google OAuth."""
-    serializer = RegistrationOAuthSerializer(data=request.data)
+    serializer = RegistrationOAuthSerializer(data=payload)
     serializer.is_valid(raise_exception=True)
-    payload = serializer.validated_data
+    validated = serializer.validated_data
 
     try:
-        google_user = _google_userinfo(payload["accessToken"])
+        google_user = _google_userinfo(validated["accessToken"])
     except Exception:
         return Response(
             {"detail": "Invalid Google access token."}, status=status.HTTP_401_UNAUTHORIZED
@@ -265,11 +262,11 @@ def register_oauth(request):
 
     try:
         user = redeem_non_student_oauth_invite(
-            code=payload["code"],
+            code=validated["code"],
             oauth_subject=google_subject,
             oauth_email=google_email,
-            username=payload.get("username"),
-            name=payload.get("name") or google_user.get("name"),
+            username=validated.get("username"),
+            name=validated.get("name") or google_user.get("name"),
             email_verified=google_user.get("email_verified"),
             picture_url=google_user.get("picture"),
         )
@@ -534,7 +531,7 @@ def logout(request):
     return Response({"message": "Logged out."}, status=status.HTTP_200_OK)
 
 
-@api_view(["POST"])
+@api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 def change_password(request):
     """Change password for the authenticated user and revoke all sessions."""
@@ -847,38 +844,25 @@ def create_user(request):
     return Response("User created successfully.", status=status.HTTP_200_OK)
 
 
-@api_view(["PATCH"])
+@api_view(["PATCH", "DELETE"])
 @permission_classes([IsTeacherOrAbove])
-def edit_user(request, user_id: int):
+def manage_user(request, user_id: int):
     """
-    Update an existing user's profile, role, or password.
+    Update or delete an existing user account.
 
-    Enforces ownership rules: teachers can only edit their own students,
-    admins can edit any user. Role changes trigger profile creation
-    (e.g., promoting to teacher creates TeacherProfile).
+    PATCH: Update user profile, role, or password.
+    DELETE: Permanently delete a user account.
 
     Args:
-        user_id: Database ID of the user to update (path parameter)
-
-    Request Body:
-        {
-            "name": "New Name",              # Optional
-            "username": "new@example.com",   # Optional, must be unique
-            "password": "newpassword",       # Optional
-            "role": "STUDENT|TEACHER|RESEARCHER"  # Optional, changes user's role
-        }
-
-    Returns:
-        200: "User edited successfully."
-        400: "Username already taken" if new username exists
-        403: "Forbidden" if requester lacks permission
-        404: "User not found" if user_id doesn't exist
-
-    Permission Rules:
-        - TEACHER: Can edit own students only
-        - Researcher with EDIT_USER sudo permission
-        - Admin (is_staff): Can edit researchers and teachers
+        user_id: Database ID of the user (path parameter)
     """
+    if request.method == "DELETE":
+        return _delete_user(request, user_id)
+    return _edit_user(request, user_id)
+
+
+def _edit_user(request, user_id: int):
+    """Update an existing user's profile, role, or password."""
     serializer = UserInputSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     payload = serializer.validated_data
@@ -927,34 +911,9 @@ def edit_user(request, user_id: int):
     return Response("User edited successfully.", status=status.HTTP_200_OK)
 
 
-@api_view(["DELETE"])
-@permission_classes([IsTeacherOrAbove])
-def delete_user(request, username: str):
-    """
-    Permanently delete a user account from the system.
-
-    This is a hard delete - the user and all associated data (profiles,
-    enrollments, submissions) are permanently removed. Teachers can only
-    delete their own students; admins can delete any non-admin user.
-
-    Args:
-        username: Email/username of the user to delete (path parameter)
-
-    Returns:
-        200: "User deleted successfully."
-        403: "Forbidden" if requester lacks permission
-        404: "User not found" if username doesn't exist
-
-    Permission Rules:
-        - TEACHER: Can delete own students only
-        - Researcher with DELETE_USER sudo permission
-        - Admin (is_staff): Can delete researchers and teachers
-
-    Warning:
-        This performs a hard delete. Consider implementing soft delete
-        for audit trail purposes (tracked in issue #24).
-    """
-    user = User.objects.filter(username=username).first()
+def _delete_user(request, user_id: int):
+    """Permanently delete a user account by ID."""
+    user = User.objects.filter(id=user_id).first()
     if not user:
         return Response("User not found", status=status.HTTP_404_NOT_FOUND)
     if not can_delete_user(request.user, user):

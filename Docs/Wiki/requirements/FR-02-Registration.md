@@ -140,15 +140,25 @@
 - test_REG_UC_01_oauth_entry
 - test_REG_UC_01_error_display
 
-**Integration:**
+**Backend Integration:**
 - test_REG_UC_01_local_registration_flow
 - test_REG_UC_01_oauth_registration_flow
 - test_REG_UC_01_student_auto_enroll
 - test_REG_UC_01_student_username_collision_suffix
 
+**Frontend Integration:**
+- N/A (covered by E2E registration flows)
+
+**Security:**
+- N/A (covered by backend code validation and constraint tests)
+
 **E2E (Playwright):**
 - test_REG_UC_01_e2e_local
 - test_REG_UC_01_e2e_oauth
+
+**System Tests (Black Box):**
+- ST-REG-UC-01
+- ST-REG-UC-01-E1
 
 ---
 
@@ -193,12 +203,22 @@
 - test_REG_UC_01a_join_code_form
 - test_REG_UC_01a_already_enrolled_message
 
-**Integration:**
+**Backend Integration:**
 - test_REG_UC_01a_join_course_flow
 - test_REG_UC_01a_already_enrolled_no_usage_decrement
 
+**Frontend Integration:**
+- N/A (covered by E2E join-course flow)
+
+**Security:**
+- N/A (covered by backend role and code-state enforcement tests)
+
 **E2E (Playwright):**
 - test_REG_UC_01a_e2e_join_course
+
+**System Tests (Black Box):**
+- ST-REG-UC-01a
+- ST-REG-UC-01a-E1
 
 ---
 
@@ -276,14 +296,24 @@
 - test_REG_UC_02_expiry_picker
 - test_REG_UC_02_metadata_toggle
 
-**Integration:**
+**Backend Integration:**
 - test_REG_UC_02_generate_codes_admin
 - test_REG_UC_02_generate_codes_researcher
 - test_REG_UC_02_generate_codes_teacher
 
+**Frontend Integration:**
+- N/A (covered by E2E code-generation flows)
+
+**Security:**
+- N/A (covered by backend permission and lifecycle constraint tests)
+
 **E2E (Playwright):**
 - test_REG_UC_02_e2e_generate_teacher_codes
 - test_REG_UC_02_e2e_generate_student_codes
+
+**System Tests (Black Box):**
+- ST-REG-UC-02
+- ST-REG-UC-02-E5
 
 ---
 
@@ -344,14 +374,24 @@
 - test_REG_UC_03_revoke_confirm
 - test_REG_UC_03_archive_action
 
-**Integration:**
+**Backend Integration:**
 - test_REG_UC_03_list_scope
 - test_REG_UC_03_revoke_flow
 - test_REG_UC_03_archive_flow
 
+**Frontend Integration:**
+- N/A (covered by E2E lifecycle flows)
+
+**Security:**
+- N/A (covered by backend scope and transition gate tests)
+
 **E2E (Playwright):**
 - test_REG_UC_03_e2e_revoke
 - test_REG_UC_03_e2e_archive
+
+**System Tests (Black Box):**
+- ST-REG-UC-03
+- ST-REG-UC-03-E2
 
 ---
 
@@ -509,14 +549,13 @@ Exhausted / Expired / Revoked → Archived (visibility-only)
 
 | Method | Path | Auth | UC |
 |--------|------|------|----|
-| POST | `/api/v1/registration/validate-code` | None | REG-UC-01 |
-| POST | `/api/v1/registration/local` | None | REG-UC-01 |
-| POST | `/api/v1/registration/oauth` | None | REG-UC-01 |
-| POST | `/api/v1/registration/student/join-course` | Access token (Student) | REG-UC-01a |
+| POST | `/api/v1/registration/code-validations` | None | REG-UC-01 |
+| POST | `/api/v1/registration/accounts` | None | REG-UC-01 |
+| POST | `/api/v1/enrollments` | Access token (Student) | REG-UC-01a |
 
 Notes:
-- `/api/v1/registration/oauth` is for RESEARCHER/TEACHER registration flows only.
-- STUDENT registration must use local registration so username generation and immutability are enforced.
+- `POST /api/v1/registration/accounts` accepts a `method` field: `"LOCAL"` or `"OAUTH"`. OAuth is for RESEARCHER/TEACHER registration flows only.
+- STUDENT registration must use `method: "LOCAL"` so username generation and immutability are enforced.
 
 ### Code Generation
 

@@ -103,7 +103,7 @@ class TestAuthRegCompletion:
     def _login(self, api_client, *, identifier: str, password: str):
         """Perform password login and return response."""
         return api_client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/sessions",
             {"identifier": identifier, "password": password},
             format="json",
         )
@@ -115,7 +115,7 @@ class TestAuthRegCompletion:
             lambda _token: {"sub": subject, "email": email},
         )
         return api_client.post(
-            "/api/v1/auth/oauth/google",
+            "/api/v1/auth/sessions/oauth",
             {"accessToken": "valid-token"},
             format="json",
         )
@@ -296,7 +296,7 @@ class TestAuthRegCompletion:
         )
         assert login.status_code == 200
         refresh = api_client.post(
-            "/api/v1/auth/refresh",
+            "/api/v1/auth/token-exchanges",
             {"refreshToken": login.json()["refreshToken"]},
             format="json",
         )
@@ -316,7 +316,7 @@ class TestAuthRegCompletion:
         )
         assert login.status_code == 200
         refresh = api_client.post(
-            "/api/v1/auth/refresh",
+            "/api/v1/auth/token-exchanges",
             {"refreshToken": login.json()["refreshToken"]},
             format="json",
         )
@@ -336,7 +336,7 @@ class TestAuthRegCompletion:
         )
         assert login.status_code == 200
         refresh = api_client.post(
-            "/api/v1/auth/refresh",
+            "/api/v1/auth/token-exchanges",
             {"refreshToken": login.json()["refreshToken"]},
             format="json",
         )
@@ -356,7 +356,7 @@ class TestAuthRegCompletion:
         )
         assert login.status_code == 200
         refresh = api_client.post(
-            "/api/v1/auth/refresh",
+            "/api/v1/auth/token-exchanges",
             {"refreshToken": login.json()["refreshToken"]},
             format="json",
         )
@@ -395,8 +395,8 @@ class TestAuthRegCompletion:
         user_id = login.json()["id"]
         user = User.objects.get(id=user_id)
         api_client.force_authenticate(user=user)
-        change = api_client.post(
-            "/api/v1/auth/password/change",
+        change = api_client.patch(
+            "/api/v1/auth/password",
             {
                 "currentPassword": password,
                 "newPassword": "ChangedPass123!",
@@ -406,7 +406,7 @@ class TestAuthRegCompletion:
         )
         assert change.status_code == 200
         refresh = api_client.post(
-            "/api/v1/auth/refresh",
+            "/api/v1/auth/token-exchanges",
             {"refreshToken": refresh_token},
             format="json",
         )
@@ -473,8 +473,8 @@ class TestAuthRegCompletion:
         )
         api_client.force_authenticate(user=teacher)
 
-        incorrect_current = api_client.post(
-            "/api/v1/auth/password/change",
+        incorrect_current = api_client.patch(
+            "/api/v1/auth/password",
             {
                 "currentPassword": "WrongPass123!",
                 "newPassword": "ValidPass123!",
@@ -484,8 +484,8 @@ class TestAuthRegCompletion:
         )
         assert incorrect_current.status_code == 400
 
-        mismatch = api_client.post(
-            "/api/v1/auth/password/change",
+        mismatch = api_client.patch(
+            "/api/v1/auth/password",
             {
                 "currentPassword": "StartPass123!",
                 "newPassword": "ValidPass123!",
@@ -495,8 +495,8 @@ class TestAuthRegCompletion:
         )
         assert mismatch.status_code == 400
 
-        weak = api_client.post(
-            "/api/v1/auth/password/change",
+        weak = api_client.patch(
+            "/api/v1/auth/password",
             {
                 "currentPassword": "StartPass123!",
                 "newPassword": "weak",
@@ -514,8 +514,8 @@ class TestAuthRegCompletion:
             email="uc04-e2-teacher@example.com",
         )
         api_client.force_authenticate(user=teacher)
-        response = api_client.post(
-            "/api/v1/auth/password/change",
+        response = api_client.patch(
+            "/api/v1/auth/password",
             {
                 "currentPassword": "StartPass123!",
                 "newPassword": "StartPass123!",
@@ -534,8 +534,8 @@ class TestAuthRegCompletion:
             email="cn01-teacher@example.com",
         )
         api_client.force_authenticate(user=teacher)
-        weak = api_client.post(
-            "/api/v1/auth/password/change",
+        weak = api_client.patch(
+            "/api/v1/auth/password",
             {
                 "currentPassword": "StartPass123!",
                 "newPassword": "short",
@@ -569,8 +569,8 @@ class TestAuthRegCompletion:
         refresh_2 = second.json()["refreshToken"]
 
         api_client.force_authenticate(user=teacher)
-        change = api_client.post(
-            "/api/v1/auth/password/change",
+        change = api_client.patch(
+            "/api/v1/auth/password",
             {
                 "currentPassword": "StartPass123!",
                 "newPassword": "Cn11NewPass1!",
@@ -581,12 +581,12 @@ class TestAuthRegCompletion:
         assert change.status_code == 200
 
         old_1 = api_client.post(
-            "/api/v1/auth/refresh",
+            "/api/v1/auth/token-exchanges",
             {"refreshToken": refresh_1},
             format="json",
         )
         old_2 = api_client.post(
-            "/api/v1/auth/refresh",
+            "/api/v1/auth/token-exchanges",
             {"refreshToken": refresh_2},
             format="json",
         )
@@ -644,7 +644,7 @@ class TestAuthRegCompletion:
         expired_code.save(update_fields=["expires_at"])
 
         used_complete = api_client.post(
-            "/api/v1/auth/reset-codes/complete",
+            "/api/v1/auth/password-resets",
             {
                 "identifier": teacher_used.email,
                 "resetCode": approve_used.json()["resetCode"],
@@ -673,7 +673,7 @@ class TestAuthRegCompletion:
         )
         for _ in range(LOGIN_RATE_LIMIT_ATTEMPTS):
             attempt = api_client.post(
-                "/api/v1/auth/reset-requests/status",
+                "/api/v1/auth/reset-request-lookups",
                 {
                     "identifier": teacher.email,
                     "requestToken": "REQ-INVALID",
@@ -683,7 +683,7 @@ class TestAuthRegCompletion:
             assert attempt.status_code == 404
 
         throttled = api_client.post(
-            "/api/v1/auth/reset-requests/status",
+            "/api/v1/auth/reset-request-lookups",
             {
                 "identifier": teacher.email,
                 "requestToken": "REQ-INVALID",
@@ -701,13 +701,13 @@ class TestAuthRegCompletion:
         user = User.objects.get(id=login.json()["id"])
         api_client.force_authenticate(user=user)
         logout = api_client.post(
-            "/api/v1/auth/logout",
+            "/api/v1/auth/session-revocations",
             {"refreshToken": refresh_token},
             format="json",
         )
         assert logout.status_code == 200
         invalidated = api_client.post(
-            "/api/v1/auth/refresh",
+            "/api/v1/auth/token-exchanges",
             {"refreshToken": refresh_token},
             format="json",
         )
@@ -800,8 +800,9 @@ class TestAuthRegCompletion:
     def test_REG_UC_01_E1(self, api_client):
         """Invalid invite code returns a generic invalid/expired error."""
         response = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "REG-UC01-E1-INVALID",
                 "name": "Bad Code User",
                 "password": "StartPass123!",
@@ -829,8 +830,9 @@ class TestAuthRegCompletion:
             code_type=RegistrationCodeType.TEACHER,
         )
         first = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "REG-E2-TEACHER-1",
                 "name": "First Teacher",
                 "username": "dup-teacher",
@@ -842,8 +844,9 @@ class TestAuthRegCompletion:
         assert first.status_code == 200
 
         duplicate = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "REG-E2-TEACHER-2",
                 "name": "Second Teacher",
                 "username": "dup-teacher",
@@ -872,8 +875,9 @@ class TestAuthRegCompletion:
             lambda _token: (_ for _ in ()).throw(Exception("oauth-failed")),
         )
         response = api_client.post(
-            "/api/v1/registration/oauth",
+            "/api/v1/registration/accounts",
             {
+                "method": "OAUTH",
                 "code": "REG-E4-TEACHER",
                 "accessToken": "bad-token",
             },
@@ -891,8 +895,9 @@ class TestAuthRegCompletion:
         monkeypatch.setattr("accounts.services._ensure_student_enrollment", fail_enrollment)
         before_users = User.objects.count()
         register = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "REG-CN03-REGISTER",
                 "name": "Atomic Failure Student",
                 "password": "StartPass123!",
@@ -907,7 +912,7 @@ class TestAuthRegCompletion:
         join_code = self._student_code(teacher_user, "REG-CN03-JOIN")
         api_client.force_authenticate(user=student_user)
         join = api_client.post(
-            "/api/v1/registration/student/join-course",
+            "/api/v1/enrollments",
             {"code": "REG-CN03-JOIN"},
             format="json",
         )
@@ -919,8 +924,9 @@ class TestAuthRegCompletion:
         """Student code registration and redemption always enroll into linked course."""
         primary_code = self._student_code(teacher_user, "REG-CN13-PRIMARY")
         register = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "REG-CN13-PRIMARY",
                 "name": "CN13 Student",
                 "password": "StartPass123!",
@@ -939,7 +945,7 @@ class TestAuthRegCompletion:
         secondary_code = self._student_code(teacher_user, "REG-CN13-SECONDARY")
         api_client.force_authenticate(user=student)
         join = api_client.post(
-            "/api/v1/registration/student/join-course",
+            "/api/v1/enrollments",
             {"code": "REG-CN13-SECONDARY"},
             format="json",
         )
@@ -954,7 +960,7 @@ class TestAuthRegCompletion:
         """Join-course redemption rejects invalid/expired/revoked codes."""
         api_client.force_authenticate(user=student_user)
         response = api_client.post(
-            "/api/v1/registration/student/join-course",
+            "/api/v1/enrollments",
             {"code": "REG-UC01A-E1-INVALID"},
             format="json",
         )
@@ -1359,8 +1365,9 @@ class TestAuthRegCompletion:
         """Revoke blocks new registrations; archive only hides code from default listings."""
         code = self._student_code(teacher_user, "REG-CN15-CODE", max_uses=2)
         first_registration = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "REG-CN15-CODE",
                 "name": "CN15 Existing Student",
                 "password": "StartPass123!",
@@ -1381,8 +1388,9 @@ class TestAuthRegCompletion:
 
         api_client.force_authenticate(user=None)
         blocked_registration = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "REG-CN15-CODE",
                 "name": "CN15 Blocked Student",
                 "password": "StartPass123!",

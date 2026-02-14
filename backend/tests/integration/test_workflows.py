@@ -10,8 +10,8 @@ from assessments.models import Question
 
 def login(client: APIClient, username: str, password: str) -> dict:
     response = client.post(
-        "/api/v1/auth/login",
-        {"username": username, "password": password},
+        "/api/v1/auth/sessions",
+        {"identifier": username, "password": password},
         format="json",
     )
     assert response.status_code == 200

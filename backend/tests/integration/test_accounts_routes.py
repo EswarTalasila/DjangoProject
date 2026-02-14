@@ -78,7 +78,7 @@ class TestAccountRoutes:
         self, api_client, *, role: str, identifier: str, password: str = "StartPass123!"
     ) -> None:
         response = api_client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/sessions",
             {"identifier": identifier, "password": password},
             format="json",
         )
@@ -99,8 +99,9 @@ class TestAccountRoutes:
         TeacherProfile.objects.get_or_create(user=teacher)
         self._student_code(teacher, code="INVITE-STUDENT-1")
         response = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "INVITE-STUDENT-1",
                 "password": "testpass123",
                 "name": "Student Name",
@@ -126,8 +127,8 @@ class TestAccountRoutes:
             },
         )
         response = api_client.post(
-            "/api/v1/registration/oauth",
-            {"code": "INVITE-STUDENT-OAUTH", "accessToken": "oauth-token"},
+            "/api/v1/registration/accounts",
+            {"method": "OAUTH", "code": "INVITE-STUDENT-OAUTH", "accessToken": "oauth-token"},
             format="json",
         )
         assert response.status_code == 400
@@ -153,8 +154,9 @@ class TestAccountRoutes:
             },
         )
         response = api_client.post(
-            "/api/v1/registration/oauth",
+            "/api/v1/registration/accounts",
             {
+                "method": "OAUTH",
                 "code": oauth_code,
                 "accessToken": "oauth-token",
                 "username": "researcher-oauth-user",
@@ -177,8 +179,9 @@ class TestAccountRoutes:
         ).exists()
 
         local_response = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": local_code,
                 "name": "Local Researcher",
                 "username": "local-researcher",
@@ -201,8 +204,9 @@ class TestAccountRoutes:
             code_type=RegistrationCodeType.TEACHER,
         )
         response = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "INVITE-TEACHER-LOCAL",
                 "name": "Local Teacher",
                 "username": "local-teacher",
@@ -225,8 +229,9 @@ class TestAccountRoutes:
             code_type=RegistrationCodeType.TEACHER,
         )
         response = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "INVITE-TEACHER-MISSING",
                 "name": "Missing Fields",
                 "password": "StartPass123!",
@@ -325,7 +330,7 @@ class TestAccountRoutes:
         """Validate-code returns course context for a valid student invite."""
         self._student_code(teacher_user, code="INVITE-CONTEXT", course_name="Biology")
         response = api_client.post(
-            "/api/v1/registration/validate-code",
+            "/api/v1/registration/code-validations",
             {"code": "INVITE-CONTEXT"},
             format="json",
         )
@@ -342,8 +347,9 @@ class TestAccountRoutes:
         assert first_code.course_id != second_code.course_id
 
         create_res = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "INVITE-FIRST",
                 "name": "Multi Student",
                 "password": "testpass123",
@@ -356,7 +362,7 @@ class TestAccountRoutes:
         user = User.objects.get(username=username)
         api_client.force_authenticate(user=user)
         redeem_res = api_client.post(
-            "/api/v1/registration/student/join-course",
+            "/api/v1/enrollments",
             {"code": "INVITE-SECOND"},
             format="json",
         )
@@ -386,8 +392,9 @@ class TestAccountRoutes:
         )
 
         create_res = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "IDEMP-FIRST",
                 "name": "Repeat Student",
                 "password": "testpass123",
@@ -400,7 +407,7 @@ class TestAccountRoutes:
         user = User.objects.get(username=username)
         api_client.force_authenticate(user=user)
         redeem_res = api_client.post(
-            "/api/v1/registration/student/join-course",
+            "/api/v1/enrollments",
             {"code": "IDEMP-SECOND"},
             format="json",
         )
@@ -421,7 +428,7 @@ class TestAccountRoutes:
         code = self._student_code(teacher_user, code="JOIN-AUTH")
 
         unauthenticated = api_client.post(
-            "/api/v1/registration/student/join-course",
+            "/api/v1/enrollments",
             {"code": "JOIN-AUTH"},
             format="json",
         )
@@ -429,7 +436,7 @@ class TestAccountRoutes:
 
         api_client.force_authenticate(user=teacher_user)
         forbidden = api_client.post(
-            "/api/v1/registration/student/join-course",
+            "/api/v1/enrollments",
             {"code": "JOIN-AUTH"},
             format="json",
         )
@@ -645,7 +652,7 @@ class TestAccountRoutes:
         TeacherProfile.objects.create(user=user)
 
         login_response = api_client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/sessions",
             {"identifier": "refresh@example.com", "password": "StartPass123!"},
             format="json",
         )
@@ -653,7 +660,7 @@ class TestAccountRoutes:
         refresh_token = login_response.json()["refreshToken"]
 
         refresh_response = api_client.post(
-            "/api/v1/auth/refresh",
+            "/api/v1/auth/token-exchanges",
             {"refreshToken": refresh_token},
             format="json",
         )
@@ -662,14 +669,14 @@ class TestAccountRoutes:
 
         api_client.force_authenticate(user=user)
         logout_response = api_client.post(
-            "/api/v1/auth/logout",
+            "/api/v1/auth/session-revocations",
             {"refreshToken": refresh_token},
             format="json",
         )
         assert logout_response.status_code == 200
 
         refresh_after_logout = api_client.post(
-            "/api/v1/auth/refresh",
+            "/api/v1/auth/token-exchanges",
             {"refreshToken": refresh_token},
             format="json",
         )
@@ -687,7 +694,7 @@ class TestAccountRoutes:
         TeacherProfile.objects.create(user=user)
 
         login_response = api_client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/sessions",
             {"identifier": "changepass-user", "password": "OldPass123!"},
             format="json",
         )
@@ -696,8 +703,8 @@ class TestAccountRoutes:
         refresh_token = payload["refreshToken"]
         api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {payload['accessToken']}")
 
-        change_response = api_client.post(
-            "/api/v1/auth/password/change",
+        change_response = api_client.patch(
+            "/api/v1/auth/password",
             {
                 "currentPassword": "OldPass123!",
                 "newPassword": "NewPass123!",
@@ -708,14 +715,14 @@ class TestAccountRoutes:
         assert change_response.status_code == 200
 
         refresh_after_change = api_client.post(
-            "/api/v1/auth/refresh",
+            "/api/v1/auth/token-exchanges",
             {"refreshToken": refresh_token},
             format="json",
         )
         assert refresh_after_change.status_code == 401
 
         relogin = api_client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/sessions",
             {"identifier": "changepass-user", "password": "NewPass123!"},
             format="json",
         )
@@ -725,8 +732,9 @@ class TestAccountRoutes:
         """Teacher directly issues student reset code; student verifies and completes reset."""
         self._student_code(teacher_user, code="RESET-CODE-1", course_name="Reset Course")
         register = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "RESET-CODE-1",
                 "name": "Reset Student",
                 "password": "StartPass123!",
@@ -756,7 +764,7 @@ class TestAccountRoutes:
         assert latest_request.reviewed_by_id == teacher_user.id
 
         verify_response = api_client.post(
-            "/api/v1/auth/reset-codes/verify",
+            "/api/v1/auth/reset-code-validations",
             {"identifier": student_identifier, "resetCode": reset_code},
             format="json",
         )
@@ -765,7 +773,7 @@ class TestAccountRoutes:
 
         api_client.force_authenticate(user=None)
         complete_response = api_client.post(
-            "/api/v1/auth/reset-codes/complete",
+            "/api/v1/auth/password-resets",
             {
                 "identifier": student_identifier,
                 "resetCode": reset_code,
@@ -777,7 +785,7 @@ class TestAccountRoutes:
         assert complete_response.status_code == 200
 
         login_after = api_client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/sessions",
             {"identifier": student_identifier, "password": "AfterReset123!"},
             format="json",
         )
@@ -787,8 +795,9 @@ class TestAccountRoutes:
         """Student identifiers cannot use request/status endpoints in the approval queue flow."""
         self._student_code(teacher_user, code="RESET-CODE-2", course_name="Reset Course 2")
         register = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "RESET-CODE-2",
                 "name": "Blocked Student Reset Request",
                 "password": "StartPass123!",
@@ -807,7 +816,7 @@ class TestAccountRoutes:
         assert request_response.json()["detail"] == "Unable to create reset request."
 
         status_response = api_client.post(
-            "/api/v1/auth/reset-requests/status",
+            "/api/v1/auth/reset-request-lookups",
             {"identifier": student_identifier, "requestToken": "REQ-DOES-NOT-EXIST"},
             format="json",
         )
@@ -827,8 +836,9 @@ class TestAccountRoutes:
         foreign_code = self._student_code(other_teacher, code="FOREIGN-RESET-CODE")
 
         register = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "FOREIGN-RESET-CODE",
                 "name": "Foreign Student",
                 "password": "StartPass123!",
@@ -907,8 +917,9 @@ class TestAccountRoutes:
         """Student username is generated, collision-suffixed, and immutable."""
         self._student_code(teacher_user, code="REG-CN16-STUDENT-A")
         first_register = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "REG-CN16-STUDENT-A",
                 "password": "StartPass123!",
                 "name": "Jane Smith",
@@ -921,8 +932,9 @@ class TestAccountRoutes:
 
         self._student_code(teacher_user, code="REG-CN16-STUDENT-B")
         second_register = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "REG-CN16-STUDENT-B",
                 "password": "StartPass123!",
                 "name": "Jane Smith",
@@ -984,14 +996,14 @@ class TestAccountRoutes:
                 "role": "ROLE_TEACHER",
             },
         ]
-        response = api_client.post("/api/v1/users/bulk", payload, format="json")
+        response = api_client.post("/api/v1/user-batches", payload, format="json")
         assert response.status_code == 200
         assert response.json() == 2
 
     def test_USER_UC_04_E1(self, api_client, admin_user, teacher_user):
         """Non-admin user deletion attempts are forbidden."""
         api_client.force_authenticate(user=teacher_user)
-        response = api_client.delete(f"/api/v1/users/{admin_user.username}")
+        response = api_client.delete(f"/api/v1/users/{admin_user.id}")
         assert response.status_code == 403
 
     def test_USER_UC_01(self, api_client, admin_user):
@@ -1022,14 +1034,14 @@ class TestAccountRoutes:
         TeacherProfile.objects.create(user=user)
 
         username_login = api_client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/sessions",
             {"identifier": "teachernotemail", "password": "StartPass123!"},
             format="json",
         )
         assert username_login.status_code == 200
 
         email_login = api_client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/sessions",
             {"identifier": "teachernotemail@example.com", "password": "StartPass123!"},
             format="json",
         )
@@ -1046,14 +1058,14 @@ class TestAccountRoutes:
         UserRole.objects.create(user=user, role=Role.STUDENT)
 
         email_login = api_client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/sessions",
             {"identifier": "student-only@example.com", "password": "StartPass123!"},
             format="json",
         )
         assert email_login.status_code == 401
 
         username_login = api_client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/sessions",
             {"identifier": "student-only", "password": "StartPass123!"},
             format="json",
         )
@@ -1115,7 +1127,7 @@ class TestAccountRoutes:
 
         api_client.force_authenticate(user=None)
         verify_response = api_client.post(
-            "/api/v1/auth/reset-codes/verify",
+            "/api/v1/auth/reset-code-validations",
             {"identifier": "reset-agg-teacher@example.com", "resetCode": reset_code},
             format="json",
         )
@@ -1123,7 +1135,7 @@ class TestAccountRoutes:
         assert verify_response.json()["valid"] is True
 
         complete_response = api_client.post(
-            "/api/v1/auth/reset-codes/complete",
+            "/api/v1/auth/password-resets",
             {
                 "identifier": "reset-agg-teacher@example.com",
                 "resetCode": reset_code,
@@ -1135,7 +1147,7 @@ class TestAccountRoutes:
         assert complete_response.status_code == 200
 
         login_response = api_client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/sessions",
             {"identifier": "reset-agg-teacher@example.com", "password": "NewTeacherPass1!"},
             format="json",
         )
@@ -1167,7 +1179,7 @@ class TestAccountRoutes:
 
         api_client.force_authenticate(user=None)
         complete = api_client.post(
-            "/api/v1/auth/reset-codes/complete",
+            "/api/v1/auth/password-resets",
             {
                 "identifier": "reset-researcher@example.com",
                 "resetCode": reset_code,
@@ -1179,7 +1191,7 @@ class TestAccountRoutes:
         assert complete.status_code == 200
 
         login = api_client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/sessions",
             {"identifier": "reset-researcher@example.com", "password": "NewResPass1!"},
             format="json",
         )
@@ -1211,7 +1223,7 @@ class TestAccountRoutes:
 
         api_client.force_authenticate(user=None)
         complete = api_client.post(
-            "/api/v1/auth/reset-codes/complete",
+            "/api/v1/auth/password-resets",
             {
                 "identifier": "reset-teacher-05@example.com",
                 "resetCode": reset_code,
@@ -1223,7 +1235,7 @@ class TestAccountRoutes:
         assert complete.status_code == 200
 
         login = api_client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/sessions",
             {"identifier": "reset-teacher-05@example.com", "password": "NewTeach1!Pass"},
             format="json",
         )
@@ -1272,7 +1284,7 @@ class TestAccountRoutes:
         req.save(update_fields=["expires_at"])
 
         status_response = api_client.post(
-            "/api/v1/auth/reset-requests/status",
+            "/api/v1/auth/reset-request-lookups",
             {"identifier": "expire-teacher@example.com", "requestToken": request_token},
             format="json",
         )
@@ -1304,7 +1316,7 @@ class TestAccountRoutes:
 
         # Wrong code
         wrong = api_client.post(
-            "/api/v1/auth/reset-codes/verify",
+            "/api/v1/auth/reset-code-validations",
             {"identifier": "e3-teacher@example.com", "resetCode": "RESET-WRONG"},
             format="json",
         )
@@ -1317,7 +1329,7 @@ class TestAccountRoutes:
         code_obj.save(update_fields=["expires_at"])
 
         expired = api_client.post(
-            "/api/v1/auth/reset-codes/verify",
+            "/api/v1/auth/reset-code-validations",
             {"identifier": "e3-teacher@example.com", "resetCode": reset_code},
             format="json",
         )
@@ -1332,7 +1344,7 @@ class TestAccountRoutes:
 
         # Use the code
         complete = api_client.post(
-            "/api/v1/auth/reset-codes/complete",
+            "/api/v1/auth/password-resets",
             {
                 "identifier": "e3-teacher@example.com",
                 "resetCode": reset_code,
@@ -1345,7 +1357,7 @@ class TestAccountRoutes:
 
         # Already-used code
         used = api_client.post(
-            "/api/v1/auth/reset-codes/complete",
+            "/api/v1/auth/password-resets",
             {
                 "identifier": "e3-teacher@example.com",
                 "resetCode": reset_code,
@@ -1404,7 +1416,7 @@ class TestAccountRoutes:
 
         # Weak password
         weak = api_client.post(
-            "/api/v1/auth/reset-codes/complete",
+            "/api/v1/auth/password-resets",
             {
                 "identifier": "e5-teacher@example.com",
                 "resetCode": reset_code,
@@ -1417,7 +1429,7 @@ class TestAccountRoutes:
 
         # Mismatch
         mismatch = api_client.post(
-            "/api/v1/auth/reset-codes/complete",
+            "/api/v1/auth/password-resets",
             {
                 "identifier": "e5-teacher@example.com",
                 "resetCode": reset_code,
@@ -1430,7 +1442,7 @@ class TestAccountRoutes:
 
         # Same as old
         same = api_client.post(
-            "/api/v1/auth/reset-codes/complete",
+            "/api/v1/auth/password-resets",
             {
                 "identifier": "e5-teacher@example.com",
                 "resetCode": reset_code,
@@ -1446,8 +1458,13 @@ class TestAccountRoutes:
         # Student: teacher-initiated, fixed 30 min
         self._student_code(teacher_user, code="CN06-STUDENT", course_name="CN06 Course")
         reg = api_client.post(
-            "/api/v1/registration/local",
-            {"code": "CN06-STUDENT", "name": "CN06 Student", "password": "StartPass123!"},
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "CN06-STUDENT",
+                "name": "CN06 Student",
+                "password": "StartPass123!",
+            },
             format="json",
         )
         assert reg.status_code == 200
@@ -1513,7 +1530,7 @@ class TestAccountRoutes:
         api_client.force_authenticate(user=None)
 
         first = api_client.post(
-            "/api/v1/auth/reset-codes/complete",
+            "/api/v1/auth/password-resets",
             {
                 "identifier": "cn07-teacher@example.com",
                 "resetCode": reset_code,
@@ -1525,7 +1542,7 @@ class TestAccountRoutes:
         assert first.status_code == 200
 
         second = api_client.post(
-            "/api/v1/auth/reset-codes/complete",
+            "/api/v1/auth/password-resets",
             {
                 "identifier": "cn07-teacher@example.com",
                 "resetCode": reset_code,
@@ -1562,7 +1579,7 @@ class TestAccountRoutes:
 
         # Fail: same-as-old password should NOT consume the code
         fail_response = api_client.post(
-            "/api/v1/auth/reset-codes/complete",
+            "/api/v1/auth/password-resets",
             {
                 "identifier": "cn08-teacher@example.com",
                 "resetCode": reset_code,
@@ -1578,7 +1595,7 @@ class TestAccountRoutes:
 
         # Succeed: code still works after failed attempt
         success = api_client.post(
-            "/api/v1/auth/reset-codes/complete",
+            "/api/v1/auth/password-resets",
             {
                 "identifier": "cn08-teacher@example.com",
                 "resetCode": reset_code,
@@ -1623,7 +1640,7 @@ class TestAccountRoutes:
 
         # Pending
         pending = api_client.post(
-            "/api/v1/auth/reset-requests/status",
+            "/api/v1/auth/reset-request-lookups",
             {"identifier": "uc06-teacher@example.com", "requestToken": request_token},
             format="json",
         )
@@ -1641,7 +1658,7 @@ class TestAccountRoutes:
 
         # Approved — should include next step hint
         approved = api_client.post(
-            "/api/v1/auth/reset-requests/status",
+            "/api/v1/auth/reset-request-lookups",
             {"identifier": "uc06-teacher@example.com", "requestToken": request_token},
             format="json",
         )
@@ -1665,7 +1682,7 @@ class TestAccountRoutes:
         token = req.json()["requestToken"]
 
         status_response = api_client.post(
-            "/api/v1/auth/reset-requests/status",
+            "/api/v1/auth/reset-request-lookups",
             {"identifier": "uc06-researcher@example.com", "requestToken": token},
             format="json",
         )
@@ -1686,7 +1703,7 @@ class TestAccountRoutes:
         token = req.json()["requestToken"]
 
         status_response = api_client.post(
-            "/api/v1/auth/reset-requests/status",
+            "/api/v1/auth/reset-request-lookups",
             {"identifier": "uc06-teacher2@example.com", "requestToken": token},
             format="json",
         )
@@ -1737,8 +1754,13 @@ class TestAccountRoutes:
         self._student_code(teacher_user, code="UC07-STUDENT", course_name="UC07 Course")
         api_client.force_authenticate(user=None)
         reg = api_client.post(
-            "/api/v1/registration/local",
-            {"code": "UC07-STUDENT", "name": "UC07 Student", "password": "StartPass123!"},
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "UC07-STUDENT",
+                "name": "UC07 Student",
+                "password": "StartPass123!",
+            },
             format="json",
         )
         assert reg.status_code == 200
@@ -1780,8 +1802,13 @@ class TestAccountRoutes:
         """Teacher generates reset code for student enrolled in their course."""
         self._student_code(teacher_user, code="UC07-T-STU", course_name="Teacher Reset Course")
         reg = api_client.post(
-            "/api/v1/registration/local",
-            {"code": "UC07-T-STU", "name": "Teacher Reset Student", "password": "StartPass123!"},
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "UC07-T-STU",
+                "name": "Teacher Reset Student",
+                "password": "StartPass123!",
+            },
             format="json",
         )
         assert reg.status_code == 200

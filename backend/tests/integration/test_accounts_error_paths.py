@@ -60,7 +60,7 @@ class TestAccountErrorPaths:
             "accounts.views._google_userinfo", lambda _token: {"sub": "", "email": ""}
         )
         response = api_client.post(
-            "/api/v1/auth/oauth/google",
+            "/api/v1/auth/sessions/oauth",
             {"accessToken": "token"},
             format="json",
         )
@@ -85,7 +85,7 @@ class TestAccountErrorPaths:
             lambda _token: {"sub": "student-subject", "email": student.email},
         )
         response = api_client.post(
-            "/api/v1/auth/oauth/google",
+            "/api/v1/auth/sessions/oauth",
             {"accessToken": "token"},
             format="json",
         )
@@ -108,7 +108,7 @@ class TestAccountErrorPaths:
             lambda _token: {"sub": "subject-match-1", "email": "new-email@example.com"},
         )
         response = api_client.post(
-            "/api/v1/auth/oauth/google",
+            "/api/v1/auth/sessions/oauth",
             {"accessToken": "token"},
             format="json",
         )
@@ -245,7 +245,7 @@ class TestAccountErrorPaths:
 
         api_client.force_authenticate(user=researcher)
         response = api_client.post(
-            "/api/v1/users/bulk",
+            "/api/v1/user-batches",
             [{"username": "x", "name": "X"}],
             format="json",
         )
@@ -275,7 +275,7 @@ class TestAccountErrorPaths:
 
         api_client.force_authenticate(user=teacher_user)
         response = api_client.post(
-            "/api/v1/auth/logout",
+            "/api/v1/auth/session-revocations",
             {"refreshToken": "not-a-valid-refresh"},
             format="json",
         )
@@ -305,8 +305,9 @@ class TestAccountErrorPaths:
         )
 
         response = api_client.post(
-            "/api/v1/registration/local",
+            "/api/v1/registration/accounts",
             {
+                "method": "LOCAL",
                 "code": "WEAK-PASS-CODE",
                 "password": "weakpass1!",
                 "name": "Weak Password Student",
@@ -416,7 +417,7 @@ class TestAccountErrorPaths:
             lambda _token: {"sub": "new-sub-no-email", "email": "teacher-no-email-oauth"},
         )
         response = api_client.post(
-            "/api/v1/auth/oauth/google",
+            "/api/v1/auth/sessions/oauth",
             {"accessToken": "token"},
             format="json",
         )
@@ -437,7 +438,7 @@ class TestAccountErrorPaths:
         api_client.force_authenticate(user=admin)
 
         response = api_client.post(
-            "/api/v1/users/bulk",
+            "/api/v1/user-batches",
             [
                 # Missing name
                 {"username": "no-name"},
@@ -471,7 +472,7 @@ class TestAccountErrorPaths:
         api_client.force_authenticate(user=admin)
 
         response = api_client.post(
-            "/api/v1/users/bulk",
+            "/api/v1/user-batches",
             {"username": "not-a-list"},
             format="json",
         )

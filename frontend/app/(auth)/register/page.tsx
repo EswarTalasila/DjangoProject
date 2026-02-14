@@ -95,7 +95,7 @@ function RegisterPageContent() {
     setIsLoading(true);
     setGeneralError(null);
     try {
-      const res = await api.post("/registration/validate-code", {
+      const res = await api.post("/registration/code-validations", {
         code: data.code,
       });
       const responseData = res.data as CodeValidationResponse;
@@ -123,7 +123,10 @@ function RegisterPageContent() {
       };
       payload.name = data.name;
 
-      const registerRes = await api.post("/registration/local", payload);
+      const registerRes = await api.post("/registration/accounts", {
+        method: "LOCAL",
+        ...payload,
+      });
       const resolvedUsername = registerRes.data?.username;
 
       if (!resolvedUsername) {
@@ -133,8 +136,8 @@ function RegisterPageContent() {
         return;
       }
 
-      const loginRes = await api.post("/auth/login", {
-        username: resolvedUsername,
+      const loginRes = await api.post("/auth/sessions", {
+        identifier: resolvedUsername,
         password: data.password,
       });
 
