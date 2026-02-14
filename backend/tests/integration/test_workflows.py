@@ -69,11 +69,12 @@ class TestWorkflows:
         step("Admin creates teacher")
         teacher_payload = {
             "username": "teacher@example.com",
+            "email": "teacher@example.com",
             "password": "teacherpass",
             "name": "Teacher",
             "role": "ROLE_TEACHER",
         }
-        response = admin_client.post("/api/v1/auth/createuser", teacher_payload, format="json")
+        response = admin_client.post("/api/v1/users", teacher_payload, format="json")
         assert response.status_code == 200
 
         teacher_client = APIClient()
@@ -89,22 +90,15 @@ class TestWorkflows:
 
         student_payload = {
             "name": "Student",
-            "username": "student@example.com",
+            "username": "workflowstudent",
             "courseId": course_id,
             "consent": True,
+            "password": "studentpass",
         }
         step("Teacher creates student")
         student_response = teacher_client.post("/api/v1/students/", student_payload, format="json")
         assert student_response.status_code == 200
         student_id = student_response.json()["id"]
-
-        step("Admin sets student password")
-        set_password = admin_client.post(
-            f"/api/v1/auth/users/{student_id}/set-password",
-            "studentpass",
-            content_type="text/plain",
-        )
-        assert set_password.status_code == 200
 
         assignment_payload = {
             "assessmentId": assessment_id,

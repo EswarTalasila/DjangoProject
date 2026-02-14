@@ -101,6 +101,37 @@ class TestCourseRoutes:
         assert response.status_code == 200
         assert response.json() == 2
 
+    def test_add_existing_student_to_second_course(self, api_client, teacher_user):
+        """Test that an existing student can be enrolled in an additional course."""
+        course_one = Course.objects.create(
+            name="Course One", teacher_profile=teacher_user.teacher_profile
+        )
+        course_two = Course.objects.create(
+            name="Course Two", teacher_profile=teacher_user.teacher_profile
+        )
+
+        api_client.force_authenticate(user=teacher_user)
+        first_payload = {
+            "name": "Shared Student",
+            "username": "sharedstudent",
+            "courseId": course_one.id,
+            "consent": True,
+        }
+        first_response = api_client.post("/api/v1/students/", first_payload, format="json")
+        assert first_response.status_code == 200
+
+        second_payload = {
+            "name": "Ignored Name",
+            "username": "sharedstudent",
+            "courseId": course_two.id,
+            "consent": True,
+        }
+        second_response = api_client.post("/api/v1/students/", second_payload, format="json")
+        assert second_response.status_code == 200
+
+        user = User.objects.get(username="sharedstudent")
+        assert Enrollment.objects.filter(student_profile=user.student_profile).count() == 2
+
     def test_remove_student_deletes_user(self, api_client, teacher_user, student_user):
         """Test that remove student deletes user."""
         course = Course.objects.create(name="Chem", teacher_profile=teacher_user.teacher_profile)

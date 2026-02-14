@@ -19,17 +19,21 @@ User Creation Flows:
     5. OAuth login (Google): Creates/links user via OAuthAccount
 
 Database Tables:
-    app_users           - Core user accounts (email-based authentication)
+    app_users           - Core user accounts (username/email authentication)
     user_roles          - Many-to-many join table for user roles
     sudo_grants         - Elevated permissions for researchers
     researcher_profiles - Extended data for researcher accounts
     teacher_profiles    - Extended data for teacher accounts
     student_profiles    - Extended data for student accounts (includes consent)
     oauth_accounts      - Linked external identity provider accounts
+    registration_codes  - Invite codes used for code-gated registration/enrollment
+    password_reset_requests - Approval-based password reset requests
+    password_reset_codes - One-time reset codes issued upon approval
 
 Note:
-    The User model uses email as the username field. All emails are
-    normalized to lowercase during creation.
+    The User model stores both username and email identifiers.
+    Students use username-first flows, while non-student roles keep
+    an email for communication and can authenticate with either identifier.
 """
 
 from typing import cast
@@ -41,20 +45,21 @@ from django.db import models
 
 class UserManager(BaseUserManager):
     """
-    Custom manager for User model with email-based authentication.
+    Custom manager for User model with username-based authentication.
 
     Provides factory methods for creating regular users and superusers,
-    handling email normalization and password hashing automatically.
+    handling username normalization and password hashing automatically.
     """
 
-    def create_user(self, username, name, password=None, **extra_fields) -> "User":
+    def create_user(self, username, name, password=None, email=None, **extra_fields) -> "User":
         """
-        Create and persist a user with a normalized email.
+        Create and persist a user with a normalized username identifier.
 
         Args:
-            username: Email address (will be normalized to lowercase)
+            username: Login identifier (normalized to lowercase)
             name: Display name for the user
             password: Optional plain-text password (hashed before storage)
+            email: Optional contact/login email (normalized lowercase)
             **extra_fields: Additional fields to set on the user model
 
         Returns:
@@ -67,8 +72,20 @@ class UserManager(BaseUserManager):
             raise ValueError("username is required")
         if not name:
             raise ValueError("name is required")
-        username = self.normalize_email(username)
-        user = cast("User", self.model(username=username, name=name, **extra_fields))
+        username = str(username).strip().lower()
+        normalized_email = str(email).strip().lower() if email else None
+        if normalized_email == "":
+            normalized_email = None
+
+        user = cast(
+            "User",
+            self.model(
+                username=username,
+                email=normalized_email,
+                name=name,
+                **extra_fields,
+            ),
+        )
         if password:
             user.set_password(password)
         else:
@@ -102,19 +119,21 @@ class UserManager(BaseUserManager):
             raise ValueError("Superuser must have is_staff=True.")
         if extra_fields.get("is_superuser") is not True:
             raise ValueError("Superuser must have is_superuser=True.")
+        extra_fields.setdefault("email", username)
         user = self.create_user(username, name, password, **extra_fields)
         return user
 
 
 class User(AbstractBaseUser, PermissionsMixin):
     """
-    Custom user model using email as the primary identifier.
+    Custom user model using username as the primary identifier.
 
-    This model replaces Django's default User model to support email-based
+    This model replaces Django's default User model to support identifier-based
     authentication. Users can authenticate via password or OAuth (Google).
 
     Attributes:
-        username: Email address serving as unique identifier (max 320 chars)
+        username: Login identifier serving as unique key (max 320 chars)
+        email: Optional email identifier/contact (max 320 chars)
         name: Display name shown in UI (max 255 chars)
         is_active: Whether account can authenticate (db column: enabled)
         is_staff: Whether user can access Django admin
@@ -130,8 +149,11 @@ class User(AbstractBaseUser, PermissionsMixin):
         student_profile: StudentProfile if user is a student
     """
 
-    # Email address used as the unique identifier for authentication
-    username = models.EmailField(max_length=320, unique=True)
+    # Unique login identifier for all roles.
+    username = models.CharField(max_length=320, unique=True)
+
+    # Optional email address. Non-student accounts are expected to provide this.
+    email = models.EmailField(max_length=320, blank=True, null=True)
 
     # Display name shown throughout the application UI
     name = models.CharField(max_length=255)
@@ -167,9 +189,15 @@ class User(AbstractBaseUser, PermissionsMixin):
         db_table = "app_users"
         constraints = [
             models.UniqueConstraint(fields=["username"], name="uq_user_username"),
+            models.UniqueConstraint(
+                fields=["email"],
+                condition=models.Q(email__isnull=False),
+                name="uq_user_email",
+            ),
         ]
         indexes = [
             models.Index(fields=["username"], name="idx_user_username"),
+            models.Index(fields=["email"], name="idx_user_email"),
         ]
 
     def __str__(self):
@@ -197,6 +225,14 @@ class Role(models.TextChoices):
     RESEARCHER = "RESEARCHER", "Researcher"
     TEACHER = "TEACHER", "Teacher"
     STUDENT = "STUDENT", "Student"
+
+
+class RegistrationCodeType(models.TextChoices):
+    """Code type used for invite-based registration flows."""
+
+    STUDENT = "STUDENT", "Student"
+    TEACHER = "TEACHER", "Teacher"
+    RESEARCHER = "RESEARCHER", "Researcher"
 
 
 class UserRole(models.Model):
@@ -493,6 +529,79 @@ class OAuthProvider(models.TextChoices):
     GOOGLE = "GOOGLE", "Google"
 
 
+class PasswordResetRequestStatus(models.TextChoices):
+    """Lifecycle states for approval-based password reset requests."""
+
+    PENDING = "PENDING", "Pending"
+    APPROVED = "APPROVED", "Approved"
+    DENIED = "DENIED", "Denied"
+    EXPIRED = "EXPIRED", "Expired"
+
+
+class RegistrationCode(models.Model):
+    """
+    Invite/registration code with bounded usage and optional course linkage.
+
+    For student onboarding, the code points at a course and is consumed when
+    the user registers or redeems it against an existing account.
+    """
+
+    code_hash = models.CharField(max_length=64, unique=True)
+    code_prefix = models.CharField(max_length=8)
+    code_type = models.CharField(max_length=32, choices=RegistrationCodeType.choices)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        db_column="created_by_user_id",
+        related_name="registration_codes_created",
+    )
+    course = models.ForeignKey(
+        "courses.Course",
+        on_delete=models.PROTECT,
+        db_column="course_id",
+        related_name="registration_codes",
+        null=True,
+        blank=True,
+    )
+    max_uses = models.PositiveIntegerField(default=1)
+    times_used = models.PositiveIntegerField(default=0)
+    expires_at = models.DateTimeField()
+    is_active = models.BooleanField(default=True)
+    metadata = models.JSONField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        """Database table configuration for RegistrationCode."""
+
+        db_table = "registration_codes"
+        constraints = [
+            models.UniqueConstraint(fields=["code_hash"], name="uq_registration_code_hash"),
+        ]
+        indexes = [
+            models.Index(fields=["code_hash"], name="idx_registration_code_hash"),
+            models.Index(fields=["code_prefix"], name="idx_registration_code_prefix"),
+            models.Index(fields=["code_type"], name="idx_registration_code_type"),
+            models.Index(fields=["course"], name="idx_registration_course"),
+            models.Index(fields=["expires_at"], name="idx_registration_expires"),
+            models.Index(fields=["archived_at"], name="idx_registration_archived"),
+        ]
+
+    def clean(self):
+        """Model-level constraints for bounded code usage."""
+        super().clean()
+        if self.max_uses < 1:
+            raise ValidationError("max_uses must be >= 1")
+        if self.times_used < 0:
+            raise ValidationError("times_used must be >= 0")
+        if self.times_used > self.max_uses:
+            raise ValidationError("times_used cannot exceed max_uses")
+
+    def __str__(self):
+        """Return a readable string representation."""
+        return f"{self.code_type}:{self.code_prefix}"
+
+
 class OAuthAccount(models.Model):
     """
     External OAuth account linked to a local user.
@@ -556,3 +665,86 @@ class OAuthAccount(models.Model):
     def __str__(self):
         """Return a readable string representation."""
         return f"{self.provider}:{self.subject}"
+
+
+class PasswordResetRequest(models.Model):
+    """
+    Approval-based password reset request.
+
+    A request is initiated by a user via identifier and transitioned by an approver
+    (teacher/researcher/admin) according to role-based approval rules.
+    """
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        db_column="user_id",
+        related_name="password_reset_requests",
+    )
+    identifier = models.CharField(max_length=320)
+    requested_role = models.CharField(max_length=32, choices=Role.choices)
+    request_token_hash = models.CharField(max_length=128, unique=True)
+    status = models.CharField(
+        max_length=16,
+        choices=PasswordResetRequestStatus.choices,
+        default=PasswordResetRequestStatus.PENDING,
+    )
+    reason = models.CharField(max_length=255, null=True, blank=True)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column="reviewed_by_user_id",
+        related_name="password_reset_requests_reviewed",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        """Database table configuration for PasswordResetRequest."""
+
+        db_table = "password_reset_requests"
+        indexes = [
+            models.Index(fields=["identifier"], name="idx_prr_identifier"),
+            models.Index(fields=["status"], name="idx_prr_status"),
+            models.Index(fields=["expires_at"], name="idx_prr_expires_at"),
+            models.Index(fields=["user"], name="idx_prr_user"),
+        ]
+
+    def __str__(self):
+        """Return a readable string representation."""
+        return f"PasswordResetRequest({self.user_id}, {self.status})"
+
+
+class PasswordResetCode(models.Model):
+    """
+    One-time reset code generated after a reset request is approved.
+
+    Code values are never persisted directly, only their hash is stored.
+    """
+
+    request = models.OneToOneField(
+        PasswordResetRequest,
+        on_delete=models.CASCADE,
+        db_column="request_id",
+        related_name="reset_code",
+    )
+    code_hash = models.CharField(max_length=128, unique=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        """Database table configuration for PasswordResetCode."""
+
+        db_table = "password_reset_codes"
+        indexes = [
+            models.Index(fields=["expires_at"], name="idx_prc_expires_at"),
+            models.Index(fields=["used_at"], name="idx_prc_used_at"),
+        ]
+
+    def __str__(self):
+        """Return a readable string representation."""
+        return f"PasswordResetCode(request={self.request_id})"

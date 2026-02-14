@@ -5,7 +5,7 @@ This module provides API endpoints for teachers to add students to their
 courses, either individually or in bulk via CSV import.
 
 Student Creation Flow:
-    1. Teacher submits student data (name, email, courseId)
+    1. Teacher submits student data (name, username, courseId)
     2. System creates User account with STUDENT role
     3. System creates StudentProfile linked to the User
     4. System creates Enrollment linking student to course
@@ -39,7 +39,7 @@ def add_one(request):
     Request Body:
         {
             "name": "Student Name",
-            "username": "student@school.edu",
+            "username": "student_username",
             "courseId": 123,
             "consent": true,        # Optional
             "password": "secret"    # Optional, generated if not provided
@@ -72,8 +72,8 @@ def add_bulk(request):
 
     Request Body:
         [
-            {"name": "Student 1", "username": "s1@school.edu", "courseId": 123},
-            {"name": "Student 2", "username": "s2@school.edu", "courseId": 123},
+            {"name": "Student 1", "username": "student1", "courseId": 123},
+            {"name": "Student 2", "username": "student2", "courseId": 123},
             ...
         ]
 

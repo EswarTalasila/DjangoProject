@@ -5,7 +5,7 @@
 | **Status** | FINAL |
 | **Scope** | Cross-domain testing policy |
 | **Applies To** | All FR domains |
-| **Last Updated** | 2026-02-10 |
+| **Last Updated** | 2026-02-13 |
 
 ---
 
@@ -51,6 +51,13 @@ Each domain (FR) should include the following testing layers within its detail d
 # E2E
  test_{DOMAIN}_UC_##_e2e_flow
 ```
+
+### Pytest Verbose Output Policy
+
+- Backend tests use `backend/tests/conftest.py` hook `pytest_itemcollected` to append the first docstring line to each collected test node in verbose mode.
+- Verbose output format is `test_id - first docstring line`.
+- The first docstring line is required to be a concise assertion statement so `pytest -v` remains traceable to UC/CN intent.
+- Tests without a docstring keep the default pytest node ID output.
 
 ### System Tests (Black Box)
 

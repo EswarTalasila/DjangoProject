@@ -126,7 +126,7 @@ class TestResearcherSudoDelegation:
         # Researcher1 grants subset to researcher2
         api_client.force_authenticate(user=researcher1)
         response = api_client.post(
-            "/api/v1/auth/grant-sudo",
+            "/api/v1/users/sudo",
             {
                 "user_id": researcher2.id,
                 "permissions": [SudoPermission.CREATE_TEACHER.value],
@@ -162,7 +162,7 @@ class TestResearcherSudoDelegation:
 
         api_client.force_authenticate(user=researcher1)
         response = api_client.post(
-            "/api/v1/auth/grant-sudo",
+            "/api/v1/users/sudo",
             {
                 "user_id": researcher2.id,
                 "permissions": [SudoPermission.CREATE_TEACHER.value],
@@ -190,7 +190,7 @@ class TestResearcherSudoDelegation:
 
         api_client.force_authenticate(user=researcher1)
         response = api_client.post(
-            "/api/v1/auth/grant-sudo",
+            "/api/v1/users/sudo",
             {
                 "user_id": researcher2.id,
                 "permissions": [SudoPermission.EDIT_USER.value],  # Don't have this
@@ -219,7 +219,7 @@ class TestResearcherSudoDelegation:
 
         api_client.force_authenticate(user=researcher1)
         response = api_client.post(
-            "/api/v1/auth/grant-sudo",
+            "/api/v1/users/sudo",
             {
                 "user_id": researcher2.id,
                 "permissions": [SudoPermission.CREATE_TEACHER.value],
@@ -247,7 +247,7 @@ class TestResearcherSudoDelegation:
 
         api_client.force_authenticate(user=researcher1)
         response = api_client.post(
-            "/api/v1/auth/grant-sudo",
+            "/api/v1/users/sudo",
             {
                 "user_id": teacher.id,
                 "permissions": [SudoPermission.CREATE_TEACHER.value],
@@ -267,7 +267,7 @@ class TestResearcherSudoDelegation:
         # Create initial grant
         api_client.force_authenticate(user=admin_user)
         response1 = api_client.post(
-            "/api/v1/auth/grant-sudo",
+            "/api/v1/users/sudo",
             {
                 "user_id": researcher.id,
                 "permissions": [SudoPermission.CREATE_TEACHER.value],
@@ -278,7 +278,7 @@ class TestResearcherSudoDelegation:
 
         # Try to grant again (should update, not error)
         response2 = api_client.post(
-            "/api/v1/auth/grant-sudo",
+            "/api/v1/users/sudo",
             {
                 "user_id": researcher.id,
                 "permissions": [SudoPermission.EDIT_USER.value],
@@ -308,7 +308,7 @@ class TestResearcherSudoDelegation:
         grant = SudoGrantFactory(user=researcher2, granted_by=researcher1)
 
         api_client.force_authenticate(user=researcher1)
-        response = api_client.delete(f"/api/v1/auth/revoke-sudo/{grant.id}")
+        response = api_client.delete(f"/api/v1/users/sudo/{grant.id}")
 
         assert response.status_code == 200
         assert "Sudo revoked" in response.data["message"]
@@ -333,7 +333,7 @@ class TestResearcherSudoDelegation:
 
         # Researcher2 (not the granter) tries to revoke
         api_client.force_authenticate(user=researcher2)
-        response = api_client.delete(f"/api/v1/auth/revoke-sudo/{grant.id}")
+        response = api_client.delete(f"/api/v1/users/sudo/{grant.id}")
 
         assert response.status_code == 403
         assert "You can only revoke grants you created" in response.data["error"]

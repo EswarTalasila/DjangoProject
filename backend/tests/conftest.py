@@ -47,3 +47,12 @@ def student_user(admin_user):
     UserRole.objects.create(user=user, role=Role.STUDENT)
     StudentProfile.objects.create(user=user, created_by=admin_user, consent=False)
     return user
+
+
+def pytest_itemcollected(item):
+    """Show first docstring line alongside test ID in verbose output."""
+    doc = getattr(item.function, "__doc__", None)
+    if doc:
+        first_line = doc.strip().split("\n")[0].strip()
+        if first_line:
+            item._nodeid = f"{item.nodeid} - {first_line}"

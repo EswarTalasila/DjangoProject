@@ -29,14 +29,14 @@ class TestAdminSudo:
     # =========================================================================
 
     def test_ADMIN_UC_20(self, api_client, admin_user):
-        """Admin grants permissions to researcher via POST /auth/grant-sudo."""
+        """Admin grants permissions to researcher via POST /users/sudo."""
         researcher = UserFactory()
         UserRole.objects.create(user=researcher, role=Role.RESEARCHER)
         ResearcherProfile.objects.create(user=researcher)
 
         api_client.force_authenticate(user=admin_user)
         response = api_client.post(
-            "/api/v1/auth/grant-sudo",
+            "/api/v1/users/sudo",
             {
                 "user_id": researcher.id,
                 "permissions": [
@@ -68,7 +68,7 @@ class TestAdminSudo:
 
         api_client.force_authenticate(user=admin_user)
         response = api_client.post(
-            "/api/v1/auth/grant-sudo",
+            "/api/v1/users/sudo",
             {
                 "user_id": teacher.id,
                 "permissions": [SudoPermission.CREATE_TEACHER.value],
@@ -84,14 +84,14 @@ class TestAdminSudo:
     # =========================================================================
 
     def test_ADMIN_UC_21(self, api_client, admin_user):
-        """Admin can revoke any grant via DELETE /auth/revoke-sudo/{id}."""
+        """Admin can revoke any grant via DELETE /users/sudo/{id}."""
         researcher = UserFactory()
         UserRole.objects.create(user=researcher, role=Role.RESEARCHER)
         ResearcherProfile.objects.create(user=researcher)
         grant = SudoGrantFactory(user=researcher)
 
         api_client.force_authenticate(user=admin_user)
-        response = api_client.delete(f"/api/v1/auth/revoke-sudo/{grant.id}")
+        response = api_client.delete(f"/api/v1/users/sudo/{grant.id}")
 
         assert response.status_code == 200
         assert "Sudo revoked" in response.data["message"]

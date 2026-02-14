@@ -16,12 +16,14 @@ Endpoints:
     GET/PUT/DELETE /api/v1/courses/{id} - Course detail/update/delete
     GET /api/v1/courses/{id}/students  - List enrolled students
     DELETE /api/v1/courses/{id}/students/{userId} - Remove student
+    POST /api/v1/courses/{id}/students/{userId}/reset-code - Teacher-issued student reset code
 """
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
+from accounts.services import issue_student_reset_code_for_teacher
 from core.errors import error_response
 from core.permissions import IsTeacher, IsTeacherOrAbove
 
@@ -186,3 +188,30 @@ def remove_student(request, course_id: int, student_user_id: int):
     except ValueError as exc:
         return error_response(exc)
     return Response("Student removed successfully", status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsTeacher])
+def generate_student_reset_code(request, course_id: int, student_user_id: int):
+    """Generate a one-time reset code for a student in the teacher's course."""
+    try:
+        reset_request, reset_code = issue_student_reset_code_for_teacher(
+            teacher=request.user,
+            course_id=course_id,
+            student_user_id=student_user_id,
+        )
+    except ValueError as exc:
+        return error_response(exc)
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+
+    return Response(
+        {
+            "requestId": reset_request.id,
+            "resetCode": reset_code,
+            "expiresAt": reset_request.expires_at.isoformat(),
+            "studentUserId": student_user_id,
+            "courseId": course_id,
+        },
+        status=status.HTTP_200_OK,
+    )

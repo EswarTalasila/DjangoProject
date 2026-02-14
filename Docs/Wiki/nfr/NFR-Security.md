@@ -142,3 +142,25 @@ System must refuse to start in production with known-insecure default credential
 **Status:** Defined
 
 ---
+
+## NFR-SEC-07: Registration Code Storage Hardening
+
+**Category:** Authentication Security
+
+**Requirement:**
+Registration invite codes must be protected at rest so database disclosure does not reveal usable invite tokens. The system must persist deterministic salted HMAC digests, not plaintext invite codes.
+
+**Acceptance Criteria:**
+- [ ] Registration code values are persisted as deterministic salted HMAC digests (plaintext not stored)
+- [ ] Code generation returns plaintext code values exactly once for distribution, while persisting only hashed form
+- [ ] Code validation/redeem endpoints hash incoming plaintext and match against persisted digest
+- [ ] Code list/detail endpoints expose only non-sensitive preview data (for example, code prefix), never plaintext or digest
+- [ ] Lookup remains compatible with Django `SECRET_KEY_FALLBACKS` during secret rotation windows
+
+**Verification Method:** Automated test - integration tests verify plaintext-once response behavior and hash-at-rest persistence
+
+**Applicable FRs:** REG (REG-CN-08, REG-CN-22)
+
+**Status:** Defined
+
+---

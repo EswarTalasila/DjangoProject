@@ -3,7 +3,7 @@
 | Field | Value |
 |-------|-------|
 | **Status** | READY |
-| **Date** | 2026-02-10 |
+| **Date** | 2026-02-13 |
 | **Domain** | REG |
 | **Applies To** | ADMIN (system role), RESEARCHER, TEACHER, STUDENT |
 | **Related Issues** | #29 (code-gated auth/registration), #28 (role hierarchy/sudo) |
@@ -14,12 +14,14 @@
 
 ### In Scope
 - Code-gated registration for RESEARCHER, TEACHER, STUDENT
-- Local registration (email + password + name)
-- OAuth registration (Google) with in-app name capture
+- Local registration for non-students (username + email + password + name)
+- Local registration for students (first/last name + generated immutable username + password; email optional)
+- OAuth registration (Google) for non-students
 - Access code validation (status, expiry, uses remaining)
 - Code generation (count + uses per code, expiration, optional metadata)
 - Code lifecycle management (list, detail, state transitions, archive visibility)
 - Student auto-enrollment when registering with a teacher-issued code
+- Student join-course redemption using additional teacher-issued codes after account creation
 
 ### Out of Scope
 - Self-registration without an access code
@@ -36,7 +38,7 @@
 | ADMIN | System role | `is_staff=True`; can generate researcher codes and view all codes |
 | RESEARCHER | User role | Can generate teacher codes; can view own codes; sudo expands scope |
 | TEACHER | User role | Can generate student codes; must link to a course |
-| STUDENT | User role | Can self-register with a valid student code |
+| STUDENT | User role | Can self-register with a valid student code and join additional courses via code redemption |
 
 **Actor ordering:** ADMIN > RESEARCHER > TEACHER > STUDENT
 
@@ -46,8 +48,10 @@
 
 | ID | Roles | Story |
 |----|-------|-------|
-| REG-US-01 | RESEARCHER, TEACHER, STUDENT | As a researcher, teacher, or student I can register using an access code so that I can access the system. |
+| REG-US-01 | RESEARCHER, TEACHER | As a researcher or teacher I can register using an access code so that I can access the system. |
+| REG-US-01a-STUDENT | STUDENT | As a student I can register using a teacher-issued course code so that I get a generated username and immediate course enrollment. |
 | REG-US-02 | ADMIN, RESEARCHER, TEACHER | As an admin, researcher, or teacher I can generate access codes with a count, uses-per-code, and expiration so that new users can register. |
+| REG-US-03-STUDENT | STUDENT | As a student with an existing account I can redeem another course code so that I can join additional courses without creating a new account. |
 
 ---
 
@@ -57,7 +61,7 @@
 
 **Roles:** RESEARCHER, TEACHER, STUDENT
 
-**Preconditions:** User possesses a valid access code that matches their target role.
+**Preconditions:** User is unauthenticated and possesses a valid access code that matches their target role.
 
 **Trigger:** User enters access code on registration page.
 
@@ -65,12 +69,18 @@
 1. User enters access code.
 2. System validates code (active, not expired, uses remaining).
 3. System determines role and any linked course (student codes).
-4. User selects registration method: Local or OAuth.
-5. Local: user enters name, email, password; system validates and creates account.
-6. OAuth: user completes provider flow; system collects display name in-app.
-7. System links user to code, decrements uses, and sets code status if exhausted.
-8. If student code: auto-enroll user in linked course.
-9. User is logged in and redirected to dashboard.
+4. If target role is STUDENT:
+   - user enters first name, last name, and password
+   - system generates immutable username (`first initial + last name`) and resolves collisions with numeric suffixes
+   - username is displayed in locked state before final submit
+   - optional student email may be stored but is not used for login
+5. If target role is RESEARCHER or TEACHER:
+   - user selects registration method: Local or OAuth
+   - Local: user enters name, username, email, password; system validates and creates account
+   - OAuth: user completes provider flow; system collects display name in-app
+6. System links user to code, decrements uses, and sets code status if exhausted.
+7. If student code: auto-enroll user in linked course.
+8. User is logged in and redirected to dashboard.
 
 **Postcondition:** Account created; code usage recorded; student auto-enrolled if applicable.
 
@@ -92,16 +102,20 @@
 - Behavior: Generic error; do not reveal code state beyond invalid
 
 **REG-UC-01-E2** — Registration errors
-- Trigger: Weak password, password mismatch, email already in use
+- Trigger: Weak password, password mismatch, or duplicate username/email identifier for non-student registration
 - Behavior: Field-level validation errors
 
 **REG-UC-01-E3** — Missing required fields
-- Trigger: Missing name/email/password in local registration
+- Trigger: Missing name/password for student registration, or missing name/username/email/password for non-student local registration
 - Behavior: Required field errors
 
 **REG-UC-01-E4** — OAuth registration error
-- Trigger: OAuth cancelled/failed or missing email
+- Trigger: OAuth cancelled/failed or missing email (non-student only)
 - Behavior: OAuth error message; return to registration choice
+
+**REG-UC-01-E5** — Student OAuth unsupported
+- Trigger: Student code flow attempts OAuth registration
+- Behavior: Clear unsupported-flow error; prompt student local registration flow
 
 **Tests:**
 
@@ -114,12 +128,15 @@
 - test_REG_UC_01_E2
 - test_REG_UC_01_E3
 - test_REG_UC_01_E4
+- test_REG_UC_01_E5
+- test_REG_CN_16 (username generation + collision suffix)
 - test_REG_CN_03 (atomic transaction)
 - test_REG_CN_13 (auto-enroll)
 
 **Frontend Unit:**
 - test_REG_UC_01_code_validation
 - test_REG_UC_01_local_form_validation
+- test_REG_UC_01_student_username_preview
 - test_REG_UC_01_oauth_entry
 - test_REG_UC_01_error_display
 
@@ -127,10 +144,61 @@
 - test_REG_UC_01_local_registration_flow
 - test_REG_UC_01_oauth_registration_flow
 - test_REG_UC_01_student_auto_enroll
+- test_REG_UC_01_student_username_collision_suffix
 
 **E2E (Playwright):**
 - test_REG_UC_01_e2e_local
 - test_REG_UC_01_e2e_oauth
+
+---
+
+### REG-UC-01a — Student Course Join via Code Redemption
+
+**Roles:** STUDENT
+
+**Preconditions:** Authenticated student account exists.
+
+**Trigger:** Student submits a teacher-issued student code from join-course UI.
+
+**Main Flow:**
+1. Student enters code while authenticated.
+2. System validates code (active, not expired, uses remaining) and resolves linked course.
+3. System checks if student is already enrolled in linked course.
+4. If not enrolled, enrollment is created and code usage is decremented atomically.
+5. If already enrolled, return idempotent `already_enrolled` response and do not decrement usage.
+6. Student remains logged in and sees updated course list.
+
+**Postcondition:** Student is enrolled in the linked course or receives idempotent already-enrolled confirmation.
+
+**Errors:**
+
+**REG-UC-01a-E1** — Access code error
+- Trigger: Invalid, expired, exhausted, or revoked student code
+- Behavior: Generic invalid-code style error
+
+**REG-UC-01a-E2** — Non-student access blocked
+- Trigger: Non-student role attempts course-join redemption endpoint
+- Behavior: Access denied
+
+**Tests:**
+
+**Backend Unit:**
+- test_REG_UC_01a_STUDENT
+- test_REG_UC_01a_E1
+- test_REG_UC_01a_E2
+- test_REG_CN_03 (atomic transaction)
+- test_REG_CN_20 (idempotent already-enrolled semantics)
+
+**Frontend Unit:**
+- test_REG_UC_01a_join_code_form
+- test_REG_UC_01a_already_enrolled_message
+
+**Integration:**
+- test_REG_UC_01a_join_course_flow
+- test_REG_UC_01a_already_enrolled_no_usage_decrement
+
+**E2E (Playwright):**
+- test_REG_UC_01a_e2e_join_course
 
 ---
 
@@ -149,7 +217,7 @@
 4. Teacher flow: select a course (required for student codes).
 5. Researcher flow: optional metadata for teacher codes (name, district, etc.).
 6. System validates constraints and permissions.
-7. System generates codes, stores hashed values, and returns plaintext codes once.
+7. System generates codes, stores deterministic salted HMAC hashes (not plaintext), and returns plaintext codes once.
 
 **Postcondition:** Codes created with expiration and usage limits.
 
@@ -201,6 +269,7 @@
 - test_REG_CN_07 (count + uses)
 - test_REG_CN_11 (metadata -> single code)
 - test_REG_CN_12 (expiry required)
+- test_REG_CN_10 (role hierarchy + sudo scope)
 
 **Frontend Unit:**
 - test_REG_UC_02_form_validation
@@ -295,12 +364,12 @@
 - **Implements:** NFR-SEC-02 (Registration Code Entropy)
 
 ### REG-CN-02 — Code Expiration Enforcement
-- Expired codes cannot be used for registration
-- **Applies to:** REG-UC-01, REG-UC-03
+- Expired codes cannot be used for registration or join-course redemption
+- **Applies to:** REG-UC-01, REG-UC-01a, REG-UC-03
 
 ### REG-CN-03 — Atomic Registration Transaction
-- Registration + code usage decrement + enrollment must be atomic
-- **Applies to:** REG-UC-01
+- Registration/redeem + code usage decrement + enrollment must be atomic
+- **Applies to:** REG-UC-01, REG-UC-01a
 - **Implements:** NFR-REL-01 (Transaction Atomicity for Multi-Record Operations)
 
 ### REG-CN-04 — Code Visibility Scope
@@ -326,6 +395,7 @@
 
 ### REG-CN-08 — Codes Returned Once
 - Generated codes are shown in plaintext once for sharing
+- Stored code material must never expose plaintext at rest
 - **Applies to:** REG-UC-02
 
 ### REG-CN-09 — Optional Teacher Metadata
@@ -349,7 +419,8 @@
 ### REG-CN-13 — Student Codes Require Course
 - Teacher student codes must link to a course
 - Registration auto-enrolls student into linked course
-- **Applies to:** REG-UC-01, REG-UC-02
+- Authenticated student redemption also enrolls into linked course
+- **Applies to:** REG-UC-01, REG-UC-01a, REG-UC-02
 
 ### REG-CN-14 — Admin Bootstrap Only
 - Admin accounts are bootstrapped via environment
@@ -363,6 +434,45 @@
 - `EXPIRED` and `EXHAUSTED` are server-derived states (not client-settable)
 - Neither action disables existing accounts
 - **Applies to:** REG-UC-03
+
+### REG-CN-16 — Student Username Generation + Immutability
+- Student username is generated from first initial + last name (normalized)
+- Username collisions must resolve by deterministic numeric suffixing (e.g., `jsmith`, `jsmith2`)
+- Generated username is immutable after account creation
+- **Applies to:** REG-UC-01
+
+### REG-CN-17 — Student Identifier Policy
+- Student authentication identifier is username, not email
+- Student username must be displayed in locked state before submit during registration
+- **Applies to:** REG-UC-01
+
+### REG-CN-18 — Student Email Optional and Non-Auth
+- Student email may be null or optional metadata only
+- Student email is never used as login identifier
+- **Applies to:** REG-UC-01
+
+### REG-CN-21 — Non-Student Dual Identifier Account Fields
+- RESEARCHER and TEACHER registrations must persist both `username` and `email`
+- Non-student authentication may use either `username` or `email` as identifier
+- Identifier values must be globally unique across both fields to avoid login ambiguity
+- **Applies to:** REG-UC-01
+
+### REG-CN-19 — Student OAuth Registration Disabled
+- Student registration does not support OAuth until role-identifier mapping is explicitly redesigned
+- Student code flows must enforce local registration only
+- **Applies to:** REG-UC-01
+
+### REG-CN-20 — Existing Student Code Redemption Idempotency
+- Redeeming a course code for a course where the student is already enrolled must return success (`already_enrolled`) without duplicate enrollment
+- Already-enrolled redemptions must not consume a code use
+- **Applies to:** REG-UC-01a
+
+### REG-CN-22 — Registration Code Hash-At-Rest
+- Registration codes must be persisted as deterministic salted HMAC digests; plaintext code values must not be stored
+- Validation and redemption must hash incoming plaintext and compare against persisted digest
+- Code list/detail responses must expose a non-sensitive prefix only; plaintext is returned only at generation time
+- **Applies to:** REG-UC-01, REG-UC-01a, REG-UC-02, REG-UC-03
+- **Implements:** NFR-SEC-07 (Registration Code Storage Hardening)
 
 ---
 
@@ -384,6 +494,13 @@ Exhausted / Expired / Revoked → Archived (visibility-only)
 [Code Validated] → [User Created] → [Code Usage Decremented] → [Enroll Student (if applicable)]
 ```
 
+### Student Course Join Redemption
+
+```
+[Student Authenticated] → [Code Validated] → [Enroll Student]
+                                            → [Already Enrolled (idempotent success)]
+```
+
 ---
 
 ## 7) Endpoints (Draft)
@@ -395,6 +512,11 @@ Exhausted / Expired / Revoked → Archived (visibility-only)
 | POST | `/api/v1/registration/validate-code` | None | REG-UC-01 |
 | POST | `/api/v1/registration/local` | None | REG-UC-01 |
 | POST | `/api/v1/registration/oauth` | None | REG-UC-01 |
+| POST | `/api/v1/registration/student/join-course` | Access token (Student) | REG-UC-01a |
+
+Notes:
+- `/api/v1/registration/oauth` is for RESEARCHER/TEACHER registration flows only.
+- STUDENT registration must use local registration so username generation and immutability are enforced.
 
 ### Code Generation
 
@@ -423,9 +545,12 @@ Exhausted / Expired / Revoked → Archived (visibility-only)
 | UC / Error | Wireframe Screens |
 |------------|-------------------|
 | REG-UC-01 | C1, C1 (load), C1c, C2, C3, C4, C5, C5b |
+| REG-UC-01a | C6, C6b |
 | REG-UC-01-E1 | C1b |
 | REG-UC-01-E2/E3 | C3b |
 | REG-UC-01-E4 | C4b |
+| REG-UC-01-E5 | C4c |
+| REG-UC-01a-E1/E2 | C6c |
 | REG-UC-02-ADMIN | D1, D1b |
 | REG-UC-02-RESEARCHER | D2, D2b, D2c, D2d |
 | REG-UC-02-TEACHER | D3, D3b |
