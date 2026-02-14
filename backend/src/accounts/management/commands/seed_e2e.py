@@ -3,10 +3,11 @@
 import os
 
 from django.contrib.auth import get_user_model
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 
 from accounts.models import Role
 from accounts.services import ensure_profiles_for_role, set_single_role
+from config.env import env
 
 User = get_user_model()
 
@@ -26,6 +27,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         """Seed baseline users for E2E workflows."""
+        if env.is_production:
+            raise CommandError("seed_e2e is blocked in production.")
+
         force_password = options.get("force_password", False)
 
         admin_username = os.environ.get("E2E_ADMIN_USERNAME") or os.environ.get(
@@ -36,31 +40,29 @@ class Command(BaseCommand):
         )
         admin_name = os.environ.get("E2E_ADMIN_NAME") or os.environ.get("ADMIN_USERNAME", "Admin")
 
-        teacher_username = os.environ.get("E2E_TEACHER_USERNAME")
+        teacher_username = os.environ.get("E2E_TEACHER_USERNAME", "teacher@example.com")
         teacher_password = os.environ.get("E2E_TEACHER_PASSWORD", "teacherpass")
 
-        student_username = os.environ.get("E2E_STUDENT_USERNAME")
+        student_username = os.environ.get("E2E_STUDENT_USERNAME", "student@example.com")
         student_password = os.environ.get("E2E_STUDENT_PASSWORD", "studentpass")
 
         self._ensure_admin(admin_username, admin_name, admin_password, force_password)
 
-        if teacher_username:
-            self._ensure_user(
-                teacher_username,
-                "Teacher",
-                teacher_password,
-                Role.TEACHER,
-                force_password,
-            )
+        self._ensure_user(
+            teacher_username,
+            "Teacher",
+            teacher_password,
+            Role.TEACHER,
+            force_password,
+        )
 
-        if student_username:
-            self._ensure_user(
-                student_username,
-                "Student",
-                student_password,
-                Role.STUDENT,
-                force_password,
-            )
+        self._ensure_user(
+            student_username,
+            "Student",
+            student_password,
+            Role.STUDENT,
+            force_password,
+        )
 
         self.stdout.write(self.style.SUCCESS("E2E seed completed"))
 

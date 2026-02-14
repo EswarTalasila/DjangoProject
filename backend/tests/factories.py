@@ -1,10 +1,20 @@
 """Factory helpers for backend test data."""
 
+from typing import ClassVar
+
 import factory
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 
-from accounts.models import Role, StudentProfile, SudoGrant, SudoPermission, TeacherProfile, User, UserRole
+from accounts.models import (
+    Role,
+    StudentProfile,
+    SudoGrant,
+    SudoPermission,
+    TeacherProfile,
+    User,
+    UserRole,
+)
 from assessments.models import (
     Assessment,
     GradingMode,
@@ -126,7 +136,7 @@ class SudoGrantFactory(factory.django.DjangoModelFactory):
 
     user = factory.SubFactory(UserFactory)
     granted_by = factory.SubFactory(UserFactory)
-    permissions = []
+    permissions: ClassVar[list[str]] = []
     can_grant_sudo = False
 
     class Params:

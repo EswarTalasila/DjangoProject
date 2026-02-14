@@ -50,7 +50,8 @@ def assessment_to_dto(assessment: Assessment) -> AssessmentDTO:
         assessment: The Assessment model instance
 
     Returns:
-        AssessmentDTO with id, title, category, gradingMode, questions, rubricId, rubricAssessmentIds
+        AssessmentDTO with id, title, category, gradingMode, questions,
+        rubricId, and rubricAssessmentIds.
     """
     return AssessmentDTO(
         id=assessment.id,

@@ -60,7 +60,7 @@ pip install -e ".[dev]"
 # Set required environment variables
 export DATABASE_URL=postgres://datadash:password@localhost:5432/datadash
 export DJANGO_SECRET_KEY=local-dev-secret-key
-export DJANGO_DEBUG=true
+export ENVIRONMENT=development
 export DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
 
 # Run migrations
@@ -119,11 +119,19 @@ scripts/lint/run_docstring_check.sh
 ## Management Commands
 
 ```bash
+# Ensure bootstrap admin exists (idempotent; strict validation in production)
+python src/manage.py ensure_admin
+
 # Create superuser
 python src/manage.py createsuperuser
 
 # Seed E2E test data
 python src/manage.py seed_e2e
+
+# Environment diagnostics report (profile-aware)
+python src/manage.py env_report --profile development
+python src/manage.py env_report --profile testing
+python src/manage.py env_report --profile production --strict
 
 # Open Django shell
 python src/manage.py shell
@@ -167,15 +175,14 @@ Base URL: `/api/v1/`
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `ENVIRONMENT` | Runtime profile (`development/testing/production`) | `development` |
 | `DATABASE_URL` | PostgreSQL connection URL | Required |
 | `DJANGO_SECRET_KEY` | Django secret key | Required |
-| `DJANGO_DEBUG` | Enable debug mode | `false` |
 | `DJANGO_ALLOWED_HOSTS` | Comma-separated hosts | `localhost` |
-| `DJANGO_CORS_ALLOWED_ORIGINS` | Comma-separated CORS origins | `http://localhost:4200` |
-| `JWT_SECRET_KEY` | JWT signing key | Falls back to DJANGO_SECRET_KEY |
-| `JWT_EXPIRATION_HOURS` | Access token lifetime | `1` |
-| `JWT_REFRESH_EXPIRATION_DAYS` | Refresh token lifetime | `7` |
-| `OTEL_ENABLED` | Enable OpenTelemetry | `false` |
+| `DJANGO_CORS_ALLOWED_ORIGINS` | Comma-separated CORS origins | `http://localhost:3000` |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID | Required in production |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | Required in production |
+| `OTEL_ENABLED` | Enable OpenTelemetry | Profile-driven default |
 | `OTEL_SERVICE_NAME` | Service name for traces | `eel-backend` |
 | `OTEL_TRACE_FILE` | Path for trace output | `traces.jsonl` |
 

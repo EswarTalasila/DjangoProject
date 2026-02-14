@@ -11,9 +11,9 @@ UC Ranges:
 
 import pytest
 
-from accounts.models import Role, SudoGrant, SudoPermission, UserRole, ResearcherProfile
+from accounts.models import ResearcherProfile, Role, SudoGrant, SudoPermission, UserRole
 from core.permissions import has_sudo_permission
-from tests.factories import UserFactory, SudoGrantFactory
+from tests.factories import SudoGrantFactory, UserFactory
 
 
 @pytest.mark.django_db
@@ -28,15 +28,18 @@ class TestResearcherSudoPermissions:
     # RESEARCHER-UC-20: Check sudo permission
     # =========================================================================
 
-    @pytest.mark.parametrize("permission", [
-        SudoPermission.CREATE_TEACHER.value,
-        SudoPermission.CREATE_STUDENT.value,
-        SudoPermission.EDIT_USER.value,
-        SudoPermission.DELETE_USER.value,
-        SudoPermission.BULK_CREATE.value,
-        SudoPermission.RESET_PASSWORD.value,
-        SudoPermission.GRANT_SUDO.value,
-    ])
+    @pytest.mark.parametrize(
+        "permission",
+        [
+            SudoPermission.CREATE_TEACHER.value,
+            SudoPermission.CREATE_STUDENT.value,
+            SudoPermission.EDIT_USER.value,
+            SudoPermission.DELETE_USER.value,
+            SudoPermission.BULK_CREATE.value,
+            SudoPermission.RESET_PASSWORD.value,
+            SudoPermission.GRANT_SUDO.value,
+        ],
+    )
     def test_RESEARCHER_UC_20(self, permission):
         """Researcher with specific permission - has_sudo_permission returns True."""
         user = UserFactory()
@@ -60,10 +63,7 @@ class TestResearcherSudoPermissions:
         user = UserFactory()
         UserRole.objects.create(user=user, role=Role.RESEARCHER)
         ResearcherProfile.objects.create(user=user)
-        SudoGrantFactory(
-            user=user,
-            permissions=[SudoPermission.CREATE_TEACHER.value]
-        )
+        SudoGrantFactory(user=user, permissions=[SudoPermission.CREATE_TEACHER.value])
 
         assert has_sudo_permission(user, SudoPermission.EDIT_USER.value) is False
 

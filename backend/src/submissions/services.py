@@ -45,7 +45,8 @@ def submission_to_dto(submission: Submission) -> SubmissionDTO:
         submission: The Submission model instance
 
     Returns:
-        SubmissionDTO with id, assignmentId, studentId, teacherId, submittedAt, score, status, answers
+        SubmissionDTO with id, assignmentId, studentId, teacherId, submittedAt,
+        score, status, and answers.
     """
     return SubmissionDTO(
         id=submission.id,

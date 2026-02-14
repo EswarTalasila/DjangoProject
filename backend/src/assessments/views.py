@@ -25,7 +25,7 @@ from rest_framework.response import Response
 from accounts.models import Role
 from assignments.models import Assignment
 from core.errors import error_response
-from core.permissions import IsAdmin, IsResearcherOrAdmin, IsTeacherOrAbove, primary_role
+from core.permissions import IsResearcherOrAdmin, IsTeacherOrAbove, primary_role
 from courses.models import Enrollment
 
 from .models import Assessment
@@ -73,7 +73,9 @@ def list_or_create(request):
         return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_201_CREATED)
 
     assessments = list_assessments()
-    return Response([assessment_to_dto(a).model_dump() for a in assessments], status=status.HTTP_200_OK)
+    return Response(
+        [assessment_to_dto(a).model_dump() for a in assessments], status=status.HTTP_200_OK
+    )
 
 
 @api_view(["GET", "PUT", "DELETE"])

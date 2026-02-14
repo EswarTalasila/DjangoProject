@@ -69,7 +69,7 @@ def primary_role(user) -> str:
 
     if user.is_staff:
         return "ADMIN"
-    
+
     roles = _role_set(user)
     for role in (Role.RESEARCHER, Role.TEACHER, Role.STUDENT):
         if role in roles:
@@ -105,6 +105,7 @@ def has_any_role(user, roles: Iterable[str]) -> bool:
     role_set = _role_set(user)
     return any(role in role_set for role in roles)
 
+
 def has_sudo_permission(user, permission: str) -> bool:
     """
     Check if user is a sudoed researcher with the given permission.
@@ -129,7 +130,8 @@ def has_sudo_permission(user, permission: str) -> bool:
         return permission in sudo_grant.permissions
     except AttributeError:
         return False
-    
+
+
 class IsAdmin(permissions.BasePermission):
     """
     DRF permission class restricting access to admin users only.
@@ -143,6 +145,7 @@ class IsAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
         """Return True if request user is an admin."""
         return request.user.is_staff
+
 
 class IsResearcher(permissions.BasePermission):
     """
@@ -159,7 +162,6 @@ class IsResearcher(permissions.BasePermission):
         return has_role(request.user, Role.RESEARCHER)
 
 
-
 class IsResearcherOrAdmin(permissions.BasePermission):
     """
     DRF permission class allowing access to researchers or admins.
@@ -173,6 +175,7 @@ class IsResearcherOrAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
         """Return True if request user is a researcher or admin."""
         return request.user.is_staff or has_role(request.user, Role.RESEARCHER)
+
 
 class IsTeacher(permissions.BasePermission):
     """

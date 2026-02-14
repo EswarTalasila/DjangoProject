@@ -3,7 +3,7 @@
 import pytest
 from rest_framework.test import APIClient
 
-from accounts.models import Role, ResearcherProfile, StudentProfile, TeacherProfile, UserRole
+from accounts.models import ResearcherProfile, Role, StudentProfile, TeacherProfile, UserRole
 from tests.factories import UserFactory
 
 
@@ -17,7 +17,7 @@ def api_client():
 def admin_user():
     """Test that admin user."""
     user = UserFactory()
-    user.is_staff=True
+    user.is_staff = True
     user.save()
     return user
 

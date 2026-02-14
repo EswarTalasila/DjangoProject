@@ -122,7 +122,9 @@ def list_course(request, course_id: int):
         200: Array of assignment DTOs
     """
     assignments = list_by_course(course_id)
-    return Response([assignment_to_dto(a).model_dump() for a in assignments], status=status.HTTP_200_OK)
+    return Response(
+        [assignment_to_dto(a).model_dump() for a in assignments], status=status.HTTP_200_OK
+    )
 
 
 @api_view(["GET"])
@@ -149,4 +151,6 @@ def list_user(request, user_id: int):
     if not target:
         return Response("User not found", status=status.HTTP_404_NOT_FOUND)
     assignments = list_for_user(target)
-    return Response([assignment_to_dto(a).model_dump() for a in assignments], status=status.HTTP_200_OK)
+    return Response(
+        [assignment_to_dto(a).model_dump() for a in assignments], status=status.HTTP_200_OK
+    )

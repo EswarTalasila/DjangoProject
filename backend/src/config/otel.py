@@ -12,6 +12,7 @@ from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor
 
+from config.env import env
 from core.otel_exporter import FileSpanExporter
 
 _CONFIGURED = False
@@ -22,7 +23,7 @@ def configure_tracing() -> None:
     global _CONFIGURED
     if _CONFIGURED:
         return
-    if os.environ.get("OTEL_ENABLED", "false").lower() not in ("true", "1", "yes"):
+    if not env.effective_otel_enabled:
         return
 
     service_name = os.environ.get("OTEL_SERVICE_NAME", "eel-backend")
@@ -30,14 +31,14 @@ def configure_tracing() -> None:
     provider = TracerProvider(resource=resource)
     trace.set_tracer_provider(provider)
 
-    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+    endpoint = env.otel_exporter_otlp_endpoint
     headers = _parse_headers(os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", ""))
     if endpoint:
         exporter = OTLPSpanExporter(endpoint=endpoint, headers=headers)
         provider.add_span_processor(BatchSpanProcessor(exporter))
 
-    trace_file = os.environ.get("OTEL_TRACE_FILE")
-    if trace_file:
+    trace_file = env.otel_trace_file
+    if trace_file and not env.is_production:
         provider.add_span_processor(SimpleSpanProcessor(FileSpanExporter(trace_file)))
 
     DjangoInstrumentor().instrument()

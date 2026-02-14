@@ -19,7 +19,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = env.django_secret_key
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env.django_debug
+DEBUG = env.debug
+ENVIRONMENT = env.environment
 
 ALLOWED_HOSTS = env.allowed_hosts_list
 
@@ -51,7 +52,7 @@ INSTALLED_APPS = [
 # Development-only apps (not loaded in production)
 # - debug_toolbar: SQL query inspection, request/response debugging
 # - django_extensions: shell_plus with auto-imports, show_urls, graph_models
-if DEBUG:
+if env.debug_toolbar_enabled:
     INSTALLED_APPS += [
         "debug_toolbar",
         "django_extensions",
@@ -69,7 +70,7 @@ MIDDLEWARE = [
 ]
 
 # Debug toolbar middleware (insert after SecurityMiddleware)
-if DEBUG:
+if env.debug_toolbar_enabled:
     MIDDLEWARE.insert(1, "debug_toolbar.middleware.DebugToolbarMiddleware")
 
 ROOT_URLCONF = "config.urls"
@@ -140,7 +141,7 @@ CORS_ALLOW_CREDENTIALS = True
 # Debug toolbar settings
 # For Docker, we need to include the Docker network gateway
 INTERNAL_IPS = ["127.0.0.1", "localhost"]
-if DEBUG:
+if env.debug_toolbar_enabled:
     import socket
 
     # Add Docker host IP for debug toolbar to work in containers
@@ -198,10 +199,10 @@ SIMPLE_JWT = {
 GOOGLE_CLIENT_ID = env.google_client_id
 GOOGLE_CLIENT_SECRET = env.google_client_secret
 
-# Security settings (production overrides)
-if not DEBUG:
-    SECURE_BROWSER_XSS_FILTER = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-    X_FRAME_OPTIONS = "DENY"
-    CSRF_COOKIE_SECURE = True
-    SESSION_COOKIE_SECURE = True
+# Security settings
+SECURE_BROWSER_XSS_FILTER = env.is_production
+SECURE_CONTENT_TYPE_NOSNIFF = env.is_production
+X_FRAME_OPTIONS = "DENY"
+CSRF_COOKIE_SECURE = env.csrf_cookie_secure
+SESSION_COOKIE_SECURE = env.session_cookie_secure
+SECURE_SSL_REDIRECT = env.ssl_redirect_enabled

@@ -235,6 +235,7 @@ class UserRole(models.Model):
         """Return a readable string representation."""
         return f"{self.user.username}: {self.role}"
 
+
 class SudoPermission(models.TextChoices):
     """
     Enumeration of elevated permissions that can be granted to researchers.
@@ -300,15 +301,11 @@ class SudoGrant(models.Model):
     """
 
     # The researcher receiving elevated permissions
-    user = models.OneToOneField(
-        User, on_delete=models.CASCADE, related_name="sudo_grant"
-    )
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="sudo_grant")
 
     # Admin or sudoed researcher who created this grant
     # PROTECT prevents deleting the granter if they have active grants
-    granted_by = models.ForeignKey(
-        User, on_delete=models.PROTECT, related_name="sudo_grants_given"
-    )
+    granted_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="sudo_grants_given")
 
     # Timestamp for auditing when sudo was granted
     granted_at = models.DateTimeField(auto_now_add=True)
@@ -334,17 +331,19 @@ class SudoGrant(models.Model):
         """Validate permissions JSONField against SudoPermission enum."""
         super().clean()
         if not isinstance(self.permissions, list):
-            raise ValidationError({
-                "permissions": "Permissions must be a list"
-            })
+            raise ValidationError({"permissions": "Permissions must be a list"})
 
         valid_permissions = {p.value for p in SudoPermission}
         invalid = [p for p in self.permissions if p not in valid_permissions]
 
         if invalid:
-            raise ValidationError({
-                "permissions": f"Invalid permissions: {invalid}. Valid values: {list(valid_permissions)}"
-            })
+            raise ValidationError(
+                {
+                    "permissions": (
+                        f"Invalid permissions: {invalid}. Valid values: {list(valid_permissions)}"
+                    )
+                }
+            )
 
 
 class ResearcherProfile(models.Model):
@@ -383,7 +382,7 @@ class ResearcherProfile(models.Model):
     def __str__(self):
         """Return a readable string representation."""
         return f"ResearcherProfile({self.user.username})"
-    
+
 
 class TeacherProfile(models.Model):
     """
