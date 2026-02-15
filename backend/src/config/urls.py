@@ -21,10 +21,24 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
+from accounts import views as account_views
+
 urlpatterns: list[URLPattern | URLResolver] = [
     path("admin/", admin.site.urls),
     # Versioned API routes
     path("api/v1/auth/", include("accounts.urls")),
+    path("api/v1/registration/", include("accounts.urls_registration")),
+    # Collection aliases without trailing slash to match API standard.
+    path("api/v1/users", account_views.create_user),
+    path("api/v1/users/", include("accounts.urls_users")),
+    # Top-level resources (moved from nested paths)
+    path("api/v1/enrollments", account_views.join_course_with_code),
+    path("api/v1/user-batches", account_views.bulk_create),
+    path("api/v1/sudo-grants", account_views.grant_sudo),
+    path("api/v1/sudo-grants/<int:grant_id>", account_views.revoke_sudo),
+    # Collection aliases without trailing slash to match API standard.
+    path("api/v1/codes", account_views.codes_collection),
+    path("api/v1/codes/", include("accounts.urls_codes")),
     path("api/v1/courses/", include("courses.urls")),
     path("api/v1/assessments/", include("assessments.urls")),
     path("api/v1/assignments/", include("assignments.urls")),

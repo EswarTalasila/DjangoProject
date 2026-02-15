@@ -11,17 +11,28 @@ All endpoints return JSON responses. Authentication uses JWT tokens via
 SimpleJWT. Role-based access control is enforced via permission classes.
 
 Endpoints:
-    POST /api/v1/auth/register      - Public self-registration (student only)
-    POST /api/v1/auth/login         - Username/password authentication
-    POST /api/v1/auth/login/google  - Google OAuth authentication
-    POST /api/v1/auth/check-email   - Check if email exists in system
-    POST /api/v1/users              - Create user (teacher/admin, sudoed researcher)
-    POST /api/v1/users/{id}         - Update user (teacher/admin, sudoed researcher)
-    DELETE /api/v1/users/{username} - Delete user (teacher/admin, sudoed researcher)
-    GET /api/v1/users/staff         - List staff (researcher/admin)
-    POST /api/v1/users/{id}/password - Set initial password (first login flow)
-    PUT /api/v1/users/{id}/password/reset - Reset password (admin, sudoed researcher)
-    POST /api/v1/users/bulk         - Bulk create users (admin only)
+    POST /api/v1/auth/sessions          - Username/password authentication
+    POST /api/v1/auth/sessions/oauth    - Google OAuth authentication
+    POST /api/v1/auth/token-exchanges   - Refresh access token
+    POST /api/v1/auth/session-revocations - Logout (refresh token blacklist)
+    PATCH /api/v1/auth/password         - Self-service password change
+    POST /api/v1/auth/reset-requests    - Create non-student approval-based reset request
+    POST /api/v1/auth/reset-request-lookups - Lookup non-student reset request status
+    PATCH /api/v1/auth/reset-requests/{id}  - Approve/deny non-student reset request
+    POST /api/v1/auth/reset-code-validations - Verify reset code
+    POST /api/v1/auth/password-resets   - Complete password reset
+    POST /api/v1/registration/accounts  - Unified registration (method: LOCAL|OAUTH)
+    POST /api/v1/registration/code-validations - Public invite code validation (FR-02)
+    POST /api/v1/enrollments            - Authenticated student course join (FR-02)
+    GET/POST /api/v1/codes              - List/create registration codes (FR-02)
+    GET/PATCH /api/v1/codes/{id}        - Code detail + lifecycle transitions (FR-02)
+    POST /api/v1/users                  - Create user (teacher/admin, sudoed researcher)
+    PATCH /api/v1/users/{id}            - Update user (teacher/admin, sudoed researcher)
+    DELETE /api/v1/users/{id}           - Delete user (teacher/admin, sudoed researcher)
+    GET /api/v1/users/staff             - List staff (researcher/admin)
+    POST /api/v1/user-batches           - Bulk create users (admin only)
+    POST /api/v1/sudo-grants            - Grant sudo permissions
+    DELETE /api/v1/sudo-grants/{id}     - Revoke sudo grant
 """
 
 import json
@@ -29,10 +40,11 @@ from typing import Any, cast
 from urllib.request import Request, urlopen
 
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -43,24 +55,90 @@ from core.permissions import (
     primary_role,
 )
 
-from .models import OAuthAccount, OAuthProvider, Role, SudoPermission
-from .serializers import CheckEmailSerializer, UserInputSerializer, UserOutputSerializer
+from .models import (
+    OAuthAccount,
+    OAuthProvider,
+    PasswordResetRequestStatus,
+    RegistrationCodeType,
+    Role,
+    SudoPermission,
+)
+from .serializers import (
+    GoogleOAuthLoginSerializer,
+    LoginSerializer,
+    PasswordChangeSerializer,
+    PasswordResetCodeCompleteSerializer,
+    PasswordResetCodeVerifySerializer,
+    PasswordResetRequestCreateSerializer,
+    PasswordResetStatusSerializer,
+    PasswordResetTransitionSerializer,
+    RefreshTokenSerializer,
+    RegistrationCodeCreateSerializer,
+    RegistrationCodeUpdateSerializer,
+    RegistrationCodeValidateInputSerializer,
+    RegistrationOAuthSerializer,
+    StudentInviteRegisterSerializer,
+    StudentJoinCourseSerializer,
+    UserInputSerializer,
+    UserOutputSerializer,
+)
 from .services import (
     authenticate_user,
+    blacklist_refresh_token,
     build_user_response,
     can_create_user,
     can_delete_user,
     can_edit_user,
-    can_reset_password,
+    check_identifier_throttle,
+    clear_identifier_failures,
+    complete_password_reset,
+    create_password_reset_request,
+    create_registration_codes,
     create_user_from_payload,
     ensure_profiles_for_role,
+    find_user_by_identifier,
+    get_password_reset_request_status,
     grant_sudo_to_researcher,
+    identifier_allowed_for_user,
+    invalidate_user_sessions,
     link_or_create_oauth_account,
+    password_strength_errors,
+    redeem_non_student_local_invite,
+    redeem_non_student_oauth_invite,
+    redeem_student_invite,
+    redeem_student_join_course,
+    register_identifier_failure,
+    registration_code_scope_queryset,
+    registration_code_status,
     revoke_sudo_grant,
     set_single_role,
+    transition_password_reset_request,
+    transition_registration_code_status,
+    validate_registration_code,
+    verify_password_reset_code,
 )
 
 User = get_user_model()
+
+
+def _normalize_identifier(value: str | None) -> str:
+    """Normalize identifier values for case-insensitive comparisons."""
+    return str(value or "").strip().lower()
+
+
+def _identifier_in_use(identifier: str | None, exclude_user_id: int | None = None) -> bool:
+    """
+    Check whether an identifier is already used as either username or email.
+
+    This prevents ambiguous login identifiers across accounts.
+    """
+    normalized = _normalize_identifier(identifier)
+    if not normalized:
+        return False
+    queryset = User.objects.filter(Q(username__iexact=normalized) | Q(email__iexact=normalized))
+    if exclude_user_id is not None:
+        queryset = queryset.exclude(id=exclude_user_id)
+    return queryset.exists()
 
 
 def _google_userinfo(access_token: str) -> dict[str, Any]:
@@ -97,83 +175,394 @@ def _google_userinfo(access_token: str) -> dict[str, Any]:
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
-def register(request):
+def register_account(request):
     """
-    Register a new user account via public self-registration.
+    Unified registration endpoint.
 
-    This endpoint allows anyone to create a new account. For security,
-    all self-registered users are assigned the STUDENT role regardless
-    of any role specified in the request payload.
+    Dispatches to LOCAL or OAUTH registration based on the ``method`` field.
 
     Request Body:
-        {
-            "username": "user@example.com",  # Required, must be unique email
-            "password": "securepassword",    # Required
-            "name": "User Name"              # Required, display name
-        }
+        { "method": "LOCAL", ...local fields... }
+        { "method": "OAUTH", ...oauth fields... }
 
     Returns:
-        200: "User registered" on success
-        400: "name, username, and password are required" if missing fields
-        400: "Username already taken" if email exists
-
-    Security Note:
-        Role is forced to STUDENT to prevent privilege escalation.
-        Use /api/v1/users endpoint for creating teachers/admins.
+        400 if method is missing or invalid.
     """
-    serializer = UserInputSerializer(data=request.data)
+    method = (request.data.get("method") or "").upper()
+    payload = {k: v for k, v in request.data.items() if k != "method"}
+    if method == "LOCAL":
+        return _register_local(request, payload)
+    if method == "OAUTH":
+        return _register_oauth(request, payload)
+    return Response({"detail": "method must be LOCAL or OAUTH"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+def _register_local(request, payload):
+    """Register a new account using a local invite-code flow."""
+    serializer = StudentInviteRegisterSerializer(data=payload)
     serializer.is_valid(raise_exception=True)
-    payload = serializer.validated_data
-    if not payload.get("username") or not payload.get("password") or not payload.get("name"):
+    validated = serializer.validated_data
+
+    record = validate_registration_code(validated["code"])
+    if not record:
+        return Response({"detail": "Invalid or expired code"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if record.code_type == RegistrationCodeType.STUDENT:
+        try:
+            user, enrollment = redeem_student_invite(validated)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
         return Response(
-            "name, username, and password are required",
+            {
+                "message": "User registered",
+                "username": user.username,
+                "name": user.name,
+                "courseId": enrollment.course_id,
+                "createdNewUser": True,
+                "alreadyEnrolled": False,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    try:
+        user = redeem_non_student_local_invite(validated)
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    refresh = RefreshToken.for_user(user)
+    body = build_user_response(user, str(refresh.access_token), str(refresh))
+    body["message"] = "User registered"
+    body["createdNewUser"] = True
+    body["alreadyEnrolled"] = False
+    body["courseId"] = None
+    return Response(body, status=status.HTTP_200_OK)
+
+
+def _register_oauth(request, payload):
+    """Register a non-student account with invite code + Google OAuth."""
+    serializer = RegistrationOAuthSerializer(data=payload)
+    serializer.is_valid(raise_exception=True)
+    validated = serializer.validated_data
+
+    try:
+        google_user = _google_userinfo(validated["accessToken"])
+    except Exception:
+        return Response(
+            {"detail": "Invalid Google access token."}, status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    google_subject = str(google_user.get("sub", "")).strip()
+    google_email = str(google_user.get("email", "")).strip()
+    if not google_subject or not google_email:
+        return Response(
+            {"detail": "Google user profile is missing required fields."},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    if User.objects.filter(username__iexact=payload.get("username")).exists():
-        return Response("Username already taken", status=status.HTTP_400_BAD_REQUEST)
-    create_user_from_payload(payload, role_override=Role.STUDENT, creator=None)
-    return Response("User registered", status=status.HTTP_200_OK)
+
+    try:
+        user = redeem_non_student_oauth_invite(
+            code=validated["code"],
+            oauth_subject=google_subject,
+            oauth_email=google_email,
+            username=validated.get("username"),
+            name=validated.get("name") or google_user.get("name"),
+            email_verified=google_user.get("email_verified"),
+            picture_url=google_user.get("picture"),
+        )
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+
+    refresh = RefreshToken.for_user(user)
+    body = build_user_response(user, str(refresh.access_token), str(refresh))
+    body["message"] = "User registered"
+    return Response(body, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def validate_registration_code_view(request):
+    """Validate a registration code and return non-sensitive context."""
+    serializer = RegistrationCodeValidateInputSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    code = serializer.validated_data["code"]
+    record = validate_registration_code(code)
+    if not record:
+        return Response({"detail": "Invalid or expired code"}, status=status.HTTP_400_BAD_REQUEST)
+
+    context = {}
+    if record.course_id and record.course is not None:
+        context["course_name"] = record.course.name
+        teacher_profile = getattr(record.course, "teacher_profile", None)
+        if teacher_profile and teacher_profile.user_id:
+            context["teacher_name"] = teacher_profile.user.name
+
+    return Response(
+        {
+            "valid": True,
+            "code_type": record.code_type,
+            "context": context,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def join_course_with_code(request):
+    """Redeem a student invite code for the authenticated student account."""
+    if primary_role(request.user) != Role.STUDENT:
+        return Response(
+            {"detail": "Only student accounts can redeem student codes"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    serializer = StudentJoinCourseSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    try:
+        enrollment, already_enrolled = redeem_student_join_course(
+            user=request.user,
+            code=serializer.validated_data["code"],
+        )
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+
+    return Response(
+        {
+            "message": "Already enrolled" if already_enrolled else "Invite redeemed",
+            "username": request.user.username,
+            "name": request.user.name,
+            "courseId": enrollment.course_id,
+            "createdNewUser": False,
+            "alreadyEnrolled": already_enrolled,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+def _serialize_registration_code(record):
+    """Return API payload for registration code list/detail responses."""
+    plaintext_code = getattr(record, "plaintext_code", None)
+    return {
+        "id": record.id,
+        "code": plaintext_code,
+        "codePrefix": record.code_prefix,
+        "codeType": record.code_type,
+        "status": registration_code_status(record),
+        "maxUses": record.max_uses,
+        "timesUsed": record.times_used,
+        "usesRemaining": max(record.max_uses - record.times_used, 0),
+        "expiresAt": record.expires_at.isoformat(),
+        "isActive": record.is_active,
+        "courseId": record.course_id,
+        "courseName": record.course.name if record.course_id else None,
+        "metadata": record.metadata,
+        "createdByUserId": record.created_by_id,
+        "createdAt": record.created_at.isoformat(),
+        "archivedAt": record.archived_at.isoformat() if record.archived_at else None,
+    }
+
+
+def _create_codes(request):
+    """Generate registration codes for the next role tier."""
+    serializer = RegistrationCodeCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    payload = serializer.validated_data
+
+    try:
+        created = create_registration_codes(
+            creator=request.user,
+            code_type=payload["codeType"],
+            count=payload["count"],
+            uses_per_code=payload["usesPerCode"],
+            expires_at=payload["expiresAt"],
+            course_id=payload.get("courseId"),
+            metadata=payload.get("metadata"),
+        )
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response(
+        {
+            "count": len(created),
+            "codes": [_serialize_registration_code(record) for record in created],
+        },
+        status=status.HTTP_201_CREATED,
+    )
+
+
+def _list_codes(request):
+    """List registration codes scoped to the authenticated user's role."""
+    include_archived = str(request.query_params.get("includeArchived", "")).lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    status_filter = str(request.query_params.get("status", "")).strip().upper()
+    code_type_filter = str(request.query_params.get("codeType", "")).strip().upper()
+
+    queryset = registration_code_scope_queryset(request.user)
+    if code_type_filter:
+        queryset = queryset.filter(code_type=code_type_filter)
+    if not include_archived:
+        queryset = queryset.filter(archived_at__isnull=True)
+
+    records = list(queryset.order_by("-created_at"))
+    payload = [_serialize_registration_code(record) for record in records]
+    if status_filter:
+        payload = [entry for entry in payload if entry["status"] == status_filter]
+    return Response(payload, status=status.HTTP_200_OK)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def codes_collection(request):
+    """List or create registration codes according to request method."""
+    if request.method == "GET":
+        return _list_codes(request)
+    return _create_codes(request)
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated])
+def code_detail(request, code_id: int):
+    """Get or transition a single registration code within role scope."""
+    if request.method == "GET":
+        record = registration_code_scope_queryset(request.user).filter(id=code_id).first()
+        if not record:
+            return Response(
+                {"detail": "Registration code not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+        return Response(_serialize_registration_code(record), status=status.HTTP_200_OK)
+
+    serializer = RegistrationCodeUpdateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    payload = serializer.validated_data
+
+    try:
+        updated = transition_registration_code_status(
+            actor=request.user,
+            registration_code_id=code_id,
+            next_status=payload["status"],
+        )
+    except ValueError as exc:
+        message = str(exc)
+        if message == "Registration code not found.":
+            return Response({"detail": message}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"detail": message}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response(_serialize_registration_code(updated), status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def login(request):
-    """
-    Authenticate a user with username and password, returning a JWT token.
+    """Authenticate a user with role-constrained identifier + password."""
+    serializer = LoginSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    identifier = serializer.validated_data["identifier"]
+    password = serializer.validated_data["password"]
+    if not check_identifier_throttle("login", identifier):
+        return Response(
+            {"detail": "Too many failed attempts. Please try again later."},
+            status=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
 
-    Validates credentials against the database and returns a JWT access token
-    on success. The token should be included in subsequent requests via the
-    Authorization header: "Bearer <token>".
+    existing_user = find_user_by_identifier(identifier)
+    if not existing_user:
+        register_identifier_failure("login", identifier)
+        return Response(
+            {"detail": "Invalid identifier or password."}, status=status.HTTP_401_UNAUTHORIZED
+        )
 
-    Request Body:
+    if not identifier_allowed_for_user(identifier, existing_user):
+        register_identifier_failure("login", identifier)
+        return Response(
+            {"detail": "Invalid identifier or password."}, status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    user = authenticate_user(identifier, password)
+    if not user:
+        register_identifier_failure("login", identifier)
+        return Response(
+            {"detail": "Invalid identifier or password."}, status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    clear_identifier_failures("login", identifier)
+    refresh = RefreshToken.for_user(user)
+    body = build_user_response(user, str(refresh.access_token), str(refresh))
+    return Response(body, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def refresh(request):
+    """Exchange a refresh token for a new access token."""
+    serializer = RefreshTokenSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    try:
+        token = RefreshToken(serializer.validated_data["refreshToken"])
+    except Exception:
+        return Response({"detail": "Invalid refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
+    return Response(
         {
-            "username": "user@example.com",  # Required
-            "password": "userpassword"       # Required
-        }
-
-    Returns:
-        200: {
-            "accessToken": "eyJ...",  # JWT access token
+            "accessToken": str(token.access_token),
             "tokenType": "Bearer",
-            "role": "STUDENT|TEACHER|RESEARCHER",
-            "id": "123",
-            "name": "User Name",
-            "username": "user@example.com"
-        }
-        400: "username and password are required" if missing fields
-        401: "Invalid username or password" if credentials invalid
-    """
-    serializer = UserInputSerializer(data=request.data)
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def logout(request):
+    """Invalidate a refresh token and end the current session."""
+    serializer = RefreshTokenSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    if not blacklist_refresh_token(serializer.validated_data["refreshToken"]):
+        return Response({"detail": "Invalid refresh token."}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"message": "Logged out."}, status=status.HTTP_200_OK)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def change_password(request):
+    """Change password for the authenticated user and revoke all sessions."""
+    serializer = PasswordChangeSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     payload = serializer.validated_data
-    if not payload.get("username") or not payload.get("password"):
-        return Response("username and password are required", status=status.HTTP_400_BAD_REQUEST)
-    user = authenticate_user(payload.get("username"), payload.get("password"))
-    if not user:
-        return Response("Invalid username or password", status=status.HTTP_401_UNAUTHORIZED)
-    refresh = RefreshToken.for_user(user)
-    body = build_user_response(user, str(refresh.access_token))
-    return Response(body, status=status.HTTP_200_OK)
+
+    if payload["newPassword"] != payload["confirmPassword"]:
+        return Response({"detail": "Passwords do not match."}, status=status.HTTP_400_BAD_REQUEST)
+    if not request.user.check_password(payload["currentPassword"]):
+        return Response(
+            {"detail": "Current password is incorrect."}, status=status.HTTP_400_BAD_REQUEST
+        )
+
+    errors = password_strength_errors(payload["newPassword"])
+    if errors:
+        return Response({"detail": errors[0]}, status=status.HTTP_400_BAD_REQUEST)
+    if request.user.check_password(payload["newPassword"]):
+        return Response(
+            {"detail": "New password must be different from current password."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    request.user.set_password(payload["newPassword"])
+    request.user.save(update_fields=["password"])
+    invalidated = invalidate_user_sessions(request.user)
+
+    return Response(
+        {"message": "Password changed successfully.", "sessionsInvalidated": invalidated},
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["POST"])
@@ -208,9 +597,9 @@ def login_with_google(request):
         401: "Invalid Google userinfo" if response missing required fields
         401: "No account associated with this Google email" if user not found
     """
-    access_token = request.data.get("accessToken")
-    if not access_token:
-        return Response({"error": "accessToken is required"}, status=status.HTTP_400_BAD_REQUEST)
+    serializer = GoogleOAuthLoginSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    access_token = serializer.validated_data["accessToken"]
     try:
         userinfo = _google_userinfo(access_token)
     except Exception as exc:
@@ -226,68 +615,183 @@ def login_with_google(request):
 
     account = OAuthAccount.objects.filter(provider=OAuthProvider.GOOGLE, subject=subject).first()
     if account:
+        if primary_role(account.user) == Role.STUDENT:
+            return Response(
+                {"detail": "Google OAuth is not supported for student accounts."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         account.email = email
         account.last_login_at = timezone.now()
         account.save(update_fields=["email", "last_login_at"])
         user = account.user
     else:
-        found_user = User.objects.filter(username__iexact=email).first()
+        found_user = User.objects.filter(email__iexact=email).first()
+        if not found_user:
+            found_user = User.objects.filter(username__iexact=email).first()
         if not found_user:
             return Response(
                 {"error": "No account associated with this Google email."},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
+        if primary_role(found_user) == Role.STUDENT:
+            return Response(
+                {"detail": "Google OAuth is not supported for student accounts."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not found_user.email:
+            found_user.email = email
+            found_user.save(update_fields=["email"])
         link_or_create_oauth_account(found_user, subject, email)
         user = found_user
 
     refresh = RefreshToken.for_user(user)
-    body = {
-        "accessToken": str(refresh.access_token),
-        "tokenType": "Bearer",
-        "role": primary_role(user),
-        "id": str(user.id),
-    }
+    body = build_user_response(user, str(refresh.access_token), str(refresh))
     return Response(body, status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
-def check_email(request):
-    """
-    Check if an email address exists in the system and if password is set.
+def create_reset_request(request):
+    """Create a non-student password reset request and return one-time request token."""
+    serializer = PasswordResetRequestCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    identifier = serializer.validated_data["identifier"]
 
-    Used by the frontend during login flow to determine whether to show
-    password input or first-time password setup screen.
+    if not check_identifier_throttle("reset-request", identifier):
+        return Response(
+            {"detail": "Too many failed attempts. Please try again later."},
+            status=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
 
-    Request Body:
+    try:
+        reset_request, request_token = create_password_reset_request(identifier)
+    except PermissionError as exc:
+        register_identifier_failure("reset-request", identifier)
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    except ValueError as exc:
+        register_identifier_failure("reset-request", identifier)
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    clear_identifier_failures("reset-request", identifier)
+    return Response(
         {
-            "email": "user@example.com"  # Email to check
-        }
-
-    Returns:
-        200: {
-            "exists": true,
-            "userId": 123,           # User's database ID
-            "needsPassword": false   # True if user has no password set
-        }
-        404: {"exists": false, "userId": -1, "needsPassword": false} if not found
-
-    Security Note:
-        This endpoint enables user enumeration. Consider adding rate limiting
-        or captcha for production deployments (tracked in issue #18).
-    """
-    email = request.data.get("email")
-    if not email:
-        return Response({"exists": False, "userId": -1, "needsPassword": False})
-    user = User.objects.filter(username__iexact=email).first()
-    if not user:
-        serializer = CheckEmailSerializer({"exists": False, "userId": -1, "needsPassword": False})
-        return Response(serializer.data, status=status.HTTP_404_NOT_FOUND)
-    needs_password = user.password is None
-    serializer = CheckEmailSerializer(
-        {"exists": True, "userId": user.id, "needsPassword": needs_password}
+            "requestId": reset_request.id,
+            "requestToken": request_token,
+            "status": reset_request.status,
+        },
+        status=status.HTTP_201_CREATED,
     )
-    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def reset_request_status(request):
+    """Lookup status for a non-student reset request by identifier + request token."""
+    serializer = PasswordResetStatusSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    identifier = serializer.validated_data["identifier"]
+    request_token = serializer.validated_data["requestToken"]
+
+    if not check_identifier_throttle("reset-status", identifier):
+        return Response(
+            {"detail": "Too many failed attempts. Please try again later."},
+            status=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+
+    reset_request = get_password_reset_request_status(identifier, request_token)
+    if not reset_request:
+        register_identifier_failure("reset-status", identifier)
+        return Response(
+            {"detail": "Invalid identifier or request token."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    clear_identifier_failures("reset-status", identifier)
+    response = {
+        "requestId": reset_request.id,
+        "status": reset_request.status,
+    }
+    if reset_request.status == PasswordResetRequestStatus.APPROVED:
+        response["next"] = "ENTER_RESET_CODE"
+    return Response(response, status=status.HTTP_200_OK)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsResearcherOrAdmin])
+def transition_reset_request(request, request_id: int):
+    """Approve or deny a pending non-student reset request."""
+    serializer = PasswordResetTransitionSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    payload = serializer.validated_data
+    try:
+        updated, reset_code = transition_password_reset_request(
+            approver=request.user,
+            request_id=request_id,
+            new_status=payload["status"],
+            reason=payload.get("reason"),
+            expires_at=payload.get("expires_at"),
+        )
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+
+    body = {
+        "requestId": updated.id,
+        "status": updated.status,
+    }
+    if reset_code:
+        body["resetCode"] = reset_code
+    return Response(body, status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def verify_reset_code(request):
+    """Verify a reset code before allowing password update."""
+    serializer = PasswordResetCodeVerifySerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    identifier = serializer.validated_data["identifier"]
+    reset_code = serializer.validated_data["resetCode"]
+    code = verify_password_reset_code(identifier, reset_code)
+    if not code:
+        return Response(
+            {"valid": False, "detail": "Invalid or expired reset code."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return Response(
+        {
+            "valid": True,
+            "requestId": code.request_id,
+            "expiresAt": code.expires_at.isoformat(),
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def complete_reset_code(request):
+    """Complete a password reset using a valid code."""
+    serializer = PasswordResetCodeCompleteSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    payload = serializer.validated_data
+
+    if payload["newPassword"] != payload["confirmPassword"]:
+        return Response({"detail": "Passwords do not match."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        complete_password_reset(
+            identifier=payload["identifier"],
+            reset_code=payload["resetCode"],
+            new_password=payload["newPassword"],
+        )
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    except ValueError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response({"message": "Password reset successful."}, status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
@@ -297,8 +801,6 @@ def create_user(request):
     Create a new user account with specified role (privileged operation).
 
     Teachers can create students only. Admins can create users of any role.
-    The created user will have no password set initially - they must use
-    the set_password endpoint or Google OAuth on first login.
 
     Request Body:
         {
@@ -327,44 +829,40 @@ def create_user(request):
     requested_role = payload.get("role") or Role.STUDENT
     if not can_create_user(request.user, requested_role):
         return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
-    if User.objects.filter(username__iexact=payload.get("username")).exists():
+    if requested_role != Role.STUDENT and not payload.get("email"):
+        return Response(
+            "email is required for non-student users", status=status.HTTP_400_BAD_REQUEST
+        )
+    if _identifier_in_use(payload.get("username")):
         return Response("Username already taken", status=status.HTTP_400_BAD_REQUEST)
-    create_user_from_payload(payload, role_override=requested_role, creator=request.user)
+    if payload.get("email") and _identifier_in_use(payload.get("email")):
+        return Response("Email already taken", status=status.HTTP_400_BAD_REQUEST)
+    try:
+        create_user_from_payload(payload, role_override=requested_role, creator=request.user)
+    except ValueError as exc:
+        return Response(str(exc), status=status.HTTP_400_BAD_REQUEST)
     return Response("User created successfully.", status=status.HTTP_200_OK)
 
 
-@api_view(["POST"])
+@api_view(["PATCH", "DELETE"])
 @permission_classes([IsTeacherOrAbove])
-def edit_user(request, user_id: int):
+def manage_user(request, user_id: int):
     """
-    Update an existing user's profile, role, or password.
+    Update or delete an existing user account.
 
-    Enforces ownership rules: teachers can only edit their own students,
-    admins can edit any user. Role changes trigger profile creation
-    (e.g., promoting to teacher creates TeacherProfile).
+    PATCH: Update user profile, role, or password.
+    DELETE: Permanently delete a user account.
 
     Args:
-        user_id: Database ID of the user to update (path parameter)
-
-    Request Body:
-        {
-            "name": "New Name",              # Optional
-            "username": "new@example.com",   # Optional, must be unique
-            "password": "newpassword",       # Optional
-            "role": "STUDENT|TEACHER|RESEARCHER"  # Optional, changes user's role
-        }
-
-    Returns:
-        200: "User edited successfully."
-        400: "Username already taken" if new username exists
-        403: "Forbidden" if requester lacks permission
-        404: "User not found" if user_id doesn't exist
-
-    Permission Rules:
-        - TEACHER: Can edit own students only
-        - Researcher with EDIT_USER sudo permission
-        - Admin (is_staff): Can edit researchers and teachers
+        user_id: Database ID of the user (path parameter)
     """
+    if request.method == "DELETE":
+        return _delete_user(request, user_id)
+    return _edit_user(request, user_id)
+
+
+def _edit_user(request, user_id: int):
+    """Update an existing user's profile, role, or password."""
     serializer = UserInputSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     payload = serializer.validated_data
@@ -374,12 +872,36 @@ def edit_user(request, user_id: int):
     requested_role = payload.get("role") or primary_role(user)
     if not can_edit_user(request.user, user, requested_role):
         return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
+    next_username = user.username
+    next_email = user.email
+
     if payload.get("name"):
         user.name = payload["name"]
+
     if payload.get("username") and payload["username"] != user.username:
-        if User.objects.filter(username__iexact=payload["username"]).exclude(id=user_id).exists():
+        if primary_role(user) == Role.STUDENT:
+            return Response(
+                "Student usernames are immutable after account creation.",
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if _identifier_in_use(payload["username"], exclude_user_id=user_id):
             return Response("Username already taken", status=status.HTTP_400_BAD_REQUEST)
-        user.username = payload["username"]
+        next_username = _normalize_identifier(payload["username"])
+        user.username = next_username
+
+    if "email" in payload:
+        incoming_email = payload.get("email")
+        normalized_email = _normalize_identifier(incoming_email) or None
+        if normalized_email and _identifier_in_use(normalized_email, exclude_user_id=user_id):
+            return Response("Email already taken", status=status.HTTP_400_BAD_REQUEST)
+        next_email = normalized_email
+        user.email = normalized_email
+
+    if requested_role != Role.STUDENT and not next_email:
+        return Response(
+            "email is required for non-student users", status=status.HTTP_400_BAD_REQUEST
+        )
+
     if payload.get("password"):
         user.set_password(payload["password"])
     user.save()
@@ -389,34 +911,9 @@ def edit_user(request, user_id: int):
     return Response("User edited successfully.", status=status.HTTP_200_OK)
 
 
-@api_view(["DELETE"])
-@permission_classes([IsTeacherOrAbove])
-def delete_user(request, username: str):
-    """
-    Permanently delete a user account from the system.
-
-    This is a hard delete - the user and all associated data (profiles,
-    enrollments, submissions) are permanently removed. Teachers can only
-    delete their own students; admins can delete any non-admin user.
-
-    Args:
-        username: Email/username of the user to delete (path parameter)
-
-    Returns:
-        200: "User deleted successfully."
-        403: "Forbidden" if requester lacks permission
-        404: "User not found" if username doesn't exist
-
-    Permission Rules:
-        - TEACHER: Can delete own students only
-        - Researcher with DELETE_USER sudo permission
-        - Admin (is_staff): Can delete researchers and teachers
-
-    Warning:
-        This performs a hard delete. Consider implementing soft delete
-        for audit trail purposes (tracked in issue #24).
-    """
-    user = User.objects.filter(username=username).first()
+def _delete_user(request, user_id: int):
+    """Permanently delete a user account by ID."""
+    user = User.objects.filter(id=user_id).first()
     if not user:
         return Response("User not found", status=status.HTTP_404_NOT_FOUND)
     if not can_delete_user(request.user, user):
@@ -453,76 +950,6 @@ def list_staff(request):
     users = User.objects.filter(roles__role__in=[Role.TEACHER, Role.RESEARCHER]).distinct()
     serializer = UserOutputSerializer(users, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
-
-
-@api_view(["POST"])
-@permission_classes([AllowAny])
-def set_password(request, user_id: int):
-    """
-    Set password for a user's first login (initial password setup).
-
-    This endpoint is used when a user is created without a password
-    (e.g., by a teacher/admin) and needs to set their password on
-    first login. The frontend calls this after check_email returns
-    needsPassword=true.
-
-    Args:
-        user_id: Database ID of the user (path parameter)
-
-    Request Body:
-        Raw text string containing the new password (not JSON)
-
-    Returns:
-        200: "Password set succesfully."
-        400: "Password is required" if body is empty
-        404: "User not found" if user_id doesn't exist
-
-    Security Warning:
-        This endpoint is currently unauthenticated, allowing anyone who
-        knows a user ID to set their password. This should be secured
-        with a time-limited, single-use token (tracked in issue #17).
-    """
-    password = request.body.decode("utf-8").strip()
-    if not password:
-        return Response("Password is required", status=status.HTTP_400_BAD_REQUEST)
-    user = User.objects.filter(id=user_id).first()
-    if not user:
-        return Response("User not found", status=status.HTTP_404_NOT_FOUND)
-    user.set_password(password)
-    user.save()
-    return Response("Password set succesfully.", status=status.HTTP_200_OK)
-
-
-@api_view(["PUT"])
-@permission_classes([IsTeacherOrAbove])
-def reset_password(request, user_id: int):
-    """
-    Reset a user's password, requiring them to set a new one on next login.
-
-    Sets the user's password to null, which forces them through the
-    first-login password setup flow. Teachers can reset passwords for
-    their students; admins can reset any non-admin user's password.
-
-    Args:
-        user_id: Database ID of the user (path parameter)
-
-    Returns:
-        200: "Password reset successfully."
-        403: "Forbidden" if requester lacks permission
-        404: "User not found" if user_id doesn't exist
-
-    Permission Rules:
-        - Researcher with RESET_PASSWORD sudo permission
-        - Admin (is_staff): Can reset password for researchers and teachers
-    """
-    user = User.objects.filter(id=user_id).first()
-    if not user:
-        return Response("User not found", status=status.HTTP_404_NOT_FOUND)
-    if not can_reset_password(request.user, user):
-        return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
-    user.password = None
-    user.save(update_fields=["password"])
-    return Response("Password reset successfully.", status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
@@ -585,10 +1012,17 @@ def bulk_create(request):
         requested_role = payload.get("role") or Role.STUDENT
         if not can_create_user(request.user, requested_role):
             continue
-        if User.objects.filter(username__iexact=payload.get("username")).exists():
+        if requested_role != Role.STUDENT and not payload.get("email"):
             continue
-        create_user_from_payload(payload, role_override=requested_role, creator=request.user)
-        created += 1
+        if _identifier_in_use(payload.get("username")):
+            continue
+        if payload.get("email") and _identifier_in_use(payload.get("email")):
+            continue
+        try:
+            create_user_from_payload(payload, role_override=requested_role, creator=request.user)
+            created += 1
+        except ValueError:
+            continue
     return Response(created, status=status.HTTP_200_OK)
 
 

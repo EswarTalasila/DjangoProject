@@ -2,29 +2,60 @@
 
 import pytest
 
+from accounts.models import OAuthAccount, OAuthProvider, Role, User, UserRole
+
 
 @pytest.mark.django_db
 class TestAuthErrors:
-    def test_login_invalid_credentials_returns_401(self, api_client):
-        """Test that login invalid credentials returns 401."""
+    def test_AUTH_UC_01_E1(self, api_client):
+        """AUTH-UC-01-E1: invalid credentials return 401 without enumeration."""
         response = api_client.post(
-            "/api/v1/auth/login",
-            {"username": "missing@example.com", "password": "bad"},
+            "/api/v1/auth/sessions",
+            {"identifier": "missing@example.com", "password": "bad"},
             format="json",
         )
         assert response.status_code == 401
-        assert b"Invalid username or password" in response.content
+        assert response.json()["detail"] == "Invalid identifier or password."
 
-    def test_google_login_requires_access_token(self, api_client):
-        """Test that google login requires access token."""
-        response = api_client.post("/api/v1/auth/google", {}, format="json")
+    def test_AUTH_UC_02_E1(self, api_client):
+        """AUTH-UC-02-E1: OAuth login requires provider access token."""
+        response = api_client.post("/api/v1/auth/sessions/oauth", {}, format="json")
         assert response.status_code == 400
-        assert response.json().get("error") == "accessToken is required"
+        assert "accessToken" in response.json()
 
-    def test_check_email_missing_returns_404(self, api_client):
-        """Test that check email missing returns 404."""
-        response = api_client.post("/api/v1/auth/check-email", {"email": "none@example.com"})
+    def test_AUTH_UC_06_E1(self, api_client):
+        """AUTH-UC-06-E1: reset status lookup rejects invalid identifier/token pair."""
+        response = api_client.post(
+            "/api/v1/auth/reset-request-lookups",
+            {"identifier": "none@example.com", "requestToken": "REQ-INVALID"},
+            format="json",
+        )
         assert response.status_code == 404
-        payload = response.json()
-        assert payload["exists"] is False
-        assert payload["needsPassword"] is False
+        assert response.json()["detail"] == "Invalid identifier or request token."
+
+    def test_AUTH_CN_13(self, api_client, monkeypatch):
+        """AUTH-CN-13: student accounts cannot use OAuth login flow."""
+        student = User.objects.create_user(
+            username="studentoauth",
+            name="Student OAuth",
+            password="StartPass123!",
+        )
+        UserRole.objects.create(user=student, role=Role.STUDENT)
+        OAuthAccount.objects.create(
+            user=student,
+            provider=OAuthProvider.GOOGLE,
+            subject="google-subject-1",
+            email="studentoauth@example.com",
+        )
+        monkeypatch.setattr(
+            "accounts.views._google_userinfo",
+            lambda _token: {"sub": "google-subject-1", "email": "studentoauth@example.com"},
+        )
+
+        response = api_client.post(
+            "/api/v1/auth/sessions/oauth",
+            {"accessToken": "valid-token"},
+            format="json",
+        )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Google OAuth is not supported for student accounts."

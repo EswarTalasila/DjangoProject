@@ -41,12 +41,12 @@ All NFR IDs use two-digit sequential numbering within each domain. IDs do not in
 
 | Domain       | Document           | Entries | All Defined | All Implemented | All Verified |
 |-------------|-------------------|---------|-------------|-----------------|--------------|
-| Security    | NFR-Security.md    | 6       | 6           | 0               | 0            |
+| Security    | NFR-Security.md    | 7       | 7           | 0               | 0            |
 | Operations  | NFR-Operations.md  | 7       | 7           | 0               | 0            |
 | Reliability | NFR-Reliability.md | 4       | 4           | 0               | 0            |
 | Privacy     | NFR-Privacy.md     | 3       | 3           | 0               | 0            |
 | Performance | NFR-Performance.md | 1       | 1           | 0               | 0            |
-| **Total**   |                    | **21**  | **21**      | **0**           | **0**        |
+| **Total**   |                    | **22**  | **22**      | **0**           | **0**        |
 
 All entries begin in "Defined" status when initially documented. Implementation tracking (transitioning entries to "Implemented" status) occurs during development phases. Verification tracking (transitioning entries to "Verified" status) occurs during testing phases. The status progression is one-way: Defined → Implemented → Verified.
 
@@ -115,12 +115,14 @@ This matrix shows which NFR domains apply to which FR domains. An "X" indicates 
 **Forward references (FR → NFR):** FR constraint sections include "Implements: NFR-XXX-##" annotations identifying which cross-cutting policy each constraint implements. Examples:
 - AUTH-CN-03 implements NFR-SEC-01 (Rate Limiting Protection)
 - REG-CN-03 implements NFR-REL-01 (Transaction Atomicity)
+- REG-CN-22 implements NFR-SEC-07 (Registration Code Storage Hardening)
 - ENV-CN-04 implements NFR-SEC-04 (Password Strength Policy)
 - ENV-CN-10 implements NFR-OPS-02 (Startup Validation)
 - ENV-CN-11 implements NFR-OPS-05 (Observability Instrumentation)
 
 **Backward references (NFR → FR):** NFR entry "Applicable FRs" fields list implementing constraint IDs alongside domain names. Examples:
 - NFR-SEC-01: AUTH (AUTH-CN-03), REG
+- NFR-SEC-07: REG (REG-CN-08, REG-CN-22)
 - NFR-REL-01: AUTH (AUTH-CN-08), REG (REG-CN-03)
 - NFR-OPS-01: AUTH, REG, CRS, SUB, VIZ, EXP, OBS (OBS-CN-04), ENV (ENV-CN-01, ENV-CN-12)
 - NFR-OPS-02: All domains, OBS (OBS-CN-01), ENV (ENV-CN-02, ENV-CN-10)
@@ -200,5 +202,5 @@ All NFR entries specify one of these five verification methods. Each method defi
 
 ---
 
-*Last updated: 2026-02-11*
+*Last updated: 2026-02-13*
 *Status: Phase 24 complete (bidirectional cross-references established)*

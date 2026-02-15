@@ -150,26 +150,21 @@ python src/manage.py showmigrations
 
 Base URL: `/api/v1/`
 
+For canonical endpoint definitions, use:
+- `/Users/znboston/Learning/csc492/2026Spring-Team26-EE-Lab/Docs/Wiki/API-Reference.md`
+
+Quick auth/registration snapshot:
+
 | Endpoint | Methods | Auth | Description |
 |----------|---------|------|-------------|
-| `/auth/login` | POST | Public | User login |
-| `/auth/register` | POST | Public | User registration (student only) |
-| `/auth/google` | POST | Public | Google OAuth login |
-| `/auth/check-email` | POST | Public | Check if email exists |
-| `/auth/createuser` | POST | Teacher/Admin | Create user with role |
-| `/auth/edituser/{id}` | POST | Teacher/Admin | Edit user |
-| `/auth/deleteuser/{username}` | DELETE | Teacher/Admin | Delete user |
-| `/assessments/` | GET, POST | Teacher/Researcher/Admin | List/create assessments |
-| `/assessments/{id}` | GET, PUT, DELETE | Admin | Assessment CRUD |
-| `/assignments/` | GET, POST | Teacher | List/create assignments |
-| `/assignments/{id}` | GET, DELETE | Teacher | Assignment detail/delete |
-| `/courses/` | GET, POST | Teacher | List/create courses |
-| `/courses/{id}` | GET, PUT, DELETE | Teacher | Course CRUD |
-| `/students/` | POST | Teacher | Create student |
-| `/submissions/` | POST | Student/Teacher | Create submission |
-| `/submissions/{id}` | GET | Owner | Get submission |
-| `/submissions/{id}/override-score` | PATCH | Teacher | Override score |
-| `/visualizations/` | POST | Teacher/Researcher/Admin | Get visualization data |
+| `/auth/sessions` | POST | Public | User login via identifier/password |
+| `/auth/sessions/oauth` | POST | Public | Google OAuth login |
+| `/auth/token-exchanges` | POST | Public | Exchange refresh token for access token |
+| `/auth/session-revocations` | POST | Access token | Revoke refresh token / logout |
+| `/auth/password` | PATCH | Access token | Change password |
+| `/registration/code-validations` | POST | Public | Validate registration code |
+| `/registration/accounts` | POST | Public | Register account (`method: LOCAL|OAUTH`) |
+| `/enrollments` | POST | Student | Join course with student code |
 
 ## Environment Variables
 

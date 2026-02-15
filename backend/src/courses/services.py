@@ -195,9 +195,15 @@ def create_student_in_course(request_user: User, payload: dict) -> Enrollment:
     if not course:
         raise ValueError("Course not found")
 
-    student_user = create_user_from_payload(
-        payload, role_override=Role.STUDENT, creator=request_user
-    )
+    username = str(payload.get("username", "")).strip().lower()
+    student_user = User.objects.filter(username__iexact=username).first()
+    if student_user:
+        if not has_role(student_user, Role.STUDENT):
+            raise ValueError("Existing account is not a student")
+    else:
+        student_user = create_user_from_payload(
+            payload, role_override=Role.STUDENT, creator=request_user
+        )
     student_profile = StudentProfile.objects.filter(user=student_user).first()
     if not student_profile:
         raise ValueError("StudentProfile not created")
@@ -207,8 +213,8 @@ def create_student_in_course(request_user: User, payload: dict) -> Enrollment:
         student_profile.consent = consent
         student_profile.save(update_fields=["consent"])
 
-    if Enrollment.objects.filter(student_profile=student_profile).exists():
-        raise ValueError("Student already enrolled in a course")
+    if Enrollment.objects.filter(course=course, student_profile=student_profile).exists():
+        raise ValueError("Student already enrolled in this course")
 
     enrollment = Enrollment.objects.create(
         course=course, student_profile=student_profile, status=EnrollmentStatus.ACTIVE

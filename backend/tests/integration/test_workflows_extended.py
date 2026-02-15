@@ -10,8 +10,8 @@ from assessments.models import Question
 
 def login(client: APIClient, username: str, password: str) -> dict:
     response = client.post(
-        "/api/v1/auth/login",
-        {"username": username, "password": password},
+        "/api/v1/auth/sessions",
+        {"identifier": username, "password": password},
         format="json",
     )
     assert response.status_code == 200
@@ -36,11 +36,12 @@ def create_admin_client(username: str, password: str) -> tuple[User, APIClient]:
 def create_teacher_client(admin_client: APIClient, username: str, password: str) -> APIClient:
     payload = {
         "username": username,
+        "email": f"{username}.contact@example.com" if "@" not in username else username,
         "password": password,
         "name": "Teacher",
         "role": "ROLE_TEACHER",
     }
-    response = admin_client.post("/api/v1/auth/createuser", payload, format="json")
+    response = admin_client.post("/api/v1/users", payload, format="json")
     assert response.status_code == 200
     client = APIClient()
     login(client, username, password)
@@ -53,25 +54,19 @@ def create_student(
     username: str,
     course_id: int,
     consent: bool = True,
+    password: str | None = None,
 ) -> int:
+    resolved_password = password or "studentpass"
     payload = {
         "name": name,
         "username": username,
         "courseId": course_id,
         "consent": consent,
+        "password": resolved_password,
     }
     response = teacher_client.post("/api/v1/students/", payload, format="json")
     assert response.status_code == 200
     return response.json()["id"]
-
-
-def set_password(admin_client: APIClient, user_id: int, password: str) -> None:
-    response = admin_client.post(
-        f"/api/v1/auth/users/{user_id}/set-password",
-        password,
-        content_type="text/plain",
-    )
-    assert response.status_code == 200
 
 
 @pytest.mark.django_db
@@ -307,19 +302,17 @@ class TestExtendedWorkflows:
         student_id = create_student(
             teacher_client,
             "Student One",
-            "student-sub@example.com",
+            "studentsub",
             course_id,
+            password="studentpass",
         )
         other_student_id = create_student(
             teacher_client,
             "Student Two",
-            "student-sub-other@example.com",
+            "studentsubother",
             other_course_id,
+            password="otherpass",
         )
-
-        step("Admin sets student passwords")
-        set_password(admin_client, student_id, "studentpass")
-        set_password(admin_client, other_student_id, "otherpass")
 
         step("Other teacher cannot list submissions for Course A")
         forbidden_list = other_teacher_client.get(
@@ -329,7 +322,7 @@ class TestExtendedWorkflows:
 
         step("Other student cannot draft in Course A")
         other_student_client = APIClient()
-        login(other_student_client, "student-sub-other@example.com", "otherpass")
+        login(other_student_client, "studentsubother", "otherpass")
         draft_response = other_student_client.put(
             f"/api/v1/students/{other_student_id}/assignments/{assignment_id}/draft/",
             {"answers": []},
@@ -339,7 +332,7 @@ class TestExtendedWorkflows:
 
         step("Student logs in")
         student_client = APIClient()
-        login(student_client, "student-sub@example.com", "studentpass")
+        login(student_client, "studentsub", "studentpass")
 
         step("Student saves draft")
         draft_response = student_client.put(

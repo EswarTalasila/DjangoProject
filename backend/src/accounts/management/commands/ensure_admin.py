@@ -24,11 +24,16 @@ class Command(BaseCommand):
         if env.is_production:
             self._validate_production_admin_config(admin_email, admin_password)
 
-        user = User.objects.filter(username__iexact=admin_email).first()
+        user = User.objects.filter(email__iexact=admin_email).first()
+        if not user:
+            user = User.objects.filter(username__iexact=admin_email).first()
         if user:
             updated = False
             if user.name != admin_name:
                 user.name = admin_name
+                updated = True
+            if user.email != admin_email:
+                user.email = admin_email
                 updated = True
             if not user.is_staff:
                 user.is_staff = True
@@ -37,7 +42,7 @@ class Command(BaseCommand):
                 user.is_superuser = True
                 updated = True
             if updated:
-                user.save(update_fields=["name", "is_staff", "is_superuser"])
+                user.save(update_fields=["name", "email", "is_staff", "is_superuser"])
                 self.stdout.write(self.style.SUCCESS(f"Reconciled admin user: {admin_email}"))
             else:
                 self.stdout.write(f"Admin user already exists: {admin_email}")
@@ -45,6 +50,7 @@ class Command(BaseCommand):
 
         user = User.objects.create_user(
             username=admin_email,
+            email=admin_email,
             name=admin_name,
             password=admin_password,
         )

@@ -13,9 +13,10 @@ class TestAuthorizationSecurity:
     def test_create_user_requires_authentication(self, api_client):
         """Anonymous clients cannot create teacher/researcher accounts."""
         response = api_client.post(
-            "/api/v1/auth/createuser",
+            "/api/v1/users",
             {
                 "username": "blocked@example.com",
+                "email": "blocked@example.com",
                 "password": "testpass123",
                 "name": "Blocked User",
                 "role": "ROLE_TEACHER",
@@ -29,7 +30,7 @@ class TestAuthorizationSecurity:
         """Teacher role cannot assign elevated sudo grants."""
         api_client.force_authenticate(user=teacher_user)
         response = api_client.post(
-            "/api/v1/auth/grant-sudo",
+            "/api/v1/sudo-grants",
             {
                 "user_id": researcher_user.id,
                 "permissions": [SudoPermission.CREATE_TEACHER.value],

@@ -1,5 +1,6 @@
 """Factory helpers for backend test data."""
 
+from datetime import timedelta
 from typing import ClassVar
 
 import factory
@@ -7,6 +8,14 @@ from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 
 from accounts.models import (
+    OAuthAccount,
+    OAuthProvider,
+    PasswordResetCode,
+    PasswordResetRequest,
+    PasswordResetRequestStatus,
+    RegistrationCode,
+    RegistrationCodeType,
+    ResearcherProfile,
     Role,
     StudentProfile,
     SudoGrant,
@@ -32,6 +41,7 @@ class UserFactory(factory.django.DjangoModelFactory):
         model = User
 
     username = factory.Sequence(lambda n: f"user{n}@example.com")
+    email = factory.LazyAttribute(lambda obj: obj.username)
     name = factory.Faker("name")
     password = factory.LazyFunction(lambda: make_password("testpass123"))
     is_active = True
@@ -48,6 +58,13 @@ class UserRoleFactory(factory.django.DjangoModelFactory):
 class TeacherProfileFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = TeacherProfile
+
+    user = factory.SubFactory(UserFactory)
+
+
+class ResearcherProfileFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ResearcherProfile
 
     user = factory.SubFactory(UserFactory)
 
@@ -149,3 +166,62 @@ class SudoGrantFactory(factory.django.DjangoModelFactory):
             ]
         )
         with_grant_ability = factory.Trait(can_grant_sudo=True)
+
+
+class RegistrationCodeFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = RegistrationCode
+
+    code_hash = factory.Sequence(lambda n: f"{n:064x}"[-64:])
+    code_prefix = factory.Sequence(lambda n: f"REG{n:05d}")
+    code_type = RegistrationCodeType.STUDENT
+    created_by = factory.SubFactory(UserFactory)
+    course = None
+    max_uses = 1
+    times_used = 0
+    expires_at = factory.LazyFunction(lambda: timezone.now() + timedelta(days=1))
+    is_active = True
+    metadata = None
+    archived_at = None
+
+    class Params:
+        expired = factory.Trait(expires_at=factory.LazyFunction(lambda: timezone.now()))
+        exhausted = factory.Trait(times_used=factory.SelfAttribute("max_uses"))
+        revoked = factory.Trait(is_active=False)
+
+
+class PasswordResetRequestFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = PasswordResetRequest
+
+    user = factory.SubFactory(UserFactory)
+    identifier = factory.LazyAttribute(lambda obj: obj.user.username)
+    requested_role = Role.TEACHER
+    request_token_hash = factory.Sequence(lambda n: f"reqhash{n:012d}")
+    status = PasswordResetRequestStatus.PENDING
+    expires_at = factory.LazyFunction(lambda: timezone.now() + timedelta(minutes=30))
+    reason = None
+    reviewed_by = None
+    reviewed_at = None
+
+
+class PasswordResetCodeFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = PasswordResetCode
+
+    request = factory.SubFactory(PasswordResetRequestFactory)
+    code_hash = factory.Sequence(lambda n: f"resethash{n:012d}")
+    expires_at = factory.LazyFunction(lambda: timezone.now() + timedelta(minutes=30))
+    used_at = None
+
+
+class OAuthAccountFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = OAuthAccount
+
+    user = factory.SubFactory(UserFactory)
+    provider = OAuthProvider.GOOGLE
+    subject = factory.Sequence(lambda n: f"google-sub-{n}")
+    email = factory.Sequence(lambda n: f"oauth{n}@example.com")
+    email_verified = True
+    picture_url = None
