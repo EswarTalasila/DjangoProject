@@ -59,14 +59,16 @@ Rules:
 |---|---|
 | `task test:integration` | Run all integration suites |
 | `task test:integration:backend` | Backend integration only |
-| `task test:integration:frontend` | Frontend integration only |
-| `task test:integration:role -- <role>` | Role-filtered integration tests (`admin`, `researcher`, `teacher`, `student`) |
+| `task test:integration:frontend` | Frontend integration deferred to E2E |
+| `task test:integration:role -- <role>` | Role-filtered integration tests (`admin`, `teacher`, `student`, `error`) |
 
 ### Security, E2E, and system tests
 
 | Command | Scope |
 |---|---|
 | `task test:security` | Security tests (authz, abuse, validation) |
+| `task test:coverage` | Backend coverage report |
+| `task test:coverage:frontend` | Frontend coverage report |
 | `task test:e2e` | Playwright full-flow tests |
 | `task test:system` | Black-box scripted system tests (ST-* tracing) |
 | `task test:all` | Full pipeline (unit + integration + security + e2e + system where applicable) |
@@ -74,6 +76,7 @@ Rules:
 ### Testing behavior policy
 
 - Frontend unit and frontend integration tests may use API mocking.
+- Frontend async Server Component integration stays E2E-first; unit coverage focuses on Client Components and shared libs.
 - Backend unit and backend integration tests must run against real backend logic.
 - Role-filtered integration commands should map directly to requirement role stand-ins.
 - E2E seeding should default to deterministic seed values; env overrides are optional.

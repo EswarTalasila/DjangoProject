@@ -76,12 +76,14 @@ tasks:
         print_cmd "task test" "full pipeline"
         print_cmd "task test:unit" "backend + frontend unit"
         print_cmd "task test:unit:backend" "backend unit only"
-        print_cmd "task test:unit:frontend" "frontend unit only (skip-safe)"
-        print_cmd "task test:integration" "backend integration + frontend placeholder"
+        print_cmd "task test:unit:frontend" "frontend unit only (Vitest)"
+        print_cmd "task test:integration" "backend integration + frontend deferred to E2E"
         print_cmd "task test:integration:backend" "backend integration tests only"
-        print_cmd "task test:integration:frontend" "frontend integration placeholder"
+        print_cmd "task test:integration:frontend" "frontend integration deferred to E2E"
         print_cmd "task test:integration:role -- <admin|teacher|student|error>" "role-filtered backend integration tests"
-        print_cmd "task test:security" "marker-based security tests (skip-safe)"
+        print_cmd "task test:security" "marker-based backend security tests"
+        print_cmd "task test:coverage" "backend coverage report"
+        print_cmd "task test:coverage:frontend" "frontend coverage report"
         print_cmd "task test:e2e" "Playwright flow (testing profile)"
         printf "\n"
 
@@ -451,21 +453,17 @@ tasks:
 
   test:unit:frontend:
     desc: Run frontend unit tests only
-    deps: [_check:docker]
+    deps: [_check:docker, _check:frontend-running]
     cmds:
       - >
-        sh -c 'if ! rg -q "\"test\"\\s*:" frontend/package.json; then
-          echo "SKIP: frontend test script is not configured in frontend/package.json.";
-          exit 0;
-        fi;
-        if ! {{.DOCKER_COMPOSE}} ps --status running --services | grep -qx {{.FRONTEND_CONTAINER}}; then
-          echo "Frontend container is not running. Run task up:dev first.";
-          exit 1;
-        fi;
-        {{.DOCKER_COMPOSE}} exec {{.FRONTEND_CONTAINER}} npm test -- --watch=false'
+        sh -c 'if ! {{.DOCKER_COMPOSE}} exec {{.FRONTEND_CONTAINER}} sh -c "test -x /app/node_modules/.bin/vitest"; then
+          echo "INFO: syncing frontend test dependencies in container...";
+          {{.DOCKER_COMPOSE}} exec {{.FRONTEND_CONTAINER}} npm install --prefer-offline --no-audit;
+        fi'
+      - "{{.DOCKER_COMPOSE}} exec {{.FRONTEND_CONTAINER}} npm run test"
 
   test:integration:
-    desc: Run integration tests (backend now; frontend placeholder)
+    desc: Run integration tests (backend; frontend deferred to E2E)
     deps: [_check:docker, _check:testing-profile]
     cmds:
       - task: test:integration:backend
@@ -478,7 +476,12 @@ tasks:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -v"
 
   test:coverage:
-    desc: Run tests with coverage report
+    desc: Run backend tests with coverage report
+    cmds:
+      - task: test:coverage:backend
+
+  test:coverage:backend:
+    desc: Run backend tests with coverage report
     deps: [_check:docker, _check:backend-running]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest --cov=src --cov-report=term-missing"
@@ -504,10 +507,10 @@ tasks:
         exit "$rc"'
 
   test:integration:frontend:
-    desc: Run frontend integration tests only (placeholder)
+    desc: Frontend integration is deferred to Playwright E2E for async Server Components
     deps: [_check:docker, _check:testing-profile]
     cmds:
-      - 'echo "SKIP: frontend integration test surface not implemented yet."'
+      - 'echo "INFO: frontend integration remains E2E-first. Use task test:e2e."'
 
   test:integration:role:
     desc: "Run role-filtered backend integration tests (usage: task test:integration:role -- teacher)"
@@ -539,7 +542,7 @@ tasks:
         exit "$rc"'
 
   test:security:
-    desc: Run security tests (skip cleanly if none collected)
+    desc: Run backend security tests
     deps: [_check:docker, _check:backend-running, _check:testing-profile]
     cmds:
       - >
@@ -550,6 +553,17 @@ tasks:
           exit 0;
         fi;
         exit "$rc"'
+
+  test:coverage:frontend:
+    desc: Run frontend unit tests with coverage report
+    deps: [_check:docker, _check:frontend-running]
+    cmds:
+      - >
+        sh -c 'if ! {{.DOCKER_COMPOSE}} exec {{.FRONTEND_CONTAINER}} sh -c "test -x /app/node_modules/.bin/vitest"; then
+          echo "INFO: syncing frontend test dependencies in container...";
+          {{.DOCKER_COMPOSE}} exec {{.FRONTEND_CONTAINER}} npm install --prefer-offline --no-audit;
+        fi'
+      - "{{.DOCKER_COMPOSE}} exec {{.FRONTEND_CONTAINER}} npm run test:coverage"
 
   test:workflow:
     desc: Run workflow-marked integration tests (compatibility command)

@@ -22,10 +22,14 @@ pytest tests/integration -v
 pytest -m workflow -v
 pytest -m workflow_teacher -v
 pytest -m workflow_student -v
+
+# Security marker
+pytest -m security -v
 ```
 
 ## Markers
 - `integration`: API-level tests.
+- `security`: Security-focused authorization and abuse-path tests.
 - `workflow`: End-to-end workflow suites.
 - `workflow_admin`, `workflow_teacher`, `workflow_student`: Role-specific workflows.
 - `workflow_error`: Error-path workflow coverage.
@@ -52,3 +56,4 @@ pytest -m workflow_student -v
 ### Security
 
 - `security/__init__.py`
+- `security/test_authz_security.py`
