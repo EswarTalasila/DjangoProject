@@ -631,9 +631,9 @@ def main() -> int:
     )
     parser.add_argument(
         "--workers",
-        default=os.getenv("PYTEST_WORKERS", "auto"),
+        default=os.getenv("TEST_WORKERS", "auto"),
         help=(
-            "Pytest-xdist workers (default: env PYTEST_WORKERS or 'auto'). "
+            "Pytest-xdist workers (default: env TEST_WORKERS or 'auto'). "
             "Use 0/off/none to disable parallel execution."
         ),
     )

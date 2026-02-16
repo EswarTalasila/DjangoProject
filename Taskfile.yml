@@ -11,6 +11,7 @@ vars:
   DATABASE_CONTAINER: database
   OTEL_TRACE_DIR: Docs/diagrams/otel
   PLANTUML_DIR: Docs/diagrams/plantuml
+  TEST_WORKERS: auto
 
 tasks:
   # ===========================================================================
@@ -88,7 +89,8 @@ tasks:
         print_cmd "task test:coverage:backend" "alias for test:coverage"
         print_cmd "task test:coverage:frontend" "frontend coverage report"
         print_cmd "task test:e2e" "Playwright flow (testing profile)"
-        print_cmd "PYTEST_WORKERS=0 task test:coverage" "disable xdist parallel workers for one run"
+        print_cmd "task test -- <N>" "override pytest workers for compatible test tasks (default: auto, 0 = sequential)"
+        print_cmd "TEST_WORKERS=0 task test:integration:role -- <role>" "set workers when task args are already in use"
         printf "\n"
 
         print_section "${C_BLUE}" "Quality"
@@ -423,31 +425,51 @@ tasks:
   # ===========================================================================
   test:
     desc: Run full test pipeline (unit + integration + security + e2e)
+    vars:
+      TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
       - task: test:all
+        vars:
+          TEST_WORKERS: '{{.TEST_WORKERS}}'
 
   test:all:
     desc: Run all test layers (unit + integration + security + e2e)
     deps: [_check:docker]
+    vars:
+      TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
       - task: test:unit
+        vars:
+          TEST_WORKERS: '{{.TEST_WORKERS}}'
       - task: test:integration
+        vars:
+          TEST_WORKERS: '{{.TEST_WORKERS}}'
       - task: test:security
+        vars:
+          TEST_WORKERS: '{{.TEST_WORKERS}}'
       - task: test:e2e
 
   test:unit:
     desc: Run backend + frontend unit tests
     deps: [_check:docker]
+    vars:
+      TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
       - task: test:unit:backend
+        vars:
+          TEST_WORKERS: '{{.TEST_WORKERS}}'
       - task: test:unit:frontend
 
   test:unit:backend:
     desc: Run backend unit tests only
     deps: [_check:docker, _check:backend-running]
+    vars:
+      TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
       - >
-        sh -c '{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest tests/unit -v -n "${PYTEST_WORKERS:-auto}" --dist=loadscope;
+        sh -c 'workers="{{.TEST_WORKERS}}";
+        case "$workers" in auto|[0-9]|[1-9][0-9]*) ;; *) echo "Invalid TEST_WORKERS: $workers (use auto or integer; 0 = sequential)."; exit 1 ;; esac;
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest tests/unit -v -n "$workers" --dist=loadscope;
         rc=$?;
         if [ "$rc" -eq 5 ]; then
           echo "SKIP: no backend unit tests collected.";
@@ -469,30 +491,46 @@ tasks:
   test:integration:
     desc: Run integration tests (backend; frontend deferred to E2E)
     deps: [_check:docker, _check:testing-profile]
+    vars:
+      TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
       - task: test:integration:backend
+        vars:
+          TEST_WORKERS: '{{.TEST_WORKERS}}'
       - task: test:integration:frontend
 
   test:verbose:
     desc: Run full backend pytest suite (compatibility command)
     deps: [_check:docker, _check:backend-running]
+    vars:
+      TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
       - >
-        sh -c '{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -v -n "${PYTEST_WORKERS:-auto}" --dist=loadscope'
+        sh -c 'workers="{{.TEST_WORKERS}}";
+        case "$workers" in auto|[0-9]|[1-9][0-9]*) ;; *) echo "Invalid TEST_WORKERS: $workers (use auto or integer; 0 = sequential)."; exit 1 ;; esac;
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -v -n "$workers" --dist=loadscope'
 
   test:coverage:
 
     desc: Run backend tests with unified coverage + FR progress report
+    vars:
+      TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
       - task: test:coverage:backend
+        vars:
+          TEST_WORKERS: '{{.TEST_WORKERS}}'
 
   test:coverage:backend:
     desc: Compatibility alias for unified backend coverage report
     deps: [_check:docker, _check:backend-running, _check:testing-profile]
+    vars:
+      TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
       - >
-        sh -c '{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}}
-        python scripts/coverage/coverage_report.py --gate none --workers "${PYTEST_WORKERS:-auto}"'
+        sh -c 'workers="{{.TEST_WORKERS}}";
+        case "$workers" in auto|[0-9]|[1-9][0-9]*) ;; *) echo "Invalid TEST_WORKERS: $workers (use auto or integer; 0 = sequential)."; exit 1 ;; esac;
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}}
+        python scripts/coverage/coverage_report.py --gate none --workers "$workers"'
 
   test:coverage:fr:
     desc: "Gate a specific FR progress row (usage: task test:coverage:fr -- FR-01 80)"
@@ -502,23 +540,33 @@ tasks:
         sh -c 'set -- {{.CLI_ARGS}};
         fr="${1:-FR-01}";
         min="${2:-80}";
+        workers="{{.TEST_WORKERS}}";
+        case "$workers" in auto|[0-9]|[1-9][0-9]*) ;; *) echo "Invalid TEST_WORKERS: $workers (use auto or integer; 0 = sequential)."; exit 1 ;; esac;
         {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}}
-        python scripts/coverage/coverage_report.py --gate domain --domain "$fr" --min "$min" --workers "${PYTEST_WORKERS:-auto}"'
+        python scripts/coverage/coverage_report.py --gate domain --domain "$fr" --min "$min" --workers "$workers"'
 
   test:coverage-html:
     desc: Run tests with HTML coverage report
     deps: [_check:docker, _check:backend-running]
+    vars:
+      TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
       - >
-        sh -c '{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest --cov=src --cov-report=html -n "${PYTEST_WORKERS:-auto}" --dist=loadscope'
+        sh -c 'workers="{{.TEST_WORKERS}}";
+        case "$workers" in auto|[0-9]|[1-9][0-9]*) ;; *) echo "Invalid TEST_WORKERS: $workers (use auto or integer; 0 = sequential)."; exit 1 ;; esac;
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest --cov=src --cov-report=html -n "$workers" --dist=loadscope'
       - 'echo "Coverage report generated at backend/htmlcov/index.html"'
 
   test:integration:backend:
     desc: Run backend integration tests only
     deps: [_check:docker, _check:backend-running, _check:testing-profile]
+    vars:
+      TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
       - >
-        sh -c '{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest tests/integration -v -n "${PYTEST_WORKERS:-auto}" --dist=loadscope;
+        sh -c 'workers="{{.TEST_WORKERS}}";
+        case "$workers" in auto|[0-9]|[1-9][0-9]*) ;; *) echo "Invalid TEST_WORKERS: $workers (use auto or integer; 0 = sequential)."; exit 1 ;; esac;
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest tests/integration -v -n "$workers" --dist=loadscope;
         rc=$?;
         if [ "$rc" -eq 5 ]; then
           echo "SKIP: no backend integration tests collected.";
@@ -538,6 +586,8 @@ tasks:
     cmds:
       - >
         sh -c 'role="{{.CLI_ARGS}}";
+        workers="{{.TEST_WORKERS}}";
+        case "$workers" in auto|[0-9]|[1-9][0-9]*) ;; *) echo "Invalid TEST_WORKERS: $workers (use auto or integer; 0 = sequential)."; exit 1 ;; esac;
         if [ -z "$role" ]; then
           echo "Usage: task test:integration:role -- <admin|teacher|student|error>";
           exit 1;
@@ -553,7 +603,7 @@ tasks:
             exit 1
             ;;
         esac;
-        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest tests/integration -m "$marker" -v -n "${PYTEST_WORKERS:-auto}" --dist=loadscope;
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest tests/integration -m "$marker" -v -n "$workers" --dist=loadscope;
         rc=$?;
         if [ "$rc" -eq 5 ]; then
           echo "SKIP: no integration tests collected for role=$role (marker=$marker).";
@@ -564,9 +614,13 @@ tasks:
   test:security:
     desc: Run backend security tests
     deps: [_check:docker, _check:backend-running, _check:testing-profile]
+    vars:
+      TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
       - >
-        sh -c '{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -m security -v -n "${PYTEST_WORKERS:-auto}" --dist=loadscope;
+        sh -c 'workers="{{.TEST_WORKERS}}";
+        case "$workers" in auto|[0-9]|[1-9][0-9]*) ;; *) echo "Invalid TEST_WORKERS: $workers (use auto or integer; 0 = sequential)."; exit 1 ;; esac;
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -m security -v -n "$workers" --dist=loadscope;
         rc=$?;
         if [ "$rc" -eq 5 ]; then
           echo "SKIP: no security tests collected.";
@@ -588,9 +642,13 @@ tasks:
   test:workflow:
     desc: Run workflow-marked integration tests (compatibility command)
     deps: [_check:docker, _check:backend-running, _check:testing-profile]
+    vars:
+      TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
       - >
-        sh -c '{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -m workflow -v -n "${PYTEST_WORKERS:-auto}" --dist=loadscope'
+        sh -c 'workers="{{.TEST_WORKERS}}";
+        case "$workers" in auto|[0-9]|[1-9][0-9]*) ;; *) echo "Invalid TEST_WORKERS: $workers (use auto or integer; 0 = sequential)."; exit 1 ;; esac;
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -m workflow -v -n "$workers" --dist=loadscope'
 
   test:frontend:
     desc: Run frontend unit tests (compatibility alias)
