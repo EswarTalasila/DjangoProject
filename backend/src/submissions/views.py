@@ -32,7 +32,7 @@ from core.pagination import paginate
 from core.permissions import IsTeacher, has_role, primary_role
 from courses.models import Enrollment
 
-from .models import Submission
+from .models import Submission, SubmissionStatus
 from .serializers import AnswerSerializer, SubmissionSerializer
 from .services import (
     create_submission,
@@ -169,7 +169,7 @@ def _create_for_assignment(request, assignment_id: int, assignment: Assignment):
     elif role == Role.TEACHER:
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     try:
-        submission = create_submission(assignment_id, serializer.validated_data, "SUBMITTED")
+        submission = create_submission(assignment_id, serializer.validated_data, SubmissionStatus.SUBMITTED)
     except ValueError as exc:
         return error_response(exc)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_201_CREATED)
@@ -508,11 +508,11 @@ def save_draft(request, student_id: int, assignment_id: int):
     payload = {
         "assignmentId": assignment_id,
         "studentId": student_id,
-        "status": "IN_PROGRESS",
+        "status": SubmissionStatus.IN_PROGRESS,
         "answers": answers,
     }
     try:
-        submission = create_submission(assignment_id, payload, "IN_PROGRESS")
+        submission = create_submission(assignment_id, payload, SubmissionStatus.IN_PROGRESS)
     except ValueError as exc:
         return error_response(exc)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
@@ -569,7 +569,7 @@ def edit(request):
             "assignmentId": 123,
             "studentId": 456,         # For student submissions
             "teacherId": 789,         # For teacher self-assessments
-            "status": "SUBMITTED",    # Optional status update
+            "status": "SUBMITTED|IN_PROGRESS|...",    # Optional status update
             "answers": [...]          # Updated answers
         }
 

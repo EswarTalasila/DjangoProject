@@ -1,28 +1,14 @@
 """
-Assignment domain helpers.
-
-This module provides business logic for assignment distribution including:
-- Creating assignments that link assessments to courses or teachers
-- Listing assignments for students and teachers based on their context
-- Automatic submission creation when assignments are created
-
-Assignment audience types:
-- COURSE: Assigned to all students in a course
-- TEACHER: Assigned to a specific teacher (self-assessment)
+Assignment domain mutations — create and delete operations.
 """
 
 from django.db import transaction
-from django.db.models import Q
-from django.utils import timezone
 
-from accounts.models import Role, User
-from assessments.models import Assessment, QuestionKind
-from core.dtos import AssignmentDTO
-from core.permissions import primary_role
+from assessments.models import Assessment, GradingMode, QuestionKind
+from core.helpers import answer_type_from_question
 from courses.models import Enrollment
 from submissions.models import (
     Answer,
-    AnswerType,
     MultipleChoiceAnswer,
     NumberScaleAnswer,
     ShortAnswerAnswer,
@@ -30,23 +16,10 @@ from submissions.models import (
     SubmissionStatus,
 )
 
-from .models import Assignment
+from ..models import Assignment, AudienceType
 
 
-def assignment_to_dto(assignment: Assignment) -> AssignmentDTO:
-    """Convert an Assignment to a DTO for API responses."""
-    return AssignmentDTO(
-        id=assignment.id,
-        assessmentId=assignment.assessment_id,
-        audienceType=assignment.audience_type,
-        courseId=assignment.course_id,
-        targetTeacherId=assignment.teacher_id,
-        openAt=assignment.open_at,
-        dueAt=assignment.due_at,
-    )
-
-
-def create_assignment(creator_user: User, payload: dict) -> Assignment:
+def create_assignment(creator_user, payload: dict) -> Assignment:
     """
     Create an assignment to distribute an assessment.
 
@@ -72,9 +45,9 @@ def create_assignment(creator_user: User, payload: dict) -> Assignment:
         raise ValueError("audienceType is required")
     if open_at is None:
         raise ValueError("openAt is required")
-    if audience == "COURSE" and not payload.get("courseId"):
+    if audience == AudienceType.COURSE and not payload.get("courseId"):
         raise ValueError("courseId must be set when audienceType is COURSE")
-    if audience == "TEACHER" and not payload.get("targetTeacherId"):
+    if audience == AudienceType.TEACHER and not payload.get("targetTeacherId"):
         raise ValueError("targetTeacherId must be set when audienceType is TEACHER")
     assignment = Assignment.objects.create(
         created_by=creator_user,
@@ -89,45 +62,6 @@ def create_assignment(creator_user: User, payload: dict) -> Assignment:
     if assignment.course_id:
         _create_submissions_for_course(assignment)
     return assignment
-
-
-def get_assignment(assignment_id: int) -> Assignment | None:
-    """Retrieve an assignment by ID, or None if not found."""
-    return Assignment.objects.filter(id=assignment_id).first()
-
-
-def list_by_course(course_id: int) -> list[Assignment]:
-    """List all assignments for a course."""
-    return list(Assignment.objects.filter(course_id=course_id))
-
-
-def list_for_user(user: User) -> list[Assignment]:
-    """
-    List assignments accessible to a user based on their role.
-
-    Students see assignments for courses they're enrolled in.
-    Teachers see assignments targeted at them (self-assessments).
-
-    Only returns assignments that are currently open (open_at <= now)
-    and not past due (due_at is null or due_at >= now).
-    """
-    role = primary_role(user)
-    now = timezone.now()
-    if role == Role.STUDENT:
-        enrollments = Enrollment.objects.filter(student_profile__user=user)
-        course_ids = [enrollment.course_id for enrollment in enrollments]
-        return list(
-            Assignment.objects.filter(course_id__in=course_ids, open_at__lte=now)
-            .filter(Q(due_at__isnull=True) | Q(due_at__gte=now))
-            .order_by("open_at")
-        )
-    if role == Role.TEACHER:
-        return list(
-            Assignment.objects.filter(teacher_id=user.id, open_at__lte=now)
-            .filter(Q(due_at__isnull=True) | Q(due_at__gte=now))
-            .order_by("open_at")
-        )
-    return []
 
 
 @transaction.atomic
@@ -149,7 +83,7 @@ def _create_submissions_for_course(assignment: Assignment) -> None:
     assessment = Assessment.objects.filter(id=assignment.assessment_id).first()
     if not assessment:
         return
-    if assessment.grading_mode == "MOOD_METER":
+    if assessment.grading_mode == GradingMode.MOOD_METER:
         return
     if assignment.course_id is None:
         return
@@ -172,7 +106,7 @@ def _create_submissions_for_course(assignment: Assignment) -> None:
             answer = Answer.objects.create(
                 submission=submission,
                 question=question,
-                answer_type=_answer_type_from_question(question),
+                answer_type=answer_type_from_question(question),
                 score=0.0,
                 skipped=False,
             )
@@ -182,16 +116,3 @@ def _create_submissions_for_course(assignment: Assignment) -> None:
                 ShortAnswerAnswer.objects.create(answer=answer, text="")
             elif question.kind == QuestionKind.NUMBER_SCALE:
                 NumberScaleAnswer.objects.create(answer=answer, val=None)
-
-
-def _answer_type_from_question(question) -> str:
-    """Map a question kind to the corresponding answer type."""
-    if question.kind == QuestionKind.MULTIPLE_CHOICE:
-        return AnswerType.MULTIPLE_CHOICE
-    if question.kind == QuestionKind.SHORT_ANSWER:
-        return AnswerType.SHORT_ANSWER
-    if question.kind == QuestionKind.NUMBER_SCALE:
-        return AnswerType.NUMBER_SCALE
-    if question.kind == QuestionKind.MOOD_METER:
-        return AnswerType.MOOD_METER
-    return AnswerType.SHORT_ANSWER

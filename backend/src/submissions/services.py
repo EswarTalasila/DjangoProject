@@ -18,7 +18,7 @@ from collections.abc import Iterable
 from django.db import transaction
 from django.utils import timezone
 
-from assessments.models import Assessment, Question
+from assessments.models import Assessment, GradingMode, Question
 from assignments.models import Assignment, AudienceType
 from core.dtos import AnswerDTO, SubmissionCompactDTO, SubmissionDTO
 
@@ -151,7 +151,7 @@ def create_submission(assignment_id: int, payload: dict, status: str) -> Submiss
 
     # MOOD_METER assessments allow multiple submissions (e.g., daily check-ins)
     # Other assessments update the existing submission if one exists
-    if assessment.grading_mode != "MOOD_METER":
+    if assessment.grading_mode != GradingMode.MOOD_METER:
         existing = _find_existing_submission(assignment_id, student_id, teacher_id)
         if existing:
             payload_with_status = dict(payload)
@@ -170,7 +170,7 @@ def create_submission(assignment_id: int, payload: dict, status: str) -> Submiss
         status=status,
     )
     _replace_answers(submission, payload.get("answers") or [])
-    if status != SubmissionStatus.IN_PROGRESS and assessment.grading_mode != "MANUAL":
+    if status != SubmissionStatus.IN_PROGRESS and assessment.grading_mode != GradingMode.MANUAL:
         _auto_score_submission(submission, assessment)
     submission.save()
     return submission
@@ -342,7 +342,7 @@ def edit_submission(payload: dict) -> Submission:
     if (
         assessment
         and status != SubmissionStatus.IN_PROGRESS
-        and assessment.grading_mode != "MANUAL"
+        and assessment.grading_mode != GradingMode.MANUAL
     ):
         _auto_score_submission(submission, assessment)
 
@@ -389,7 +389,7 @@ def override_score(submission_id: int, scores: list) -> Submission:
     total = 0.0
 
     # MOOD_METER assessments have no numeric scoring - just mark as graded
-    if assessment.grading_mode == "MOOD_METER":
+    if assessment.grading_mode == GradingMode.MOOD_METER:
         submission.status = SubmissionStatus.GRADED
         if submission.submitted_at is None:
             submission.submitted_at = timezone.now()
@@ -398,7 +398,7 @@ def override_score(submission_id: int, scores: list) -> Submission:
 
     # HYBRID mode: only manually score SHORT_ANSWER questions
     # Other question types (MCQ, NUMBER_SCALE) keep their auto-calculated scores
-    if assessment.grading_mode == "HYBRID":
+    if assessment.grading_mode == GradingMode.HYBRID:
         score_index = 0
         for answer in answers:
             if answer.answer_type == AnswerType.SHORT_ANSWER and score_index < len(scores):
@@ -508,7 +508,7 @@ def _auto_score_submission(submission: Submission, assessment: Assessment) -> No
         elif answer.answer_type == AnswerType.NUMBER_SCALE:
             total += _auto_score_number_scale(answer, question)
     submission.score = total
-    if assessment.grading_mode in ("AUTO", "MOOD_METER"):
+    if assessment.grading_mode in (GradingMode.AUTO, GradingMode.MOOD_METER):
         submission.status = SubmissionStatus.GRADED
         if submission.submitted_at is None:
             submission.submitted_at = timezone.now()
