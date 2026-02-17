@@ -1,10 +1,17 @@
 """Pytest fixtures for backend tests."""
 
 import pytest
+from django.core.cache import cache
 from rest_framework.test import APIClient
 
 from accounts.models import ResearcherProfile, Role, StudentProfile, TeacherProfile, UserRole
 from tests.factories import UserFactory
+
+
+@pytest.fixture(autouse=True)
+def _clear_throttle_cache():
+    """Clear DRF throttle cache between tests to prevent cross-test rate limiting."""
+    cache.clear()
 
 
 @pytest.fixture
