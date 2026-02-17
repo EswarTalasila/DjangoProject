@@ -1,28 +1,15 @@
 """
-Course and student domain helpers.
-
-This module provides business logic for course management including:
-- Course CRUD operations
-- Student enrollment and removal
-- Permission checks for course access
-- Automatic submission creation when students are enrolled
-
-Enrollment flow:
-1. Teacher creates a course
-2. Teacher adds students to the course
-3. System creates placeholder submissions for existing assignments
-4. Students can then access and complete their submissions
+Course and student domain mutations — create, edit, and delete operations.
 """
 
 import logging
 
 from django.db import IntegrityError, transaction
 
-from accounts.models import Role, StudentProfile, TeacherProfile, User
+from accounts.models import Role, StudentProfile, User
 from accounts.services import create_user_from_payload
-from assessments.models import Assessment, QuestionKind
+from assessments.models import Assessment, GradingMode, QuestionKind
 from assignments.models import Assignment
-from core.dtos import CourseDTO, EnrollmentStudentDTO
 from core.helpers import answer_type_from_question
 from core.permissions import has_role
 from submissions.models import (
@@ -34,77 +21,10 @@ from submissions.models import (
     SubmissionStatus,
 )
 
-from .models import Course, Enrollment, EnrollmentStatus
+from ..models import Course, Enrollment, EnrollmentStatus
+from ._queries import _teacher_profile_for
 
 logger = logging.getLogger(__name__)
-
-
-def _teacher_profile_for(user: User) -> TeacherProfile | None:
-    """Get the TeacherProfile for a user, or None if not a teacher."""
-    return TeacherProfile.objects.filter(user=user).first()
-
-
-def _course_owner(course: Course) -> User | None:
-    """Get the User who owns (teaches) a course."""
-    if not course.teacher_profile:
-        return None
-    return course.teacher_profile.user
-
-
-def can_view_course(request_user: User, course: Course) -> bool:
-    """
-    Check if a user can view a course.
-
-    Admins (is_staff) can view all courses.
-    Researchers can view all courses (for data oversight).
-    Teachers can only view their own courses.
-    """
-    if request_user.is_staff:
-        return True
-    if has_role(request_user, Role.RESEARCHER):
-        return True
-    owner = _course_owner(course)
-    return owner is not None and owner.id == request_user.id
-
-
-def can_manage_course(request_user: User, course: Course) -> bool:
-    """Check if a user can manage (edit/delete) a course. Only the course owner can."""
-    owner = _course_owner(course)
-    return owner is not None and owner.id == request_user.id
-
-
-def course_to_dto(course: Course) -> CourseDTO:
-    """
-    Convert a Course to a DTO with enrolled students and assignment IDs.
-
-    Returns:
-        CourseDTO with id, name, students, studentCount, assignmentIds, teacherId
-    """
-    enrollments = Enrollment.objects.filter(course=course)
-    students = [enrollment_to_student_dto(e) for e in enrollments]
-    assignment_ids = list(Assignment.objects.filter(course=course).values_list("id", flat=True))
-    return CourseDTO(
-        id=course.id,
-        name=course.name,
-        students=students,
-        studentCount=len(students),
-        assignmentIds=assignment_ids,
-        teacherId=course.teacher_profile_id,
-    )
-
-
-def enrollment_to_student_dto(enrollment: Enrollment) -> EnrollmentStudentDTO:
-    """Convert an Enrollment to a student DTO with user info and consent status."""
-    student_profile = enrollment.student_profile
-    user = student_profile.user if student_profile else None
-    return EnrollmentStudentDTO(
-        id=user.id if user else None,
-        name=user.name if user else None,
-        username=user.username if user else None,
-        role="ROLE_STUDENT",
-        consent=bool(student_profile.consent) if student_profile else False,
-        courseId=enrollment.course_id,
-    )
 
 
 @transaction.atomic
@@ -150,21 +70,6 @@ def delete_course(course: Course) -> None:
     enrollments.delete()
     User.objects.filter(id__in=student_user_ids).delete()
     course.delete()
-
-
-def list_courses_for_user(user: User) -> list[Course]:
-    """
-    List courses accessible to a user.
-
-    Admins (is_staff) see all courses.
-    Researchers see all courses (for data oversight).
-    Teachers see only their own courses.
-    """
-    if user.is_staff:
-        return list(Course.objects.all())
-    if has_role(user, Role.RESEARCHER):
-        return list(Course.objects.all())
-    return list(Course.objects.filter(teacher_profile__user=user))
 
 
 @transaction.atomic
@@ -229,13 +134,18 @@ def bulk_create_students(request_user: User, payloads: list[dict]) -> int:
     """
     Create multiple students in bulk. Errors are silently ignored.
 
+    Delegates to create_student_in_course via the package namespace so that
+    test monkeypatches on courses.services.create_student_in_course are honored.
+
     Returns:
         The number of students successfully created
     """
+    import courses.services as _svc  # late import to avoid circular dependency
+
     created = 0
     for payload in payloads:
         try:
-            create_student_in_course(request_user, payload)
+            _svc.create_student_in_course(request_user, payload)
             created += 1
         except (ValueError, IntegrityError):
             logger.exception("Bulk create student failed for payload.")
@@ -257,12 +167,6 @@ def remove_student_from_course(course: Course, student_user_id: int) -> None:
     User.objects.filter(id=student_user_id).delete()
 
 
-def list_students_in_course(course: Course) -> list[EnrollmentStudentDTO]:
-    """Return all students enrolled in a course as DTOs."""
-    enrollments = Enrollment.objects.filter(course=course)
-    return [enrollment_to_student_dto(e) for e in enrollments]
-
-
 def _create_submissions_for_student(student_user: User, course: Course) -> None:
     """
     Create placeholder submissions for all existing course assignments.
@@ -276,7 +180,7 @@ def _create_submissions_for_student(student_user: User, course: Course) -> None:
         assessment = Assessment.objects.filter(id=assignment.assessment_id).first()
         if not assessment:
             continue
-        if assessment.grading_mode == "MOOD_METER":
+        if assessment.grading_mode == GradingMode.MOOD_METER:
             continue
         if Submission.objects.filter(student=student_user, assignment=assignment).exists():
             continue

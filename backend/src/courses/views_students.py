@@ -23,7 +23,7 @@ from rest_framework.response import Response
 from core.permissions import IsTeacher
 
 from .serializers import StudentInputSerializer
-from .services import bulk_create_students, create_student_in_course
+from .services import bulk_create_students, create_student_in_course, enrollment_to_student_dto
 
 
 @api_view(["POST"])
@@ -58,7 +58,7 @@ def add_one(request):
         enrollment = create_student_in_course(request.user, serializer.validated_data)
     except ValueError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-    return Response(enrollment_to_payload(enrollment), status=status.HTTP_201_CREATED)
+    return Response(enrollment_to_student_dto(enrollment).model_dump(), status=status.HTTP_201_CREATED)
 
 
 @api_view(["POST"])
@@ -98,25 +98,3 @@ def add_bulk(request):
         validated.append(serializer.validated_data)
     created = bulk_create_students(request.user, validated)
     return Response(created, status=status.HTTP_201_CREATED)
-
-
-def enrollment_to_payload(enrollment):
-    """
-    Convert an Enrollment instance to the student API response format.
-
-    Args:
-        enrollment: Enrollment model instance
-
-    Returns:
-        Dict with student user info and enrollment details
-    """
-    student = enrollment.student_profile
-    user = student.user if student else None
-    return {
-        "id": user.id if user else None,
-        "name": user.name if user else None,
-        "username": user.username if user else None,
-        "role": "ROLE_STUDENT",
-        "consent": bool(student.consent) if student else False,
-        "courseId": enrollment.course_id,
-    }
