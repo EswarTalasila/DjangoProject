@@ -38,6 +38,7 @@ Endpoints:
 import json
 import logging
 from typing import Any, cast
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from django.contrib.auth import get_user_model
@@ -104,6 +105,7 @@ from .services import (
     grant_sudo_to_researcher,
     identifier_allowed_for_user,
     identifier_in_use,
+    identifier_throttle_retry_after,
     invalidate_user_sessions,
     link_or_create_oauth_account,
     normalize_username_identifier,
@@ -125,6 +127,16 @@ from .services import (
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
+
+
+def _identifier_throttle_response(scope: str, identifier: str) -> Response:
+    """Return standardized 429 response for identifier-based lockouts."""
+    retry_after = max(1, identifier_throttle_retry_after(scope, identifier))
+    return Response(
+        {"detail": "Too many failed attempts. Please try again later."},
+        status=status.HTTP_429_TOO_MANY_REQUESTS,
+        headers={"Retry-After": str(retry_after)},
+    )
 
 
 def _google_userinfo(access_token: str) -> dict[str, Any]:
@@ -242,8 +254,13 @@ def _register_oauth(request, payload):
 
     try:
         google_user = _google_userinfo(validated["accessToken"])
-    except Exception:
-        logger.exception("Google userinfo request failed during OAuth registration")
+    except (URLError, HTTPError, json.JSONDecodeError, OSError) as exc:
+        logger.warning("Google userinfo request failed: %s", exc)
+        return Response(
+            {"detail": "Invalid Google access token."}, status=status.HTTP_401_UNAUTHORIZED
+        )
+    except Exception as exc:
+        logger.warning("Unexpected error fetching Google userinfo: %s", type(exc).__name__)
         return Response(
             {"detail": "Invalid Google access token."}, status=status.HTTP_401_UNAUTHORIZED
         )
@@ -470,10 +487,7 @@ def login(request):
     identifier = serializer.validated_data["identifier"]
     password = serializer.validated_data["password"]
     if not check_identifier_throttle("login", identifier):
-        return Response(
-            {"detail": "Too many failed attempts. Please try again later."},
-            status=status.HTTP_429_TOO_MANY_REQUESTS,
-        )
+        return _identifier_throttle_response("login", identifier)
 
     existing_user = find_user_by_identifier(identifier)
     if not existing_user:
@@ -596,16 +610,22 @@ def login_with_google(request):
         }
         400: "accessToken is required" if missing
         401: "Access token verification failed" if Google rejects token
-        401: "Invalid Google userinfo" if response missing required fields
-        401: "No account associated with this Google email" if user not found
+        401: "Access token verification failed" if Google response is invalid
+        401: "Invalid identifier or password" when no eligible account is linked
     """
     serializer = GoogleOAuthLoginSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     access_token = serializer.validated_data["accessToken"]
     try:
         userinfo = _google_userinfo(access_token)
-    except Exception:
-        logger.exception("Google userinfo request failed during OAuth login")
+    except (URLError, HTTPError, json.JSONDecodeError, OSError) as exc:
+        logger.warning("Google userinfo request failed: %s", exc)
+        return Response(
+            {"detail": "Access token verification failed."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+    except Exception as exc:
+        logger.warning("Unexpected error fetching Google userinfo: %s", type(exc).__name__)
         return Response(
             {"detail": "Access token verification failed."},
             status=status.HTTP_401_UNAUTHORIZED,
@@ -614,7 +634,10 @@ def login_with_google(request):
     subject = userinfo.get("sub")
     email = userinfo.get("email")
     if not subject or not email:
-        return Response({"detail": "Invalid Google userinfo"}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response(
+            {"detail": "Access token verification failed."},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
 
     account = OAuthAccount.objects.filter(provider=OAuthProvider.GOOGLE, subject=subject).first()
     if account:
@@ -633,7 +656,7 @@ def login_with_google(request):
             found_user = User.objects.filter(username__iexact=email).first()
         if not found_user:
             return Response(
-                {"detail": "No account associated with this Google email."},
+                {"detail": "Invalid identifier or password."},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
         if primary_role(found_user) == Role.STUDENT:
@@ -662,10 +685,7 @@ def create_reset_request(request):
     identifier = serializer.validated_data["identifier"]
 
     if not check_identifier_throttle("reset-request", identifier):
-        return Response(
-            {"detail": "Too many failed attempts. Please try again later."},
-            status=status.HTTP_429_TOO_MANY_REQUESTS,
-        )
+        return _identifier_throttle_response("reset-request", identifier)
 
     try:
         reset_request, request_token = create_password_reset_request(identifier)
@@ -698,10 +718,7 @@ def reset_request_status(request):
     request_token = serializer.validated_data["requestToken"]
 
     if not check_identifier_throttle("reset-status", identifier):
-        return Response(
-            {"detail": "Too many failed attempts. Please try again later."},
-            status=status.HTTP_429_TOO_MANY_REQUESTS,
-        )
+        return _identifier_throttle_response("reset-status", identifier)
 
     reset_request = get_password_reset_request_status(identifier, request_token)
     if not reset_request:
