@@ -27,7 +27,7 @@ from rest_framework.response import Response
 from accounts.models import Role, User
 from accounts.services import teacher_owns_student
 from assignments.models import Assignment
-from core.errors import error_response, server_error_response
+from core.errors import error_response
 from core.pagination import paginate
 from core.permissions import IsTeacher, has_role, primary_role
 from courses.models import Enrollment
@@ -163,18 +163,15 @@ def _create_for_assignment(request, assignment_id: int, assignment: Assignment):
     serializer.is_valid(raise_exception=True)
     if role == Role.STUDENT:
         if serializer.validated_data.get("studentId") != request.user.id:
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         if not _student_enrolled_in_assignment(request.user, assignment):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     elif role == Role.TEACHER:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     try:
         submission = create_submission(assignment_id, serializer.validated_data, "SUBMITTED")
     except ValueError as exc:
         return error_response(exc)
-    except Exception:
-        logger.exception("Unexpected error in submission view")
-        return server_error_response()
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_201_CREATED)
 
 
@@ -241,7 +238,7 @@ def assignment_submissions(request, assignment_id: int):
         return error_response("Assignment not found", status.HTTP_404_NOT_FOUND)
     role = primary_role(request.user)
     if role == Role.STUDENT:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     # Admins and researchers can view any assignment's submissions
     if (
         not request.user.is_staff
@@ -249,7 +246,7 @@ def assignment_submissions(request, assignment_id: int):
         and role == Role.TEACHER
         and not _teacher_owns_assignment(request.user, assignment)
     ):
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
     return paginate(submissions, request, transform_fn=lambda s: submission_to_dto(s).model_dump())
 
@@ -290,9 +287,6 @@ def teacher_self_assess(request, assessment_id: int):
         submission = submit_teacher_self_assessment(request.user.id, assessment_id, answers)
     except ValueError as exc:
         return error_response(exc)
-    except Exception:
-        logger.exception("Unexpected error in submission view")
-        return server_error_response()
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_201_CREATED)
 
 
@@ -317,11 +311,8 @@ def get_one(request, submission_id: int):
         submission = get_submission(submission_id)
     except ValueError as exc:
         return error_response(exc)
-    except Exception:
-        logger.exception("Unexpected error in submission view")
-        return server_error_response()
     if not _can_access_submission(request.user, submission):
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
 
 
@@ -347,7 +338,7 @@ def get_by_assignment_id(request, assignment_id: int):
         return error_response("Assignment not found", status.HTTP_404_NOT_FOUND)
     role = primary_role(request.user)
     if role == Role.STUDENT:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     # Admins and researchers can view any assignment's submissions
     if (
         not request.user.is_staff
@@ -355,7 +346,7 @@ def get_by_assignment_id(request, assignment_id: int):
         and role == Role.TEACHER
         and not _teacher_owns_assignment(request.user, assignment)
     ):
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
     return paginate(submissions, request, transform_fn=lambda s: submission_to_dto(s).model_dump())
 
@@ -385,13 +376,13 @@ def get_by_student_id(request, student_id: int):
         pass  # Researchers can view any student's submissions
     elif role == Role.STUDENT:
         if request.user.id != student_id:
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     elif role == Role.TEACHER:
         student_user = User.objects.filter(id=student_id).first()
         if not student_user or not teacher_owns_student(request.user, student_user):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     else:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_student(student_id)
     return paginate(submissions, request, transform_fn=lambda s: submission_to_dto(s).model_dump())
 
@@ -420,9 +411,9 @@ def get_by_teacher_id(request, teacher_id: int):
         pass  # Researchers can view any teacher's submissions
     elif role == Role.TEACHER:
         if request.user.id != teacher_id:
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     else:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_teacher(teacher_id)
     return paginate(submissions, request, transform_fn=lambda s: submission_to_dto(s).model_dump())
 
@@ -458,21 +449,18 @@ def get_student_submission(request, student_id: int, assignment_id: int):
         pass  # Researchers can view any submission
     elif role == Role.STUDENT:
         if request.user.id != student_id:
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         if not _student_enrolled_in_assignment(request.user, assignment):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     elif role == Role.TEACHER:
         if not _teacher_owns_assignment(request.user, assignment):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     else:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     try:
         submission = get_by_student_and_assignment(student_id, assignment_id)
     except ValueError as exc:
         return error_response(exc)
-    except Exception:
-        logger.exception("Unexpected error in submission view")
-        return server_error_response()
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
 
 
@@ -511,11 +499,11 @@ def save_draft(request, student_id: int, assignment_id: int):
         pass
     elif role == Role.STUDENT:
         if request.user.id != student_id:
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         if not _student_enrolled_in_assignment(request.user, assignment):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     else:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     answers = request.data.get("answers", [])
     payload = {
         "assignmentId": assignment_id,
@@ -527,9 +515,6 @@ def save_draft(request, student_id: int, assignment_id: int):
         submission = create_submission(assignment_id, payload, "IN_PROGRESS")
     except ValueError as exc:
         return error_response(exc)
-    except Exception:
-        logger.exception("Unexpected error in submission view")
-        return server_error_response()
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
 
 
@@ -554,14 +539,17 @@ def list_mine_view(request):
     """
     user_id = request.query_params.get("userId")
     if user_id is None:
-        return Response(status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"detail": "userId query parameter is required"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     # Allow admins and researchers to view any user's submissions
     if (
         request.user.id != int(user_id)
         and not request.user.is_staff
         and not has_role(request.user, Role.RESEARCHER)
     ):
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     status_filter = request.query_params.get("status")
     results = list_mine(int(user_id), status_filter)
     return paginate(results, request)
@@ -604,23 +592,20 @@ def edit(request):
         pass
     elif role == Role.STUDENT:
         if request.user.id != student_id:
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         if not _student_enrolled_in_assignment(request.user, assignment):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     elif role == Role.TEACHER:
         if request.user.id != teacher_id:
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         if not _teacher_owns_assignment(request.user, assignment):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     else:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     try:
         submission = edit_submission(serializer.validated_data)
     except ValueError as exc:
         return error_response(exc)
-    except Exception:
-        logger.exception("Unexpected error in submission view")
-        return server_error_response()
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
 
 
@@ -653,17 +638,14 @@ def override_score_view(request, submission_id: int):
         return Response({"detail": "Expected list of scores"}, status=status.HTTP_400_BAD_REQUEST)
     role = primary_role(request.user)
     if not request.user.is_staff and role != Role.TEACHER:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submission = Submission.objects.filter(id=submission_id).select_related("assignment").first()
     if not submission:
         return error_response("Submission not found", status.HTTP_404_NOT_FOUND)
     if role == Role.TEACHER and not _teacher_owns_assignment(request.user, submission.assignment):
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     try:
         submission = override_score(submission_id, request.data)
     except ValueError as exc:
         return error_response(exc)
-    except Exception:
-        logger.exception("Unexpected error in submission view")
-        return server_error_response()
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)

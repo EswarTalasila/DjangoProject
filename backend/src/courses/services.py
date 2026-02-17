@@ -16,17 +16,17 @@ Enrollment flow:
 
 import logging
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from accounts.models import Role, StudentProfile, TeacherProfile, User
 from accounts.services import create_user_from_payload
 from assessments.models import Assessment, QuestionKind
 from assignments.models import Assignment
 from core.dtos import CourseDTO, EnrollmentStudentDTO
+from core.helpers import answer_type_from_question
 from core.permissions import has_role
 from submissions.models import (
     Answer,
-    AnswerType,
     MultipleChoiceAnswer,
     NumberScaleAnswer,
     ShortAnswerAnswer,
@@ -237,7 +237,7 @@ def bulk_create_students(request_user: User, payloads: list[dict]) -> int:
         try:
             create_student_in_course(request_user, payload)
             created += 1
-        except Exception:
+        except (ValueError, IntegrityError):
             logger.exception("Bulk create student failed for payload.")
             continue
     return created
@@ -295,7 +295,7 @@ def _create_submissions_for_student(student_user: User, course: Course) -> None:
             answer = Answer.objects.create(
                 submission=submission,
                 question=question,
-                answer_type=_answer_type_from_question(question),
+                answer_type=answer_type_from_question(question),
                 score=0.0,
                 skipped=False,
             )
@@ -305,16 +305,3 @@ def _create_submissions_for_student(student_user: User, course: Course) -> None:
                 ShortAnswerAnswer.objects.create(answer=answer, text="")
             elif question.kind == QuestionKind.NUMBER_SCALE:
                 NumberScaleAnswer.objects.create(answer=answer, val=None)
-
-
-def _answer_type_from_question(question) -> str:
-    """Map a question kind to the corresponding answer type."""
-    if question.kind == QuestionKind.MULTIPLE_CHOICE:
-        return AnswerType.MULTIPLE_CHOICE
-    if question.kind == QuestionKind.SHORT_ANSWER:
-        return AnswerType.SHORT_ANSWER
-    if question.kind == QuestionKind.NUMBER_SCALE:
-        return AnswerType.NUMBER_SCALE
-    if question.kind == QuestionKind.MOOD_METER:
-        return AnswerType.MOOD_METER
-    return AnswerType.SHORT_ANSWER

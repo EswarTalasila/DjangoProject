@@ -56,7 +56,7 @@ def add_one(request):
     serializer.is_valid(raise_exception=True)
     try:
         enrollment = create_student_in_course(request.user, serializer.validated_data)
-    except Exception as exc:
+    except ValueError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     return Response(enrollment_to_payload(enrollment), status=status.HTTP_201_CREATED)
 

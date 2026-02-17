@@ -15,15 +15,19 @@ Endpoints:
     POST /api/v1/visualizations - Get visualization data with filters
 """
 
+import logging
+
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from core.errors import error_response, server_error_response
+from core.errors import error_response
 from core.permissions import IsTeacherOrAbove
 
 from .serializers import VisualizationFilterSerializer
 from .services import get_visualization_data
+
+logger = logging.getLogger(__name__)
 
 
 @api_view(["POST"])
@@ -59,6 +63,4 @@ def get_visualizations(request):
         data = get_visualization_data(serializer.validated_data, request.user)
     except ValueError as exc:
         return error_response(exc)
-    except Exception:
-        return server_error_response()
     return Response([d.model_dump() for d in data], status=status.HTTP_200_OK)
