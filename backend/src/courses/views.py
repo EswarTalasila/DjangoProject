@@ -25,6 +25,7 @@ from rest_framework.response import Response
 
 from accounts.services import issue_student_reset_code_for_teacher
 from core.errors import error_response
+from core.pagination import paginate
 from core.permissions import IsTeacher, IsTeacherOrAbove
 
 from .models import Course
@@ -61,7 +62,7 @@ def list_or_create(request):
     """
     if request.method == "POST":
         if not IsTeacher().has_permission(request, None):
-            return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         serializer = CourseInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -69,11 +70,10 @@ def list_or_create(request):
         except ValueError as exc:
             return error_response(exc)
         course_data = course_to_dto(course).model_dump()
-        return Response(course_data, status=status.HTTP_200_OK)
+        return Response(course_data, status=status.HTTP_201_CREATED)
 
     courses = list_courses_for_user(request.user)
-    courses_data = [course_to_dto(course).model_dump() for course in courses]
-    return Response(courses_data, status=status.HTTP_200_OK)
+    return paginate(courses, request, transform_fn=lambda c: course_to_dto(c).model_dump())
 
 
 @api_view(["GET", "PUT", "DELETE"])
@@ -104,23 +104,23 @@ def detail(request, course_id: int):
     """
     course = Course.objects.filter(id=course_id).first()
     if not course:
-        return Response("Course not found", status=status.HTTP_404_NOT_FOUND)
+        return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
 
     if request.method == "GET":
         if not can_view_course(request.user, course):
-            return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         return Response(course_to_dto(course).model_dump(), status=status.HTTP_200_OK)
 
     if request.method == "PUT":
         if not can_manage_course(request.user, course):
-            return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         serializer = CourseInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         course = edit_course(course, serializer.validated_data["name"])
         return Response(course_to_dto(course).model_dump(), status=status.HTTP_200_OK)
 
     if not can_manage_course(request.user, course):
-        return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     delete_course(course)
     return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -149,11 +149,11 @@ def list_students(request, course_id: int):
     """
     course = Course.objects.filter(id=course_id).first()
     if not course:
-        return Response("Course not found", status=status.HTTP_404_NOT_FOUND)
+        return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
     if not can_view_course(request.user, course):
-        return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
-    students = [s.model_dump() for s in list_students_in_course(course)]
-    return Response(students, status=status.HTTP_200_OK)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+    students = list_students_in_course(course)
+    return paginate(students, request, transform_fn=lambda s: s.model_dump())
 
 
 @api_view(["DELETE"])
@@ -180,14 +180,14 @@ def remove_student(request, course_id: int, student_user_id: int):
     """
     course = Course.objects.filter(id=course_id).first()
     if not course:
-        return Response("Course not found", status=status.HTTP_404_NOT_FOUND)
+        return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
     if not can_manage_course(request.user, course):
-        return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     try:
         remove_student_from_course(course, student_user_id)
     except ValueError as exc:
         return error_response(exc)
-    return Response("Student removed successfully", status=status.HTTP_200_OK)
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(["POST"])

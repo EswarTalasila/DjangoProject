@@ -57,8 +57,8 @@ def add_one(request):
     try:
         enrollment = create_student_in_course(request.user, serializer.validated_data)
     except Exception as exc:
-        return Response(str(exc), status=status.HTTP_400_BAD_REQUEST)
-    return Response(enrollment_to_payload(enrollment), status=status.HTTP_200_OK)
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(enrollment_to_payload(enrollment), status=status.HTTP_201_CREATED)
 
 
 @api_view(["POST"])
@@ -89,7 +89,7 @@ def add_bulk(request):
         Check the response count against input count to detect skips.
     """
     if not isinstance(request.data, list):
-        return Response("Expected list of students", status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": "Expected list of students"}, status=status.HTTP_400_BAD_REQUEST)
     validated = []
     for entry in request.data:
         serializer = StudentInputSerializer(data=entry)
@@ -97,7 +97,7 @@ def add_bulk(request):
             continue
         validated.append(serializer.validated_data)
     created = bulk_create_students(request.user, validated)
-    return Response(created, status=status.HTTP_200_OK)
+    return Response(created, status=status.HTTP_201_CREATED)
 
 
 def enrollment_to_payload(enrollment):

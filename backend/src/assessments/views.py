@@ -25,6 +25,7 @@ from rest_framework.response import Response
 from accounts.models import Role
 from assignments.models import Assignment
 from core.errors import error_response
+from core.pagination import paginate
 from core.permissions import IsResearcherOrAdmin, IsTeacherOrAbove, primary_role
 from courses.models import Enrollment
 
@@ -73,9 +74,7 @@ def list_or_create(request):
         return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_201_CREATED)
 
     assessments = list_assessments()
-    return Response(
-        [assessment_to_dto(a).model_dump() for a in assessments], status=status.HTTP_200_OK
-    )
+    return paginate(assessments, request, transform_fn=lambda a: assessment_to_dto(a).model_dump())
 
 
 @api_view(["GET", "PUT", "DELETE"])
@@ -102,7 +101,7 @@ def detail(request, assessment_id: int):
     """
     assessment = Assessment.objects.filter(id=assessment_id).first()
     if not assessment:
-        return Response("Assessment not found", status=status.HTTP_404_NOT_FOUND)
+        return Response({"detail": "Assessment not found"}, status=status.HTTP_404_NOT_FOUND)
 
     if request.method == "GET":
         role = primary_role(request.user)
@@ -132,4 +131,4 @@ def detail(request, assessment_id: int):
     if not IsResearcherOrAdmin().has_permission(request, None):
         return Response(status=status.HTTP_403_FORBIDDEN)
     delete_assessment(assessment)
-    return Response("Assessment deleted successfully.", status=status.HTTP_200_OK)
+    return Response(status=status.HTTP_204_NO_CONTENT)

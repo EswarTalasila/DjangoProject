@@ -36,24 +36,27 @@ Endpoints:
 """
 
 import json
+import logging
 from typing import Any, cast
 from urllib.request import Request, urlopen
 
 from django.contrib.auth import get_user_model
-from django.db.models import Q
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from core.pagination import paginate
 from core.permissions import (
     IsResearcherOrAdmin,
     IsTeacherOrAbove,
     has_sudo_permission,
     primary_role,
 )
+from core.throttles import AnonAuthThrottle, AnonBurstThrottle
 
 from .models import (
     OAuthAccount,
@@ -100,8 +103,10 @@ from .services import (
     get_password_reset_request_status,
     grant_sudo_to_researcher,
     identifier_allowed_for_user,
+    identifier_in_use,
     invalidate_user_sessions,
     link_or_create_oauth_account,
+    normalize_username_identifier,
     password_strength_errors,
     redeem_non_student_local_invite,
     redeem_non_student_oauth_invite,
@@ -119,26 +124,7 @@ from .services import (
 )
 
 User = get_user_model()
-
-
-def _normalize_identifier(value: str | None) -> str:
-    """Normalize identifier values for case-insensitive comparisons."""
-    return str(value or "").strip().lower()
-
-
-def _identifier_in_use(identifier: str | None, exclude_user_id: int | None = None) -> bool:
-    """
-    Check whether an identifier is already used as either username or email.
-
-    This prevents ambiguous login identifiers across accounts.
-    """
-    normalized = _normalize_identifier(identifier)
-    if not normalized:
-        return False
-    queryset = User.objects.filter(Q(username__iexact=normalized) | Q(email__iexact=normalized))
-    if exclude_user_id is not None:
-        queryset = queryset.exclude(id=exclude_user_id)
-    return queryset.exists()
+logger = logging.getLogger(__name__)
 
 
 def _google_userinfo(access_token: str) -> dict[str, Any]:
@@ -175,6 +161,7 @@ def _google_userinfo(access_token: str) -> dict[str, Any]:
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([AnonAuthThrottle])
 def register_account(request):
     """
     Unified registration endpoint.
@@ -202,6 +189,18 @@ def _register_local(request, payload):
     serializer = StudentInviteRegisterSerializer(data=payload)
     serializer.is_valid(raise_exception=True)
     validated = serializer.validated_data
+    confirm_password = validated.get("confirmPassword")
+    if validated["password"] != confirm_password:
+        return Response({"detail": "Passwords do not match."}, status=status.HTTP_400_BAD_REQUEST)
+    password_errors = password_strength_errors(validated["password"])
+    if password_errors:
+        return Response(
+            {
+                "detail": "Password does not meet policy requirements.",
+                "errors": password_errors,
+            },
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     record = validate_registration_code(validated["code"])
     if not record:
@@ -213,17 +212,13 @@ def _register_local(request, payload):
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response(
-            {
-                "message": "User registered",
-                "username": user.username,
-                "name": user.name,
-                "courseId": enrollment.course_id,
-                "createdNewUser": True,
-                "alreadyEnrolled": False,
-            },
-            status=status.HTTP_200_OK,
-        )
+        refresh = RefreshToken.for_user(user)
+        body = build_user_response(user, str(refresh.access_token), str(refresh))
+        body["message"] = "User registered"
+        body["courseId"] = enrollment.course_id
+        body["createdNewUser"] = True
+        body["alreadyEnrolled"] = False
+        return Response(body, status=status.HTTP_201_CREATED)
 
     try:
         user = redeem_non_student_local_invite(validated)
@@ -236,7 +231,7 @@ def _register_local(request, payload):
     body["createdNewUser"] = True
     body["alreadyEnrolled"] = False
     body["courseId"] = None
-    return Response(body, status=status.HTTP_200_OK)
+    return Response(body, status=status.HTTP_201_CREATED)
 
 
 def _register_oauth(request, payload):
@@ -248,6 +243,7 @@ def _register_oauth(request, payload):
     try:
         google_user = _google_userinfo(validated["accessToken"])
     except Exception:
+        logger.exception("Google userinfo request failed during OAuth registration")
         return Response(
             {"detail": "Invalid Google access token."}, status=status.HTTP_401_UNAUTHORIZED
         )
@@ -265,8 +261,8 @@ def _register_oauth(request, payload):
             code=validated["code"],
             oauth_subject=google_subject,
             oauth_email=google_email,
-            username=validated.get("username"),
-            name=validated.get("name") or google_user.get("name"),
+            first_name=validated.get("firstName"),
+            last_name=validated.get("lastName"),
             email_verified=google_user.get("email_verified"),
             picture_url=google_user.get("picture"),
         )
@@ -278,11 +274,15 @@ def _register_oauth(request, payload):
     refresh = RefreshToken.for_user(user)
     body = build_user_response(user, str(refresh.access_token), str(refresh))
     body["message"] = "User registered"
-    return Response(body, status=status.HTTP_200_OK)
+    body["courseId"] = None
+    body["createdNewUser"] = True
+    body["alreadyEnrolled"] = False
+    return Response(body, status=status.HTTP_201_CREATED)
 
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([AnonAuthThrottle])
 def validate_registration_code_view(request):
     """Validate a registration code and return non-sensitive context."""
     serializer = RegistrationCodeValidateInputSerializer(data=request.data)
@@ -341,7 +341,7 @@ def join_course_with_code(request):
             "createdNewUser": False,
             "alreadyEnrolled": already_enrolled,
         },
-        status=status.HTTP_200_OK,
+        status=status.HTTP_201_CREATED,
     )
 
 
@@ -415,10 +415,9 @@ def _list_codes(request):
         queryset = queryset.filter(archived_at__isnull=True)
 
     records = list(queryset.order_by("-created_at"))
-    payload = [_serialize_registration_code(record) for record in records]
     if status_filter:
-        payload = [entry for entry in payload if entry["status"] == status_filter]
-    return Response(payload, status=status.HTTP_200_OK)
+        records = [r for r in records if registration_code_status(r) == status_filter]
+    return paginate(records, request, transform_fn=_serialize_registration_code)
 
 
 @api_view(["GET", "POST"])
@@ -463,6 +462,7 @@ def code_detail(request, code_id: int):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([AnonBurstThrottle])
 def login(request):
     """Authenticate a user with role-constrained identifier + password."""
     serializer = LoginSerializer(data=request.data)
@@ -503,13 +503,14 @@ def login(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([AnonAuthThrottle])
 def refresh(request):
     """Exchange a refresh token for a new access token."""
     serializer = RefreshTokenSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     try:
         token = RefreshToken(serializer.validated_data["refreshToken"])
-    except Exception:
+    except TokenError:
         return Response({"detail": "Invalid refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
     return Response(
         {
@@ -567,6 +568,7 @@ def change_password(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([AnonBurstThrottle])
 def login_with_google(request):
     """
     Authenticate a user via Google OAuth, returning a JWT token.
@@ -602,16 +604,17 @@ def login_with_google(request):
     access_token = serializer.validated_data["accessToken"]
     try:
         userinfo = _google_userinfo(access_token)
-    except Exception as exc:
+    except Exception:
+        logger.exception("Google userinfo request failed during OAuth login")
         return Response(
-            {"error": f"Access token verification failed: {exc}"},
+            {"detail": "Access token verification failed."},
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
     subject = userinfo.get("sub")
     email = userinfo.get("email")
     if not subject or not email:
-        return Response({"error": "Invalid Google userinfo"}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({"detail": "Invalid Google userinfo"}, status=status.HTTP_401_UNAUTHORIZED)
 
     account = OAuthAccount.objects.filter(provider=OAuthProvider.GOOGLE, subject=subject).first()
     if account:
@@ -630,7 +633,7 @@ def login_with_google(request):
             found_user = User.objects.filter(username__iexact=email).first()
         if not found_user:
             return Response(
-                {"error": "No account associated with this Google email."},
+                {"detail": "No account associated with this Google email."},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
         if primary_role(found_user) == Role.STUDENT:
@@ -651,6 +654,7 @@ def login_with_google(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([AnonBurstThrottle])
 def create_reset_request(request):
     """Create a non-student password reset request and return one-time request token."""
     serializer = PasswordResetRequestCreateSerializer(data=request.data)
@@ -685,6 +689,7 @@ def create_reset_request(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([AnonAuthThrottle])
 def reset_request_status(request):
     """Lookup status for a non-student reset request by identifier + request token."""
     serializer = PasswordResetStatusSerializer(data=request.data)
@@ -747,6 +752,7 @@ def transition_reset_request(request, request_id: int):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([AnonBurstThrottle])
 def verify_reset_code(request):
     """Verify a reset code before allowing password update."""
     serializer = PasswordResetCodeVerifySerializer(data=request.data)
@@ -771,6 +777,7 @@ def verify_reset_code(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
+@throttle_classes([AnonBurstThrottle])
 def complete_reset_code(request):
     """Complete a password reset using a valid code."""
     serializer = PasswordResetCodeCompleteSerializer(data=request.data)
@@ -825,23 +832,26 @@ def create_user(request):
     serializer.is_valid(raise_exception=True)
     payload = serializer.validated_data
     if not payload.get("username") or not payload.get("name"):
-        return Response("name and username are required", status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            {"detail": "name and username are required"}, status=status.HTTP_400_BAD_REQUEST
+        )
     requested_role = payload.get("role") or Role.STUDENT
     if not can_create_user(request.user, requested_role):
-        return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     if requested_role != Role.STUDENT and not payload.get("email"):
         return Response(
-            "email is required for non-student users", status=status.HTTP_400_BAD_REQUEST
+            {"detail": "email is required for non-student users"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
-    if _identifier_in_use(payload.get("username")):
-        return Response("Username already taken", status=status.HTTP_400_BAD_REQUEST)
-    if payload.get("email") and _identifier_in_use(payload.get("email")):
-        return Response("Email already taken", status=status.HTTP_400_BAD_REQUEST)
+    if identifier_in_use(payload.get("username")):
+        return Response({"detail": "Username already taken"}, status=status.HTTP_400_BAD_REQUEST)
+    if payload.get("email") and identifier_in_use(payload.get("email")):
+        return Response({"detail": "Email already taken"}, status=status.HTTP_400_BAD_REQUEST)
     try:
         create_user_from_payload(payload, role_override=requested_role, creator=request.user)
     except ValueError as exc:
-        return Response(str(exc), status=status.HTTP_400_BAD_REQUEST)
-    return Response("User created successfully.", status=status.HTTP_200_OK)
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({"detail": "User created successfully."}, status=status.HTTP_201_CREATED)
 
 
 @api_view(["PATCH", "DELETE"])
@@ -868,10 +878,10 @@ def _edit_user(request, user_id: int):
     payload = serializer.validated_data
     user = User.objects.filter(id=user_id).first()
     if not user:
-        return Response("User not found", status=status.HTTP_404_NOT_FOUND)
+        return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     requested_role = payload.get("role") or primary_role(user)
     if not can_edit_user(request.user, user, requested_role):
-        return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     next_username = user.username
     next_email = user.email
 
@@ -881,25 +891,28 @@ def _edit_user(request, user_id: int):
     if payload.get("username") and payload["username"] != user.username:
         if primary_role(user) == Role.STUDENT:
             return Response(
-                "Student usernames are immutable after account creation.",
+                {"detail": "Student usernames are immutable after account creation."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if _identifier_in_use(payload["username"], exclude_user_id=user_id):
-            return Response("Username already taken", status=status.HTTP_400_BAD_REQUEST)
-        next_username = _normalize_identifier(payload["username"])
+        if identifier_in_use(payload["username"], exclude_user_id=user_id):
+            return Response(
+                {"detail": "Username already taken"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        next_username = normalize_username_identifier(payload["username"])
         user.username = next_username
 
     if "email" in payload:
         incoming_email = payload.get("email")
-        normalized_email = _normalize_identifier(incoming_email) or None
-        if normalized_email and _identifier_in_use(normalized_email, exclude_user_id=user_id):
-            return Response("Email already taken", status=status.HTTP_400_BAD_REQUEST)
+        normalized_email = normalize_username_identifier(incoming_email) if incoming_email else None
+        if normalized_email and identifier_in_use(normalized_email, exclude_user_id=user_id):
+            return Response({"detail": "Email already taken"}, status=status.HTTP_400_BAD_REQUEST)
         next_email = normalized_email
         user.email = normalized_email
 
     if requested_role != Role.STUDENT and not next_email:
         return Response(
-            "email is required for non-student users", status=status.HTTP_400_BAD_REQUEST
+            {"detail": "email is required for non-student users"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     if payload.get("password"):
@@ -908,18 +921,18 @@ def _edit_user(request, user_id: int):
     if payload.get("role"):
         set_single_role(user, payload["role"])
         ensure_profiles_for_role(user, payload["role"], creator=request.user)
-    return Response("User edited successfully.", status=status.HTTP_200_OK)
+    return Response({"detail": "User edited successfully."}, status=status.HTTP_200_OK)
 
 
 def _delete_user(request, user_id: int):
     """Permanently delete a user account by ID."""
     user = User.objects.filter(id=user_id).first()
     if not user:
-        return Response("User not found", status=status.HTTP_404_NOT_FOUND)
+        return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     if not can_delete_user(request.user, user):
-        return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     user.delete()
-    return Response("User deleted successfully.", status=status.HTTP_200_OK)
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(["GET"])
@@ -947,9 +960,13 @@ def list_staff(request):
         The role field includes the "ROLE_" prefix for compatibility
         with the Angular frontend's role-based routing.
     """
-    users = User.objects.filter(roles__role__in=[Role.TEACHER, Role.RESEARCHER]).distinct()
-    serializer = UserOutputSerializer(users, many=True)
-    return Response(serializer.data, status=status.HTTP_200_OK)
+    users = (
+        User.objects.filter(roles__role__in=[Role.TEACHER, Role.RESEARCHER])
+        .prefetch_related("roles")
+        .distinct()
+        .order_by("id")
+    )
+    return paginate(users, request, transform_fn=lambda u: UserOutputSerializer(u).data)
 
 
 @api_view(["POST"])
@@ -998,9 +1015,9 @@ def bulk_create(request):
     if not request.user.is_staff and not has_sudo_permission(
         request.user, SudoPermission.BULK_CREATE
     ):
-        return Response("Forbidden", status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     if not isinstance(request.data, list):
-        return Response("Expected list of users", status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": "Expected list of users"}, status=status.HTTP_400_BAD_REQUEST)
     created = 0
     for entry in request.data:
         serializer = UserInputSerializer(data=entry)
@@ -1014,16 +1031,16 @@ def bulk_create(request):
             continue
         if requested_role != Role.STUDENT and not payload.get("email"):
             continue
-        if _identifier_in_use(payload.get("username")):
+        if identifier_in_use(payload.get("username")):
             continue
-        if payload.get("email") and _identifier_in_use(payload.get("email")):
+        if payload.get("email") and identifier_in_use(payload.get("email")):
             continue
         try:
             create_user_from_payload(payload, role_override=requested_role, creator=request.user)
             created += 1
         except ValueError:
             continue
-    return Response(created, status=status.HTTP_200_OK)
+    return Response(created, status=status.HTTP_201_CREATED)
 
 
 @api_view(["POST"])
@@ -1058,11 +1075,11 @@ def grant_sudo(request):
     can_grant_sudo_flag = request.data.get("can_grant_sudo", False)
 
     if not user_id:
-        return Response({"error": "user_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": "user_id is required"}, status=status.HTTP_400_BAD_REQUEST)
 
     grantee = User.objects.filter(id=user_id).first()
     if not grantee:
-        return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
     try:
         grant = grant_sudo_to_researcher(
@@ -1072,12 +1089,12 @@ def grant_sudo(request):
             can_grant_sudo=can_grant_sudo_flag,
         )
         return Response(
-            {"message": "Sudo granted", "grant_id": grant.id}, status=status.HTTP_200_OK
+            {"message": "Sudo granted", "grant_id": grant.id}, status=status.HTTP_201_CREATED
         )
     except ValueError as e:
-        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except PermissionError as e:
-        return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": str(e)}, status=status.HTTP_403_FORBIDDEN)
 
 
 @api_view(["DELETE"])
@@ -1103,8 +1120,8 @@ def revoke_sudo(request, grant_id: int):
     """
     try:
         revoke_sudo_grant(revoker=request.user, grant_id=grant_id)
-        return Response({"message": "Sudo revoked"}, status=status.HTTP_200_OK)
+        return Response(status=status.HTTP_204_NO_CONTENT)
     except ValueError as e:
-        return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
     except PermissionError as e:
-        return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": str(e)}, status=status.HTTP_403_FORBIDDEN)

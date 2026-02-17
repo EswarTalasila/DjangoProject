@@ -23,6 +23,7 @@ from rest_framework.response import Response
 
 from accounts.models import Role, User
 from core.errors import error_response
+from core.pagination import paginate
 from core.permissions import IsTeacher, IsTeacherOrAbove, has_role, primary_role
 from courses.models import Enrollment
 
@@ -88,7 +89,7 @@ def detail(request, assignment_id: int):
     """
     assignment = get_assignment(assignment_id)
     if not assignment:
-        return Response("Assignment not found", status=status.HTTP_404_NOT_FOUND)
+        return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
     if request.method == "GET":
         role = primary_role(request.user)
         if role == Role.STUDENT:
@@ -104,7 +105,7 @@ def detail(request, assignment_id: int):
     if not IsTeacher().has_permission(request, None):
         return Response(status=status.HTTP_403_FORBIDDEN)
     delete_assignment(assignment)
-    return Response("Assignment deleted successfully.", status=status.HTTP_200_OK)
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(["GET"])
@@ -122,9 +123,7 @@ def list_course(request, course_id: int):
         200: Array of assignment DTOs
     """
     assignments = list_by_course(course_id)
-    return Response(
-        [assignment_to_dto(a).model_dump() for a in assignments], status=status.HTTP_200_OK
-    )
+    return paginate(assignments, request, transform_fn=lambda a: assignment_to_dto(a).model_dump())
 
 
 @api_view(["GET"])
@@ -154,8 +153,6 @@ def list_user(request, user_id: int):
         return Response(status=status.HTTP_403_FORBIDDEN)
     target = User.objects.filter(id=user_id).first()
     if not target:
-        return Response("User not found", status=status.HTTP_404_NOT_FOUND)
+        return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     assignments = list_for_user(target)
-    return Response(
-        [assignment_to_dto(a).model_dump() for a in assignments], status=status.HTTP_200_OK
-    )
+    return paginate(assignments, request, transform_fn=lambda a: assignment_to_dto(a).model_dump())
