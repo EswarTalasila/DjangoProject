@@ -39,8 +39,7 @@ def custom_exception_handler(exc, context):
     # Unhandled exception (not a DRF exception)
     if response is None:
         return Response(
-            {"detail": "Internal server error"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            {"detail": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
     # Already correct format
