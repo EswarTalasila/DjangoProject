@@ -9,9 +9,9 @@ All error responses from the API will use this single shape, making client-side
 error handling simple and predictable.
 """
 
-from rest_framework.views import exception_handler
-from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import exception_handler
 
 
 def custom_exception_handler(exc, context):
