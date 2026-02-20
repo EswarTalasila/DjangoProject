@@ -148,7 +148,7 @@ sequenceDiagram
   API-->>UI: session + redirect
 ```
 
-### 6.3 Approve Reset (Teacher)
+### 6.3 Issue Reset Code (Teacher)
 
 ```mermaid
 sequenceDiagram
@@ -159,8 +159,8 @@ sequenceDiagram
   participant Generator
   participant DB
 
-  Teacher->>UI: Approve reset request
-  UI->>API: PATCH /reset-requests/{id} {status: APPROVED}
+  Teacher->>UI: Select enrolled student needing reset
+  UI->>API: POST /auth/password-reset-codes {targetUserId}
   API->>ResetFactory: apply AUTH policy
   ResetFactory->>Generator: generate single-use code
   Generator->>DB: store hashed reset code

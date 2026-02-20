@@ -63,7 +63,7 @@ All API endpoints must follow REST conventions to ensure consistent, predictable
 - [ ] Resource IDs appear in URL paths for update/delete operations (e.g., `/users/<id>` not ID in request body)
 - [ ] All resource names are consistently plural across modules (e.g., `/visualizations` not `/visualization`)
 - [ ] Lifecycle state transitions on existing resources use PATCH on the resource endpoint (e.g., `/codes/{id}` with target state payload)
-- [ ] Workflow state transitions on existing resources also use PATCH (e.g., `/reset-requests/{id}` with `status=APPROVED|DENIED`)
+- [ ] Non-resource workflow operations use noun-based POST endpoints when no stable resource ID exists (e.g., `/auth/password-reset-codes`)
 - [ ] HTTP method semantics match operation intent (creation uses POST, updates use PATCH/PUT)
 
 **Verification Method:** Automated test - API contract tests verify endpoint paths and HTTP methods match REST conventions

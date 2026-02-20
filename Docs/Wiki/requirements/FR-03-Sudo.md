@@ -18,7 +18,8 @@
 - SudoGrant lifecycle: grant, update, revoke elevated permissions for researchers
 - Permission evaluation: role-based + sudo-based authorization checks across all user management operations
 - Escalation prevention: subset-only delegation, admin-only `can_grant_sudo`, no cross-space escalation
-- Permission enum: CREATE_TEACHER, CREATE_STUDENT, EDIT_USER, DELETE_USER, BULK_CREATE, RESET_PASSWORD, GRANT_SUDO
+- Permission enum: CREATE_TEACHER, CREATE_STUDENT, CREATE_RESEARCHER_CODES, EDIT_USER, DELETE_USER, BULK_CREATE, ISSUE_STUDENT_RESET_CODE, ISSUE_RESEARCHER_RESET_CODE
+- Issuer-based reset authority expansion for researchers via sudo flags (no reset-request workflow)
 - Researcher capabilities without sudo (read-only data oversight)
 
 ### Out of Scope
@@ -94,6 +95,7 @@
 > - Must have existing SudoGrant with `can_grant_sudo=True`
 > - Can only grant permissions they themselves hold (subset check)
 > - Cannot set `can_grant_sudo=True` (admin only, SUDO-CN-05)
+> - Cannot delegate `CREATE_RESEARCHER_CODES` even if they hold it (admin-only delegation for researcher invite capability)
 
 **Errors:**
 
@@ -538,6 +540,7 @@
 ### SUDO-CN-03 — No Privilege Escalation
 - A researcher with `can_grant_sudo=True` can only delegate permissions they themselves hold
 - The granted permissions must be a subset of the granter's own permissions list
+- `CREATE_RESEARCHER_CODES` is non-delegable by researchers, even when present in the granter's own permissions
 - Attempting to grant a permission the granter does not hold results in a 403 error
 - **Applies to:** SUDO-UC-01
 - **Implements:** NFR-SEC-08 (Principle of Least Privilege)
@@ -579,12 +582,14 @@
 |-----------|-----------|-------------------|
 | `CREATE_TEACHER` | Create teacher accounts | `POST /api/v1/users` |
 | `CREATE_STUDENT` | Create student accounts; generate student registration codes | `POST /api/v1/users`, `POST /api/v1/codes` |
-| `EDIT_USER` | Edit teacher and student accounts | `PATCH /api/v1/users/{id}` |
+| `CREATE_RESEARCHER_CODES` | Generate researcher registration codes | `POST /api/v1/codes` (`codeType=RESEARCHER`) |
+| `EDIT_USER` | Edit teacher and student accounts | `PATCH /api/v1/users/{user_id}` |
 | `DELETE_USER` | Delete teacher and student accounts | `DELETE /api/v1/users/{user_id}` |
-| `BULK_CREATE` | Bulk create users | `POST /api/v1/user-batches` |
-| `RESET_PASSWORD` | Reset passwords for other users | (Defined in enum; not yet wired to views) |
-| `GRANT_SUDO` | (Available in enum; authorization uses `can_grant_sudo` flag on SudoGrant model instead) | `POST /api/v1/sudo-grants` (via `can_grant_sudo` flag) |
+| `BULK_CREATE` | Bulk create users (kept for internal/testing workflows; not an end-user UX flow) | `POST /api/v1/user-batches` |
+| `ISSUE_STUDENT_RESET_CODE` | Allow researcher to issue reset codes for students (outside teacher-owned course flow) | `POST /api/v1/auth/password-reset-codes` (target role STUDENT) |
+| `ISSUE_RESEARCHER_RESET_CODE` | Allow researcher to issue reset codes for other researchers | `POST /api/v1/auth/password-reset-codes` (target role RESEARCHER) |
 
+- Default role behavior (no sudo permission required): researcher can issue teacher reset codes; teacher can issue student reset codes in owned courses.
 - **Applies to:** SUDO-UC-03, SUDO-UC-04, SUDO-UC-05, SUDO-UC-06
 
 ### SUDO-CN-10 — Grant Revocation Scope
@@ -665,7 +670,7 @@ Teachers seed → Students (via create_user or registration codes)
 }
 ```
 
-**POST response (200):**
+**POST response (201):**
 ```json
 {
     "message": "Sudo granted",
@@ -673,12 +678,7 @@ Teachers seed → Students (via create_user or registration codes)
 }
 ```
 
-**DELETE response (200):**
-```json
-{
-    "message": "Sudo revoked"
-}
-```
+**DELETE response (204):** no body
 
 ### Affected Endpoints (Permission Enforcement)
 
@@ -691,6 +691,7 @@ These endpoints are defined in other FR domains but enforce sudo permission chec
 | DELETE | `/api/v1/users/{user_id}` | `can_delete_user()` | SUDO-UC-05 |
 | POST | `/api/v1/user-batches` | `BULK_CREATE` check | SUDO-UC-06 |
 | POST | `/api/v1/codes` | `_can_generate_code_type()` | SUDO-UC-03 (via CREATE_STUDENT) |
+| POST | `/api/v1/auth/password-reset-codes` | `can_issue_reset_code()` | AUTH-UC-07 (via ISSUE_STUDENT_RESET_CODE / ISSUE_RESEARCHER_RESET_CODE) |
 | GET | `/api/v1/users/staff` | `IsResearcherOrAdmin` | (read access) |
 
 Notes:
@@ -731,11 +732,12 @@ The following DRF permission classes enforce role-based access control across al
 ```
 CREATE_TEACHER    — Create teacher accounts
 CREATE_STUDENT    — Create student accounts
+CREATE_RESEARCHER_CODES — Generate researcher registration codes
 EDIT_USER         — Edit user accounts (within user role space)
 DELETE_USER       — Delete user accounts (within user role space)
 BULK_CREATE       — Use bulk user creation endpoints
-RESET_PASSWORD    — Reset passwords for other users (defined; not yet wired)
-GRANT_SUDO        — Grant sudo permissions (available in enum; authorization uses can_grant_sudo flag)
+ISSUE_STUDENT_RESET_CODE — Researcher can issue reset codes for students (sudo extension)
+ISSUE_RESEARCHER_RESET_CODE — Researcher can issue reset codes for researchers (sudo extension)
 ```
 
 ### SudoGrant Model
@@ -773,8 +775,8 @@ FR-03 defines the permission model that other FR domains reference:
 
 | FR | Cross-Reference | Notes |
 |----|----------------|-------|
-| FR-01 AUTH | AUTH-UC-07 uses role hierarchy for reset approval chain | Admin can approve any; researcher can approve teacher |
-| FR-02 REG | REG-CN-10 references role hierarchy + sudo for code generation | `CREATE_STUDENT` sudo expands researcher code generation scope |
+| FR-01 AUTH | AUTH-UC-07 uses role hierarchy for issuer-based reset-code generation | Defaults: teacher->student, researcher->teacher, admin->any; sudo extends researcher scope for student/researcher issuance |
+| FR-02 REG | REG-CN-10 references role hierarchy + sudo for code generation | `CREATE_STUDENT` and `CREATE_RESEARCHER_CODES` sudo expand researcher code generation scope |
 | FR-05 CRS | Course visibility uses role hierarchy | Researcher read access to all courses (defined in FR-05) |
 | FR-06 ASMT | Assessment CRUD uses role hierarchy | Researcher full access to assessments (defined in FR-06) |
 | FR-12 ENV | Admin bootstrap creates system admin | `ensure_admin` sets `is_staff=True` without user role |
@@ -785,13 +787,14 @@ FR-03 defines the permission model that other FR domains reference:
 
 ### Unwired Permissions
 
-Two `SudoPermission` enum values are defined but not yet connected to view-level authorization logic:
+Password-reset sudo extensions are drafted and must be implemented with explicit scope checks:
 
-1. **`RESET_PASSWORD`** — Intended to allow sudoed researchers to approve/issue password resets. Currently, reset request approval (`AUTH-UC-07`) uses role-based checks only (`_can_approve_reset_request` checks `is_staff` or `RESEARCHER + request.requested_role == TEACHER`). Wiring `RESET_PASSWORD` would make reset approval sudo-gated rather than role-gated.
+1. **`ISSUE_STUDENT_RESET_CODE`** — Grants researchers authority to issue student reset codes outside teacher-owned course issuance.
+2. **`ISSUE_RESEARCHER_RESET_CODE`** — Grants researchers authority to issue reset codes for researcher accounts.
 
-2. **`GRANT_SUDO`** — Available in the enum, but actual grant authorization uses the `can_grant_sudo` boolean flag on the `SudoGrant` model (via `_can_grant_permissions`). The enum value is redundant with the flag. If consolidated, only one mechanism should remain.
+Default role behavior is unchanged: teacher->student (owned course), researcher->teacher, admin->any.
 
-These are intentional design decisions documented here for future reference. Any change to wire these permissions should update this spec and the corresponding test coverage.
+`CREATE_RESEARCHER_CODES` is implemented and explicitly non-delegable by researchers (admin-granted only).
 
 ### SudoGrant Admin Registration
 
