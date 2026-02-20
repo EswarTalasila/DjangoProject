@@ -27,8 +27,8 @@ Database Tables:
     student_profiles    - Extended data for student accounts (includes consent)
     oauth_accounts      - Linked external identity provider accounts
     registration_codes  - Invite codes used for code-gated registration/enrollment
-    password_reset_requests - Approval-based password reset requests
-    password_reset_codes - One-time reset codes issued upon approval
+    password_reset_requests - Issuer-anchored password reset issuance records
+    password_reset_codes - One-time reset codes issued from reset records
 
 Note:
     The User model stores both username and email identifiers.
@@ -283,11 +283,12 @@ class SudoPermission(models.TextChoices):
     Values:
         CREATE_TEACHER: Can create teacher accounts
         CREATE_STUDENT: Can create student accounts
+        CREATE_RESEARCHER_CODES: Can generate researcher invite codes
         EDIT_USER: Can edit user accounts (within user role space)
         DELETE_USER: Can delete user accounts (within user role space)
         BULK_CREATE: Can use bulk user creation endpoints
-        RESET_PASSWORD: Can reset passwords for other users
-        GRANT_SUDO: Can grant sudo permissions to other researchers
+        ISSUE_STUDENT_RESET_CODE: Can issue student reset codes (researcher sudo extension)
+        ISSUE_RESEARCHER_RESET_CODE: Can issue researcher reset codes (researcher sudo extension)
 
     Note:
         Sudo permissions only apply within the user role space (RESEARCHER,
@@ -297,11 +298,12 @@ class SudoPermission(models.TextChoices):
 
     CREATE_TEACHER = "CREATE_TEACHER", "Create Teacher"
     CREATE_STUDENT = "CREATE_STUDENT", "Create Student"
+    CREATE_RESEARCHER_CODES = "CREATE_RESEARCHER_CODES", "Create Researcher Codes"
     EDIT_USER = "EDIT_USER", "Edit User"
     DELETE_USER = "DELETE_USER", "Delete User"
     BULK_CREATE = "BULK_CREATE", "Bulk Create"
-    RESET_PASSWORD = "RESET_PASSWORD", "Reset Password"
-    GRANT_SUDO = "GRANT_SUDO", "Grant Sudo"
+    ISSUE_STUDENT_RESET_CODE = "ISSUE_STUDENT_RESET_CODE", "Issue Student Reset Code"
+    ISSUE_RESEARCHER_RESET_CODE = "ISSUE_RESEARCHER_RESET_CODE", "Issue Researcher Reset Code"
 
 
 class SudoGrant(models.Model):
@@ -530,7 +532,7 @@ class OAuthProvider(models.TextChoices):
 
 
 class PasswordResetRequestStatus(models.TextChoices):
-    """Lifecycle states for approval-based password reset requests."""
+    """Lifecycle states for reset issuance records."""
 
     PENDING = "PENDING", "Pending"
     APPROVED = "APPROVED", "Approved"
@@ -669,10 +671,10 @@ class OAuthAccount(models.Model):
 
 class PasswordResetRequest(models.Model):
     """
-    Approval-based password reset request.
+    Password reset issuance record.
 
-    A request is initiated by a user via identifier and transitioned by an approver
-    (teacher/researcher/admin) according to role-based approval rules.
+    Each issuance stores the target user, issuer context, and lifecycle state used
+    to validate or expire one-time reset codes.
     """
 
     user = models.ForeignKey(
@@ -720,7 +722,7 @@ class PasswordResetRequest(models.Model):
 
 class PasswordResetCode(models.Model):
     """
-    One-time reset code generated after a reset request is approved.
+    One-time reset code generated from a reset issuance record.
 
     Code values are never persisted directly, only their hash is stored.
     """

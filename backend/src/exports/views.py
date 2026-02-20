@@ -36,4 +36,7 @@ def export_stub(request):
     Returns:
         501: Export endpoints are not implemented
     """
-    return Response("Export endpoints are not implemented", status=status.HTTP_501_NOT_IMPLEMENTED)
+    return Response(
+        {"detail": "Export endpoints are not implemented"},
+        status=status.HTTP_501_NOT_IMPLEMENTED,
+    )

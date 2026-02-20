@@ -13,17 +13,15 @@ Course Workflow:
 
 Endpoints:
     GET/POST /api/v1/courses           - List or create courses
-    GET/PUT/DELETE /api/v1/courses/{id} - Course detail/update/delete
+    GET/PATCH/DELETE /api/v1/courses/{id} - Course detail/update/delete
     GET /api/v1/courses/{id}/students  - List enrolled students
     DELETE /api/v1/courses/{id}/students/{userId} - Remove student
-    POST /api/v1/courses/{id}/students/{userId}/reset-code - Teacher-issued student reset code
 """
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from accounts.services import issue_student_reset_code_for_teacher
 from core.errors import error_response
 from core.pagination import paginate
 from core.permissions import IsTeacher, IsTeacherOrAbove
@@ -76,24 +74,24 @@ def list_or_create(request):
     return paginate(courses, request, transform_fn=lambda c: course_to_dto(c).model_dump())
 
 
-@api_view(["GET", "PUT", "DELETE"])
+@api_view(["GET", "PATCH", "DELETE"])
 @permission_classes([IsTeacherOrAbove])
 def detail(request, course_id: int):
     """
     Get, update, or delete a specific course.
 
     GET: Returns course details (requires view permission).
-    PUT: Updates course name (requires manage permission).
+    PATCH: Updates course name (requires manage permission).
     DELETE: Deletes course and all enrollments (requires manage permission).
 
     Args:
         course_id: Database ID of the course (path parameter)
 
-    Request Body (PUT):
+    Request Body (PATCH):
         {"name": "New Course Name"}
 
     Returns:
-        GET/PUT 200: Course DTO
+        GET/PATCH 200: Course DTO
         DELETE 204: No content on success
         403: Forbidden if user lacks permission
         404: "Course not found"
@@ -111,7 +109,7 @@ def detail(request, course_id: int):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         return Response(course_to_dto(course).model_dump(), status=status.HTTP_200_OK)
 
-    if request.method == "PUT":
+    if request.method == "PATCH":
         if not can_manage_course(request.user, course):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         serializer = CourseInputSerializer(data=request.data)
@@ -188,30 +186,3 @@ def remove_student(request, course_id: int, student_user_id: int):
     except ValueError as exc:
         return error_response(exc)
     return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-@api_view(["POST"])
-@permission_classes([IsTeacher])
-def generate_student_reset_code(request, course_id: int, student_user_id: int):
-    """Generate a one-time reset code for a student in the teacher's course."""
-    try:
-        reset_request, reset_code = issue_student_reset_code_for_teacher(
-            teacher=request.user,
-            course_id=course_id,
-            student_user_id=student_user_id,
-        )
-    except ValueError as exc:
-        return error_response(exc)
-    except PermissionError as exc:
-        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
-
-    return Response(
-        {
-            "requestId": reset_request.id,
-            "resetCode": reset_code,
-            "expiresAt": reset_request.expires_at.isoformat(),
-            "studentUserId": student_user_id,
-            "courseId": course_id,
-        },
-        status=status.HTTP_200_OK,
-    )

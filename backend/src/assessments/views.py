@@ -14,7 +14,7 @@ Question Types Supported:
 
 Endpoints:
     GET/POST /api/v1/assessments           - List or create assessments
-    GET/PUT/DELETE /api/v1/assessments/{id} - Assessment detail/update/delete
+    GET/PATCH/DELETE /api/v1/assessments/{id} - Assessment detail/update/delete
 """
 
 from rest_framework import status
@@ -67,7 +67,7 @@ def list_or_create(request):
     """
     if request.method == "POST":
         if not IsResearcherOrAdmin().has_permission(request, None):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         serializer = AssessmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         assessment = create_assessment(request.user, serializer.validated_data)
@@ -77,7 +77,7 @@ def list_or_create(request):
     return paginate(assessments, request, transform_fn=lambda a: assessment_to_dto(a).model_dump())
 
 
-@api_view(["GET", "PUT", "DELETE"])
+@api_view(["GET", "PATCH", "DELETE"])
 @permission_classes([IsAuthenticated])
 def detail(request, assessment_id: int):
     """
@@ -85,7 +85,7 @@ def detail(request, assessment_id: int):
 
     GET: Returns assessment with all questions. Students can only view
     assessments assigned to courses they're enrolled in.
-    PUT: Updates assessment (researcher/admin). Note: updating after submissions
+    PATCH: Updates assessment (researcher/admin). Note: updating after submissions
     exist may corrupt historical data (issue #25).
     DELETE: Removes assessment (researcher/admin).
 
@@ -94,8 +94,8 @@ def detail(request, assessment_id: int):
 
     Returns:
         GET 200: Assessment DTO with questions
-        PUT 200: Updated assessment DTO
-        DELETE 200: "Assessment deleted successfully."
+        PATCH 200: Updated assessment DTO
+        DELETE 204: No content on success
         403: Forbidden based on role/permission
         404: "Assessment not found"
     """
@@ -114,12 +114,12 @@ def detail(request, assessment_id: int):
                 course_id__in=course_ids,
             ).exists()
             if not allowed:
-                return Response(status=status.HTTP_403_FORBIDDEN)
+                return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_200_OK)
 
-    if request.method == "PUT":
+    if request.method == "PATCH":
         if not IsResearcherOrAdmin().has_permission(request, None):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         serializer = AssessmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -129,6 +129,6 @@ def detail(request, assessment_id: int):
         return Response(assessment_to_dto(updated).model_dump(), status=status.HTTP_200_OK)
 
     if not IsResearcherOrAdmin().has_permission(request, None):
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     delete_assessment(assessment)
     return Response(status=status.HTTP_204_NO_CONTENT)

@@ -8,7 +8,9 @@ from .models import (
     PasswordResetCode,
     PasswordResetRequest,
     RegistrationCode,
+    ResearcherProfile,
     StudentProfile,
+    SudoGrant,
     TeacherProfile,
     User,
     UserRole,
@@ -60,6 +62,23 @@ class TeacherProfileAdmin(admin.ModelAdmin):
 
     list_display = ("user", "created_at")
     search_fields = ("user__username", "user__name")
+
+
+@admin.register(ResearcherProfile)
+class ResearcherProfileAdmin(admin.ModelAdmin):
+    """Admin configuration for researcher profiles."""
+
+    list_display = ("user", "created_at")
+    search_fields = ("user__username", "user__name")
+
+
+@admin.register(SudoGrant)
+class SudoGrantAdmin(admin.ModelAdmin):
+    """Admin configuration for sudo grants."""
+
+    list_display = ("id", "user", "granted_by", "can_grant_sudo", "granted_at")
+    list_filter = ("can_grant_sudo",)
+    search_fields = ("user__username", "granted_by__username")
 
 
 @admin.register(OAuthAccount)

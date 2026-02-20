@@ -16,9 +16,7 @@ Endpoints:
     POST /api/v1/auth/token-exchanges   - Refresh access token
     POST /api/v1/auth/session-revocations - Logout (refresh token blacklist)
     PATCH /api/v1/auth/password         - Self-service password change
-    POST /api/v1/auth/reset-requests    - Create non-student approval-based reset request
-    POST /api/v1/auth/reset-request-lookups - Lookup non-student reset request status
-    PATCH /api/v1/auth/reset-requests/{id}  - Approve/deny non-student reset request
+    POST /api/v1/auth/password-reset-codes - Issuer-driven reset code generation
     POST /api/v1/auth/reset-code-validations - Verify reset code
     POST /api/v1/auth/password-resets   - Complete password reset
     POST /api/v1/registration/accounts  - Unified registration (method: LOCAL|OAUTH)
@@ -62,7 +60,6 @@ from core.throttles import AnonAuthThrottle, AnonBurstThrottle
 from .models import (
     OAuthAccount,
     OAuthProvider,
-    PasswordResetRequestStatus,
     RegistrationCodeType,
     Role,
     SudoPermission,
@@ -72,10 +69,8 @@ from .serializers import (
     LoginSerializer,
     PasswordChangeSerializer,
     PasswordResetCodeCompleteSerializer,
+    PasswordResetCodeIssueSerializer,
     PasswordResetCodeVerifySerializer,
-    PasswordResetRequestCreateSerializer,
-    PasswordResetStatusSerializer,
-    PasswordResetTransitionSerializer,
     RefreshTokenSerializer,
     RegistrationCodeCreateSerializer,
     RegistrationCodeUpdateSerializer,
@@ -96,17 +91,17 @@ from .services import (
     check_identifier_throttle,
     clear_identifier_failures,
     complete_password_reset,
-    create_password_reset_request,
     create_registration_codes,
     create_user_from_payload,
     ensure_profiles_for_role,
     find_user_by_identifier,
-    get_password_reset_request_status,
+    generate_managed_username,
     grant_sudo_to_researcher,
     identifier_allowed_for_user,
     identifier_in_use,
     identifier_throttle_retry_after,
     invalidate_user_sessions,
+    issue_password_reset_code,
     link_or_create_oauth_account,
     normalize_username_identifier,
     password_strength_errors,
@@ -119,7 +114,6 @@ from .services import (
     registration_code_status,
     revoke_sudo_grant,
     set_single_role,
-    transition_password_reset_request,
     transition_registration_code_status,
     validate_registration_code,
     verify_password_reset_code,
@@ -127,6 +121,7 @@ from .services import (
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
+USERNAME_IMMUTABLE_DETAIL = "username is system-managed and must not be provided"
 
 
 def _identifier_throttle_response(scope: str, identifier: str) -> Response:
@@ -479,7 +474,6 @@ def code_detail(request, code_id: int):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
-@throttle_classes([AnonBurstThrottle])
 def login(request):
     """Authenticate a user with role-constrained identifier + password."""
     serializer = LoginSerializer(data=request.data)
@@ -582,7 +576,6 @@ def change_password(request):
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
-@throttle_classes([AnonBurstThrottle])
 def login_with_google(request):
     """
     Authenticate a user via Google OAuth, returning a JWT token.
@@ -676,95 +669,37 @@ def login_with_google(request):
 
 
 @api_view(["POST"])
-@permission_classes([AllowAny])
-@throttle_classes([AnonBurstThrottle])
-def create_reset_request(request):
-    """Create a non-student password reset request and return one-time request token."""
-    serializer = PasswordResetRequestCreateSerializer(data=request.data)
+@permission_classes([IsTeacherOrAbove])
+def issue_password_reset_code_view(request):
+    """Issue a one-time reset code for a selected target user."""
+    serializer = PasswordResetCodeIssueSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    identifier = serializer.validated_data["identifier"]
-
-    if not check_identifier_throttle("reset-request", identifier):
-        return _identifier_throttle_response("reset-request", identifier)
+    target_user_id = serializer.validated_data["targetUserId"]
 
     try:
-        reset_request, request_token = create_password_reset_request(identifier)
-    except PermissionError as exc:
-        register_identifier_failure("reset-request", identifier)
-        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-    except ValueError as exc:
-        register_identifier_failure("reset-request", identifier)
-        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-
-    clear_identifier_failures("reset-request", identifier)
-    return Response(
-        {
-            "requestId": reset_request.id,
-            "requestToken": request_token,
-            "status": reset_request.status,
-        },
-        status=status.HTTP_201_CREATED,
-    )
-
-
-@api_view(["POST"])
-@permission_classes([AllowAny])
-@throttle_classes([AnonAuthThrottle])
-def reset_request_status(request):
-    """Lookup status for a non-student reset request by identifier + request token."""
-    serializer = PasswordResetStatusSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    identifier = serializer.validated_data["identifier"]
-    request_token = serializer.validated_data["requestToken"]
-
-    if not check_identifier_throttle("reset-status", identifier):
-        return _identifier_throttle_response("reset-status", identifier)
-
-    reset_request = get_password_reset_request_status(identifier, request_token)
-    if not reset_request:
-        register_identifier_failure("reset-status", identifier)
-        return Response(
-            {"detail": "Invalid identifier or request token."},
-            status=status.HTTP_404_NOT_FOUND,
-        )
-
-    clear_identifier_failures("reset-status", identifier)
-    response = {
-        "requestId": reset_request.id,
-        "status": reset_request.status,
-    }
-    if reset_request.status == PasswordResetRequestStatus.APPROVED:
-        response["next"] = "ENTER_RESET_CODE"
-    return Response(response, status=status.HTTP_200_OK)
-
-
-@api_view(["PATCH"])
-@permission_classes([IsResearcherOrAdmin])
-def transition_reset_request(request, request_id: int):
-    """Approve or deny a pending non-student reset request."""
-    serializer = PasswordResetTransitionSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    payload = serializer.validated_data
-    try:
-        updated, reset_code = transition_password_reset_request(
-            approver=request.user,
-            request_id=request_id,
-            new_status=payload["status"],
-            reason=payload.get("reason"),
-            expires_at=payload.get("expires_at"),
+        reset_request, reset_code = issue_password_reset_code(
+            issuer=request.user,
+            target_user_id=target_user_id,
         )
     except ValueError as exc:
-        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND
+        if "not found" not in detail.lower():
+            status_code = status.HTTP_400_BAD_REQUEST
+        return Response({"detail": detail}, status=status_code)
     except PermissionError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
 
-    body = {
-        "requestId": updated.id,
-        "status": updated.status,
-    }
-    if reset_code:
-        body["resetCode"] = reset_code
-    return Response(body, status=status.HTTP_200_OK)
+    return Response(
+        {
+            "requestId": reset_request.id,
+            "targetUserId": target_user_id,
+            "targetRole": reset_request.requested_role,
+            "resetCode": reset_code,
+            "expiresAt": reset_request.expires_at.isoformat(),
+        },
+        status=status.HTTP_201_CREATED,
+    )
 
 
 @api_view(["POST"])
@@ -828,16 +763,15 @@ def create_user(request):
 
     Request Body:
         {
-            "username": "user@example.com",  # Required, must be unique
             "name": "User Name",             # Required
             "role": "STUDENT|TEACHER|RESEARCHER", # Optional, defaults to STUDENT
             "password": "optional"           # Optional initial password
+            "email": "optional@example.com"  # Required for non-students
         }
 
     Returns:
-        200: "User created successfully."
-        400: "name and username are required" if missing fields
-        400: "Username already taken" if email exists
+        201: "User created successfully."
+        400: "name is required" if missing
         403: "Forbidden" if requester lacks permission for requested role
 
     Permission Rules:
@@ -847,11 +781,14 @@ def create_user(request):
     """
     serializer = UserInputSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    payload = serializer.validated_data
-    if not payload.get("username") or not payload.get("name"):
+    if "username" in request.data:
         return Response(
-            {"detail": "name and username are required"}, status=status.HTTP_400_BAD_REQUEST
+            {"detail": USERNAME_IMMUTABLE_DETAIL},
+            status=status.HTTP_400_BAD_REQUEST,
         )
+    payload = serializer.validated_data
+    if not payload.get("name"):
+        return Response({"detail": "name is required"}, status=status.HTTP_400_BAD_REQUEST)
     requested_role = payload.get("role") or Role.STUDENT
     if not can_create_user(request.user, requested_role):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
@@ -860,12 +797,12 @@ def create_user(request):
             {"detail": "email is required for non-student users"},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    if identifier_in_use(payload.get("username")):
-        return Response({"detail": "Username already taken"}, status=status.HTTP_400_BAD_REQUEST)
     if payload.get("email") and identifier_in_use(payload.get("email")):
         return Response({"detail": "Email already taken"}, status=status.HTTP_400_BAD_REQUEST)
+    create_payload = dict(payload)
+    create_payload["username"] = generate_managed_username(name=payload["name"])
     try:
-        create_user_from_payload(payload, role_override=requested_role, creator=request.user)
+        create_user_from_payload(create_payload, role_override=requested_role, creator=request.user)
     except ValueError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     return Response({"detail": "User created successfully."}, status=status.HTTP_201_CREATED)
@@ -899,24 +836,16 @@ def _edit_user(request, user_id: int):
     requested_role = payload.get("role") or primary_role(user)
     if not can_edit_user(request.user, user, requested_role):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
-    next_username = user.username
     next_email = user.email
 
     if payload.get("name"):
         user.name = payload["name"]
 
-    if payload.get("username") and payload["username"] != user.username:
-        if primary_role(user) == Role.STUDENT:
-            return Response(
-                {"detail": "Student usernames are immutable after account creation."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if identifier_in_use(payload["username"], exclude_user_id=user_id):
-            return Response(
-                {"detail": "Username already taken"}, status=status.HTTP_400_BAD_REQUEST
-            )
-        next_username = normalize_username_identifier(payload["username"])
-        user.username = next_username
+    if "username" in payload:
+        return Response(
+            {"detail": "Usernames are system-managed and immutable."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     if "email" in payload:
         incoming_email = payload.get("email")
@@ -999,14 +928,14 @@ def bulk_create(request):
     Request Body:
         [
             {
-                "username": "user1@example.com",
                 "name": "User One",
+                "email": "user1@example.com",
                 "role": "STUDENT",     # Optional, defaults to STUDENT
                 "password": "optional" # Optional
             },
             {
-                "username": "user2@example.com",
-                "name": "User Two"
+                "name": "User Two",
+                "email": "user2@example.com"
             },
             ...
         ]
@@ -1015,8 +944,8 @@ def bulk_create(request):
         200: Integer count of successfully created users
 
     Skipped Entries:
-        - Missing required fields (username, name)
-        - Duplicate usernames (already exist)
+        - Missing required fields (name)
+        - Duplicate email/identifier collisions
         - Invalid serializer data
         - Roles requester cannot create (non-admin trying to create admin)
 
@@ -1035,25 +964,33 @@ def bulk_create(request):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     if not isinstance(request.data, list):
         return Response({"detail": "Expected list of users"}, status=status.HTTP_400_BAD_REQUEST)
+    for entry in request.data:
+        if isinstance(entry, dict) and "username" in entry:
+            return Response(
+                {"detail": USERNAME_IMMUTABLE_DETAIL},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
     created = 0
     for entry in request.data:
         serializer = UserInputSerializer(data=entry)
         if not serializer.is_valid():
             continue
         payload = serializer.validated_data
-        if not payload.get("username") or not payload.get("name"):
+        if not payload.get("name"):
             continue
         requested_role = payload.get("role") or Role.STUDENT
         if not can_create_user(request.user, requested_role):
             continue
         if requested_role != Role.STUDENT and not payload.get("email"):
             continue
-        if identifier_in_use(payload.get("username")):
-            continue
         if payload.get("email") and identifier_in_use(payload.get("email")):
             continue
+        create_payload = dict(payload)
+        create_payload["username"] = generate_managed_username(name=payload["name"])
         try:
-            create_user_from_payload(payload, role_override=requested_role, creator=request.user)
+            create_user_from_payload(
+                create_payload, role_override=requested_role, creator=request.user
+            )
             created += 1
         except ValueError:
             continue

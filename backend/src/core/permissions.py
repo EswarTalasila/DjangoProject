@@ -42,6 +42,10 @@ def _role_set(user) -> set[str]:
     """
     Return the authenticated user's set of assigned roles.
 
+    Results are cached on the user object for the duration of the request
+    to avoid repeated identical queries when multiple permission checks
+    call has_role() or primary_role() on the same user.
+
     Args:
         user: User instance or None
 
@@ -50,7 +54,12 @@ def _role_set(user) -> set[str]:
     """
     if not user or not getattr(user, "is_authenticated", False):
         return set()
-    return set(user.roles.values_list("role", flat=True))
+    cached = getattr(user, "_cached_role_set", None)
+    if cached is not None:
+        return cached
+    roles = set(user.roles.values_list("role", flat=True))
+    user._cached_role_set = roles
+    return roles
 
 
 def primary_role(user) -> str:

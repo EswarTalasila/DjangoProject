@@ -13,9 +13,4 @@ urlpatterns = [
         views.remove_student,
         name="courses-students-remove",
     ),
-    path(
-        "<int:course_id>/students/<int:student_user_id>/reset-code",
-        views.generate_student_reset_code,
-        name="courses-students-reset-code",
-    ),
 ]

@@ -94,16 +94,16 @@ def detail(request, assignment_id: int):
         role = primary_role(request.user)
         if role == Role.STUDENT:
             if assignment.course_id is None:
-                return Response(status=status.HTTP_403_FORBIDDEN)
+                return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
             enrolled = Enrollment.objects.filter(
                 course_id=assignment.course_id,
                 student_profile__user=request.user,
             ).exists()
             if not enrolled:
-                return Response(status=status.HTTP_403_FORBIDDEN)
+                return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         return Response(assignment_to_dto(assignment).model_dump(), status=status.HTTP_200_OK)
     if not IsTeacher().has_permission(request, None):
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     delete_assignment(assignment)
     return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -150,7 +150,7 @@ def list_user(request, user_id: int):
         and not request.user.is_staff
         and not has_role(request.user, Role.RESEARCHER)
     ):
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     target = User.objects.filter(id=user_id).first()
     if not target:
         return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)

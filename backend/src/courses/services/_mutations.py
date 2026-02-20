@@ -7,11 +7,10 @@ import logging
 from django.db import IntegrityError, transaction
 
 from accounts.models import Role, StudentProfile, User
-from accounts.services import create_user_from_payload
+from accounts.services import create_user_from_payload, generate_managed_username
 from assessments.models import Assessment, GradingMode, QuestionKind
 from assignments.models import Assignment
 from core.helpers import answer_type_from_question
-from core.permissions import has_role
 from submissions.models import (
     Answer,
     MultipleChoiceAnswer,
@@ -85,7 +84,7 @@ def create_student_in_course(request_user: User, payload: dict) -> Enrollment:
 
     Args:
         request_user: The teacher adding the student
-        payload: Dict with name, username, courseId, and optionally consent
+        payload: Dict with name, courseId, and optionally consent
 
     Returns:
         The created Enrollment
@@ -100,15 +99,15 @@ def create_student_in_course(request_user: User, payload: dict) -> Enrollment:
     if not course:
         raise ValueError("Course not found")
 
-    username = str(payload.get("username", "")).strip().lower()
-    student_user = User.objects.filter(username__iexact=username).first()
-    if student_user:
-        if not has_role(student_user, Role.STUDENT):
-            raise ValueError("Existing account is not a student")
-    else:
-        student_user = create_user_from_payload(
-            payload, role_override=Role.STUDENT, creator=request_user
-        )
+    raw_username = str(payload.get("username", "")).strip()
+    if raw_username:
+        raise ValueError("username is system-managed and must not be provided")
+
+    create_payload = dict(payload)
+    create_payload["username"] = generate_managed_username(name=payload.get("name"))
+    student_user = create_user_from_payload(
+        create_payload, role_override=Role.STUDENT, creator=request_user
+    )
     student_profile = StudentProfile.objects.filter(user=student_user).first()
     if not student_profile:
         raise ValueError("StudentProfile not created")

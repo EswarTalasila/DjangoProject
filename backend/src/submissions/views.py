@@ -169,7 +169,11 @@ def _create_for_assignment(request, assignment_id: int, assignment: Assignment):
     elif role == Role.TEACHER:
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     try:
-        submission = create_submission(assignment_id, serializer.validated_data, SubmissionStatus.SUBMITTED)
+        submission = create_submission(
+            assignment_id,
+            serializer.validated_data,
+            SubmissionStatus.SUBMITTED,
+        )
     except ValueError as exc:
         return error_response(exc)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_201_CREATED)

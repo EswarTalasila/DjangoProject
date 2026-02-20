@@ -36,7 +36,6 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path("api/v1/user-batches", account_views.bulk_create),
     path("api/v1/sudo-grants", account_views.grant_sudo),
     path("api/v1/sudo-grants/<int:grant_id>", account_views.revoke_sudo),
-    # Collection aliases without trailing slash to match API standard.
     path("api/v1/codes", account_views.codes_collection),
     path("api/v1/codes/", include("accounts.urls_codes")),
     path("api/v1/courses/", include("courses.urls")),

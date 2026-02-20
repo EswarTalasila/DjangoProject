@@ -1,0 +1,163 @@
+"""
+Account service helpers.
+
+This package provides business logic for user account management, organized
+into focused sub-modules:
+
+- _utils: Normalizers, hash functions, throttle helpers, username generators
+- _auth: Authentication, sessions, and token management
+- _roles: Role management, permissions, and user CRUD
+- _password_reset: Password reset workflow (issuer-driven codes + completion)
+- _registration: Registration code management and redemption
+- _sudo: Sudo grant and revoke operations
+
+All public names are re-exported here for backward compatibility.
+"""
+
+from ._auth import (
+    authenticate_user,
+    blacklist_refresh_token,
+    build_user_response,
+    find_user_by_identifier,
+    invalidate_user_sessions,
+    link_or_create_oauth_account,
+)
+from ._password_reset import (
+    cleanup_temporary_reset_codes,
+    complete_password_reset,
+    issue_password_reset_code,
+    verify_password_reset_code,
+)
+from ._registration import (
+    _ensure_student_enrollment,
+    _role_from_registration_code_type,
+    _select_valid_code_for_update,
+    create_registration_codes,
+    redeem_non_student_local_invite,
+    redeem_non_student_oauth_invite,
+    redeem_student_invite,
+    redeem_student_join_course,
+    registration_code_scope_queryset,
+    registration_code_status,
+    transition_registration_code_status,
+    validate_registration_code,
+)
+from ._roles import (
+    _get_role_value,
+    can_create_user,
+    can_delete_user,
+    can_edit_user,
+    create_user_from_payload,
+    ensure_profiles_for_role,
+    set_single_role,
+    teacher_owns_student,
+)
+from ._sudo import (
+    _can_grant_permissions,
+    grant_sudo_to_researcher,
+    revoke_sudo_grant,
+)
+from ._utils import (
+    DEFAULT_RESET_CODE_WINDOW,
+    LOGIN_RATE_LIMIT_ATTEMPTS,
+    LOGIN_RATE_LIMIT_WINDOW_SECONDS,
+    MANAGED_USERNAME_BASE_LENGTH,
+    MANAGED_USERNAME_LENGTH,
+    REGISTRATION_CODE_HMAC_SALT,
+    REGISTRATION_CODE_PREFIX_LENGTH,
+    REGISTRATION_CODE_STATUS_ACTIVE,
+    REGISTRATION_CODE_STATUS_ARCHIVED,
+    REGISTRATION_CODE_STATUS_EXHAUSTED,
+    REGISTRATION_CODE_STATUS_EXPIRED,
+    REGISTRATION_CODE_STATUS_REVOKED,
+    REGISTRATION_CODE_TOKEN_BYTES,
+    _compact_alnum,
+    _generate_secret_token,
+    _hash_secret_token,
+    _managed_username_seed,
+    _normalize_registration_name,
+    _registration_code_hashes_for_lookup,
+    _unique_username_from_base,
+    check_identifier_throttle,
+    clear_identifier_failures,
+    generate_managed_username,
+    generate_student_username,
+    identifier_allowed_for_user,
+    identifier_in_use,
+    identifier_throttle_retry_after,
+    normalize_registration_code_input,
+    normalize_username_identifier,
+    password_strength_errors,
+    register_identifier_failure,
+    registration_code_hash,
+    registration_code_prefix,
+)
+
+__all__ = [
+    "DEFAULT_RESET_CODE_WINDOW",
+    "LOGIN_RATE_LIMIT_ATTEMPTS",
+    "LOGIN_RATE_LIMIT_WINDOW_SECONDS",
+    "MANAGED_USERNAME_BASE_LENGTH",
+    "MANAGED_USERNAME_LENGTH",
+    "REGISTRATION_CODE_HMAC_SALT",
+    "REGISTRATION_CODE_PREFIX_LENGTH",
+    "REGISTRATION_CODE_STATUS_ACTIVE",
+    "REGISTRATION_CODE_STATUS_ARCHIVED",
+    "REGISTRATION_CODE_STATUS_EXHAUSTED",
+    "REGISTRATION_CODE_STATUS_EXPIRED",
+    "REGISTRATION_CODE_STATUS_REVOKED",
+    "REGISTRATION_CODE_TOKEN_BYTES",
+    "_can_grant_permissions",
+    "_compact_alnum",
+    "_ensure_student_enrollment",
+    "_generate_secret_token",
+    "_get_role_value",
+    "_hash_secret_token",
+    "_managed_username_seed",
+    "_normalize_registration_name",
+    "_registration_code_hashes_for_lookup",
+    "_role_from_registration_code_type",
+    "_select_valid_code_for_update",
+    "_unique_username_from_base",
+    "authenticate_user",
+    "blacklist_refresh_token",
+    "build_user_response",
+    "can_create_user",
+    "can_delete_user",
+    "can_edit_user",
+    "check_identifier_throttle",
+    "cleanup_temporary_reset_codes",
+    "clear_identifier_failures",
+    "complete_password_reset",
+    "create_registration_codes",
+    "create_user_from_payload",
+    "ensure_profiles_for_role",
+    "find_user_by_identifier",
+    "generate_managed_username",
+    "generate_student_username",
+    "grant_sudo_to_researcher",
+    "identifier_allowed_for_user",
+    "identifier_in_use",
+    "identifier_throttle_retry_after",
+    "invalidate_user_sessions",
+    "issue_password_reset_code",
+    "link_or_create_oauth_account",
+    "normalize_registration_code_input",
+    "normalize_username_identifier",
+    "password_strength_errors",
+    "redeem_non_student_local_invite",
+    "redeem_non_student_oauth_invite",
+    "redeem_student_invite",
+    "redeem_student_join_course",
+    "register_identifier_failure",
+    "registration_code_hash",
+    "registration_code_prefix",
+    "registration_code_scope_queryset",
+    "registration_code_status",
+    "revoke_sudo_grant",
+    "set_single_role",
+    "teacher_owns_student",
+    "transition_registration_code_status",
+    "validate_registration_code",
+    "verify_password_reset_code",
+]

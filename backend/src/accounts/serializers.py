@@ -19,9 +19,11 @@ Note:
     converting "ROLE_TEACHER" to "TEACHER" for internal use.
 """
 
+from collections.abc import Mapping
+
 from rest_framework import serializers
 
-from .models import PasswordResetRequestStatus, RegistrationCodeType, Role, User, UserRole
+from .models import RegistrationCodeType, Role, User, UserRole
 
 
 class RoleChoiceField(serializers.ChoiceField):
@@ -44,6 +46,19 @@ class RoleChoiceField(serializers.ChoiceField):
         """
         if isinstance(data, str) and data.startswith("ROLE_"):
             data = data.replace("ROLE_", "", 1)
+        return super().to_internal_value(data)
+
+
+class StrictFieldsSerializer(serializers.Serializer):
+    """Serializer base that rejects any undeclared input fields."""
+
+    def to_internal_value(self, data):
+        if isinstance(data, Mapping):
+            unknown_fields = sorted(set(data.keys()) - set(self.fields.keys()))
+            if unknown_fields:
+                raise serializers.ValidationError(
+                    {field: ["Unknown field."] for field in unknown_fields}
+                )
         return super().to_internal_value(data)
 
 
@@ -110,9 +125,10 @@ class UserOutputSerializer(serializers.ModelSerializer):
         Return the user's primary role as a ROLE_* string.
 
         Falls back to ROLE_STUDENT if no role is assigned.
+        Uses .all() instead of .values_list() to leverage prefetch_related cache.
         """
-        role = obj.roles.values_list("role", flat=True).first()
-        value = role or Role.STUDENT
+        roles = list(obj.roles.all())
+        value = roles[0].role if roles else Role.STUDENT
         return f"ROLE_{value}"
 
 
@@ -122,16 +138,24 @@ class RegistrationCodeValidateInputSerializer(serializers.Serializer):
     code = serializers.CharField(max_length=64)
 
 
-class StudentInviteRegisterSerializer(serializers.Serializer):
+class StudentInviteRegisterSerializer(StrictFieldsSerializer):
     """
     Payload for local registration via invite code.
     """
 
     code = serializers.CharField(max_length=64)
-    name = serializers.CharField(required=True, allow_blank=False, max_length=255)
-    username = serializers.CharField(required=False, allow_blank=False, max_length=320)
-    email = serializers.EmailField(required=False, allow_blank=False, max_length=320)
+    firstName = serializers.CharField(required=True, allow_blank=False, max_length=255)
+    lastName = serializers.CharField(required=True, allow_blank=False, max_length=255)
+    email = serializers.EmailField(
+        required=False, allow_blank=False, allow_null=True, max_length=320
+    )
     password = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        max_length=255,
+        trim_whitespace=False,
+    )
+    confirmPassword = serializers.CharField(
         required=True,
         allow_blank=False,
         max_length=255,
@@ -145,13 +169,13 @@ class StudentJoinCourseSerializer(serializers.Serializer):
     code = serializers.CharField(max_length=64)
 
 
-class RegistrationOAuthSerializer(serializers.Serializer):
+class RegistrationOAuthSerializer(StrictFieldsSerializer):
     """Payload for non-student OAuth registration via invite code."""
 
     code = serializers.CharField(max_length=64)
     accessToken = serializers.CharField(required=True, allow_blank=False)
-    username = serializers.CharField(required=False, allow_blank=False, max_length=320)
-    name = serializers.CharField(required=False, allow_blank=False, max_length=255)
+    firstName = serializers.CharField(required=True, allow_blank=False, max_length=255)
+    lastName = serializers.CharField(required=True, allow_blank=False, max_length=255)
 
 
 class RegistrationCodeCreateSerializer(serializers.Serializer):
@@ -238,45 +262,10 @@ class PasswordChangeSerializer(serializers.Serializer):
     confirmPassword = serializers.CharField(required=True, allow_blank=False, trim_whitespace=False)
 
 
-class PasswordResetRequestCreateSerializer(serializers.Serializer):
-    """Payload to initiate a reset request."""
+class PasswordResetCodeIssueSerializer(StrictFieldsSerializer):
+    """Payload for issuer-driven reset code generation."""
 
-    identifier = serializers.CharField(required=False, allow_blank=False, max_length=320)
-    username = serializers.CharField(required=False, allow_blank=False, max_length=320)
-    email = serializers.CharField(required=False, allow_blank=False, max_length=320)
-
-    def validate(self, attrs):
-        identifier = attrs.get("identifier") or attrs.get("username") or attrs.get("email")
-        if not identifier:
-            raise serializers.ValidationError({"identifier": "identifier is required"})
-        attrs["identifier"] = identifier
-        return attrs
-
-
-class PasswordResetStatusSerializer(serializers.Serializer):
-    """Payload to check reset request status."""
-
-    identifier = serializers.CharField(required=False, allow_blank=False, max_length=320)
-    username = serializers.CharField(required=False, allow_blank=False, max_length=320)
-    email = serializers.CharField(required=False, allow_blank=False, max_length=320)
-    requestToken = serializers.CharField(required=True, allow_blank=False, max_length=64)
-
-    def validate(self, attrs):
-        identifier = attrs.get("identifier") or attrs.get("username") or attrs.get("email")
-        if not identifier:
-            raise serializers.ValidationError({"identifier": "identifier is required"})
-        attrs["identifier"] = identifier
-        return attrs
-
-
-class PasswordResetTransitionSerializer(serializers.Serializer):
-    """Payload for approver state transition."""
-
-    status = serializers.ChoiceField(
-        choices=[PasswordResetRequestStatus.APPROVED, PasswordResetRequestStatus.DENIED]
-    )
-    reason = serializers.CharField(required=False, allow_blank=False, max_length=255)
-    expires_at = serializers.DateTimeField(required=False)
+    targetUserId = serializers.IntegerField(required=True, min_value=1)
 
 
 class PasswordResetCodeVerifySerializer(serializers.Serializer):
