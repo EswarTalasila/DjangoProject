@@ -1,0 +1,17 @@
+@startuml
+autonumber
+participant Client
+database Postgres
+participant "eel-backend"
+
+Client ->> "eel-backend": POST api/v1/codes
+"eel-backend" ->> Postgres: SELECT app_users WHERE id = ?
+"eel-backend" ->> Postgres: SELECT user_roles WHERE user_id = ?
+"eel-backend" ->> Postgres: SELECT courses WHERE id = ?
+"eel-backend" ->> Postgres: SELECT teacher_profiles WHERE id = ?
+"eel-backend" ->> Postgres: EXISTS registration_codes (code_hash)
+"eel-backend" ->> Postgres: INSERT registration_codes
+"eel-backend" ->> Postgres: EXISTS registration_codes (code_hash)
+"eel-backend" ->> Postgres: INSERT registration_codes
+"eel-backend" -->> Client: HTTP 201
+@enduml

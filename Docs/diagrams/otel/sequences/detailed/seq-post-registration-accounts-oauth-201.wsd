@@ -1,0 +1,62 @@
+@startuml
+title POST /api/v1/registration/accounts — OAUTH (201 Created)
+autonumber
+
+actor Client
+participant "register_account()\n_register_oauth()" as View
+participant "RegistrationOAuth\nSerializer" as Serializer
+participant "_google_userinfo()" as Google
+participant "validate_registration\n_code()" as Validate
+participant "redeem_non_student\n_oauth_invite()" as Redeem
+participant "create_user_from\n_payload()" as CreateUser
+database Postgres
+entity "Google OAuth API" as GoogleAPI
+
+Client -> View: POST /registration/accounts\n{method: "OAUTH", code,\naccessToken, firstName, lastName}
+View -> Serializer: is_valid(raise_exception=True)
+Serializer --> View: validated data
+
+View -> Google: _google_userinfo(accessToken)
+Google -> GoogleAPI: GET googleapis.com/oauth2/v3/userinfo\nAuthorization: Bearer {token}
+GoogleAPI --> Google: {sub, email, email_verified,\nname, picture}
+Google --> View: google profile data
+View -> View: extract google_subject, google_email\nvalidate both present
+
+== @transaction.atomic ==
+
+View -> Redeem: redeem_non_student_oauth_invite(\ncode, subject, email, names, verified, picture)
+
+Redeem -> Postgres: SELECT registration_codes\nWHERE code_hash = ? FOR UPDATE
+Postgres --> Redeem: RegistrationCode (locked)
+Redeem -> Redeem: validate code_type != STUDENT
+
+Redeem -> Postgres: SELECT EXISTS oauth_accounts\nWHERE provider=GOOGLE\nAND subject = ?
+Postgres --> Redeem: False (not linked)
+
+Redeem -> Postgres: SELECT EXISTS app_users\nWHERE username = email OR email = email
+Postgres --> Redeem: False (email not taken)
+
+Redeem -> Redeem: generate_managed_username()
+Redeem -> Postgres: SELECT EXISTS app_users\nWHERE username = ?
+Postgres --> Redeem: False (unique)
+
+Redeem -> CreateUser: create_user_from_payload(\nrole=TEACHER, creator=None, password=None)
+CreateUser -> Postgres: INSERT INTO app_users\n(username, name, email, password=unusable)
+CreateUser -> Postgres: DELETE FROM user_roles WHERE user_id = ?
+CreateUser -> Postgres: INSERT INTO user_roles
+CreateUser -> Postgres: INSERT INTO teacher_profiles
+CreateUser --> Redeem: User
+
+Redeem -> Postgres: INSERT/UPDATE oauth_accounts\n(provider=GOOGLE, subject, user, email)
+Redeem -> Postgres: UPDATE oauth_accounts\nSET email_verified, picture_url, last_login_at
+
+Redeem -> Postgres: UPDATE registration_codes\nSET times_used += 1
+Redeem --> View: User
+
+== end transaction ==
+
+View -> View: RefreshToken.for_user(user)\ngenerate JWT tokens
+View -> View: build_user_response(user, tokens)
+
+View --> Client: 201 Created\n{message, username, name, email,\naccessToken, refreshToken,\nrole, courseId: null}
+@enduml

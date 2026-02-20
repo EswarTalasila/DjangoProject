@@ -1,0 +1,26 @@
+@startuml
+autonumber
+participant Client
+database Postgres
+participant "eel-backend"
+
+Client ->> "eel-backend": POST api/v1/registration/accounts
+"eel-backend" ->> Postgres: SELECT registration_codes WHERE code_hash = ?
+"eel-backend" ->> Postgres: SELECT registration_codes WHERE code_hash = ?
+"eel-backend" ->> Postgres: SELECT courses WHERE id = ?
+"eel-backend" ->> Postgres: EXISTS app_users (username)
+"eel-backend" ->> Postgres: SAVEPOINT "s281472824570240_x1"
+"eel-backend" ->> Postgres: INSERT app_users
+"eel-backend" ->> Postgres: DELETE user_roles WHERE user_id = ?
+"eel-backend" ->> Postgres: INSERT user_roles
+"eel-backend" ->> Postgres: EXISTS student_profiles (user_id)
+"eel-backend" ->> Postgres: INSERT student_profiles
+"eel-backend" ->> Postgres: RELEASE SAVEPOINT "s281472824570240_x1"
+"eel-backend" ->> Postgres: SELECT student_profiles WHERE user_id = ?
+"eel-backend" ->> Postgres: SELECT enrollments WHERE course_id = ?
+"eel-backend" ->> Postgres: INSERT enrollments
+"eel-backend" ->> Postgres: UPDATE registration_codes SET ...
+"eel-backend" ->> Postgres: INSERT token_blacklist_outstandingtoken
+"eel-backend" ->> Postgres: SELECT user_roles WHERE user_id = ?
+"eel-backend" -->> Client: HTTP 201
+@enduml

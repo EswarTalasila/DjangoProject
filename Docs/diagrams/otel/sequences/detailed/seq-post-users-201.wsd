@@ -1,0 +1,66 @@
+@startuml
+title POST /api/v1/users — Create User (201 Created)
+autonumber
+
+actor Client
+participant "create_user()" as View
+participant "IsTeacherOrAbove" as Perm
+participant "UserInputSerializer" as Serializer
+participant "can_create_user()" as RoleGate
+participant "identifier_in_use()" as DupCheck
+participant "generate_managed\n_username()" as UsernameGen
+participant "create_user_from\n_payload()" as CreateUser
+database Postgres
+
+Client -> View: POST /users\n{name: "Jane Doe", email: "jane@...",\npassword: "...", role: "ROLE_TEACHER"}\n[JWT: admin user]
+View -> Perm: has_permission(request)
+Perm -> Perm: is_staff? Yes
+Perm --> View: True
+
+View -> Serializer: is_valid(raise_exception=True)
+Serializer --> View: validated data
+
+View -> View: reject if "username" in request.data\n(username is system-managed)
+View -> View: validate "name" present
+
+View -> RoleGate: can_create_user(admin, TEACHER)
+RoleGate -> RoleGate: admin can create\nRESEARCHER or TEACHER -> OK
+RoleGate --> View: True
+
+View -> View: role != STUDENT, email required? Yes, present
+
+View -> DupCheck: identifier_in_use("jane@...")
+DupCheck -> Postgres: SELECT EXISTS app_users\nWHERE username = 'jane@...' OR email = 'jane@...'
+Postgres --> DupCheck: False
+DupCheck --> View: False (available)
+
+View -> UsernameGen: generate_managed_username("Jane Doe")
+UsernameGen -> UsernameGen: normalize -> seed -> 8-char
+UsernameGen -> Postgres: SELECT EXISTS app_users\nWHERE username = ?
+Postgres --> UsernameGen: False (unique)
+UsernameGen --> View: "janedo42"
+
+== @transaction.atomic ==
+
+View -> CreateUser: create_user_from_payload(\nrole=TEACHER, creator=admin)
+CreateUser -> Postgres: INSERT INTO app_users\n(username="janedo42", email, name, password)
+Postgres --> CreateUser: User
+CreateUser -> Postgres: DELETE FROM user_roles\nWHERE user_id = ?
+CreateUser -> Postgres: INSERT INTO user_roles\n(user_id, role=TEACHER)
+CreateUser -> Postgres: SELECT EXISTS teacher_profiles\nWHERE user_id = ?
+Postgres --> CreateUser: False
+CreateUser -> Postgres: INSERT INTO teacher_profiles\n(user_id)
+CreateUser --> View: User
+
+== end transaction ==
+
+View --> Client: 201 Created\n{detail: "User created successfully"}
+
+note over RoleGate
+  **Who can create whom:**
+  Admin: RESEARCHER, TEACHER
+  Researcher + CREATE_TEACHER sudo: TEACHER
+  Researcher + CREATE_STUDENT sudo: STUDENT
+  Teacher: STUDENT only
+end note
+@enduml

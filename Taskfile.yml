@@ -90,6 +90,7 @@ tasks:
         print_cmd "task test:coverage:frontend" "frontend coverage report"
         print_cmd "task test:e2e" "Playwright flow (testing profile)"
         print_cmd "task test -- <N>" "override pytest workers for compatible test tasks (default: auto, 0 = sequential)"
+        print_cmd "task test:security [-- <N>]" "security suite defaults to sequential (0) for deterministic throttling checks"
         print_cmd "TEST_WORKERS=0 task test:integration:role -- <role>" "set workers when task args are already in use"
         printf "\n"
 
@@ -128,6 +129,7 @@ tasks:
         print_cmd "task django:show-urls" "list URL routes"
         print_cmd "task django:createsuperuser" "interactive superuser creation"
         print_cmd "task django:graph-models" "generate model graph (Graphviz)"
+        print_cmd "task seed:account -- <researcher|teacher|student|all>" "provision role account via real registration pipeline"
         printf "\n"
 
         print_section "${C_MAGENTA}" "Docs & Diagrams"
@@ -615,7 +617,7 @@ tasks:
     desc: Run backend security tests
     deps: [_check:docker, _check:backend-running, _check:testing-profile]
     vars:
-      TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
+      TEST_WORKERS: '{{default "0" .CLI_ARGS}}'
     cmds:
       - >
         sh -c 'workers="{{.TEST_WORKERS}}";
@@ -805,6 +807,18 @@ tasks:
     deps: [_check:docker, _check:backend-running]
     cmds:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py makemigrations"
+
+  seed:account:
+    desc: "Provision a deterministic role account via real registration pipeline (usage: task seed:account -- <researcher|teacher|student|all>)"
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - >
+        sh -c 'role="{{.CLI_ARGS}}";
+        if [ -z "$role" ]; then
+          echo "Usage: task seed:account -- <researcher|teacher|student|all>";
+          exit 1;
+        fi;
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py provision_account --role "$role"'
 
   django:shell:
     desc: Open Django shell

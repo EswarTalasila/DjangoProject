@@ -1,0 +1,18 @@
+@startuml
+autonumber
+participant Client
+database Postgres
+participant "eel-backend"
+
+Client ->> "eel-backend": POST api/v1/users
+"eel-backend" ->> Postgres: SELECT app_users WHERE id = ?
+loop 2x
+  "eel-backend" ->> Postgres: EXISTS app_users (username)
+end
+"eel-backend" ->> Postgres: INSERT app_users
+"eel-backend" ->> Postgres: DELETE user_roles WHERE user_id = ?
+"eel-backend" ->> Postgres: INSERT user_roles
+"eel-backend" ->> Postgres: EXISTS teacher_profiles (user_id)
+"eel-backend" ->> Postgres: INSERT teacher_profiles
+"eel-backend" -->> Client: HTTP 201
+@enduml

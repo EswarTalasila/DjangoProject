@@ -31,14 +31,26 @@ const codeSchema = z.object({
 });
 
 const registerSchema = z.object({
-  name: z.string().trim().min(1, "Full name is required"),
+  firstName: z.string().trim().min(1, "First name is required"),
+  lastName: z.string().trim().min(1, "Last name is required"),
+  email: z.string().trim().email("Enter a valid email").optional().or(z.literal("")),
   password: z.string().min(8, "Password must be at least 8 characters"),
+  confirmPassword: z.string().min(1, "Confirm password is required"),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
 });
 
 type CodeForm = z.infer<typeof codeSchema>;
 type RegisterForm = z.infer<typeof registerSchema>;
 type ApiError = { response?: { data?: unknown } };
-const registerFieldNames = new Set<keyof RegisterForm>(["name", "password"]);
+const registerFieldNames = new Set<keyof RegisterForm>([
+  "firstName",
+  "lastName",
+  "email",
+  "password",
+  "confirmPassword",
+]);
 
 function RegisterPageContent() {
   const router = useRouter();
@@ -53,7 +65,13 @@ function RegisterPageContent() {
   const codeForm = useForm<CodeForm>({ resolver: zodResolver(codeSchema) });
   const detailsForm = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { name: "", password: "" },
+    defaultValues: {
+      firstName: "",
+      lastName: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+    },
   });
 
   const handleApiError = (
@@ -117,17 +135,41 @@ function RegisterPageContent() {
     setIsLoading(true);
     setGeneralError(null);
     try {
+      const isStudent = codeContext?.code_type === "STUDENT";
+      if (!isStudent && !data.email?.trim()) {
+        detailsForm.setError("email", {
+          type: "manual",
+          message: "Email is required for teacher/researcher registration",
+        });
+        return;
+      }
+
       const payload: Record<string, string> = {
         code: validatedCode,
+        firstName: data.firstName.trim(),
+        lastName: data.lastName.trim(),
         password: data.password,
+        confirmPassword: data.confirmPassword,
       };
-      payload.name = data.name;
+      if (!isStudent && data.email?.trim()) {
+        payload.email = data.email.trim().toLowerCase();
+      }
 
       const registerRes = await api.post("/registration/accounts", {
         method: "LOCAL",
         ...payload,
       });
-      const resolvedUsername = registerRes.data?.username;
+      const {
+        accessToken,
+        role,
+        name,
+        username: resolvedUsername,
+      } = registerRes.data as {
+        accessToken?: string;
+        role?: string;
+        name?: string;
+        username?: string;
+      };
 
       if (!resolvedUsername) {
         setGeneralError(
@@ -136,12 +178,10 @@ function RegisterPageContent() {
         return;
       }
 
-      const loginRes = await api.post("/auth/sessions", {
-        identifier: resolvedUsername,
-        password: data.password,
-      });
-
-      const { accessToken, role, name } = loginRes.data;
+      if (!accessToken) {
+        setGeneralError("Registration succeeded, but token response was missing.");
+        return;
+      }
       Cookies.set("access_token", accessToken, { expires: 1 });
       if (role) Cookies.set("user_role", role);
       Cookies.set("user_name", name || "User", { expires: 1 });
@@ -164,7 +204,7 @@ function RegisterPageContent() {
         <p className="text-sm text-slate-500">
           {step === "CODE"
             ? "Enter your invitation code to get started"
-            : "Complete your student registration"}
+            : "Complete your registration"}
         </p>
       </div>
 
@@ -235,24 +275,67 @@ function RegisterPageContent() {
             <form onSubmit={detailsForm.handleSubmit(onRegister)}>
               <div className="grid gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="name">Full Name</Label>
+                  <Label htmlFor="firstName">First Name</Label>
                   <Input
-                    id="name"
-                    placeholder="Jane Doe"
+                    id="firstName"
+                    placeholder="Jane"
                     disabled={isLoading}
                     className={
-                      detailsForm.formState.errors.name
+                      detailsForm.formState.errors.firstName
                         ? "border-red-500 focus-visible:ring-red-500"
                         : ""
                     }
-                    {...detailsForm.register("name")}
+                    {...detailsForm.register("firstName")}
                   />
-                  {detailsForm.formState.errors.name && (
+                  {detailsForm.formState.errors.firstName && (
                     <p className="text-xs text-red-500 mt-1">
-                      {detailsForm.formState.errors.name.message}
+                      {detailsForm.formState.errors.firstName.message}
                     </p>
                   )}
                 </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="lastName">Last Name</Label>
+                  <Input
+                    id="lastName"
+                    placeholder="Doe"
+                    disabled={isLoading}
+                    className={
+                      detailsForm.formState.errors.lastName
+                        ? "border-red-500 focus-visible:ring-red-500"
+                        : ""
+                    }
+                    {...detailsForm.register("lastName")}
+                  />
+                  {detailsForm.formState.errors.lastName && (
+                    <p className="text-xs text-red-500 mt-1">
+                      {detailsForm.formState.errors.lastName.message}
+                    </p>
+                  )}
+                </div>
+
+                {codeContext?.code_type !== "STUDENT" && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="name@example.com"
+                      disabled={isLoading}
+                      className={
+                        detailsForm.formState.errors.email
+                          ? "border-red-500 focus-visible:ring-red-500"
+                          : ""
+                      }
+                      {...detailsForm.register("email")}
+                    />
+                    {detailsForm.formState.errors.email && (
+                      <p className="text-xs text-red-500 mt-1">
+                        {detailsForm.formState.errors.email.message}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div className="grid gap-2">
                   <Label htmlFor="password">Password</Label>
@@ -270,6 +353,26 @@ function RegisterPageContent() {
                   {detailsForm.formState.errors.password && (
                     <p className="text-xs text-red-500 mt-1">
                       {detailsForm.formState.errors.password.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="confirmPassword">Confirm Password</Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    disabled={isLoading}
+                    className={
+                      detailsForm.formState.errors.confirmPassword
+                        ? "border-red-500 focus-visible:ring-red-500"
+                        : ""
+                    }
+                    {...detailsForm.register("confirmPassword")}
+                  />
+                  {detailsForm.formState.errors.confirmPassword && (
+                    <p className="text-xs text-red-500 mt-1">
+                      {detailsForm.formState.errors.confirmPassword.message}
                     </p>
                   )}
                 </div>

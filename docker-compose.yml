@@ -21,7 +21,7 @@
 #   docker compose --profile proxy up # Include Nginx reverse proxy
 #
 # SERVICES:
-#   - database:     PostgreSQL 16 (port 5432)
+#   - database:     PostgreSQL 17 (internal only, access via docker compose exec)
 #   - backend:      Django REST API (port 8000)
 #   - frontend:     Next.js dev server (port 3000)
 #   - frontend-e2e: Playwright E2E tests (profile: e2e)
@@ -42,8 +42,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test:
         [

@@ -1,0 +1,29 @@
+@startuml
+title POST /api/v1/registration/code-validations (200 OK)
+autonumber
+
+actor Client
+participant "validate_registration\n_code_view" as View
+participant "AnonAuthThrottle" as Throttle
+participant "RegistrationCode\nValidateInputSerializer" as Serializer
+participant "validate_registration\n_code()" as Service
+database Postgres
+
+Client -> View: POST /registration/code-validations\n{code: "REG-abc123..."}
+View -> Throttle: check rate limit
+Throttle --> View: OK (AllowAny)
+View -> Serializer: is_valid(data)
+Serializer --> View: validated {code}
+
+View -> Service: validate_registration_code(code)
+Service -> Service: _registration_code_hashes_for_lookup(code)\nHMAC hash with SECRET_KEY + fallbacks
+Service -> Postgres: SELECT registration_codes\nWHERE code_hash = ?
+Postgres --> Service: RegistrationCode row
+Service -> Service: check archived_at is None
+Service -> Service: check is_active == True
+Service -> Service: check expires_at > now
+Service -> Service: check times_used < max_uses
+Service --> View: RegistrationCode (valid)
+
+View --> Client: 200 OK\n{valid: true, code_type: "STUDENT",\ncontext: {course_name, teacher_name}}
+@enduml

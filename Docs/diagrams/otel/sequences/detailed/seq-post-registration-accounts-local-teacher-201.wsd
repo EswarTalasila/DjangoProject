@@ -1,0 +1,64 @@
+@startuml
+title POST /api/v1/registration/accounts — LOCAL TEACHER/RESEARCHER (201 Created)
+autonumber
+
+actor Client
+participant "register_account()\n_register_local()" as View
+participant "StudentInvite\nRegisterSerializer" as Serializer
+participant "password_strength\n_errors()" as PwdCheck
+participant "validate_registration\n_code()" as Validate
+participant "redeem_non_student\n_local_invite()" as Redeem
+participant "create_user_from\n_payload()" as CreateUser
+database Postgres
+
+Client -> View: POST /registration/accounts\n{method: "LOCAL", code, firstName,\nlastName, email, password, confirmPassword}
+View -> Serializer: is_valid(raise_exception=True)
+Serializer --> View: validated data
+
+View -> View: password == confirmPassword?
+View -> PwdCheck: password_strength_errors(password)
+PwdCheck --> View: [] (no errors)
+
+View -> Validate: validate_registration_code(code)
+Validate -> Postgres: SELECT registration_codes\nWHERE code_hash = ?
+Postgres --> Validate: RegistrationCode (TEACHER type)
+Validate --> View: RegistrationCode
+
+note over View: code_type == TEACHER\n-> non-student registration path
+
+== @transaction.atomic ==
+
+View -> Redeem: redeem_non_student_local_invite(data)
+Redeem -> Postgres: SELECT registration_codes\nWHERE code_hash = ?\nFOR UPDATE
+Postgres --> Redeem: RegistrationCode (locked)
+Redeem -> Redeem: validate code_type != STUDENT
+
+Redeem -> Postgres: SELECT EXISTS app_users\nWHERE username = email OR email = email
+Postgres --> Redeem: False (email not taken)
+
+Redeem -> Redeem: generate_managed_username()
+Redeem -> Postgres: SELECT EXISTS app_users\nWHERE username = ?
+Postgres --> Redeem: False (unique)
+
+Redeem -> Redeem: _role_from_registration_code_type()\nTEACHER -> Role.TEACHER
+
+Redeem -> CreateUser: create_user_from_payload(\nrole=TEACHER, creator=None)
+CreateUser -> Postgres: INSERT INTO app_users
+Postgres --> CreateUser: User
+CreateUser -> Postgres: DELETE FROM user_roles WHERE user_id = ?
+CreateUser -> Postgres: INSERT INTO user_roles\n(user_id, role=TEACHER)
+CreateUser -> Postgres: SELECT EXISTS teacher_profiles\nWHERE user_id = ?
+Postgres --> CreateUser: False
+CreateUser -> Postgres: INSERT INTO teacher_profiles\n(user_id)
+CreateUser --> Redeem: User
+
+Redeem -> Postgres: UPDATE registration_codes\nSET times_used += 1
+Redeem --> View: User
+
+== end transaction ==
+
+View -> View: RefreshToken.for_user(user)\ngenerate JWT tokens
+View -> View: build_user_response(user, tokens)
+
+View --> Client: 201 Created\n{message, username, name, email,\naccessToken, refreshToken,\nrole: ROLE_TEACHER, courseId: null}
+@enduml

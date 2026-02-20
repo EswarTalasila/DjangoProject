@@ -1,0 +1,11 @@
+@startuml
+autonumber
+participant Client
+database Postgres
+participant "eel-backend"
+
+Client ->> "eel-backend": GET api/v1/codes/<int:code_id>
+"eel-backend" ->> Postgres: SELECT app_users WHERE id = ?
+"eel-backend" ->> Postgres: SELECT registration_codes WHERE id = ?
+"eel-backend" --x Client: HTTP 404
+@enduml

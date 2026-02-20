@@ -1,0 +1,27 @@
+@startuml
+autonumber
+participant Client
+database Postgres
+participant "eel-backend"
+
+Client ->> "eel-backend": DELETE api/v1/courses/<int:course_id>
+"eel-backend" ->> Postgres: SELECT app_users WHERE id = ?
+"eel-backend" ->> Postgres: SELECT user_roles WHERE user_id = ?
+"eel-backend" ->> Postgres: SELECT courses WHERE id = ?
+"eel-backend" ->> Postgres: SELECT teacher_profiles WHERE id = ?
+"eel-backend" ->> Postgres: SELECT app_users WHERE id = ?
+"eel-backend" ->> Postgres: SELECT enrollments WHERE course_id = ?
+"eel-backend" ->> Postgres: DELETE enrollments WHERE course_id = ?
+"eel-backend" ->> Postgres: SELECT app_users WHERE id = ?
+"eel-backend" ->> Postgres: SELECT sudo_grants WHERE granted_by_id = ?
+"eel-backend" ->> Postgres: SELECT teacher_profiles WHERE user_id = ?
+"eel-backend" ->> Postgres: SELECT student_profiles WHERE user_id = ?
+"eel-backend" ->> Postgres: SELECT student_profiles WHERE created_by_user_id = ?
+"eel-backend" ->> Postgres: SELECT registration_codes WHERE created_by_user_id = ?
+"eel-backend" ->> Postgres: SELECT password_reset_requests WHERE user_id = ?
+"eel-backend" ->> Postgres: SELECT assessments WHERE created_by_admin_id = ?
+"eel-backend" ->> Postgres: SELECT assignments WHERE created_by_user_id = ?
+"eel-backend" ->> Postgres: SELECT student_profiles WHERE id = ?
+"eel-backend" ->> Postgres: SELECT app_users WHERE id = ?
+"eel-backend" --x Client: HTTP 500
+@enduml

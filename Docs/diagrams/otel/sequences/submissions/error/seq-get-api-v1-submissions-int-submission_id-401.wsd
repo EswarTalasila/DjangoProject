@@ -1,0 +1,8 @@
+@startuml
+autonumber
+participant Client
+participant "eel-backend"
+
+Client ->> "eel-backend": GET api/v1/submissions/<int:submission_id>
+"eel-backend" --x Client: HTTP 401
+@enduml

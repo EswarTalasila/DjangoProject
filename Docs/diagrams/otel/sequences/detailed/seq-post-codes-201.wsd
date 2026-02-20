@@ -1,0 +1,51 @@
+@startuml
+title POST /api/v1/codes — Create Registration Codes (201 Created)
+autonumber
+
+actor Client
+participant "codes_collection()\n_create_codes()" as View
+participant "IsAuthenticated" as Auth
+participant "RegistrationCode\nCreateSerializer" as Serializer
+participant "create_registration\n_codes()" as Service
+participant "_can_generate\n_code_type()" as PermCheck
+database Postgres
+
+Client -> View: POST /codes\n{codeType: "STUDENT", count: 2,\nusesPerCode: 5, expiresAt: "...",\ncourseId: 1}\n[JWT: teacher user]
+View -> Auth: check JWT
+Auth --> View: authenticated
+
+View -> Serializer: is_valid(raise_exception=True)
+Serializer -> Serializer: validate codeType\n(STUDENT|TEACHER|RESEARCHER)
+Serializer --> View: validated data
+
+== @transaction.atomic ==
+
+View -> Service: create_registration_codes(\ncreator, STUDENT, count=2,\nuses=5, expires_at, course_id=1)
+
+Service -> PermCheck: _can_generate_code_type(\ncreator, STUDENT)
+PermCheck -> PermCheck: primary_role = TEACHER\nTEACHER can create STUDENT -> True
+PermCheck --> Service: True
+
+Service -> Service: validate expires_at > now
+Service -> Service: validate count >= 1
+
+Service -> Postgres: SELECT courses WHERE id = 1
+Postgres --> Service: Course
+Service -> Service: verify teacher owns course\n(course.teacher_profile.user == creator)
+
+loop 2x (count=2)
+  Service -> Service: _generate_secret_token("REG", 12)\n-> "REG-{24-hex-chars}"
+  Service -> Service: _registration_code_hashes_for_lookup()
+  Service -> Postgres: SELECT EXISTS registration_codes\nWHERE code_hash IN (hashes)
+  Postgres --> Service: False (unique)
+  Service -> Service: registration_code_hash()\nregistration_code_prefix()
+  Service -> Postgres: INSERT INTO registration_codes\n(code_hash, prefix, type=STUDENT,\ncreated_by, course_id, max_uses=5,\ntimes_used=0, is_active=True)
+end
+
+Service --> View: [code1, code2]\n(with plaintext_code attached)
+
+== end transaction ==
+
+View -> View: _serialize_registration_code()\nfor each code
+View --> Client: 201 Created\n{count: 2, codes: [\n  {id, plaintext_code, codeType,\n   prefix, maxUses, timesUsed,\n   expiresAt, courseName, ...},\n  {...}\n]}
+@enduml
