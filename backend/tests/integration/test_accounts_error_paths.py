@@ -65,7 +65,7 @@ class TestAccountErrorPaths:
             format="json",
         )
         assert response.status_code == 401
-        assert "Invalid Google userinfo" in response.json()["error"]
+        assert response.json()["detail"] == "Access token verification failed."
 
     def test_oauth_login_rejects_student_even_when_oauth_link_exists(
         self, api_client, monkeypatch, admin_user
@@ -139,7 +139,6 @@ class TestAccountErrorPaths:
         response = api_client.post(
             "/api/v1/users",
             {
-                "username": "teacher-new",
                 "name": "Teacher New",
                 "role": Role.TEACHER,
                 "email": "dup-email@example.com",
@@ -147,7 +146,7 @@ class TestAccountErrorPaths:
             format="json",
         )
         assert response.status_code == 400
-        assert response.data == "Email already taken"
+        assert response.data["detail"] == "Email already taken"
 
     def test_create_user_requires_email_for_non_student(self, api_client):
         """Non-student user creation without email is rejected."""
@@ -164,7 +163,6 @@ class TestAccountErrorPaths:
         response = api_client.post(
             "/api/v1/users",
             {
-                "username": "teacher-missing-email",
                 "name": "Teacher Missing Email",
                 "role": Role.TEACHER,
             },
@@ -172,6 +170,31 @@ class TestAccountErrorPaths:
         )
         assert response.status_code == 400
         assert "email is required" in str(response.data)
+
+    def test_create_user_rejects_username_field(self, api_client):
+        """Create-user rejects caller-supplied username values."""
+
+        admin = User.objects.create_user(
+            username="admin-create-username",
+            email="admin-create-username@example.com",
+            name="Admin",
+            password="StartPass123!",
+            is_staff=True,
+        )
+        api_client.force_authenticate(user=admin)
+
+        response = api_client.post(
+            "/api/v1/users",
+            {
+                "username": "caller-picked",
+                "name": "Teacher Name",
+                "role": Role.TEACHER,
+                "email": "teacher-username-block@example.com",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        assert response.data["detail"] == "username is system-managed and must not be provided"
 
     def test_edit_user_rejects_student_username_change(self, api_client, admin_user):
         """Student username changes are blocked as immutable."""
@@ -227,7 +250,7 @@ class TestAccountErrorPaths:
         )
 
         assert response.status_code == 400
-        assert response.data == "Email already taken"
+        assert response.data["detail"] == "Email already taken"
 
     def test_bulk_create_requires_sudo_for_researcher(self, api_client):
         """Researcher without BULK_CREATE sudo receives forbidden response."""
@@ -246,7 +269,7 @@ class TestAccountErrorPaths:
         api_client.force_authenticate(user=researcher)
         response = api_client.post(
             "/api/v1/user-batches",
-            [{"username": "x", "name": "X"}],
+            [{"name": "X"}],
             format="json",
         )
         assert response.status_code == 403
@@ -281,10 +304,8 @@ class TestAccountErrorPaths:
         )
         assert response.status_code == 400
 
-    def test_registration_local_currently_does_not_enforce_auth_cn01_password_policy(
-        self, api_client
-    ):
-        """Local registration accepts weak passwords (documents current AUTH/REG behavior)."""
+    def test_registration_local_enforces_auth_cn01_password_policy(self, api_client):
+        """Local registration rejects weak passwords per AUTH-CN-01."""
 
         teacher = self._make_teacher("teacher-weak-reg")
         course = Course.objects.create(
@@ -310,11 +331,613 @@ class TestAccountErrorPaths:
                 "method": "LOCAL",
                 "code": "WEAK-PASS-CODE",
                 "password": "weakpass1!",
-                "name": "Weak Password Student",
+                "confirmPassword": "weakpass1!",
+                "firstName": "Weak",
+                "lastName": "Password Student",
             },
             format="json",
         )
-        assert response.status_code == 200
+        assert response.status_code == 400
+        assert "Password does not meet policy requirements." in response.json()["detail"]
+
+    def test_registration_local_rejects_legacy_name_only_payload(self, api_client):
+        """Local registration rejects legacy combined-name payloads."""
+
+        teacher = self._make_teacher("teacher-name-only-reg")
+        course = Course.objects.create(
+            name="Name Only Course", teacher_profile=teacher.teacher_profile
+        )
+        from accounts.models import RegistrationCode, RegistrationCodeType
+
+        RegistrationCode.objects.create(
+            code_hash=registration_code_hash("NAME-ONLY-CODE"),
+            code_prefix=registration_code_prefix("NAME-ONLY-CODE"),
+            code_type=RegistrationCodeType.STUDENT,
+            created_by=teacher,
+            course=course,
+            max_uses=1,
+            times_used=0,
+            expires_at=timezone.now() + timedelta(days=1),
+            is_active=True,
+        )
+
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "NAME-ONLY-CODE",
+                "name": "Legacy Name",
+                "password": "ValidPass123!",
+                "confirmPassword": "ValidPass123!",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        payload = response.json()
+        assert "name" in payload
+
+    def test_registration_local_requires_split_name_fields(self, api_client):
+        """Local registration requires firstName and lastName fields."""
+
+        teacher = self._make_teacher("teacher-missing-split-name-reg")
+        course = Course.objects.create(
+            name="Missing Split Name Course", teacher_profile=teacher.teacher_profile
+        )
+        from accounts.models import RegistrationCode, RegistrationCodeType
+
+        RegistrationCode.objects.create(
+            code_hash=registration_code_hash("MISSING-SPLIT-NAME-CODE"),
+            code_prefix=registration_code_prefix("MISSING-SPLIT-NAME-CODE"),
+            code_type=RegistrationCodeType.STUDENT,
+            created_by=teacher,
+            course=course,
+            max_uses=1,
+            times_used=0,
+            expires_at=timezone.now() + timedelta(days=1),
+            is_active=True,
+        )
+
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "MISSING-SPLIT-NAME-CODE",
+                "password": "ValidPass123!",
+                "confirmPassword": "ValidPass123!",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        payload = response.json()
+        assert "firstName" in payload
+        assert "lastName" in payload
+
+    def test_registration_local_rejects_unknown_fields(self, api_client):
+        """Local registration rejects undeclared payload fields."""
+
+        teacher = self._make_teacher("teacher-extra-field-reg")
+        course = Course.objects.create(
+            name="Extra Field Course", teacher_profile=teacher.teacher_profile
+        )
+        from accounts.models import RegistrationCode, RegistrationCodeType
+
+        RegistrationCode.objects.create(
+            code_hash=registration_code_hash("EXTRA-FIELD-CODE"),
+            code_prefix=registration_code_prefix("EXTRA-FIELD-CODE"),
+            code_type=RegistrationCodeType.STUDENT,
+            created_by=teacher,
+            course=course,
+            max_uses=1,
+            times_used=0,
+            expires_at=timezone.now() + timedelta(days=1),
+            is_active=True,
+        )
+
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "EXTRA-FIELD-CODE",
+                "firstName": "Extra",
+                "lastName": "Field",
+                "password": "ValidPass123!",
+                "confirmPassword": "ValidPass123!",
+                "role": "ROLE_TEACHER",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        payload = response.json()
+        assert "role" in payload
+
+    # --- Registration response contract & validation ---
+
+    def test_registration_local_password_confirmation_mismatch(self, api_client):
+        """Local registration rejects mismatched password and confirmPassword."""
+
+        teacher = self._make_teacher("teacher-pw-mismatch")
+        course = Course.objects.create(
+            name="PW Mismatch Course", teacher_profile=teacher.teacher_profile
+        )
+        from accounts.models import RegistrationCode, RegistrationCodeType
+
+        RegistrationCode.objects.create(
+            code_hash=registration_code_hash("MISMATCH-CODE"),
+            code_prefix=registration_code_prefix("MISMATCH-CODE"),
+            code_type=RegistrationCodeType.STUDENT,
+            created_by=teacher,
+            course=course,
+            max_uses=1,
+            times_used=0,
+            expires_at=timezone.now() + timedelta(days=1),
+            is_active=True,
+        )
+
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "MISMATCH-CODE",
+                "firstName": "Mismatch",
+                "lastName": "Student",
+                "password": "ValidPass123!",
+                "confirmPassword": "DifferentPass456!",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "Passwords do not match" in response.json()["detail"]
+
+    def test_registration_local_missing_method_field(self, api_client):
+        """Registration endpoint rejects request with missing method field."""
+
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "code": "SOME-CODE",
+                "firstName": "No",
+                "lastName": "Method",
+                "password": "ValidPass123!",
+                "confirmPassword": "ValidPass123!",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "method must be LOCAL or OAUTH" in response.json()["detail"]
+
+    def test_registration_local_invalid_method_value(self, api_client):
+        """Registration endpoint rejects invalid method values."""
+
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "INVALID",
+                "code": "SOME-CODE",
+                "firstName": "Bad",
+                "lastName": "Method",
+                "password": "ValidPass123!",
+                "confirmPassword": "ValidPass123!",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "method must be LOCAL or OAUTH" in response.json()["detail"]
+
+    def test_registration_student_response_shape(self, api_client):
+        """Student registration returns complete unified response with JWT and null email."""
+
+        teacher = self._make_teacher("teacher-shape-student")
+        course = Course.objects.create(
+            name="Shape Student Course", teacher_profile=teacher.teacher_profile
+        )
+        from accounts.models import RegistrationCode, RegistrationCodeType
+
+        RegistrationCode.objects.create(
+            code_hash=registration_code_hash("SHAPE-STUDENT-CODE"),
+            code_prefix=registration_code_prefix("SHAPE-STUDENT-CODE"),
+            code_type=RegistrationCodeType.STUDENT,
+            created_by=teacher,
+            course=course,
+            max_uses=1,
+            times_used=0,
+            expires_at=timezone.now() + timedelta(days=1),
+            is_active=True,
+        )
+
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "SHAPE-STUDENT-CODE",
+                "firstName": "Shape",
+                "lastName": "Student",
+                "password": "ValidPass123!",
+                "confirmPassword": "ValidPass123!",
+            },
+            format="json",
+        )
+        assert response.status_code == 201
+        payload = response.json()
+
+        # All required fields present
+        assert payload["message"] == "User registered"
+        assert "accessToken" in payload
+        assert "refreshToken" in payload
+        assert payload["tokenType"] == "Bearer"
+        assert payload["role"] == Role.STUDENT
+        assert "id" in payload
+        assert "username" in payload
+        assert "name" in payload
+        assert payload["createdNewUser"] is True
+        assert payload["alreadyEnrolled"] is False
+
+        # Student-specific: email null, courseId present
+        assert payload["email"] is None or payload["email"] == ""
+        assert payload["courseId"] == course.id
+
+        # Username is system-generated, not email-based
+        assert "@" not in payload["username"]
+
+    def test_registration_teacher_response_shape(self, api_client, researcher_user):
+        """Teacher registration returns complete unified response with email and null courseId."""
+
+        from accounts.models import RegistrationCode, RegistrationCodeType
+
+        RegistrationCode.objects.create(
+            code_hash=registration_code_hash("SHAPE-TEACHER-CODE"),
+            code_prefix=registration_code_prefix("SHAPE-TEACHER-CODE"),
+            code_type=RegistrationCodeType.TEACHER,
+            created_by=researcher_user,
+            max_uses=1,
+            times_used=0,
+            expires_at=timezone.now() + timedelta(days=1),
+            is_active=True,
+        )
+
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "SHAPE-TEACHER-CODE",
+                "firstName": "Shape",
+                "lastName": "Teacher",
+                "email": "shape-teacher@example.com",
+                "password": "ValidPass123!",
+                "confirmPassword": "ValidPass123!",
+            },
+            format="json",
+        )
+        assert response.status_code == 201
+        payload = response.json()
+
+        # All required fields present
+        assert payload["message"] == "User registered"
+        assert "accessToken" in payload
+        assert "refreshToken" in payload
+        assert payload["tokenType"] == "Bearer"
+        assert payload["role"] == Role.TEACHER
+        assert "id" in payload
+        assert "username" in payload
+        assert "name" in payload
+        assert payload["createdNewUser"] is True
+        assert payload["alreadyEnrolled"] is False
+
+        # Non-student: email present, courseId null
+        assert payload["email"] == "shape-teacher@example.com"
+        assert payload["courseId"] is None
+
+        # Username is system-generated, not email-based
+        assert "@" not in payload["username"]
+
+    def test_registration_student_email_null_in_login_response(self, api_client):
+        """Student login response returns null email, not username as email fallback."""
+
+        teacher = self._make_teacher("teacher-login-email")
+        course = Course.objects.create(
+            name="Login Email Course", teacher_profile=teacher.teacher_profile
+        )
+        from accounts.models import RegistrationCode, RegistrationCodeType
+
+        RegistrationCode.objects.create(
+            code_hash=registration_code_hash("LOGIN-EMAIL-CODE"),
+            code_prefix=registration_code_prefix("LOGIN-EMAIL-CODE"),
+            code_type=RegistrationCodeType.STUDENT,
+            created_by=teacher,
+            course=course,
+            max_uses=1,
+            times_used=0,
+            expires_at=timezone.now() + timedelta(days=1),
+            is_active=True,
+        )
+
+        reg = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "LOGIN-EMAIL-CODE",
+                "firstName": "Login",
+                "lastName": "Email Student",
+                "password": "ValidPass123!",
+                "confirmPassword": "ValidPass123!",
+            },
+            format="json",
+        )
+        assert reg.status_code == 201
+        username = reg.json()["username"]
+
+        login = api_client.post(
+            "/api/v1/auth/sessions",
+            {"identifier": username, "password": "ValidPass123!"},
+            format="json",
+        )
+        assert login.status_code == 200
+        login_payload = login.json()
+
+        # Email must be None, not the username
+        assert login_payload["email"] is None or login_payload["email"] == ""
+        assert login_payload["username"] == username
+
+    def test_registration_username_collision_resolution(self, api_client):
+        """Two students with similar names get distinct system-generated usernames."""
+
+        teacher = self._make_teacher("teacher-collision")
+        course = Course.objects.create(
+            name="Collision Course", teacher_profile=teacher.teacher_profile
+        )
+        from accounts.models import RegistrationCode, RegistrationCodeType
+
+        for i in range(2):
+            RegistrationCode.objects.create(
+                code_hash=registration_code_hash(f"COLLISION-CODE-{i}"),
+                code_prefix=registration_code_prefix(f"COLLISION-CODE-{i}"),
+                code_type=RegistrationCodeType.STUDENT,
+                created_by=teacher,
+                course=course,
+                max_uses=1,
+                times_used=0,
+                expires_at=timezone.now() + timedelta(days=1),
+                is_active=True,
+            )
+
+        first = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "COLLISION-CODE-0",
+                "firstName": "Alex",
+                "lastName": "Smith",
+                "password": "ValidPass123!",
+                "confirmPassword": "ValidPass123!",
+            },
+            format="json",
+        )
+        second = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "COLLISION-CODE-1",
+                "firstName": "Alex",
+                "lastName": "Smith",
+                "password": "ValidPass123!",
+                "confirmPassword": "ValidPass123!",
+            },
+            format="json",
+        )
+        assert first.status_code == 201
+        assert second.status_code == 201
+        assert first.json()["username"] != second.json()["username"]
+
+    def test_registration_exhausted_code_rejected(self, api_client):
+        """Registration with a fully-used code returns invalid/expired error."""
+
+        teacher = self._make_teacher("teacher-exhausted")
+        course = Course.objects.create(
+            name="Exhausted Course", teacher_profile=teacher.teacher_profile
+        )
+        from accounts.models import RegistrationCode, RegistrationCodeType
+
+        RegistrationCode.objects.create(
+            code_hash=registration_code_hash("EXHAUSTED-CODE"),
+            code_prefix=registration_code_prefix("EXHAUSTED-CODE"),
+            code_type=RegistrationCodeType.STUDENT,
+            created_by=teacher,
+            course=course,
+            max_uses=1,
+            times_used=1,
+            expires_at=timezone.now() + timedelta(days=1),
+            is_active=True,
+        )
+
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "EXHAUSTED-CODE",
+                "firstName": "Exhausted",
+                "lastName": "Student",
+                "password": "ValidPass123!",
+                "confirmPassword": "ValidPass123!",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "Invalid or expired code" in response.json()["detail"]
+
+    def test_registration_revoked_code_rejected(self, api_client):
+        """Registration with a revoked code returns invalid/expired error."""
+
+        teacher = self._make_teacher("teacher-revoked")
+        course = Course.objects.create(
+            name="Revoked Course", teacher_profile=teacher.teacher_profile
+        )
+        from accounts.models import RegistrationCode, RegistrationCodeType
+
+        RegistrationCode.objects.create(
+            code_hash=registration_code_hash("REVOKED-CODE"),
+            code_prefix=registration_code_prefix("REVOKED-CODE"),
+            code_type=RegistrationCodeType.STUDENT,
+            created_by=teacher,
+            course=course,
+            max_uses=5,
+            times_used=0,
+            expires_at=timezone.now() + timedelta(days=1),
+            is_active=False,
+        )
+
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "REVOKED-CODE",
+                "firstName": "Revoked",
+                "lastName": "Student",
+                "password": "ValidPass123!",
+                "confirmPassword": "ValidPass123!",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "Invalid or expired code" in response.json()["detail"]
+
+    def test_registration_expired_code_rejected(self, api_client):
+        """Registration with an expired code returns invalid/expired error."""
+
+        teacher = self._make_teacher("teacher-expired")
+        course = Course.objects.create(
+            name="Expired Course", teacher_profile=teacher.teacher_profile
+        )
+        from accounts.models import RegistrationCode, RegistrationCodeType
+
+        RegistrationCode.objects.create(
+            code_hash=registration_code_hash("EXPIRED-CODE"),
+            code_prefix=registration_code_prefix("EXPIRED-CODE"),
+            code_type=RegistrationCodeType.STUDENT,
+            created_by=teacher,
+            course=course,
+            max_uses=5,
+            times_used=0,
+            expires_at=timezone.now() - timedelta(minutes=5),
+            is_active=True,
+        )
+
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "EXPIRED-CODE",
+                "firstName": "Expired",
+                "lastName": "Student",
+                "password": "ValidPass123!",
+                "confirmPassword": "ValidPass123!",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "Invalid or expired code" in response.json()["detail"]
+
+    def test_registration_oauth_missing_access_token(self, api_client, researcher_user):
+        """OAuth registration rejects request missing accessToken field."""
+
+        from accounts.models import RegistrationCode, RegistrationCodeType
+
+        RegistrationCode.objects.create(
+            code_hash=registration_code_hash("OAUTH-MISSING-TOKEN"),
+            code_prefix=registration_code_prefix("OAUTH-MISSING-TOKEN"),
+            code_type=RegistrationCodeType.TEACHER,
+            created_by=researcher_user,
+            max_uses=1,
+            times_used=0,
+            expires_at=timezone.now() + timedelta(days=1),
+            is_active=True,
+        )
+
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "OAUTH",
+                "code": "OAUTH-MISSING-TOKEN",
+                "firstName": "Missing",
+                "lastName": "Token",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        payload = response.json()
+        assert "accessToken" in payload
+
+    def test_registration_local_missing_password(self, api_client):
+        """Local registration rejects request missing password field."""
+
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "SOME-CODE",
+                "firstName": "No",
+                "lastName": "Password",
+                "confirmPassword": "ValidPass123!",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        payload = response.json()
+        assert "password" in payload
+
+    def test_registration_local_missing_confirm_password(self, api_client):
+        """Local registration rejects request missing confirmPassword field."""
+
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "SOME-CODE",
+                "firstName": "No",
+                "lastName": "Confirm",
+                "password": "ValidPass123!",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        payload = response.json()
+        assert "confirmPassword" in payload
+
+    def test_registration_local_username_not_accepted(self, api_client):
+        """Local registration rejects username field (system-generated only)."""
+
+        teacher = self._make_teacher("teacher-no-username")
+        course = Course.objects.create(
+            name="No Username Course", teacher_profile=teacher.teacher_profile
+        )
+        from accounts.models import RegistrationCode, RegistrationCodeType
+
+        RegistrationCode.objects.create(
+            code_hash=registration_code_hash("NO-USERNAME-CODE"),
+            code_prefix=registration_code_prefix("NO-USERNAME-CODE"),
+            code_type=RegistrationCodeType.STUDENT,
+            created_by=teacher,
+            course=course,
+            max_uses=1,
+            times_used=0,
+            expires_at=timezone.now() + timedelta(days=1),
+            is_active=True,
+        )
+
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "NO-USERNAME-CODE",
+                "firstName": "No",
+                "lastName": "Username",
+                "password": "ValidPass123!",
+                "confirmPassword": "ValidPass123!",
+                "username": "my-chosen-username",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        payload = response.json()
+        assert "username" in payload
 
     # --- Branch-coverage additions for views.py ---
 
@@ -441,23 +1064,42 @@ class TestAccountErrorPaths:
             "/api/v1/user-batches",
             [
                 # Missing name
-                {"username": "no-name"},
-                # Missing username
-                {"name": "No Username"},
+                {"email": "no-name@example.com"},
+                # Student create skipped (admin cannot create student via this matrix)
+                {"name": "Valid Student"},
                 # Valid researcher (admin can create)
                 {
-                    "username": "valid-researcher-bulk",
                     "name": "Valid Researcher",
                     "role": "RESEARCHER",
                     "email": "valid-researcher-bulk@example.com",
                 },
                 # Non-student without email (should be skipped)
-                {"username": "no-email-teacher", "name": "No Email", "role": "TEACHER"},
+                {"name": "No Email", "role": "TEACHER"},
             ],
             format="json",
         )
-        assert response.status_code == 200
+        assert response.status_code == 201
         assert response.data == 1
+
+    def test_bulk_create_rejects_username_field(self, api_client):
+        """Bulk create rejects caller-supplied username values."""
+
+        admin = User.objects.create_user(
+            username="admin-bulk-username-reject",
+            email="admin-bulk-username-reject@example.com",
+            name="Admin",
+            password="StartPass123!",
+            is_staff=True,
+        )
+        api_client.force_authenticate(user=admin)
+
+        response = api_client.post(
+            "/api/v1/user-batches",
+            [{"username": "caller-bulk", "name": "Bulk User"}],
+            format="json",
+        )
+        assert response.status_code == 400
+        assert response.data["detail"] == "username is system-managed and must not be provided"
 
     def test_bulk_create_rejects_non_list(self, api_client):
         """Bulk create rejects non-list body."""
@@ -473,7 +1115,7 @@ class TestAccountErrorPaths:
 
         response = api_client.post(
             "/api/v1/user-batches",
-            {"username": "not-a-list"},
+            {"name": "not-a-list"},
             format="json",
         )
         assert response.status_code == 400

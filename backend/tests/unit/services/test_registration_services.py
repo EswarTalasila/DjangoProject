@@ -11,17 +11,18 @@ from django.utils import timezone
 from accounts.models import (
     RegistrationCodeType,
     Role,
+    SudoPermission,
     TeacherProfile,
     User,
     UserRole,
 )
 from accounts.services import (
-    _base_student_username_from_name,
     _get_role_value,
-    _identifier_in_use,
     _role_from_registration_code_type,
     _select_valid_code_for_update,
     create_registration_codes,
+    generate_student_username,
+    identifier_in_use,
     redeem_non_student_oauth_invite,
     redeem_student_invite,
     redeem_student_join_course,
@@ -30,7 +31,7 @@ from accounts.services import (
     transition_registration_code_status,
 )
 from courses.models import Course
-from tests.factories import RegistrationCodeFactory
+from tests.factories import RegistrationCodeFactory, SudoGrantFactory
 
 
 @pytest.mark.django_db
@@ -62,12 +63,12 @@ def test_registration_code_hash_lookup_works_after_key_rotation():
 
 @pytest.mark.django_db
 @pytest.mark.unit
-def test_base_student_username_from_name_edge_cases():
-    """Username base generation handles empty, one-word, and multi-word names."""
+def test_generate_student_username_managed_format_edge_cases():
+    """Managed username format is fixed-width and index-suffixed."""
 
-    assert _base_student_username_from_name("") == "student"
-    assert _base_student_username_from_name("Plato") == "plato"
-    assert _base_student_username_from_name("Jane Smith") == "jsmith"
+    assert generate_student_username("") == "user0000"
+    assert generate_student_username("Plato") == "plato000"
+    assert generate_student_username("Jane Smith") == "jsmith00"
 
 
 @pytest.mark.django_db
@@ -92,7 +93,7 @@ def test_role_from_registration_code_type_mapping():
 
 @pytest.mark.django_db
 @pytest.mark.unit
-def test_identifier_in_use_respects_exclusion_filter():
+def testidentifier_in_use_respects_exclusion_filter():
     """Identifier collision check ignores excluded user id."""
 
     user = User.objects.create_user(
@@ -102,9 +103,9 @@ def test_identifier_in_use_respects_exclusion_filter():
         password="StartPass123!",
     )
 
-    assert _identifier_in_use("collision-user") is True
-    assert _identifier_in_use("collision@example.com") is True
-    assert _identifier_in_use("collision-user", exclude_user_id=user.id) is False
+    assert identifier_in_use("collision-user") is True
+    assert identifier_in_use("collision@example.com") is True
+    assert identifier_in_use("collision-user", exclude_user_id=user.id) is False
 
 
 @pytest.mark.django_db
@@ -134,8 +135,8 @@ def test_redeem_student_join_course_rejects_non_student_user():
 
 @pytest.mark.django_db
 @pytest.mark.unit
-def test_redeem_student_invite_requires_name_field():
-    """Student invite redemption enforces name for generated username flow."""
+def test_redeem_student_invite_requires_split_name_fields():
+    """Student invite redemption enforces firstName/lastName for username generation."""
 
     teacher = User.objects.create_user(
         username="teacher-b", name="Teacher", password="StartPass123!"
@@ -152,7 +153,7 @@ def test_redeem_student_invite_requires_name_field():
         expires_at=timezone.now() + timedelta(hours=1),
     )
 
-    with pytest.raises(ValueError, match="name is required"):
+    with pytest.raises(ValueError, match="firstName and lastName are required"):
         redeem_student_invite({"code": code, "password": "StartPass123!"})
 
 
@@ -197,6 +198,65 @@ def test_create_registration_codes_metadata_rules_enforced():
             expires_at=timezone.now() + timedelta(hours=1),
             metadata={"note": "x"},
         )
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+def test_create_registration_codes_researcher_requires_sudo_for_researcher_codes():
+    """Researcher code generation requires CREATE_RESEARCHER_CODES sudo permission."""
+
+    researcher = User.objects.create_user(
+        username="researcher-no-researcher-codes",
+        name="Researcher",
+        password="StartPass123!",
+    )
+    UserRole.objects.create(user=researcher, role=Role.RESEARCHER)
+
+    with pytest.raises(PermissionError, match="Not authorized to generate this code type"):
+        create_registration_codes(
+            creator=researcher,
+            code_type=RegistrationCodeType.RESEARCHER,
+            count=1,
+            uses_per_code=1,
+            expires_at=timezone.now() + timedelta(hours=1),
+        )
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+def test_create_registration_codes_researcher_with_permission_can_generate_researcher_codes():
+    """Researcher with CREATE_RESEARCHER_CODES can generate researcher invite codes."""
+
+    admin = User.objects.create_user(
+        username="admin-grants-researcher-codes",
+        email="admin-grants-researcher-codes@example.com",
+        name="Admin",
+        password="StartPass123!",
+    )
+    admin.is_staff = True
+    admin.save(update_fields=["is_staff"])
+
+    researcher = User.objects.create_user(
+        username="researcher-with-researcher-codes",
+        name="Researcher",
+        password="StartPass123!",
+    )
+    UserRole.objects.create(user=researcher, role=Role.RESEARCHER)
+    SudoGrantFactory(
+        user=researcher,
+        granted_by=admin,
+        permissions=[SudoPermission.CREATE_RESEARCHER_CODES.value],
+    )
+
+    created = create_registration_codes(
+        creator=researcher,
+        code_type=RegistrationCodeType.RESEARCHER,
+        count=1,
+        uses_per_code=1,
+        expires_at=timezone.now() + timedelta(hours=1),
+    )
+    assert len(created) == 1
+    assert created[0].code_type == RegistrationCodeType.RESEARCHER
 
 
 @pytest.mark.django_db
@@ -262,8 +322,8 @@ def test_redeem_non_student_oauth_invite_rejects_existing_subject_link():
             code=code,
             oauth_subject="dup-subject",
             oauth_email="new-email@example.com",
-            username="new-user",
-            name="New User",
+            first_name="New",
+            last_name="User",
         )
 
 
@@ -321,26 +381,26 @@ def test_unique_username_from_base_collision_loop():
 @pytest.mark.django_db
 @pytest.mark.unit
 def test_generate_student_username_collision_loop():
-    """Student username generator appends numeric suffix for collisions."""
+    """Managed username generator uses fixed width and collision index suffix."""
 
     from accounts.services import generate_student_username
 
-    User.objects.create_user(username="jsmith", name="Existing", password="StartPass123!")
+    User.objects.create_user(username="jsmith00", name="Existing", password="StartPass123!")
     result = generate_student_username("Jane Smith")
-    assert result == "jsmith2"
+    assert result == "jsmith01"
 
-    User.objects.create_user(username="jsmith2", name="Existing2", password="StartPass123!")
+    User.objects.create_user(username="jsmith01", name="Existing2", password="StartPass123!")
     result2 = generate_student_username("Jane Smith")
-    assert result2 == "jsmith3"
+    assert result2 == "jsmith02"
 
 
 @pytest.mark.django_db
 @pytest.mark.unit
-def test_identifier_in_use_empty_returns_false():
+def testidentifier_in_use_empty_returns_false():
     """Empty identifier is never in use."""
 
-    assert _identifier_in_use("") is False
-    assert _identifier_in_use("   ") is False
+    assert identifier_in_use("") is False
+    assert identifier_in_use("   ") is False
 
 
 @pytest.mark.django_db
@@ -374,13 +434,13 @@ def test_redeem_non_student_local_invite_happy_path_and_exhaustion():
     user = redeem_non_student_local_invite(
         {
             "code": code_text,
-            "username": "new-teacher-local",
+            "firstName": "New",
+            "lastName": "Teacher",
             "email": "new-teacher-local@example.com",
-            "name": "New Teacher",
             "password": "StartPass123!",
         }
     )
-    assert user.username == "new-teacher-local"
+    assert user.username == "nteache0"
 
     # Check code was exhausted
     record = RegistrationCode.objects.get(code_hash=registration_code_hash(code_text))
@@ -415,9 +475,9 @@ def test_redeem_non_student_local_invite_rejects_student_code():
         redeem_non_student_local_invite(
             {
                 "code": code_text,
-                "username": "blocked",
+                "firstName": "Blocked",
+                "lastName": "User",
                 "email": "blocked@example.com",
-                "name": "Blocked",
                 "password": "StartPass123!",
             }
         )
@@ -425,8 +485,8 @@ def test_redeem_non_student_local_invite_rejects_student_code():
 
 @pytest.mark.django_db
 @pytest.mark.unit
-def test_redeem_non_student_local_invite_missing_username():
-    """Missing username rejected for non-student registration."""
+def test_redeem_non_student_local_invite_missing_split_name():
+    """Missing first/last name fields are rejected for non-student registration."""
 
     from accounts.services import redeem_non_student_local_invite
 
@@ -448,7 +508,7 @@ def test_redeem_non_student_local_invite_missing_username():
         expires_at=timezone.now() + timedelta(hours=1),
     )
 
-    with pytest.raises(ValueError, match="username is required"):
+    with pytest.raises(ValueError, match="firstName and lastName are required"):
         redeem_non_student_local_invite(
             {
                 "code": code_text,
@@ -487,7 +547,8 @@ def test_redeem_non_student_local_invite_missing_email():
         redeem_non_student_local_invite(
             {
                 "code": code_text,
-                "username": "no-email-user",
+                "firstName": "No",
+                "lastName": "Email",
                 "password": "StartPass123!",
             }
         )
@@ -496,7 +557,7 @@ def test_redeem_non_student_local_invite_missing_email():
 @pytest.mark.django_db
 @pytest.mark.unit
 def test_redeem_non_student_local_invite_username_taken():
-    """Taken username blocks non-student registration."""
+    """Generated username collision resolves via numeric index."""
 
     from accounts.services import redeem_non_student_local_invite
 
@@ -509,12 +570,7 @@ def test_redeem_non_student_local_invite_username_taken():
     admin.is_staff = True
     admin.save(update_fields=["is_staff"])
 
-    User.objects.create_user(
-        username="existing-un",
-        email="existing-un@example.com",
-        name="Existing",
-        password="StartPass123!",
-    )
+    User.objects.create_user(username="euser000", name="Existing", password="StartPass123!")
 
     code_text = "TEACHER-TAKEN-UN"
     RegistrationCodeFactory(
@@ -525,15 +581,16 @@ def test_redeem_non_student_local_invite_username_taken():
         expires_at=timezone.now() + timedelta(hours=1),
     )
 
-    with pytest.raises(ValueError, match="Username already taken"):
-        redeem_non_student_local_invite(
-            {
-                "code": code_text,
-                "username": "existing-un",
-                "email": "unique-email@example.com",
-                "password": "StartPass123!",
-            }
-        )
+    user = redeem_non_student_local_invite(
+        {
+            "code": code_text,
+            "firstName": "E",
+            "lastName": "User",
+            "email": "unique-email@example.com",
+            "password": "StartPass123!",
+        }
+    )
+    assert user.username == "euser001"
 
 
 @pytest.mark.django_db
@@ -572,7 +629,8 @@ def test_redeem_non_student_local_invite_email_taken():
         redeem_non_student_local_invite(
             {
                 "code": code_text,
-                "username": "unique-un",
+                "firstName": "Unique",
+                "lastName": "User",
                 "email": "taken-email@example.com",
                 "password": "StartPass123!",
             }

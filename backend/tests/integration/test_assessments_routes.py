@@ -45,7 +45,7 @@ class TestAssessmentRoutes:
         api_client.force_authenticate(user=teacher_user)
         response = api_client.get("/api/v1/assessments/")
         assert response.status_code == 200
-        assert len(response.json()) == 1
+        assert len(response.json()["results"]) == 1
 
     def test_detail_not_found_returns_404(self, api_client, teacher_user):
         """Test that detail not found returns 404."""
@@ -80,7 +80,7 @@ class TestAssessmentRoutes:
                 }
             ],
         }
-        response = api_client.put(f"/api/v1/assessments/{assessment.id}", payload, format="json")
+        response = api_client.patch(f"/api/v1/assessments/{assessment.id}", payload, format="json")
         assert response.status_code == 200
         assessment.refresh_from_db()
         assert assessment.title == "New"
@@ -93,5 +93,5 @@ class TestAssessmentRoutes:
         )
         api_client.force_authenticate(user=admin_user)
         response = api_client.delete(f"/api/v1/assessments/{assessment.id}")
-        assert response.status_code == 200
+        assert response.status_code == 204
         assert not Assessment.objects.filter(id=assessment.id).exists()

@@ -16,6 +16,8 @@ from accounts.models import (
     ResearcherProfile,
     Role,
     StudentProfile,
+    SudoGrant,
+    SudoPermission,
     TeacherProfile,
     User,
     UserRole,
@@ -279,7 +281,7 @@ class TestAuthRegCompletion:
             email="uc02-e2-missing@example.com",
         )
         assert response.status_code == 401
-        assert "No account associated" in response.json()["error"]
+        assert response.json()["detail"] == "Invalid identifier or password."
 
     # AUTH-UC-03 / AUTH-CN-02 remaining tests
     def test_AUTH_UC_03_ADMIN(self, api_client):
@@ -611,35 +613,22 @@ class TestAuthRegCompletion:
             email="cn09-used-teacher@example.com",
         )
 
-        expired_req = api_client.post(
-            "/api/v1/auth/reset-requests",
-            {"identifier": teacher_expired.email},
-            format="json",
-        )
-        used_req = api_client.post(
-            "/api/v1/auth/reset-requests",
-            {"identifier": teacher_used.email},
-            format="json",
-        )
-        assert expired_req.status_code == 201
-        assert used_req.status_code == 201
-
         api_client.force_authenticate(user=researcher)
-        approve_expired = api_client.patch(
-            f"/api/v1/auth/reset-requests/{expired_req.json()['requestId']}",
-            {"status": PasswordResetRequestStatus.APPROVED},
+        issue_expired = api_client.post(
+            "/api/v1/auth/password-reset-codes",
+            {"targetUserId": teacher_expired.id},
             format="json",
         )
-        approve_used = api_client.patch(
-            f"/api/v1/auth/reset-requests/{used_req.json()['requestId']}",
-            {"status": PasswordResetRequestStatus.APPROVED},
+        issue_used = api_client.post(
+            "/api/v1/auth/password-reset-codes",
+            {"targetUserId": teacher_used.id},
             format="json",
         )
-        assert approve_expired.status_code == 200
-        assert approve_used.status_code == 200
+        assert issue_expired.status_code == 201
+        assert issue_used.status_code == 201
         api_client.force_authenticate(user=None)
 
-        expired_code = PasswordResetCode.objects.get(request_id=expired_req.json()["requestId"])
+        expired_code = PasswordResetCode.objects.get(request_id=issue_expired.json()["requestId"])
         expired_code.expires_at = timezone.now() - timedelta(minutes=5)
         expired_code.save(update_fields=["expires_at"])
 
@@ -647,50 +636,47 @@ class TestAuthRegCompletion:
             "/api/v1/auth/password-resets",
             {
                 "identifier": teacher_used.email,
-                "resetCode": approve_used.json()["resetCode"],
+                "resetCode": issue_used.json()["resetCode"],
                 "newPassword": "Cn09UsedPass1!",
                 "confirmPassword": "Cn09UsedPass1!",
             },
             format="json",
         )
         assert used_complete.status_code == 200
-        used_code = PasswordResetCode.objects.get(request_id=used_req.json()["requestId"])
+        used_code = PasswordResetCode.objects.get(request_id=issue_used.json()["requestId"])
         assert used_code.used_at is not None
 
         result = cleanup_temporary_reset_codes()
         assert result["codesDeleted"] == 2
         assert not PasswordResetCode.objects.filter(id=expired_code.id).exists()
         assert not PasswordResetCode.objects.filter(id=used_code.id).exists()
-        expired_request = PasswordResetRequest.objects.get(id=expired_req.json()["requestId"])
+        expired_request = PasswordResetRequest.objects.get(id=issue_expired.json()["requestId"])
         assert expired_request.status == PasswordResetRequestStatus.EXPIRED
 
     def test_AUTH_UC_06_E2(self, api_client):
-        """Reset status endpoint is rate-limited after repeated failed lookups."""
+        """Reset-code validation endpoint is rate-limited after repeated failed lookups."""
         teacher = self._make_user(
             role=Role.TEACHER,
             username="uc06e2-teacher",
             email="uc06e2-teacher@example.com",
         )
-        for _ in range(LOGIN_RATE_LIMIT_ATTEMPTS):
+        throttled_response = None
+        for _ in range(25):
             attempt = api_client.post(
-                "/api/v1/auth/reset-request-lookups",
+                "/api/v1/auth/reset-code-validations",
                 {
                     "identifier": teacher.email,
-                    "requestToken": "REQ-INVALID",
+                    "resetCode": "RESET-INVALID",
                 },
                 format="json",
             )
-            assert attempt.status_code == 404
+            if attempt.status_code == 429:
+                throttled_response = attempt
+                break
+            assert attempt.status_code == 400
 
-        throttled = api_client.post(
-            "/api/v1/auth/reset-request-lookups",
-            {
-                "identifier": teacher.email,
-                "requestToken": "REQ-INVALID",
-            },
-            format="json",
-        )
-        assert throttled.status_code == 429
+        assert throttled_response is not None
+        assert throttled_response.status_code == 429
 
     # AUTH-UC-08 remaining tests
     def _assert_logout_roundtrip(self, api_client, *, identifier: str, password: str) -> None:
@@ -804,8 +790,10 @@ class TestAuthRegCompletion:
             {
                 "method": "LOCAL",
                 "code": "REG-UC01-E1-INVALID",
-                "name": "Bad Code User",
+                "firstName": "Bad",
+                "lastName": "Code User",
                 "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
             },
             format="json",
         )
@@ -813,7 +801,7 @@ class TestAuthRegCompletion:
         assert "Invalid or expired code" in response.json()["detail"]
 
     def test_REG_UC_01_E2(self, api_client):
-        """Duplicate non-student username/email identifiers are rejected."""
+        """Duplicate non-student email identifiers are rejected."""
         researcher = self._make_user(
             role=Role.RESEARCHER,
             username="reg-e2-researcher",
@@ -834,29 +822,31 @@ class TestAuthRegCompletion:
             {
                 "method": "LOCAL",
                 "code": "REG-E2-TEACHER-1",
-                "name": "First Teacher",
-                "username": "dup-teacher",
+                "firstName": "First",
+                "lastName": "Teacher",
                 "email": "dup-teacher@example.com",
                 "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
             },
             format="json",
         )
-        assert first.status_code == 200
+        assert first.status_code == 201
 
         duplicate = api_client.post(
             "/api/v1/registration/accounts",
             {
                 "method": "LOCAL",
                 "code": "REG-E2-TEACHER-2",
-                "name": "Second Teacher",
-                "username": "dup-teacher",
-                "email": "dup-teacher-two@example.com",
+                "firstName": "Second",
+                "lastName": "Teacher",
+                "email": "dup-teacher@example.com",
                 "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
             },
             format="json",
         )
         assert duplicate.status_code == 400
-        assert "Username already taken" in duplicate.json()["detail"]
+        assert "Email already taken" in duplicate.json()["detail"]
 
     def test_REG_UC_01_E4(self, api_client, monkeypatch):
         """OAuth registration returns error when provider token verification fails."""
@@ -880,6 +870,8 @@ class TestAuthRegCompletion:
                 "method": "OAUTH",
                 "code": "REG-E4-TEACHER",
                 "accessToken": "bad-token",
+                "firstName": "OAuth",
+                "lastName": "Failure",
             },
             format="json",
         )
@@ -892,15 +884,19 @@ class TestAuthRegCompletion:
         def fail_enrollment(*_args, **_kwargs):
             raise ValueError("Enrollment creation failed")
 
-        monkeypatch.setattr("accounts.services._ensure_student_enrollment", fail_enrollment)
+        monkeypatch.setattr(
+            "accounts.services._registration._ensure_student_enrollment", fail_enrollment
+        )
         before_users = User.objects.count()
         register = api_client.post(
             "/api/v1/registration/accounts",
             {
                 "method": "LOCAL",
                 "code": "REG-CN03-REGISTER",
-                "name": "Atomic Failure Student",
+                "firstName": "Atomic",
+                "lastName": "Failure Student",
                 "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
             },
             format="json",
         )
@@ -928,12 +924,14 @@ class TestAuthRegCompletion:
             {
                 "method": "LOCAL",
                 "code": "REG-CN13-PRIMARY",
-                "name": "CN13 Student",
+                "firstName": "CN13",
+                "lastName": "Student",
                 "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
             },
             format="json",
         )
-        assert register.status_code == 200
+        assert register.status_code == 201
         student = User.objects.get(username=register.json()["username"])
         assert register.json()["courseId"] == primary_code.course_id
         assert Enrollment.objects.filter(
@@ -949,7 +947,7 @@ class TestAuthRegCompletion:
             {"code": "REG-CN13-SECONDARY"},
             format="json",
         )
-        assert join.status_code == 200
+        assert join.status_code == 201
         assert Enrollment.objects.filter(
             course_id=secondary_code.course_id,
             student_profile=student.student_profile,
@@ -1049,6 +1047,37 @@ class TestAuthRegCompletion:
         )
         assert response.status_code == 201
         assert response.json()["count"] == 2
+
+    def test_REG_UC_02_RESEARCHER_WITH_PERMISSION(self, api_client):
+        """Researcher with CREATE_RESEARCHER_CODES can generate researcher codes."""
+        admin = self._make_user(
+            role="ADMIN",
+            username="reg-uc02-admin-grant@example.com",
+            email="reg-uc02-admin-grant@example.com",
+        )
+        researcher = self._make_user(
+            role=Role.RESEARCHER,
+            username="reg-uc02-researcher-granted",
+            email="reg-uc02-researcher-granted@example.com",
+        )
+        SudoGrant.objects.create(
+            user=researcher,
+            granted_by=admin,
+            permissions=[SudoPermission.CREATE_RESEARCHER_CODES.value],
+            can_grant_sudo=False,
+        )
+        api_client.force_authenticate(user=researcher)
+        response = api_client.post(
+            "/api/v1/codes",
+            {
+                "codeType": RegistrationCodeType.RESEARCHER,
+                "count": 1,
+                "usesPerCode": 1,
+                "expiresAt": (timezone.now() + timedelta(days=2)).isoformat(),
+            },
+            format="json",
+        )
+        assert response.status_code == 201
 
     def test_REG_UC_02_E1(self, api_client, teacher_user):
         """Code generation rejects invalid count/uses-per-code values."""
@@ -1319,17 +1348,19 @@ class TestAuthRegCompletion:
         teacher_code = self._student_code(teacher_user, "REG-CN04-STUDENT")
 
         api_client.force_authenticate(user=admin)
-        admin_ids = {entry["id"] for entry in api_client.get("/api/v1/codes").json()}
+        admin_ids = {entry["id"] for entry in api_client.get("/api/v1/codes").json()["results"]}
         assert code_a.id in admin_ids and code_b.id in admin_ids and teacher_code.id in admin_ids
 
         api_client.force_authenticate(user=researcher_a)
-        researcher_ids = {entry["id"] for entry in api_client.get("/api/v1/codes").json()}
+        researcher_ids = {
+            entry["id"] for entry in api_client.get("/api/v1/codes").json()["results"]
+        }
         assert code_a.id in researcher_ids
         assert code_b.id not in researcher_ids
         assert teacher_code.id not in researcher_ids
 
         api_client.force_authenticate(user=teacher_user)
-        teacher_ids = {entry["id"] for entry in api_client.get("/api/v1/codes").json()}
+        teacher_ids = {entry["id"] for entry in api_client.get("/api/v1/codes").json()["results"]}
         assert teacher_code.id in teacher_ids
         assert code_a.id not in teacher_ids
 
@@ -1354,7 +1385,7 @@ class TestAuthRegCompletion:
         api_client.force_authenticate(user=teacher_user)
         response = api_client.get("/api/v1/codes?includeArchived=true")
         assert response.status_code == 200
-        by_id = {entry["id"]: entry for entry in response.json()}
+        by_id = {entry["id"]: entry for entry in response.json()["results"]}
         assert by_id[active.id]["status"] == "ACTIVE"
         assert by_id[expired.id]["status"] == "EXPIRED"
         assert by_id[exhausted.id]["status"] == "EXHAUSTED"
@@ -1369,12 +1400,14 @@ class TestAuthRegCompletion:
             {
                 "method": "LOCAL",
                 "code": "REG-CN15-CODE",
-                "name": "CN15 Existing Student",
+                "firstName": "CN15",
+                "lastName": "Existing Student",
                 "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
             },
             format="json",
         )
-        assert first_registration.status_code == 200
+        assert first_registration.status_code == 201
         existing_username = first_registration.json()["username"]
 
         api_client.force_authenticate(user=teacher_user)
@@ -1392,8 +1425,10 @@ class TestAuthRegCompletion:
             {
                 "method": "LOCAL",
                 "code": "REG-CN15-CODE",
-                "name": "CN15 Blocked Student",
+                "firstName": "CN15",
+                "lastName": "Blocked Student",
                 "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
             },
             format="json",
         )
@@ -1416,9 +1451,9 @@ class TestAuthRegCompletion:
         assert archive.json()["status"] == "ARCHIVED"
 
         default_list = api_client.get("/api/v1/codes")
-        default_ids = {entry["id"] for entry in default_list.json()}
+        default_ids = {entry["id"] for entry in default_list.json()["results"]}
         assert code.id not in default_ids
 
         archived_list = api_client.get("/api/v1/codes?includeArchived=true")
-        archived_ids = {entry["id"] for entry in archived_list.json()}
+        archived_ids = {entry["id"] for entry in archived_list.json()["results"]}
         assert code.id in archived_ids

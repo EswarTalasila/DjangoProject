@@ -33,40 +33,44 @@ def create_admin_client(username: str, password: str) -> tuple[User, APIClient]:
     return admin, client
 
 
-def create_teacher_client(admin_client: APIClient, username: str, password: str) -> APIClient:
+def create_teacher_client(
+    admin_client: APIClient, email_identifier: str, password: str
+) -> APIClient:
     payload = {
-        "username": username,
-        "email": f"{username}.contact@example.com" if "@" not in username else username,
+        "email": (
+            f"{email_identifier}.contact@example.com"
+            if "@" not in email_identifier
+            else email_identifier
+        ),
         "password": password,
         "name": "Teacher",
         "role": "ROLE_TEACHER",
     }
     response = admin_client.post("/api/v1/users", payload, format="json")
-    assert response.status_code == 200
+    assert response.status_code == 201
+    created_teacher = User.objects.get(email=payload["email"])
     client = APIClient()
-    login(client, username, password)
+    login(client, created_teacher.username, password)
     return client
 
 
 def create_student(
     teacher_client: APIClient,
     name: str,
-    username: str,
     course_id: int,
     consent: bool = True,
     password: str | None = None,
-) -> int:
+) -> tuple[int, str]:
     resolved_password = password or "studentpass"
     payload = {
         "name": name,
-        "username": username,
         "courseId": course_id,
         "consent": consent,
         "password": resolved_password,
     }
     response = teacher_client.post("/api/v1/students/", payload, format="json")
-    assert response.status_code == 200
-    return response.json()["id"]
+    assert response.status_code == 201
+    return response.json()["id"], response.json()["username"]
 
 
 @pytest.mark.django_db
@@ -88,11 +92,11 @@ class TestExtendedWorkflows:
         course_response = teacher_client.post(
             "/api/v1/courses/", {"name": "Biology"}, format="json"
         )
-        assert course_response.status_code == 200
+        assert course_response.status_code == 201
         course_id = course_response.json()["id"]
 
         step("Teacher updates course")
-        update_response = teacher_client.put(
+        update_response = teacher_client.patch(
             f"/api/v1/courses/{course_id}", {"name": "Biology 101"}, format="json"
         )
         assert update_response.status_code == 200
@@ -106,31 +110,30 @@ class TestExtendedWorkflows:
         step("Teacher lists courses")
         list_response = teacher_client.get("/api/v1/courses/")
         assert list_response.status_code == 200
-        assert any(course["id"] == course_id for course in list_response.json())
+        assert any(course["id"] == course_id for course in list_response.json()["results"])
 
         step("Teacher adds student")
-        student_id = create_student(
+        student_id, _ = create_student(
             teacher_client,
             "Student One",
-            "student-course@example.com",
             course_id,
         )
 
         step("Teacher lists students")
         students_response = teacher_client.get(f"/api/v1/courses/{course_id}/students")
         assert students_response.status_code == 200
-        assert any(student["id"] == student_id for student in students_response.json())
+        assert any(student["id"] == student_id for student in students_response.json()["results"])
 
         step("Teacher removes student")
         remove_response = teacher_client.delete(
             f"/api/v1/courses/{course_id}/students/{student_id}"
         )
-        assert remove_response.status_code == 200
+        assert remove_response.status_code == 204
 
         step("Teacher confirms student removed")
         students_response = teacher_client.get(f"/api/v1/courses/{course_id}/students")
         assert students_response.status_code == 200
-        assert not students_response.json()
+        assert not students_response.json()["results"]
 
         step("Teacher deletes course")
         delete_response = teacher_client.delete(f"/api/v1/courses/{course_id}")
@@ -206,7 +209,7 @@ class TestExtendedWorkflows:
                 }
             ],
         }
-        update_response = admin_client.put(
+        update_response = admin_client.patch(
             f"/api/v1/assessments/{assessment_id}",
             update_payload,
             format="json",
@@ -218,7 +221,7 @@ class TestExtendedWorkflows:
         step("Teacher lists assessments")
         list_response = teacher_client.get("/api/v1/assessments/")
         assert list_response.status_code == 200
-        assert any(item["id"] == assessment_id for item in list_response.json())
+        assert any(item["id"] == assessment_id for item in list_response.json()["results"])
 
         step("Teacher cannot delete assessment")
         forbidden_delete = teacher_client.delete(f"/api/v1/assessments/{assessment_id}")
@@ -226,7 +229,7 @@ class TestExtendedWorkflows:
 
         step("Admin deletes assessment")
         delete_response = admin_client.delete(f"/api/v1/assessments/{assessment_id}")
-        assert delete_response.status_code == 200
+        assert delete_response.status_code == 204
 
         step("Admin confirms assessment removed")
         missing_response = admin_client.get(f"/api/v1/assessments/{assessment_id}")
@@ -277,12 +280,12 @@ class TestExtendedWorkflows:
         course_response = teacher_client.post(
             "/api/v1/courses/", {"name": "Course A"}, format="json"
         )
-        assert course_response.status_code == 200
+        assert course_response.status_code == 201
         course_id = course_response.json()["id"]
         other_course_response = teacher_client.post(
             "/api/v1/courses/", {"name": "Course B"}, format="json"
         )
-        assert other_course_response.status_code == 200
+        assert other_course_response.status_code == 201
         other_course_id = other_course_response.json()["id"]
 
         step("Teacher creates assignment for Course A")
@@ -299,17 +302,15 @@ class TestExtendedWorkflows:
         assignment_id = assignment_response.json()["id"]
 
         step("Teacher creates students")
-        student_id = create_student(
+        student_id, student_username = create_student(
             teacher_client,
             "Student One",
-            "studentsub",
             course_id,
             password="studentpass",
         )
-        other_student_id = create_student(
+        other_student_id, other_student_username = create_student(
             teacher_client,
             "Student Two",
-            "studentsubother",
             other_course_id,
             password="otherpass",
         )
@@ -322,8 +323,8 @@ class TestExtendedWorkflows:
 
         step("Other student cannot draft in Course A")
         other_student_client = APIClient()
-        login(other_student_client, "studentsubother", "otherpass")
-        draft_response = other_student_client.put(
+        login(other_student_client, other_student_username, "otherpass")
+        draft_response = other_student_client.patch(
             f"/api/v1/students/{other_student_id}/assignments/{assignment_id}/draft/",
             {"answers": []},
             format="json",
@@ -332,10 +333,10 @@ class TestExtendedWorkflows:
 
         step("Student logs in")
         student_client = APIClient()
-        login(student_client, "studentsub", "studentpass")
+        login(student_client, student_username, "studentpass")
 
         step("Student saves draft")
-        draft_response = student_client.put(
+        draft_response = student_client.patch(
             f"/api/v1/students/{student_id}/assignments/{assignment_id}/draft/",
             {
                 "answers": [
@@ -373,12 +374,12 @@ class TestExtendedWorkflows:
         step("Student lists own submissions")
         list_mine = student_client.get(f"/api/v1/submissions/mine?userId={student_id}")
         assert list_mine.status_code == 200
-        assert any(item["id"] == submission_id for item in list_mine.json())
+        assert any(item["id"] == submission_id for item in list_mine.json()["results"])
 
         step("Teacher reviews submissions")
         review_response = teacher_client.get(f"/api/v1/assignments/{assignment_id}/submissions")
         assert review_response.status_code == 200
-        assert any(item["id"] == submission_id for item in review_response.json())
+        assert any(item["id"] == submission_id for item in review_response.json()["results"])
 
         step("Teacher overrides score")
         override_response = teacher_client.patch(
@@ -412,7 +413,7 @@ class TestExtendedWorkflows:
         assert teacher_self_assess.status_code == 201
 
         step("Invalid assignment returns 404")
-        missing = student_client.put(
+        missing = student_client.patch(
             f"/api/v1/students/{student_id}/assignments/999999/draft/",
             {"answers": []},
             format="json",

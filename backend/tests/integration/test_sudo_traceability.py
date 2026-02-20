@@ -222,15 +222,11 @@ class TestSudoTraceability:
 
     def test_SUDO_UC_06(self, api_client, admin_user):
         """SUDO-UC-06 aggregate bulk create flow."""
-        account_route_tests.TestAccountRoutes().test_USER_UC_02_ADMIN(
-            api_client, admin_user
-        )
+        account_route_tests.TestAccountRoutes().test_USER_UC_02_ADMIN(api_client, admin_user)
 
     def test_SUDO_UC_06_ADMIN(self, api_client, admin_user):
         """SUDO-UC-06 admin variant."""
-        account_route_tests.TestAccountRoutes().test_USER_UC_02_ADMIN(
-            api_client, admin_user
-        )
+        account_route_tests.TestAccountRoutes().test_USER_UC_02_ADMIN(api_client, admin_user)
 
     def test_SUDO_UC_06_E1(self, api_client):
         """SUDO-UC-06-E1 missing BULK_CREATE permission."""
@@ -260,7 +256,6 @@ class TestSudoTraceability:
             "/api/v1/user-batches",
             [
                 {
-                    "username": "fr3-bulk-teacher",
                     "email": "fr3-bulk-teacher@example.com",
                     "name": "FR3 Bulk Teacher",
                     "role": "ROLE_TEACHER",
@@ -268,5 +263,5 @@ class TestSudoTraceability:
             ],
             format="json",
         )
-        assert response.status_code == 200
+        assert response.status_code == 201
         assert response.json() == 1

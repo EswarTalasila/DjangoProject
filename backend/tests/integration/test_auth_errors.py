@@ -23,15 +23,15 @@ class TestAuthErrors:
         assert response.status_code == 400
         assert "accessToken" in response.json()
 
-    def test_AUTH_UC_06_E1(self, api_client):
-        """AUTH-UC-06-E1: reset status lookup rejects invalid identifier/token pair."""
+    def test_AUTH_UC_07_E1(self, api_client, teacher_user):
+        """AUTH-UC-07-E1: issuer denied when target role is outside scope."""
+        api_client.force_authenticate(user=teacher_user)
         response = api_client.post(
-            "/api/v1/auth/reset-request-lookups",
-            {"identifier": "none@example.com", "requestToken": "REQ-INVALID"},
+            "/api/v1/auth/password-reset-codes",
+            {"targetUserId": teacher_user.id},
             format="json",
         )
-        assert response.status_code == 404
-        assert response.json()["detail"] == "Invalid identifier or request token."
+        assert response.status_code == 403
 
     def test_AUTH_CN_13(self, api_client, monkeypatch):
         """AUTH-CN-13: student accounts cannot use OAuth login flow."""

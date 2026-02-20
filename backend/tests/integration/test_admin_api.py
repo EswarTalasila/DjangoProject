@@ -48,7 +48,7 @@ class TestAdminSudo:
             format="json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 201
         assert "grant_id" in response.data
 
         # Verify database state
@@ -77,7 +77,7 @@ class TestAdminSudo:
         )
 
         assert response.status_code == 400
-        assert "must have RESEARCHER role" in response.data["error"]
+        assert "must have RESEARCHER role" in response.data["detail"]
 
     # =========================================================================
     # ADMIN-UC-21: Admin revokes sudo grant
@@ -93,6 +93,5 @@ class TestAdminSudo:
         api_client.force_authenticate(user=admin_user)
         response = api_client.delete(f"/api/v1/sudo-grants/{grant.id}")
 
-        assert response.status_code == 200
-        assert "Sudo revoked" in response.data["message"]
+        assert response.status_code == 204
         assert not SudoGrant.objects.filter(id=grant.id).exists()

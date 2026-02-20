@@ -36,8 +36,9 @@ class TestResearcherSudoPermissions:
             SudoPermission.EDIT_USER.value,
             SudoPermission.DELETE_USER.value,
             SudoPermission.BULK_CREATE.value,
-            SudoPermission.RESET_PASSWORD.value,
-            SudoPermission.GRANT_SUDO.value,
+            SudoPermission.ISSUE_STUDENT_RESET_CODE.value,
+            SudoPermission.ISSUE_RESEARCHER_RESET_CODE.value,
+            SudoPermission.CREATE_RESEARCHER_CODES.value,
         ],
     )
     def test_RESEARCHER_UC_20(self, permission):
@@ -135,7 +136,7 @@ class TestResearcherSudoDelegation:
             format="json",
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 201
         assert "grant_id" in response.data
 
         # Verify database state
@@ -171,7 +172,7 @@ class TestResearcherSudoDelegation:
         )
 
         assert response.status_code == 403
-        assert "can_grant_sudo=False" in response.data["error"]
+        assert "can_grant_sudo=False" in response.data["detail"]
 
     def test_RESEARCHER_UC_21_E2(self, api_client):
         """Escalation attempt - researcher tries to grant permission they don't hold - 403."""
@@ -199,8 +200,8 @@ class TestResearcherSudoDelegation:
         )
 
         assert response.status_code == 403
-        assert "Cannot grant permissions you don't hold" in response.data["error"]
-        assert SudoPermission.EDIT_USER.value in response.data["error"]
+        assert "Cannot grant permissions you don't hold" in response.data["detail"]
+        assert SudoPermission.EDIT_USER.value in response.data["detail"]
 
     def test_RESEARCHER_UC_21_E3(self, api_client):
         """Researcher tries to set can_grant_sudo=True - 403 (admin only)."""
@@ -229,7 +230,7 @@ class TestResearcherSudoDelegation:
         )
 
         assert response.status_code == 403
-        assert "Only admins can set can_grant_sudo=True" in response.data["error"]
+        assert "Only admins can set can_grant_sudo=True" in response.data["detail"]
 
     def test_RESEARCHER_UC_21_E4(self, api_client):
         """Researcher tries to delegate to non-researcher - 400."""
@@ -256,9 +257,37 @@ class TestResearcherSudoDelegation:
         )
 
         assert response.status_code == 400
-        assert "must have RESEARCHER role" in response.data["error"]
+        assert "must have RESEARCHER role" in response.data["detail"]
 
-    def test_RESEARCHER_UC_21_E5(self, api_client, admin_user):
+    def test_RESEARCHER_UC_21_E5_NON_DELEGABLE_PERMISSION(self, api_client):
+        """Researcher cannot delegate non-delegable CREATE_RESEARCHER_CODES permission."""
+        researcher1 = UserFactory()
+        UserRole.objects.create(user=researcher1, role=Role.RESEARCHER)
+        ResearcherProfile.objects.create(user=researcher1)
+        SudoGrantFactory(
+            user=researcher1,
+            permissions=[SudoPermission.CREATE_RESEARCHER_CODES.value],
+            can_grant_sudo=True,
+        )
+
+        researcher2 = UserFactory()
+        UserRole.objects.create(user=researcher2, role=Role.RESEARCHER)
+        ResearcherProfile.objects.create(user=researcher2)
+
+        api_client.force_authenticate(user=researcher1)
+        response = api_client.post(
+            "/api/v1/sudo-grants",
+            {
+                "user_id": researcher2.id,
+                "permissions": [SudoPermission.CREATE_RESEARCHER_CODES.value],
+            },
+            format="json",
+        )
+
+        assert response.status_code == 403
+        assert "non-delegable" in response.data["detail"]
+
+    def test_RESEARCHER_UC_21_E6(self, api_client, admin_user):
         """Grantee already has SudoGrant - updates existing."""
         researcher = UserFactory()
         UserRole.objects.create(user=researcher, role=Role.RESEARCHER)
@@ -274,7 +303,7 @@ class TestResearcherSudoDelegation:
             },
             format="json",
         )
-        assert response1.status_code == 200
+        assert response1.status_code == 201
 
         # Try to grant again (should update, not error)
         response2 = api_client.post(
@@ -287,7 +316,7 @@ class TestResearcherSudoDelegation:
         )
 
         # Service updates existing grant
-        assert response2.status_code == 200
+        assert response2.status_code == 201
         researcher.refresh_from_db()
         assert researcher.sudo_grant.permissions == [SudoPermission.EDIT_USER.value]
 
@@ -310,8 +339,7 @@ class TestResearcherSudoDelegation:
         api_client.force_authenticate(user=researcher1)
         response = api_client.delete(f"/api/v1/sudo-grants/{grant.id}")
 
-        assert response.status_code == 200
-        assert "Sudo revoked" in response.data["message"]
+        assert response.status_code == 204
         assert not SudoGrant.objects.filter(id=grant.id).exists()
 
     def test_RESEARCHER_UC_22_E1(self, api_client):
@@ -336,5 +364,5 @@ class TestResearcherSudoDelegation:
         response = api_client.delete(f"/api/v1/sudo-grants/{grant.id}")
 
         assert response.status_code == 403
-        assert "You can only revoke grants you created" in response.data["error"]
+        assert "You can only revoke grants you created" in response.data["detail"]
         assert SudoGrant.objects.filter(id=grant.id).exists()  # Still exists

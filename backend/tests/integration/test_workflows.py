@@ -68,37 +68,37 @@ class TestWorkflows:
 
         step("Admin creates teacher")
         teacher_payload = {
-            "username": "teacher@example.com",
             "email": "teacher@example.com",
             "password": "teacherpass",
             "name": "Teacher",
             "role": "ROLE_TEACHER",
         }
         response = admin_client.post("/api/v1/users", teacher_payload, format="json")
-        assert response.status_code == 200
+        assert response.status_code == 201
+        teacher_username = User.objects.get(email="teacher@example.com").username
 
         teacher_client = APIClient()
         step("Teacher login")
-        login(teacher_client, teacher_payload["username"], "teacherpass")
+        login(teacher_client, teacher_username, "teacherpass")
 
         step("Teacher creates course")
         course_response = teacher_client.post(
             "/api/v1/courses/", {"name": "Workflow Course"}, format="json"
         )
-        assert course_response.status_code == 200
+        assert course_response.status_code == 201
         course_id = course_response.json()["id"]
 
         student_payload = {
             "name": "Student",
-            "username": "workflowstudent",
             "courseId": course_id,
             "consent": True,
             "password": "studentpass",
         }
         step("Teacher creates student")
         student_response = teacher_client.post("/api/v1/students/", student_payload, format="json")
-        assert student_response.status_code == 200
+        assert student_response.status_code == 201
         student_id = student_response.json()["id"]
+        student_username = student_response.json()["username"]
 
         assignment_payload = {
             "assessmentId": assessment_id,
@@ -115,15 +115,15 @@ class TestWorkflows:
 
         student_client = APIClient()
         step("Student login")
-        login(student_client, student_payload["username"], "studentpass")
+        login(student_client, student_username, "studentpass")
 
         step("Student fetches assignments")
         assignments_response = student_client.get(f"/api/v1/assignments/users/{student_id}")
         assert assignments_response.status_code == 200
-        assert any(a["id"] == assignment_id for a in assignments_response.json())
+        assert any(a["id"] == assignment_id for a in assignments_response.json()["results"])
 
         step("Student saves draft submission")
-        draft_response = student_client.put(
+        draft_response = student_client.patch(
             f"/api/v1/students/{student_id}/assignments/{assignment_id}/draft/",
             {
                 "answers": [
@@ -165,7 +165,7 @@ class TestWorkflows:
             f"/api/v1/assignments/{assignment_id}/submissions"
         )
         assert submissions_response.status_code == 200
-        assert any(s["id"] == submission_id for s in submissions_response.json())
+        assert any(s["id"] == submission_id for s in submissions_response.json()["results"])
 
         step("Teacher overrides score")
         override_response = teacher_client.patch(

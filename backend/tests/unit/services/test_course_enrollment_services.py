@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from accounts.models import Role, StudentProfile, TeacherProfile, User, UserRole
-from courses.models import Course, Enrollment, EnrollmentStatus
+from accounts.models import Role, TeacherProfile, User, UserRole
+from courses.models import Course, Enrollment
 from courses.services import bulk_create_students, create_student_in_course
 
 
@@ -15,36 +15,17 @@ def test_create_student_in_course_requires_course_id(teacher_user):
     """Missing courseId is rejected early in student creation flow."""
 
     with pytest.raises(ValueError, match="courseId is required"):
-        create_student_in_course(teacher_user, {"name": "Student", "username": "s-one"})
+        create_student_in_course(teacher_user, {"name": "Student"})
 
 
 @pytest.mark.django_db
 @pytest.mark.unit
-def test_create_student_in_course_rejects_duplicate_enrollment(teacher_user):
-    """Existing enrollment blocks duplicate student enrollment."""
-
-    from courses.models import Course
+def test_create_student_in_course_rejects_client_username_override(teacher_user):
+    """Client-supplied username is rejected; usernames are system-managed."""
 
     course = Course.objects.create(name="Course A", teacher_profile=teacher_user.teacher_profile)
 
-    student = User.objects.create_user(
-        username="dup-student",
-        email="dup-student@example.com",
-        name="Dup Student",
-        password="StartPass123!",
-    )
-    UserRole.objects.create(user=student, role=Role.STUDENT)
-    student_profile = StudentProfile.objects.create(
-        user=student, created_by=teacher_user, consent=False
-    )
-
-    Enrollment.objects.create(
-        course=course,
-        student_profile=student_profile,
-        status=EnrollmentStatus.ACTIVE,
-    )
-
-    with pytest.raises(ValueError, match="already enrolled"):
+    with pytest.raises(ValueError, match="system-managed"):
         create_student_in_course(
             teacher_user,
             {
@@ -71,13 +52,15 @@ def test_create_student_in_course_raises_when_profile_missing(monkeypatch, teach
         password="StartPass123!",
     )
     UserRole.objects.create(user=phantom, role=Role.STUDENT)
+    monkeypatch.setattr(
+        "courses.services._mutations.create_user_from_payload", lambda *_a, **_k: phantom
+    )
 
     with pytest.raises(ValueError, match="StudentProfile not created"):
         create_student_in_course(
             teacher_user,
             {
                 "name": "Phantom",
-                "username": "phantom-student",
                 "courseId": course.id,
             },
         )
@@ -92,7 +75,7 @@ def test_bulk_create_students_counts_only_successes(teacher_user, monkeypatch):
 
     def fake_create(_request_user, payload):
         calls["i"] += 1
-        if payload.get("username") == "bad":
+        if payload.get("name") == "bad":
             raise ValueError("bad payload")
         return object()
 
@@ -101,9 +84,9 @@ def test_bulk_create_students_counts_only_successes(teacher_user, monkeypatch):
     created = bulk_create_students(
         teacher_user,
         [
-            {"username": "ok-1"},
-            {"username": "bad"},
-            {"username": "ok-2"},
+            {"name": "ok-1"},
+            {"name": "bad"},
+            {"name": "ok-2"},
         ],
     )
 
@@ -123,14 +106,15 @@ def test_create_student_in_course_creates_profile_and_enrollment(teacher_user):
         teacher_user,
         {
             "name": "New Student",
-            "username": "new-student",
             "courseId": course.id,
             "consent": True,
         },
     )
 
     assert Enrollment.objects.filter(id=enrollment.id).exists()
-    assert enrollment.student_profile.user.username == "new-student"
+    username = enrollment.student_profile.user.username
+    assert len(username) == 8
+    assert username[-1].isdigit()
     assert enrollment.student_profile.consent is True
 
 
@@ -256,8 +240,8 @@ def test_remove_student_from_course_missing_profile(teacher_user):
 
 @pytest.mark.django_db
 @pytest.mark.unit
-def test_create_student_in_course_existing_non_student_rejected(teacher_user):
-    """Existing non-student account rejects enrollment creation."""
+def test_create_student_in_course_avoids_non_student_identifier_collisions(teacher_user):
+    """Student username generation avoids collisions with existing non-student accounts."""
 
     course = Course.objects.create(
         name="Reject Course", teacher_profile=teacher_user.teacher_profile
@@ -271,15 +255,14 @@ def test_create_student_in_course_existing_non_student_rejected(teacher_user):
     UserRole.objects.create(user=other_teacher, role=Role.TEACHER)
     TeacherProfile.objects.create(user=other_teacher)
 
-    with pytest.raises(ValueError, match="not a student"):
-        create_student_in_course(
-            teacher_user,
-            {
-                "name": "Non Student",
-                "username": "existing-non-student",
-                "courseId": course.id,
-            },
-        )
+    enrollment = create_student_in_course(
+        teacher_user,
+        {
+            "name": "Non Student",
+            "courseId": course.id,
+        },
+    )
+    assert enrollment.student_profile.user.username != other_teacher.username
 
 
 @pytest.mark.django_db
@@ -340,7 +323,6 @@ def test_create_submissions_for_student_with_assignments(teacher_user):
         teacher_user,
         {
             "name": "Sub Student",
-            "username": "sub-student",
             "courseId": course.id,
             "consent": True,
         },
@@ -362,26 +344,26 @@ def test_answer_type_from_question_mapping():
     from types import SimpleNamespace
 
     from assessments.models import QuestionKind
-    from courses.services import _answer_type_from_question
+    from core.helpers import answer_type_from_question
     from submissions.models import AnswerType
 
     assert (
-        _answer_type_from_question(SimpleNamespace(kind=QuestionKind.MULTIPLE_CHOICE))
+        answer_type_from_question(SimpleNamespace(kind=QuestionKind.MULTIPLE_CHOICE))
         == AnswerType.MULTIPLE_CHOICE
     )
     assert (
-        _answer_type_from_question(SimpleNamespace(kind=QuestionKind.SHORT_ANSWER))
+        answer_type_from_question(SimpleNamespace(kind=QuestionKind.SHORT_ANSWER))
         == AnswerType.SHORT_ANSWER
     )
     assert (
-        _answer_type_from_question(SimpleNamespace(kind=QuestionKind.NUMBER_SCALE))
+        answer_type_from_question(SimpleNamespace(kind=QuestionKind.NUMBER_SCALE))
         == AnswerType.NUMBER_SCALE
     )
     assert (
-        _answer_type_from_question(SimpleNamespace(kind=QuestionKind.MOOD_METER))
+        answer_type_from_question(SimpleNamespace(kind=QuestionKind.MOOD_METER))
         == AnswerType.MOOD_METER
     )
-    assert _answer_type_from_question(SimpleNamespace(kind="UNKNOWN")) == AnswerType.SHORT_ANSWER
+    assert answer_type_from_question(SimpleNamespace(kind="UNKNOWN")) == AnswerType.SHORT_ANSWER
 
 
 @pytest.mark.django_db

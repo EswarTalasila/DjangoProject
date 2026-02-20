@@ -75,7 +75,7 @@ class TestAssignmentRoutes:
         api_client.force_authenticate(user=student_user)
         response = api_client.get(f"/api/v1/assignments/users/{student_user.id}")
         assert response.status_code == 200
-        assert len(response.json()) == 1
+        assert len(response.json()["results"]) == 1
 
     def test_get_assignment_detail(self, api_client, teacher_user, admin_user):
         """Test that get assignment detail."""
@@ -99,7 +99,9 @@ class TestAssignmentRoutes:
         assert response.status_code == 200
         assert response.json()["id"] == assignment.id
 
-    def test_list_assignments_by_course(self, api_client, teacher_user, admin_user, researcher_user):
+    def test_list_assignments_by_course(
+        self, api_client, teacher_user, admin_user, researcher_user
+    ):
         """Test that list assignments by course."""
         assessment = Assessment.objects.create(
             title="Assessment Course",
@@ -119,12 +121,12 @@ class TestAssignmentRoutes:
         api_client.force_authenticate(user=teacher_user)
         response = api_client.get(f"/api/v1/assignments/courses/{course.id}")
         assert response.status_code == 200
-        assert len(response.json()) == 1
+        assert len(response.json()["results"]) == 1
 
         api_client.force_authenticate(user=researcher_user)
         researcher_response = api_client.get(f"/api/v1/assignments/courses/{course.id}")
         assert researcher_response.status_code == 200
-        assert len(researcher_response.json()) == 1
+        assert len(researcher_response.json()["results"]) == 1
 
     def test_list_assignments_for_user_researcher_cross_user(
         self, api_client, teacher_user, student_user, researcher_user, admin_user
@@ -153,7 +155,7 @@ class TestAssignmentRoutes:
         api_client.force_authenticate(user=researcher_user)
         response = api_client.get(f"/api/v1/assignments/users/{student_user.id}")
         assert response.status_code == 200
-        assert len(response.json()) == 1
+        assert len(response.json()["results"]) == 1
 
     def test_delete_assignment_removes_submissions(
         self, api_client, teacher_user, student_user, admin_user
@@ -186,5 +188,5 @@ class TestAssignmentRoutes:
 
         api_client.force_authenticate(user=teacher_user)
         response = api_client.delete(f"/api/v1/assignments/{assignment.id}")
-        assert response.status_code == 200
+        assert response.status_code == 204
         assert not Submission.objects.filter(assignment=assignment).exists()

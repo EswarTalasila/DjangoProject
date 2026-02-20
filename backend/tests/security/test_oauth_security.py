@@ -92,7 +92,9 @@ class TestOAuthErrorSanitization:
         assert "api_key" not in body_str
         assert "xyz123" not in body_str
 
-    def test_oauth_registration_google_failure_returns_generic_message(self, api_client, admin_user):
+    def test_oauth_registration_google_failure_returns_generic_message(
+        self, api_client, admin_user
+    ):
         """SSL exception details must not appear in OAuth registration error response."""
         with patch(
             "accounts.views._google_userinfo",
@@ -164,7 +166,7 @@ class TestAuthErrorConsistency:
 
         assert response.status_code == 401
         body = response.json()
-        assert body.get("detail") == "No account associated with this Google email."
+        assert body.get("detail") == "Invalid identifier or password."
 
     def test_oauth_login_missing_google_fields_returns_generic_message(self, api_client):
         """Google userinfo with empty fields must return a generic 401, not internal error."""
@@ -180,4 +182,4 @@ class TestAuthErrorConsistency:
 
         assert response.status_code == 401
         body = response.json()
-        assert body.get("detail") == "Invalid Google userinfo"
+        assert body.get("detail") == "Access token verification failed."

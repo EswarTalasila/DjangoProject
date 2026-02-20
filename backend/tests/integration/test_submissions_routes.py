@@ -81,7 +81,7 @@ class TestSubmissionRoutes:
                 }
             ]
         }
-        response = api_client.put(
+        response = api_client.patch(
             f"/api/v1/students/{student_user.id}/assignments/{assignment.id}/draft/",
             payload,
             format="json",
@@ -139,7 +139,7 @@ class TestSubmissionRoutes:
         api_client.force_authenticate(user=teacher_user)
         response = api_client.get(f"/api/v1/assignments/{assignment.id}/submissions")
         assert response.status_code == 200
-        assert len(response.json()) == 1
+        assert len(response.json()["results"]) == 1
 
     def test_edit_submission_updates_status(
         self, api_client, teacher_user, student_user, admin_user
@@ -173,7 +173,7 @@ class TestSubmissionRoutes:
                 }
             ],
         }
-        response = api_client.put("/api/v1/submissions/", payload, format="json")
+        response = api_client.patch("/api/v1/submissions/", payload, format="json")
         assert response.status_code == 200
         submission.refresh_from_db()
         assert submission.status == SubmissionStatus.GRADED
@@ -210,7 +210,7 @@ class TestSubmissionRoutes:
         api_client.force_authenticate(user=student_user)
         response = api_client.get(f"/api/v1/submissions/mine?userId={student_user.id}")
         assert response.status_code == 200
-        payload = response.json()
+        payload = response.json()["results"]
         assert payload[0]["id"] == submission.id
 
     def test_teacher_submissions_route(self, api_client, teacher_user, admin_user):
@@ -238,4 +238,4 @@ class TestSubmissionRoutes:
         api_client.force_authenticate(user=teacher_user)
         response = api_client.get(f"/api/v1/teachers/{teacher_user.id}/submissions")
         assert response.status_code == 200
-        assert len(response.json()) == 1
+        assert len(response.json()["results"]) == 1
