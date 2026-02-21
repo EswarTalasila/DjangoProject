@@ -73,8 +73,8 @@ const studentRegisterSchema = z
 
 const nonStudentLocalSchema = z
     .object({
-        name: z.string().trim().min(1, "Full name is required"),
-        username: z.string().trim().min(3, "Username must be at least 3 characters"),
+        firstName: z.string().trim().min(1, "First name is required"),
+        lastName: z.string().trim().min(1, "Last name is required"),
         email: z.string().email("Invalid email address"),
         password: z.string().min(8, "Password must be at least 8 characters"),
         confirmPassword: z.string().min(8, "Confirm password is required"),
@@ -88,6 +88,13 @@ type CodeForm = z.infer<typeof codeSchema>;
 type StudentRegisterForm = z.infer<typeof studentRegisterSchema>;
 type NonStudentLocalForm = z.infer<typeof nonStudentLocalSchema>;
 type ApiError = { response?: { data?: unknown } };
+
+const oauthSchema = z.object({
+    firstName: z.string().trim().min(1, "First name is required"),
+    lastName: z.string().trim().min(1, "Last name is required"),
+});
+
+type OAuthForm = z.infer<typeof oauthSchema>;
 
 function generateUsername(firstName: string, lastName: string): string {
     if (!firstName || !lastName) return "";
@@ -107,6 +114,8 @@ function RegisterPageContent() {
     const [generatedUsername, setGeneratedUsername] = useState<string>("");
     const [registeredUsername, setRegisteredUsername] = useState<string>("");
     const [showSuccess, setShowSuccess] = useState(false);
+    const [showOauthForm, setShowOauthForm] = useState(false);
+    const [googleAccessToken, setGoogleAccessToken] = useState<string>("");
 
     const codeForm = useForm<CodeForm>({ resolver: zodResolver(codeSchema) });
     const studentForm = useForm<StudentRegisterForm>({
@@ -115,11 +124,39 @@ function RegisterPageContent() {
     });
     const nonStudentForm = useForm<NonStudentLocalForm>({
         resolver: zodResolver(nonStudentLocalSchema),
-        defaultValues: { name: "", username: "", email: "", password: "", confirmPassword: "" },
+        defaultValues: { firstName: "", lastName: "", email: "", password: "", confirmPassword: "" },
     });
+    const oauthForm = useForm<OAuthForm>({
+        resolver: zodResolver(oauthSchema),
+        defaultValues: { firstName: "", lastName: "" },
+    });
+
+    useEffect(() => {
+        const subscription = oauthForm.watch((value) => {
+            if (value.firstName && value.lastName) {
+                setGeneratedUsername(generateUsername(value.firstName, value.lastName));
+            } else {
+                setGeneratedUsername("");
+            }
+        });
+        return () => subscription.unsubscribe();
+    }, [oauthForm]);
 
     const role = codeContext?.code_type;
     const isStudent = role === "STUDENT";
+
+    useEffect(() => {
+        if (!isStudent) {
+            const subscription = nonStudentForm.watch((value) => {
+                if (value.firstName && value.lastName) {
+                    setGeneratedUsername(generateUsername(value.firstName, value.lastName));
+                } else {
+                    setGeneratedUsername("");
+                }
+            });
+            return () => subscription.unsubscribe();
+        }
+    }, [isStudent, nonStudentForm]);
 
     useEffect(() => {
         if (isStudent) {
@@ -136,14 +173,22 @@ function RegisterPageContent() {
 
     const handleApiError = (
         error: ApiError,
-        form: UseFormReturn<StudentRegisterForm> | UseFormReturn<NonStudentLocalForm>
+        form: UseFormReturn<StudentRegisterForm> | UseFormReturn<NonStudentLocalForm> | UseFormReturn<OAuthForm>
     ) => {
         const errorData = error.response?.data;
         if (typeof errorData === "object" && errorData !== null && !Array.isArray(errorData)) {
+            if ("errors" in errorData && Array.isArray((errorData as { errors?: string[] }).errors)) {
+                const passwordErrors = (errorData as { errors: string[] }).errors;
+                form.setError("password", { type: "manual", message: passwordErrors.join(" ") });
+                return;
+            }
+
             let hasFieldError = false;
             const validFields = isStudent 
                 ? new Set<string>(["firstName", "lastName", "email", "password", "confirmPassword"])
-                : new Set<string>(["name", "username", "email", "password", "confirmPassword"]);
+                : showOauthForm
+                    ? new Set<string>(["firstName", "lastName"])
+                    : new Set<string>(["firstName", "lastName", "email", "password", "confirmPassword"]);
             
             Object.entries(errorData as Record<string, unknown>).forEach(([field, messages]) => {
                 if (validFields.has(field)) {
@@ -218,10 +263,11 @@ function RegisterPageContent() {
             const payload = {
                 method: "LOCAL",
                 code: validatedCode,
-                name: data.name,
-                username: data.username,
+                firstName: data.firstName,
+                lastName: data.lastName,
                 email: data.email,
                 password: data.password,
+                confirmPassword: data.confirmPassword,
             };
 
             const res = await api.post("/registration/accounts", payload);
@@ -243,39 +289,43 @@ function RegisterPageContent() {
 
     const registerWithGoogle = useGoogleLogin({
         onSuccess: async (tokenResponse) => {
-            setIsLoading(true);
+            setGoogleAccessToken(tokenResponse.access_token);
+            setShowOauthForm(true);
             setGeneralError(null);
-            try {
-                const payload = {
-                    method: "OAUTH",
-                    code: validatedCode,
-                    accessToken: tokenResponse.access_token,
-                };
-
-                const res = await api.post("/registration/accounts", payload);
-                const responseData = res.data as NonStudentRegisterResponse;
-
-                const { accessToken, role, name } = responseData;
-                Cookies.set("access_token", accessToken, { expires: 1 });
-                if (role) Cookies.set("user_role", role);
-                Cookies.set("user_name", name || "User", { expires: 1 });
-
-                toast.success("Account created with Google!");
-                router.push("/dashboard");
-            } catch (error: unknown) {
-                const detail = (
-                    (error as ApiError).response?.data as { detail?: string } | undefined
-                )?.detail;
-                setGeneralError(detail || "Google registration failed.");
-            } finally {
-                setIsLoading(false);
-            }
         },
         onError: () => {
             setGeneralError("Google registration failed to initialize.");
-            setIsLoading(false);
         },
     });
+
+    const handleOAuthRegistration = async (data: OAuthForm) => {
+        setIsLoading(true);
+        setGeneralError(null);
+        try {
+            const payload = {
+                method: "OAUTH",
+                code: validatedCode,
+                accessToken: googleAccessToken,
+                firstName: data.firstName,
+                lastName: data.lastName,
+            };
+
+            const res = await api.post("/registration/accounts", payload);
+            const responseData = res.data as NonStudentRegisterResponse;
+
+            const { accessToken, role, name } = responseData;
+            Cookies.set("access_token", accessToken, { expires: 1 });
+            if (role) Cookies.set("user_role", role);
+            Cookies.set("user_name", name || "User", { expires: 1 });
+
+            toast.success("Account created with Google!");
+            router.push("/dashboard");
+        } catch (error: unknown) {
+            handleApiError(error as ApiError, oauthForm);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     const handleProceedToLogin = () => {
         router.push("/login");
@@ -581,48 +631,60 @@ function RegisterPageContent() {
                                     </Button>
                                 </div>
                             </form>
-                        ) : registrationMethod === "LOCAL" ? (
+) : registrationMethod === "LOCAL" ? (
                             <form onSubmit={nonStudentForm.handleSubmit(handleNonStudentLocalRegistration)}>
                                 <div className="grid gap-4">
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="name">Full Name</Label>
-                                        <Input
-                                            id="name"
-                                            placeholder="Jane Doe"
-                                            disabled={isLoading}
-                                            className={
-                                                nonStudentForm.formState.errors.name
-                                                    ? "border-red-500 focus-visible:ring-red-500"
-                                                    : ""
-                                            }
-                                            {...nonStudentForm.register("name")}
-                                        />
-                                        {nonStudentForm.formState.errors.name && (
-                                            <p className="text-xs text-red-500 mt-1">
-                                                {nonStudentForm.formState.errors.name.message}
-                                            </p>
-                                        )}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="firstName">First Name</Label>
+                                            <Input
+                                                id="firstName"
+                                                placeholder="Jane"
+                                                disabled={isLoading}
+                                                className={
+                                                    nonStudentForm.formState.errors.firstName
+                                                        ? "border-red-500 focus-visible:ring-red-500"
+                                                        : ""
+                                                }
+                                                {...nonStudentForm.register("firstName")}
+                                            />
+                                            {nonStudentForm.formState.errors.firstName && (
+                                                <p className="text-xs text-red-500 mt-1">
+                                                    {nonStudentForm.formState.errors.firstName.message}
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="lastName">Last Name</Label>
+                                            <Input
+                                                id="lastName"
+                                                placeholder="Doe"
+                                                disabled={isLoading}
+                                                className={
+                                                    nonStudentForm.formState.errors.lastName
+                                                        ? "border-red-500 focus-visible:ring-red-500"
+                                                        : ""
+                                                }
+                                                {...nonStudentForm.register("lastName")}
+                                            />
+                                            {nonStudentForm.formState.errors.lastName && (
+                                                <p className="text-xs text-red-500 mt-1">
+                                                    {nonStudentForm.formState.errors.lastName.message}
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
 
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="username">Username</Label>
-                                        <Input
-                                            id="username"
-                                            placeholder="janedoe"
-                                            disabled={isLoading}
-                                            className={
-                                                nonStudentForm.formState.errors.username
-                                                    ? "border-red-500 focus-visible:ring-red-500"
-                                                    : ""
-                                            }
-                                            {...nonStudentForm.register("username")}
-                                        />
-                                        {nonStudentForm.formState.errors.username && (
-                                            <p className="text-xs text-red-500 mt-1">
-                                                {nonStudentForm.formState.errors.username.message}
+                                    {generatedUsername && (
+                                        <div className="rounded-md bg-slate-100 p-3 text-sm">
+                                            <p className="text-slate-600 mb-1">Your username will be:</p>
+                                            <p className="font-semibold text-slate-900 text-lg">{generatedUsername}</p>
+                                            <p className="text-xs text-slate-500 mt-1">
+                                                (If taken, a number may be added)
                                             </p>
-                                        )}
-                                    </div>
+                                        </div>
+                                    )}
 
                                     <div className="grid gap-2">
                                         <Label htmlFor="email">Email</Label>
@@ -675,7 +737,7 @@ function RegisterPageContent() {
                                                 nonStudentForm.formState.errors.confirmPassword
                                                     ? "border-red-500 focus-visible:ring-red-500"
                                                     : ""
-                                        }
+                                            }
                                             {...nonStudentForm.register("confirmPassword")}
                                         />
                                         {nonStudentForm.formState.errors.confirmPassword && (
@@ -684,6 +746,76 @@ function RegisterPageContent() {
                                             </p>
                                         )}
                                     </div>
+
+                                    <Button disabled={isLoading}>
+                                        {isLoading && (
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        )}
+                                        Complete Registration
+                                    </Button>
+                                </div>
+                            </form>
+                        ) : showOauthForm ? (
+                            <form onSubmit={oauthForm.handleSubmit(handleOAuthRegistration)}>
+                                <div className="grid gap-4">
+                                    <div className="rounded-md bg-blue-50 p-3 text-sm text-blue-900 flex items-start">
+                                        <Mail className="mr-2 h-5 w-5 text-blue-600 shrink-0" />
+                                        <p className="text-blue-700">
+                                            Complete your registration with Google
+                                        </p>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="firstName">First Name</Label>
+                                            <Input
+                                                id="firstName"
+                                                placeholder="Jane"
+                                                disabled={isLoading}
+                                                className={
+                                                    oauthForm.formState.errors.firstName
+                                                        ? "border-red-500 focus-visible:ring-red-500"
+                                                        : ""
+                                                }
+                                                {...oauthForm.register("firstName")}
+                                            />
+                                            {oauthForm.formState.errors.firstName && (
+                                                <p className="text-xs text-red-500 mt-1">
+                                                    {oauthForm.formState.errors.firstName.message}
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="lastName">Last Name</Label>
+                                            <Input
+                                                id="lastName"
+                                                placeholder="Doe"
+                                                disabled={isLoading}
+                                                className={
+                                                    oauthForm.formState.errors.lastName
+                                                        ? "border-red-500 focus-visible:ring-red-500"
+                                                        : ""
+                                                }
+                                                {...oauthForm.register("lastName")}
+                                            />
+                                            {oauthForm.formState.errors.lastName && (
+                                                <p className="text-xs text-red-500 mt-1">
+                                                    {oauthForm.formState.errors.lastName.message}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {generatedUsername && (
+                                        <div className="rounded-md bg-slate-100 p-3 text-sm">
+                                            <p className="text-slate-600 mb-1">Your username will be:</p>
+                                            <p className="font-semibold text-slate-900 text-lg">{generatedUsername}</p>
+                                            <p className="text-xs text-slate-500 mt-1">
+                                                (If taken, a number may be added)
+                                            </p>
+                                        </div>
+                                    )}
 
                                     <Button disabled={isLoading}>
                                         {isLoading && (
