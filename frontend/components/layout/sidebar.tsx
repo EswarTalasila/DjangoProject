@@ -13,54 +13,83 @@ import {
   LogOut
 } from "lucide-react";
 
-const navItems = [
-  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { title: "Courses", href: "/courses", icon: BookOpen },
-  { title: "Assessments", href: "/assessments", icon: FileText },
-  { title: "Grading", href: "/grading", icon: CheckSquare },
-  { title: "Settings", href: "/settings", icon: Settings },
-];
+import type { Role, NavItem } from "@/components/layout/sidebarWrapper";
 
-export function Sidebar() {
+type SidebarProps = {
+  role: Role;
+  items: NavItem[];
+};
+
+export function Sidebar({ role, items }: SidebarProps) {
   const pathname = usePathname();
 
   return (
-    <div className="flex flex-col h-full border-r bg-green-900 text-white w-64">
+    <div className="flex flex-col h-full border-r bg-[#bad28f] text-[#754d28] w-64">
       {/* Logo Area */}
-      <div className="p-6 h-16 flex items-center border-b border-green-800">
-        <h1 className="text-xl font-bold tracking-tight text-white">
-          EE Lab <span className="text-green-400">Hub</span>
+      <div className="p-6 h-16 flex items-center border-b border-[#a9c17f]">
+        <h1 className="text-xl font-bold tracking-tight text-[#754d28]">
+          EE Lab <span className="text-[#754d28]">Hub</span>
         </h1>
       </div>
 
       {/* Navigation Links */}
       <nav className="flex-1 px-4 py-6 space-y-2">
-        {navItems.map((item) => (
-          <Link key={item.href} href={item.href} passHref>
-            <Button
-              variant="ghost"
-              className={cn(
-                "w-full justify-start gap-3 transition-colors",
-                // Active State: Blue text + Darker background
-                pathname === item.href || pathname.startsWith(`${item.href}/`)
-                  ? "bg-green-800 text-green-400" 
-                  : "text-green-600 hover:bg-green-800 hover:text-white"
-              )}
-            >
-              <item.icon className="h-5 w-5" />
-              {item.title}
-            </Button>
-          </Link>
-        ))}
+        {items.map((item, idx) => {
+          if (item.type === "divider") {
+            return <div key={`div-${idx}`} className="my-3 border-t border-[#a9c17f]" />;
+          }
+
+          if (item.type === "header") {
+            return (
+              <div
+                key={`hdr-${idx}`}
+                className="px-2 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-[#754d28]/80"
+              >
+                {item.label}
+              </div>
+            );
+          }
+
+          const isActive =
+            pathname === item.href || pathname.startsWith(`${item.href}/`);
+
+          const Icon =
+            item.icon ??
+            (item.href.includes("course")
+              ? BookOpen
+              : item.href.includes("assess")
+              ? FileText
+              : item.href.includes("grade")
+              ? CheckSquare
+              : item.href.includes("setting")
+              ? Settings
+              : LayoutDashboard);
+
+          return (
+            <Link key={item.href} href={item.href} passHref>
+              <Button
+                variant="ghost"
+                className={cn(
+                  "w-full justify-start gap-3 transition-colors",
+                  isActive
+                    ? "bg-[#a9c17f] text-[#754d28]"
+                    : "text-[#754d28] hover:bg-[#a9c17f]"
+                )}
+              >
+                <Icon className="h-5 w-5" />
+                {item.label}
+              </Button>
+            </Link>
+          );
+        })}
       </nav>
 
       {/* Bottom Actions (Logout) */}
-      <div className="p-4 border-t border-green-800">
+      <div className="p-4 border-t border-[#a9c17f]">
         <Button 
           variant="ghost" 
-          className="w-full justify-start gap-3 text-red-400 hover:bg-green-800 hover:text-red-300"
+          className="w-full justify-start gap-3 text-red-600 hover:bg-[#a9c17f]"
           onClick={() => {
-             // We will implement real logout logic later
              window.location.href = "/login";
           }}
         >

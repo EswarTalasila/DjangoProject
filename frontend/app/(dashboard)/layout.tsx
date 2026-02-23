@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/layout/sidebar";
+import { SidebarWrapper } from "@/components/layout/sidebarWrapper";
 import { cookies } from "next/headers"; // Import cookies
 import { redirect } from "next/navigation"; // Import redirect
 
@@ -18,7 +19,7 @@ export default async function DashboardLayout({ // Make this async
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
-      <Sidebar />
+      <SidebarWrapper />
       <div className="flex flex-col flex-1">
         <header className="h-16 border-b bg-white flex items-center justify-between px-8">
           <h2 className="text-sm font-medium text-slate-500 uppercase tracking-wider">
