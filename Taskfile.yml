@@ -84,7 +84,7 @@ tasks:
         print_cmd "task test:integration:role -- <admin|teacher|student|error>" "role-filtered backend integration tests"
         print_cmd "task test:security" "marker-based backend security tests"
 
-        print_cmd "task test:coverage" "backend coverage + FR progress report"
+        print_cmd "task test:coverage" "backend + frontend coverage reports"
         print_cmd "task test:coverage:fr -- <FR-##> [min]" "gate a specific FR progress row (default min=80)"
         print_cmd "task test:coverage:backend" "alias for test:coverage"
         print_cmd "task test:coverage:frontend" "frontend coverage report"
@@ -513,14 +513,14 @@ tasks:
         {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -v -n "$workers" --dist=loadscope'
 
   test:coverage:
-
-    desc: Run backend tests with unified coverage + FR progress report
+    desc: Run backend + frontend coverage reports
     vars:
       TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
       - task: test:coverage:backend
         vars:
           TEST_WORKERS: '{{.TEST_WORKERS}}'
+      - task: test:coverage:frontend
 
   test:coverage:backend:
     desc: Compatibility alias for unified backend coverage report
@@ -667,7 +667,16 @@ tasks:
     desc: Run Playwright E2E tests (requires e2e profile)
     deps: [_check:e2e-ready, test:e2e:setup]
     cmds:
-      - "{{.DOCKER_COMPOSE}} --profile e2e run --rm frontend-e2e npx playwright test"
+      - >
+        ENVIRONMENT=testing
+        NEXT_PUBLIC_API_URL=http://backend:8000/api/v1
+        DJANGO_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost,http://frontend:3000,http://eel-frontend:3000
+        {{.DOCKER_COMPOSE}} up -d backend frontend database
+      - >
+        ENVIRONMENT=testing
+        E2E_BASE_URL=http://frontend:3000
+        E2E_API_URL=http://backend:8000/api/v1
+        {{.DOCKER_COMPOSE}} --profile e2e run --rm frontend-e2e npx playwright test
 
   test:e2e-record:
     desc: Record E2E tests with video by role (headed, slow-mo)

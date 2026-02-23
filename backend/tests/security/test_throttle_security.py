@@ -100,6 +100,19 @@ class TestDRFThrottleEnforcement:
             attempts=BURST_LIMIT + 3,
         )
 
+    def test_oauth_identifier_lockout_returns_retry_after_header(self, api_client, monkeypatch):
+        """OAuth login enforces per-identifier lockout with Retry-After."""
+        monkeypatch.setattr(
+            "accounts.views._google_userinfo",
+            lambda _: {"sub": "oauth-lock-sub", "email": "oauth-lock@example.com"},
+        )
+        _assert_identifier_lockout_has_retry_after(
+            api_client,
+            url="/api/v1/auth/sessions/oauth",
+            payload_builder=lambda i: {"accessToken": f"oauth-lock-token-{i}"},
+            lockout_limit=LOGIN_RATE_LIMIT_ATTEMPTS,
+        )
+
     def test_validate_code_enforces_auth_throttle(self, api_client):
         """Registration code validation endpoint is rate-limited."""
         _assert_throttled(

@@ -1,16 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import {
-  Users,
-  BookOpen,
-  ClipboardCheck,
-  Plus,
-  MoreVertical,
-  Search
-} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { BookOpen, ClipboardCheck, MoreVertical, Plus, Search, Users } from 'lucide-react';
+import { toast } from 'sonner';
 
-// UI Components (Assuming standard shadcn/ui structure)
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,49 +11,123 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { RegistrationCodeDialog } from '@/components/codes/RegistrationCodeDialog';
+import { createCourse, listCourses, type CourseSummary } from '@/lib/course-api';
+import { createStudentRegistrationCode } from '@/lib/registration-code-api';
 
 export default function TeacherView() {
   const [isLoading, setIsLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [courses, setCourses] = useState<CourseSummary[]>([]);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [registrationCode, setRegistrationCode] = useState<string | null>(null);
+  const [isCodeDialogOpen, setIsCodeDialogOpen] = useState(false);
 
-  // Mock Data (Replace with API calls later)
+  const filteredCourses = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return courses;
+    return courses.filter((course) => course.name.toLowerCase().includes(needle));
+  }, [courses, search]);
+
+  async function loadCourses() {
+    setLoadError(null);
+    try {
+      const data = await listCourses();
+      setCourses(data);
+    } catch {
+      setLoadError('Failed to load courses.');
+    } finally {
+      setIsBootstrapping(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadCourses();
+  }, []);
+
+  async function handleCreateCourse() {
+    const name = window.prompt('Course name');
+    if (!name || !name.trim()) return;
+
+    setIsLoading(true);
+    try {
+      await createCourse(name.trim());
+      toast.success('Course created.');
+      await loadCourses();
+    } catch (error: unknown) {
+      const detail =
+        typeof error === 'object' &&
+        error !== null &&
+        'response' in error &&
+        typeof (error as { response?: { data?: { detail?: string } } }).response?.data?.detail ===
+          'string'
+          ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : 'Failed to create course.';
+      toast.error(detail);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleGenerateInviteCode(courseId: number) {
+    setIsLoading(true);
+    try {
+      const code = await createStudentRegistrationCode(courseId);
+      setRegistrationCode(code);
+      setIsCodeDialogOpen(true);
+    } catch (error: unknown) {
+      const detail =
+        typeof error === 'object' &&
+        error !== null &&
+        'response' in error &&
+        typeof (error as { response?: { data?: { detail?: string } } }).response?.data?.detail ===
+          'string'
+          ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail
+          : 'Failed to generate invite code.';
+      toast.error(detail);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  const totalStudents = courses.reduce((sum, course) => sum + course.studentCount, 0);
   const stats = [
-    { label: "Total Students", value: "142", icon: Users, color: "text-[#2b6ea4]" },
-    { label: "Active Courses", value: "4", icon: BookOpen, color: "text-[#61323e]" },
-    { label: "Pending Grades", value: "28", icon: ClipboardCheck, color: "text-[#754d28]" },
-  ];
-
-  const courses = [
-    { id: 1, name: "Intro to Computer Science", code: "CS-101", students: 34, pending: 12 },
-    { id: 2, name: "Data Structures & Algos", code: "CS-202", students: 28, pending: 5 },
-    { id: 3, name: "Cybersecurity Fundamentals", code: "CYB-101", students: 40, pending: 8 },
-    { id: 4, name: "Network Engineering", code: "NET-300", students: 40, pending: 3 },
+    { label: 'Total Students', value: String(totalStudents), icon: Users, color: 'text-[#2b6ea4]' },
+    { label: 'Active Courses', value: String(courses.length), icon: BookOpen, color: 'text-[#61323e]' },
+    { label: 'Pending Grades', value: 'N/A', icon: ClipboardCheck, color: 'text-[#754d28]' },
   ];
 
   return (
     <div className="space-y-8 p-8 max-w-7xl mx-auto">
+      <RegistrationCodeDialog
+        open={isCodeDialogOpen}
+        onOpenChange={setIsCodeDialogOpen}
+        code={registrationCode}
+      />
 
-      {/* --- HEADER --- */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-[#61323e]">Teacher Dashboard</h1>
           <p className="text-[#754d28] mt-1">Manage your courses, assignments, and student grades.</p>
         </div>
-        <Button className="bg-[#2b6ea4] hover:bg-[#205a86] text-white">
+        <Button
+          className="bg-[#2b6ea4] hover:bg-[#205a86] text-white"
+          onClick={handleCreateCourse}
+          disabled={isLoading}
+        >
           <Plus className="mr-2 h-4 w-4" />
           Create New Course
         </Button>
       </div>
 
-      {/* --- STATS OVERVIEW --- */}
       <div className="grid gap-4 md:grid-cols-3">
-        {stats.map((stat, index) => (
-          <Card key={index} className="border-[#ebe9e7] shadow-sm">
+        {stats.map((stat) => (
+          <Card key={stat.label} className="border-[#ebe9e7] shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-[#754d28]">
-                {stat.label}
-              </CardTitle>
+              <CardTitle className="text-sm font-medium text-[#754d28]">{stat.label}</CardTitle>
               <stat.icon className={`h-4 w-4 ${stat.color}`} />
             </CardHeader>
             <CardContent>
@@ -70,7 +137,6 @@ export default function TeacherView() {
         ))}
       </div>
 
-      {/* --- COURSE MANAGEMENT --- */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold text-[#61323e]">Your Courses</h2>
@@ -79,13 +145,25 @@ export default function TeacherView() {
             <Input
               placeholder="Search courses..."
               className="pl-8 border-[#ebe9e7] focus-visible:ring-[#2b6ea4]"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
             />
           </div>
         </div>
 
+        {loadError ? <p className="text-sm text-red-600">{loadError}</p> : null}
+        {isBootstrapping ? <p className="text-sm text-[#754d28]">Loading courses...</p> : null}
+
+        {!isBootstrapping && !filteredCourses.length ? (
+          <p className="text-sm text-[#754d28]">No courses found.</p>
+        ) : null}
+
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {courses.map((course) => (
-            <Card key={course.id} className="border-[#ebe9e7] hover:border-[#2b6ea4] transition-colors cursor-pointer group">
+          {filteredCourses.map((course) => (
+            <Card
+              key={course.id}
+              className="border-[#ebe9e7] hover:border-[#2b6ea4] transition-colors cursor-pointer group"
+            >
               <CardHeader className="pb-3">
                 <div className="flex justify-between items-start">
                   <div>
@@ -93,19 +171,19 @@ export default function TeacherView() {
                       {course.name}
                     </CardTitle>
                     <p className="text-sm text-[#754d28] mt-1 font-mono bg-[#eff6f7] px-2 py-0.5 rounded inline-block">
-                      {course.code}
+                      Course #{course.id}
                     </p>
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="h-8 w-8 p-0 text-[#754d28]">
+                      <Button variant="ghost" className="h-8 w-8 p-0 text-[#754d28]" disabled={isLoading}>
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem>Generate Invite Code</DropdownMenuItem>
-                      <DropdownMenuItem>View Roster</DropdownMenuItem>
-                      <DropdownMenuItem className="text-red-600">Archive Course</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleGenerateInviteCode(course.id)}>
+                        Generate Invite Code
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </div>
@@ -114,11 +192,11 @@ export default function TeacherView() {
                 <div className="flex justify-between text-sm text-[#754d28] border-t border-[#ebe9e7] pt-4 mt-2">
                   <div className="flex items-center">
                     <Users className="mr-1 h-4 w-4 opacity-70" />
-                    {course.students} Students
+                    {course.studentCount} Students
                   </div>
                   <div className="flex items-center font-medium text-[#61323e]">
                     <ClipboardCheck className="mr-1 h-4 w-4 opacity-70" />
-                    {course.pending} to grade
+                    {course.assignmentIds.length} assignments
                   </div>
                 </div>
               </CardContent>
