@@ -97,6 +97,8 @@ function RegisterPageContent() {
     const [registrationMethod, setRegistrationMethod] = useState<RegistrationMethod>("LOCAL");
     const [registeredUsername, setRegisteredUsername] = useState<string>("");
     const [showSuccess, setShowSuccess] = useState(false);
+    const [showOauthForm, setShowOauthForm] = useState(false);
+    const [googleAccessToken, setGoogleAccessToken] = useState<string>("");
 
     const codeForm = useForm<CodeForm>({ resolver: zodResolver(codeSchema) });
     const studentForm = useForm<StudentRegisterForm>({
@@ -117,12 +119,23 @@ function RegisterPageContent() {
 
     const handleApiError = (
         error: ApiError,
-        form: UseFormReturn<StudentRegisterForm> | UseFormReturn<NonStudentLocalForm>
+        form: UseFormReturn<StudentRegisterForm> | UseFormReturn<NonStudentLocalForm> | UseFormReturn<OAuthNameForm>
     ) => {
         const errorData = error.response?.data;
         if (typeof errorData === "object" && errorData !== null && !Array.isArray(errorData)) {
+            if ("errors" in errorData && Array.isArray((errorData as { errors?: string[] }).errors)) {
+                const passwordErrors = (errorData as { errors: string[] }).errors;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (form as UseFormReturn<any>).setError("password", { type: "manual", message: passwordErrors.join(" ") });
+                return;
+            }
+
             let hasFieldError = false;
-            const validFields = new Set<string>(["firstName", "lastName", "email", "password", "confirmPassword"]);
+            const validFields = isStudent
+                ? new Set<string>(["firstName", "lastName", "email", "password", "confirmPassword"])
+                : showOauthForm
+                    ? new Set<string>(["firstName", "lastName"])
+                    : new Set<string>(["firstName", "lastName", "email", "password", "confirmPassword"]);
 
             Object.entries(errorData as Record<string, unknown>).forEach(([field, messages]) => {
                 if (validFields.has(field)) {
@@ -224,47 +237,42 @@ function RegisterPageContent() {
 
     const registerWithGoogle = useGoogleLogin({
         onSuccess: async (tokenResponse) => {
-            setIsLoading(true);
+            setGoogleAccessToken(tokenResponse.access_token);
+            setShowOauthForm(true);
             setGeneralError(null);
-            try {
-                const { firstName, lastName } = oauthForm.getValues();
-                const payload = {
-                    method: "OAUTH",
-                    code: validatedCode,
-                    accessToken: tokenResponse.access_token,
-                    firstName: firstName.trim(),
-                    lastName: lastName.trim(),
-                };
-
-                const res = await api.post("/registration/accounts", payload);
-                const responseData = res.data as RegisterResponse;
-
-                const { accessToken, role, name } = responseData;
-                Cookies.set("access_token", accessToken, { expires: 1 });
-                if (role) Cookies.set("user_role", role);
-                Cookies.set("user_name", name || "User", { expires: 1 });
-
-                toast.success("Account created with Google!");
-                router.push("/dashboard");
-            } catch (error: unknown) {
-                const detail = (
-                    (error as ApiError).response?.data as { detail?: string } | undefined
-                )?.detail;
-                setGeneralError(detail || "Google registration failed.");
-            } finally {
-                setIsLoading(false);
-            }
         },
         onError: () => {
             setGeneralError("Google registration failed to initialize.");
-            setIsLoading(false);
         },
     });
 
-    const handleGoogleRegister = async () => {
-        const valid = await oauthForm.trigger();
-        if (!valid) return;
-        registerWithGoogle();
+    const handleOAuthRegistration = async (data: OAuthNameForm) => {
+        setIsLoading(true);
+        setGeneralError(null);
+        try {
+            const payload = {
+                method: "OAUTH",
+                code: validatedCode,
+                accessToken: googleAccessToken,
+                firstName: data.firstName.trim(),
+                lastName: data.lastName.trim(),
+            };
+
+            const res = await api.post("/registration/accounts", payload);
+            const responseData = res.data as RegisterResponse;
+
+            const { accessToken, role, name } = responseData;
+            Cookies.set("access_token", accessToken, { expires: 1 });
+            if (role) Cookies.set("user_role", role);
+            Cookies.set("user_name", name || "User", { expires: 1 });
+
+            toast.success("Account created with Google!");
+            router.push("/dashboard");
+        } catch (error: unknown) {
+            handleApiError(error as ApiError, oauthForm);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleProceedToLogin = () => {
@@ -566,9 +574,9 @@ function RegisterPageContent() {
                                 <div className="grid gap-4">
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="grid gap-2">
-                                            <Label htmlFor="ns-firstName">First Name</Label>
+                                            <Label htmlFor="firstName">First Name</Label>
                                             <Input
-                                                id="ns-firstName"
+                                                id="firstName"
                                                 placeholder="Jane"
                                                 disabled={isLoading}
                                                 className={
@@ -586,9 +594,9 @@ function RegisterPageContent() {
                                         </div>
 
                                         <div className="grid gap-2">
-                                            <Label htmlFor="ns-lastName">Last Name</Label>
+                                            <Label htmlFor="lastName">Last Name</Label>
                                             <Input
-                                                id="ns-lastName"
+                                                id="lastName"
                                                 placeholder="Doe"
                                                 disabled={isLoading}
                                                 className={
@@ -607,9 +615,9 @@ function RegisterPageContent() {
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label htmlFor="ns-email">Email</Label>
+                                        <Label htmlFor="email">Email</Label>
                                         <Input
-                                            id="ns-email"
+                                            id="email"
                                             type="email"
                                             placeholder="jane@example.com"
                                             disabled={isLoading}
@@ -628,9 +636,9 @@ function RegisterPageContent() {
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label htmlFor="ns-password">Password</Label>
+                                        <Label htmlFor="password">Password</Label>
                                         <Input
-                                            id="ns-password"
+                                            id="password"
                                             type="password"
                                             disabled={isLoading}
                                             className={
@@ -648,9 +656,9 @@ function RegisterPageContent() {
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label htmlFor="ns-confirmPassword">Confirm Password</Label>
+                                        <Label htmlFor="confirmPassword">Confirm Password</Label>
                                         <Input
-                                            id="ns-confirmPassword"
+                                            id="confirmPassword"
                                             type="password"
                                             disabled={isLoading}
                                             className={
@@ -675,59 +683,77 @@ function RegisterPageContent() {
                                     </Button>
                                 </div>
                             </form>
-                        ) : (
-                            <div className="grid gap-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="oauth-firstName">First Name</Label>
-                                        <Input
-                                            id="oauth-firstName"
-                                            placeholder="Jane"
-                                            disabled={isLoading}
-                                            className={
-                                                oauthForm.formState.errors.firstName
-                                                    ? "border-red-500 focus-visible:ring-red-500"
-                                                    : ""
-                                            }
-                                            {...oauthForm.register("firstName")}
-                                        />
-                                        {oauthForm.formState.errors.firstName && (
-                                            <p className="text-xs text-red-500 mt-1">
-                                                {oauthForm.formState.errors.firstName.message}
-                                            </p>
-                                        )}
+                        ) : showOauthForm ? (
+                            <form onSubmit={oauthForm.handleSubmit(handleOAuthRegistration)}>
+                                <div className="grid gap-4">
+                                    <div className="rounded-md bg-blue-50 p-3 text-sm text-blue-900 flex items-start">
+                                        <Mail className="mr-2 h-5 w-5 text-blue-600 shrink-0" />
+                                        <p className="text-blue-700">
+                                            Google authenticated. Enter your name to complete registration.
+                                        </p>
                                     </div>
 
-                                    <div className="grid gap-2">
-                                        <Label htmlFor="oauth-lastName">Last Name</Label>
-                                        <Input
-                                            id="oauth-lastName"
-                                            placeholder="Doe"
-                                            disabled={isLoading}
-                                            className={
-                                                oauthForm.formState.errors.lastName
-                                                    ? "border-red-500 focus-visible:ring-red-500"
-                                                    : ""
-                                            }
-                                            {...oauthForm.register("lastName")}
-                                        />
-                                        {oauthForm.formState.errors.lastName && (
-                                            <p className="text-xs text-red-500 mt-1">
-                                                {oauthForm.formState.errors.lastName.message}
-                                            </p>
-                                        )}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="oauth-firstName">First Name</Label>
+                                            <Input
+                                                id="oauth-firstName"
+                                                placeholder="Jane"
+                                                disabled={isLoading}
+                                                className={
+                                                    oauthForm.formState.errors.firstName
+                                                        ? "border-red-500 focus-visible:ring-red-500"
+                                                        : ""
+                                                }
+                                                {...oauthForm.register("firstName")}
+                                            />
+                                            {oauthForm.formState.errors.firstName && (
+                                                <p className="text-xs text-red-500 mt-1">
+                                                    {oauthForm.formState.errors.firstName.message}
+                                                </p>
+                                            )}
+                                        </div>
+
+                                        <div className="grid gap-2">
+                                            <Label htmlFor="oauth-lastName">Last Name</Label>
+                                            <Input
+                                                id="oauth-lastName"
+                                                placeholder="Doe"
+                                                disabled={isLoading}
+                                                className={
+                                                    oauthForm.formState.errors.lastName
+                                                        ? "border-red-500 focus-visible:ring-red-500"
+                                                        : ""
+                                                }
+                                                {...oauthForm.register("lastName")}
+                                            />
+                                            {oauthForm.formState.errors.lastName && (
+                                                <p className="text-xs text-red-500 mt-1">
+                                                    {oauthForm.formState.errors.lastName.message}
+                                                </p>
+                                            )}
+                                        </div>
                                     </div>
+
+                                    <Button disabled={isLoading}>
+                                        {isLoading && (
+                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        )}
+                                        Complete Registration
+                                    </Button>
                                 </div>
-
-                                <div className="bg-white border-2 border-slate-200 rounded-lg p-6 text-center">
+                            </form>
+                        ) : (
+                            <div className="text-center py-8">
+                                <div className="bg-white border-2 border-slate-200 rounded-lg p-6 mb-4">
                                     <Mail className="mx-auto h-12 w-12 text-slate-400 mb-4" />
                                     <h3 className="text-lg font-semibold mb-2">Register with Google</h3>
                                     <p className="text-sm text-slate-600 mb-4">
-                                        Enter your name above, then click below to complete registration using your Google account
+                                        Click below to authenticate with Google, then complete your registration
                                     </p>
 
                                     <Button
-                                        onClick={handleGoogleRegister}
+                                        onClick={() => registerWithGoogle()}
                                         disabled={isLoading}
                                         variant="outline"
                                     >

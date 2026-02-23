@@ -9,13 +9,19 @@ const mockGoogleLoginTrigger = vi.fn();
 const mockCookiesSet = vi.fn();
 const mockToastSuccess = vi.fn();
 
+// Captures the onSuccess callback from useGoogleLogin so tests can simulate Google auth
+let capturedGoogleOnSuccess: ((resp: { access_token: string }) => void) | null = null;
+
 function setupModuleMocks() {
   vi.doMock("next/navigation", () => ({
     useRouter: () => ({ push: mockPush }),
   }));
   vi.doMock("@react-oauth/google", () => ({
     GoogleOAuthProvider: ({ children }: { children: ReactNode }) => children,
-    useGoogleLogin: () => mockGoogleLoginTrigger,
+    useGoogleLogin: (opts: { onSuccess: (resp: { access_token: string }) => void }) => {
+      capturedGoogleOnSuccess = opts.onSuccess;
+      return mockGoogleLoginTrigger;
+    },
   }));
   vi.doMock("js-cookie", () => ({
     default: { set: mockCookiesSet, remove: vi.fn(), get: vi.fn() },
@@ -159,9 +165,25 @@ describe("Register page", () => {
     expect(mockPush).toHaveBeenCalledWith("/dashboard");
   });
 
-  it("requires oauth first/last name before triggering google registration", async () => {
+  it("requires oauth first/last name after google auth before completing registration", async () => {
     mockApiPost.mockResolvedValueOnce({
       data: { valid: true, code_type: "TEACHER", context: {} },
+    });
+    mockApiPost.mockResolvedValueOnce({
+      data: {
+        message: "User registered",
+        username: "mblake0",
+        name: "Morgan Blake",
+        email: "mblake@gmail.com",
+        accessToken: "access-token",
+        refreshToken: "refresh-token",
+        tokenType: "Bearer",
+        role: "TEACHER",
+        id: "11",
+        courseId: null,
+        createdNewUser: true,
+        alreadyEnrolled: false,
+      },
     });
 
     const RegisterPage = await loadRegisterPage();
@@ -172,18 +194,42 @@ describe("Register page", () => {
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByText("Teacher Registration");
 
+    // Switch to Google tab and click Continue with Google
     await user.click(screen.getByRole("button", { name: "Google" }));
     await user.click(screen.getByRole("button", { name: "Continue with Google" }));
+    expect(mockGoogleLoginTrigger).toHaveBeenCalledTimes(1);
+
+    // Simulate Google auth success — triggers the name form
+    await waitFor(() => expect(capturedGoogleOnSuccess).not.toBeNull());
+    capturedGoogleOnSuccess!({ access_token: "google-token-123" });
+
+    // Name form should appear — submit empty to trigger validation
+    const completeBtn = await screen.findByRole("button", { name: "Complete Registration" });
+    await user.click(completeBtn);
 
     expect(await screen.findByText("First name is required")).toBeInTheDocument();
     expect(await screen.findByText("Last name is required")).toBeInTheDocument();
-    expect(mockGoogleLoginTrigger).not.toHaveBeenCalled();
+    expect(mockApiPost).toHaveBeenCalledTimes(1); // only code validation, no registration call
 
+    // Fill names and submit
     await user.type(screen.getByLabelText("First Name"), "Morgan");
     await user.type(screen.getByLabelText("Last Name"), "Blake");
-    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
+    await user.click(completeBtn);
 
-    expect(mockGoogleLoginTrigger).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenNthCalledWith(
+        2,
+        "/registration/accounts",
+        expect.objectContaining({
+          method: "OAUTH",
+          code: "TEACH-CODE",
+          accessToken: "google-token-123",
+          firstName: "Morgan",
+          lastName: "Blake",
+        }),
+      );
+    });
+    expect(mockPush).toHaveBeenCalledWith("/dashboard");
   });
 
   it("shows backend error when registration code validation fails", async () => {
