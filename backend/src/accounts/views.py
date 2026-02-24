@@ -1087,3 +1087,10 @@ def revoke_sudo(request, grant_id: int):
         return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
     except PermissionError as e:
         return Response({"detail": str(e)}, status=status.HTTP_403_FORBIDDEN)
+    
+@api_view(["GET"]) 
+@permission_classes([IsAuthenticated])
+def me(request):
+    role = primary_role(request.user);
+    return Response({"role":role});
+

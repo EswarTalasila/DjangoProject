@@ -17,4 +17,5 @@ urlpatterns = [
     ),
     path("reset-code-validations", views.verify_reset_code, name="auth-reset-code-validations"),
     path("password-resets", views.complete_reset_code, name="auth-password-resets"),
+    path("me", views.me, name="auth-me"),
 ]
