@@ -1,8 +1,0 @@
-@startuml
-autonumber
-participant Client
-participant "eel-backend"
-
-Client ->> "eel-backend": GET api/docs/
-"eel-backend" -->> Client: HTTP 200
-@enduml
