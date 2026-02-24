@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, AlertCircle } from "lucide-react";
+import { ApiError } from "next/dist/server/api-utils";
 
 const loginSchema = z.object({
   identifier: z.string().min(1, "Identifier is required"),
@@ -57,12 +58,15 @@ function LoginPageContent() {
   // Shared success handler for both password and Google login
   const handleLoginSuccess = (data: LoginSuccessPayload) => {
     const { accessToken, role, name } = data;
-
+    const admin_error = "Can't login as admin";
     Cookies.set("access_token", accessToken, { expires: 1 });
     if (role) Cookies.set("user_role", role);
-    Cookies.set("user_name", name || "Instructor", { expires: 1 });
-
-    router.push("/dashboard");
+    if (role === "TEACHER" || role === "STUDENT" || role === "RESEARCHER") {
+       Cookies.set("user_name", name || "Instructor", { expires: 1 });
+        router.push("/dashboard");
+    } else {
+      handleLoginError(admin_error as ApiError);
+    }  
   };
 
   const handleLoginError = (error: ApiError) => {
