@@ -1,0 +1,160 @@
+@startuml
+!theme plain
+skinparam sequenceArrowThickness 1.5
+skinparam sequenceParticipantBorderColor #333
+skinparam sequenceLifeLineBorderColor #999
+skinparam noteBorderColor #CCC
+skinparam noteBackgroundColor #FEFCE8
+skinparam sequenceGroupBorderColor #666
+skinparam defaultFontSize 11
+
+title **FR-02: Teacher/Researcher OAuth Registration**\nPOST /api/v1/registration/accounts\n<size:10>Auth: AllowAny | Throttle: AnonAuthThrottle (20/min) | method=OAUTH</size>
+
+actor       "New Teacher/\nResearcher"  as C
+participant "Frontend\n(Next.js)"      as FE  #E8F4FD
+participant "register_account\n(views.py:173)" as V  #E8F0E8
+participant "RegistrationOAuth\nSerializer\n(serializers.py:172)" as S  #E8F0E8
+participant "Google API\nhttps://googleapis.com\n/oauth2/v3/userinfo" as G  #FFF8E1
+participant "RegistrationService\n(_registration.py)" as RS  #FFF3E0
+participant "Utils\n(_utils.py)"       as U   #FFF3E0
+participant "RolesService\n(_roles.py)" as R  #FFF3E0
+participant "AuthService\n(_auth.py)"  as A   #FFF3E0
+database    "PostgreSQL"               as DB  #F3E5F5
+participant "SimpleJWT"                as JWT #FCE4EC
+
+== Request ==
+C -> FE : Click "Sign in with Google"\n+ enter invite code + name
+FE -> V : POST /api/v1/registration/accounts\n**{method: "OAUTH",\n code: "REG-X9Y8...",\n accessToken: "ya29...",\n firstName, lastName}**
+
+== Dispatch ==
+V -> V : method = "OAUTH" → _register_oauth()
+
+== Serializer Validation ==
+V -> S : RegistrationOAuthSerializer(\n  data=payload)
+note right of S
+  Fields (StrictFieldsSerializer):
+  - code: CharField(max=64)
+  - accessToken: CharField
+  - firstName: CharField(max=255)
+  - lastName: CharField(max=255)
+  **Rejects unknown fields**
+  **No password fields** (OAuth)
+end note
+alt #FFE0E0 missing fields / unknown fields
+  S --> V : ValidationError
+  V --> FE : **400**
+end
+
+== Google Token Verification ==
+V -> G : GET /oauth2/v3/userinfo\nAuthorization: Bearer {accessToken}\nTimeout: 10s
+alt #FFE0E0 network error / timeout / invalid token
+  G --> V : HTTP error or timeout
+  V --> FE : **401** {"detail": "Invalid Google\naccess token."}
+end
+G --> V : **200** {sub, email, email_verified,\n  name, picture}
+note right of V
+  Extract:
+  - sub = Google user ID (string)
+  - email = Google email
+  Both must be non-empty
+end note
+alt #FFE0E0 sub or email empty/missing
+  V --> FE : **400** {"detail": "Google user profile is\nmissing required fields."}
+end
+
+== Redeem Non-Student OAuth Invite ==
+V -> RS : redeem_non_student_oauth_invite(\n  code, oauth_subject=sub,\n  oauth_email=email,\n  first_name, last_name,\n  email_verified, picture_url)
+note right of RS : @transaction.atomic
+
+=== SELECT FOR UPDATE ===
+RS -> DB : SELECT * FROM registration_codes\nWHERE code_hash = <hash>\n**FOR UPDATE**
+alt #FFE0E0 code invalid
+  RS --> V : ValueError("Invalid or expired code")
+  V --> FE : **400**
+end
+
+alt #FFE0E0 code_type == STUDENT
+  RS --> V : ValueError("Student code flows do\nnot support OAuth registration")
+  V --> FE : **400**
+end
+
+=== Validate OAuth Identity ===
+RS -> U : normalize_username_identifier(email)\n→ strip().lower()
+alt #FFE0E0 email empty after normalize
+  RS --> V : ValueError("OAuth provider did not\nreturn a valid email")
+  V --> FE : **400**
+end
+
+RS -> DB : SELECT EXISTS FROM oauth_accounts\nWHERE provider='GOOGLE'\n  AND subject={sub}
+alt #FFE0E0 OAuth account already linked
+  RS --> V : ValueError("OAuth account\nalready linked")
+  V --> FE : **400**
+end
+
+RS -> U : identifier_in_use(email)
+RS -> DB : SELECT EXISTS FROM app_users\nWHERE username ILIKE {email}\n   OR email ILIKE {email}
+alt #FFE0E0 email already taken
+  RS --> V : ValueError("Email already taken")
+  V --> FE : **400**
+end
+
+=== Validate Name ===
+alt #FFE0E0 missing firstName or lastName
+  RS --> V : ValueError("firstName and lastName\nare required for OAuth registration")
+  V --> FE : **400**
+end
+
+=== Generate Username ===
+RS -> U : generate_managed_username(\n  first_name, last_name)
+U --> RS : username = "jdoe0000"
+
+=== Map Code Type → Role ===
+RS -> RS : _role_from_registration_code_type(\n  code_type)
+
+=== Create User (No Password) ===
+RS -> R : create_user_from_payload(\n  {username, email, name,\n   password: **None**},\n  role_override=TEACHER|RESEARCHER)
+R -> DB : INSERT INTO app_users\n(username, name, email,\n **password_hash=NULL**,\n enabled=True)
+note right of DB
+  OAuth-only account:
+  password is NULL, not hashed.
+  User cannot login with credentials.
+end note
+R -> DB : INSERT INTO user_roles\n(user_id, role)
+R -> DB : INSERT INTO teacher_profiles\nor researcher_profiles
+
+=== Link OAuth Account ===
+RS -> A : link_or_create_oauth_account(\n  user, subject=sub, email=email)
+A -> DB : INSERT INTO oauth_accounts\n(user_id, provider='GOOGLE',\n subject={sub}, email={email})\nON CONFLICT(provider, subject)\nDO UPDATE SET email={email}
+RS -> DB : UPDATE oauth_accounts\nSET email_verified={bool},\n    picture_url={url},\n    last_login_at=NOW()\nWHERE id={oauth.id}
+
+=== Consume Code ===
+RS -> DB : UPDATE registration_codes\nSET times_used = times_used + 1,\n    is_active = (times_used < max_uses)
+
+RS --> V : user
+
+== Token Generation ==
+V -> JWT : RefreshToken.for_user(user)
+JWT -> DB : INSERT INTO outstandingtoken
+JWT --> V : refresh + access tokens
+
+== Response ==
+V --> FE : **201** Created
+note right of V
+  {
+    "accessToken": "eyJ...",
+    "tokenType": "Bearer",
+    "refreshToken": "eyJ...",
+    "role": "TEACHER" | "RESEARCHER",
+    "id": "789",
+    "username": "jdoe0000",
+    "name": "Jane Doe",
+    "email": "jane@gmail.com",
+    "message": "User registered",
+    "courseId": null,
+    "createdNewUser": true,
+    "alreadyEnrolled": false
+  }
+end note
+FE -> FE : Set cookies + redirect /dashboard
+
+@enduml

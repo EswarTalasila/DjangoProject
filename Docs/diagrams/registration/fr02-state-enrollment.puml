@@ -1,0 +1,55 @@
+@startuml
+!theme plain
+skinparam stateBorderColor #333
+skinparam stateBackgroundColor #FAFAFA
+skinparam stateFontSize 12
+skinparam arrowColor #666
+skinparam defaultFontSize 10
+skinparam noteBackgroundColor #FEFCE8
+skinparam noteBorderColor #CCC
+
+title **FR-02: Enrollment — State Diagram**\n<size:10>Student enrollment lifecycle</size>
+
+state "ACTIVE" as active #C8E6C9 {
+  active : status = "ACTIVE"
+  active : Student is enrolled
+  active :  and participating
+}
+
+state "DROPPED" as dropped #FFCDD2 {
+  dropped : status = "DROPPED"
+  dropped : Student removed
+  dropped :  from course
+}
+
+[*] --> active : **Student registration**\nredeem_student_invite()\n→ _ensure_student_enrollment()\nINSERT enrollment(status=ACTIVE)
+
+[*] --> active : **Join course**\nredeem_student_join_course()\n→ _ensure_student_enrollment()\nINSERT enrollment(status=ACTIVE)
+
+active --> dropped : **Teacher removes student**\nDELETE /courses/{id}/students/{sid}\ncourses/views.remove_student()\nSET status = DROPPED
+
+note right of active
+  **Duplicate enrollment prevention:**
+  UNIQUE(course_id, student_profile_id)
+  constraint at database level.
+
+  If student redeems a code for a
+  course they're already enrolled in:
+  - redeem_student_invite() raises
+    ValueError("Student already enrolled")
+  - redeem_student_join_course() returns
+    (enrollment, already_enrolled=True)
+    without consuming the code
+end note
+
+note right of dropped
+  **No re-enrollment path** in current
+  codebase. The unique constraint on
+  (course, student_profile) means a
+  new enrollment INSERT would violate
+  the constraint. Re-enrollment would
+  require updating the existing
+  DROPPED record back to ACTIVE.
+end note
+
+@enduml

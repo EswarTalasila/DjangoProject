@@ -1,0 +1,156 @@
+@startuml
+!theme plain
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam classFontSize 12
+skinparam classAttributeFontSize 10
+skinparam classBorderColor #333
+skinparam classBackgroundColor #FAFAFA
+skinparam arrowColor #666
+skinparam defaultFontSize 10
+
+title **FR-01: Auth Domain — Entity-Relationship Diagram**\n<size:10>Tables, columns, constraints, and foreign key relationships</size>
+
+entity "app_users" as User #E8F0E8 {
+  * **id** : serial <<PK>>
+  --
+  * username : varchar(320) <<UNIQUE>>
+  email : varchar(320) <<UNIQUE where NOT NULL>>
+  * name : varchar(255)
+  password_hash : varchar(128) <<nullable>>
+  * enabled : boolean [default: true]
+  * is_staff : boolean [default: false]
+  * is_superuser : boolean [default: false]
+  last_login : timestamptz <<nullable>>
+  * created_at : timestamptz <<auto>>
+  * updated_at : timestamptz <<auto>>
+  --
+  <<index>> idx_user_username (username)
+  <<index>> idx_user_email (email)
+  <<constraint>> uq_user_username UNIQUE(username)
+  <<constraint>> uq_user_email UNIQUE(email)
+    WHERE email IS NOT NULL
+}
+
+entity "user_roles" as UserRole #E8F4FD {
+  * **id** : serial <<PK>>
+  --
+  * user_id : integer <<FK → app_users>>
+  * role : varchar(32)
+    {RESEARCHER | TEACHER | STUDENT}
+  --
+  <<constraint>> uq_user_role
+    UNIQUE(user_id, role)
+}
+
+entity "oauth_accounts" as OAuth #FFF8E1 {
+  * **id** : serial <<PK>>
+  --
+  * user_id : integer <<FK → app_users>>
+  * provider : varchar(32) {GOOGLE}
+  * subject : varchar(255)
+  * email : varchar(320)
+  email_verified : boolean <<nullable>>
+  picture_url : varchar(512) <<nullable>>
+  * created_at : timestamptz <<auto>>
+  last_login_at : timestamptz <<nullable>>
+  --
+  <<constraint>> uq_oauth_provider_subject
+    UNIQUE(provider, subject)
+  <<index>> idx_oauth_email (email)
+  <<index>> idx_oauth_user (user_id)
+}
+
+entity "password_reset_requests" as PRR #FFF3E0 {
+  * **id** : serial <<PK>>
+  --
+  * user_id : integer <<FK → app_users>>
+  * identifier : varchar(320)
+  * requested_role : varchar(32)
+    {RESEARCHER | TEACHER | STUDENT}
+  * request_token_hash : varchar(128) <<UNIQUE>>
+  * status : varchar(16)
+    {PENDING | APPROVED | DENIED | EXPIRED}
+  reason : varchar(255) <<nullable>>
+  * requested_at : timestamptz <<auto>>
+  * expires_at : timestamptz
+  reviewed_by_user_id : integer <<FK → app_users, nullable>>
+  reviewed_at : timestamptz <<nullable>>
+  --
+  <<index>> idx_prr_identifier (identifier)
+  <<index>> idx_prr_status (status)
+  <<index>> idx_prr_expires_at (expires_at)
+  <<index>> idx_prr_user (user_id)
+}
+
+entity "password_reset_codes" as PRC #FCE4EC {
+  * **id** : serial <<PK>>
+  --
+  * request_id : integer <<FK → password_reset_requests>>
+    <<OneToOne>>
+  * code_hash : varchar(128) <<UNIQUE>>
+  * expires_at : timestamptz
+  used_at : timestamptz <<nullable>>
+  * created_at : timestamptz <<auto>>
+  --
+  <<index>> idx_prc_expires_at (expires_at)
+  <<index>> idx_prc_used_at (used_at)
+}
+
+entity "token_blacklist\n_outstandingtoken" as OT #F3E5F5 {
+  * **id** : serial <<PK>>
+  --
+  * user_id : integer <<FK → app_users>>
+  * jti : varchar(255) <<UNIQUE>>
+  * token : text
+  * created_at : timestamptz
+  * expires_at : timestamptz
+}
+
+entity "token_blacklist\n_blacklistedtoken" as BT #F3E5F5 {
+  * **id** : serial <<PK>>
+  --
+  * token_id : integer <<FK → outstandingtoken>>
+    <<OneToOne>>
+  * blacklisted_at : timestamptz
+}
+
+' Relationships
+User ||--o{ UserRole : "CASCADE\nuser.roles"
+User ||--o{ OAuth : "CASCADE\nuser → oauth_accounts"
+User ||--o{ PRR : "CASCADE\nuser.password_reset_requests"
+User ||--o| PRR : "SET_NULL\nreviewed_by (issuer)"
+PRR ||--|| PRC : "CASCADE\nrequest.reset_code"
+User ||--o{ OT : "CASCADE\nuser → outstanding tokens"
+OT ||--o| BT : "CASCADE\ntoken.blacklisted"
+
+note bottom of PRC
+  **Hashing:** SHA-256 hexdigest
+  Plaintext code returned at issuance,
+  only hash stored. Code prefix: "RESET-"
+  Format: RESET-{24 hex chars} (28 total)
+end note
+
+note bottom of PRR
+  **Lifecycle:** Created as APPROVED
+  by issue_password_reset_code.
+  PENDING exists in enum but unused
+  in current issuer-generated flow.
+  Expires after 30 minutes.
+end note
+
+note right of OAuth
+  **Provider:** GOOGLE only (current)
+  **subject:** Google's unique user ID
+  Students cannot use OAuth login.
+end note
+
+note right of BT
+  **Token lifecycle:**
+  Blacklisted = refresh token revoked.
+  Created on: logout, password change,
+  session invalidation.
+  Access tokens unaffected (short-lived).
+end note
+
+@enduml
