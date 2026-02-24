@@ -269,3 +269,6 @@ SECURE_SSL_REDIRECT = env.ssl_redirect_enabled
 SECURE_HSTS_SECONDS = 31536000 if env.is_production else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env.is_production
 SECURE_HSTS_PRELOAD = env.is_production
+
+# Prevent Django from trying to chmod files on Windows/Docker volumes
+FILE_UPLOAD_PERMISSIONS = None
