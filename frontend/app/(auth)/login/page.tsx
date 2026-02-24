@@ -31,7 +31,18 @@ type LoginSuccessPayload = {
   role?: string;
   name?: string;
 };
+type DetailError = { detail?: unknown };
 const loginFieldNames = new Set<keyof LoginForm>(["identifier", "password"]);
+const backendOrigin = (() => {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!apiUrl) return "";
+  try {
+    return new URL(apiUrl).origin;
+  } catch {
+    return "";
+  }
+})();
+const adminConsoleHref = backendOrigin ? `${backendOrigin}/admin/` : "/admin/";
 
 function LoginPageContent() {
   const router = useRouter();
@@ -52,7 +63,6 @@ function LoginPageContent() {
     Cookies.set("user_name", name || "Instructor", { expires: 1 });
 
     router.push("/dashboard");
-
   };
 
   const handleLoginError = (error: ApiError) => {
@@ -83,11 +93,16 @@ function LoginPageContent() {
     }
 
     // 2. Handle Generic/Detail Errors
+    const detail =
+      typeof errorData === "object" && errorData !== null
+        ? (errorData as DetailError).detail
+        : undefined;
     const errorMessage =
       typeof errorData === "string"
         ? errorData
-        : errorData?.detail ||
-          "Authentication failed. Please check your credentials.";
+        : typeof detail === "string"
+          ? detail
+          : "Authentication failed. Please check your credentials.";
 
     setGeneralError(errorMessage);
   };
@@ -173,8 +188,8 @@ function LoginPageContent() {
                 {...form.register("identifier")}
               />
               <p className="text-xs text-slate-500">
-                Students use username. Teachers, researchers, and admins can use
-                username or email.
+                Students use username. Teachers and researchers can use username
+                or email.
               </p>
               {form.formState.errors.identifier && (
                 <p className="text-xs font-medium text-red-500 flex items-center mt-1">
@@ -273,6 +288,14 @@ function LoginPageContent() {
         >
           Don&apos;t have an account? Sign Up
         </Link>
+      </p>
+      <p className="px-8 text-center text-sm text-slate-500">
+        <a
+          href={adminConsoleHref}
+          className="hover:text-brand underline underline-offset-4"
+        >
+          Admin? Open Django Admin
+        </a>
       </p>
     </>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useForm, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -31,25 +31,17 @@ type CodeValidationResponse = {
     };
 };
 
-type StudentRegisterResponse = {
+type RegisterResponse = {
     message: string;
     username: string;
     name: string;
-    courseId?: number;
-    createdNewUser: boolean;
-    alreadyEnrolled: boolean;
-};
-
-type NonStudentRegisterResponse = {
-    message: string;
-    username: string;
-    name: string;
-    email: string;
+    email: string | null;
     accessToken: string;
     refreshToken: string;
     tokenType: string;
     role: RoleType;
     id: string;
+    courseId: number | null;
     createdNewUser: boolean;
     alreadyEnrolled: boolean;
 };
@@ -84,24 +76,16 @@ const nonStudentLocalSchema = z
         path: ["confirmPassword"],
     });
 
-type CodeForm = z.infer<typeof codeSchema>;
-type StudentRegisterForm = z.infer<typeof studentRegisterSchema>;
-type NonStudentLocalForm = z.infer<typeof nonStudentLocalSchema>;
-type ApiError = { response?: { data?: unknown } };
-
-const oauthSchema = z.object({
+const oauthNameSchema = z.object({
     firstName: z.string().trim().min(1, "First name is required"),
     lastName: z.string().trim().min(1, "Last name is required"),
 });
 
-type OAuthForm = z.infer<typeof oauthSchema>;
-
-function generateUsername(firstName: string, lastName: string): string {
-    if (!firstName || !lastName) return "";
-    const firstInitial = firstName.trim().charAt(0).toLowerCase();
-    const lastNameClean = lastName.trim().toLowerCase().replace(/[^a-z]/g, "");
-    return `${firstInitial}${lastNameClean}`;
-}
+type CodeForm = z.infer<typeof codeSchema>;
+type StudentRegisterForm = z.infer<typeof studentRegisterSchema>;
+type NonStudentLocalForm = z.infer<typeof nonStudentLocalSchema>;
+type OAuthNameForm = z.infer<typeof oauthNameSchema>;
+type ApiError = { response?: { data?: unknown } };
 
 function RegisterPageContent() {
     const router = useRouter();
@@ -111,7 +95,6 @@ function RegisterPageContent() {
     const [codeContext, setCodeContext] = useState<CodeValidationResponse | null>(null);
     const [generalError, setGeneralError] = useState<string | null>(null);
     const [registrationMethod, setRegistrationMethod] = useState<RegistrationMethod>("LOCAL");
-    const [generatedUsername, setGeneratedUsername] = useState<string>("");
     const [registeredUsername, setRegisteredUsername] = useState<string>("");
     const [showSuccess, setShowSuccess] = useState(false);
     const [showOauthForm, setShowOauthForm] = useState(false);
@@ -126,70 +109,34 @@ function RegisterPageContent() {
         resolver: zodResolver(nonStudentLocalSchema),
         defaultValues: { firstName: "", lastName: "", email: "", password: "", confirmPassword: "" },
     });
-    const oauthForm = useForm<OAuthForm>({
-        resolver: zodResolver(oauthSchema),
+    const oauthForm = useForm<OAuthNameForm>({
+        resolver: zodResolver(oauthNameSchema),
         defaultValues: { firstName: "", lastName: "" },
     });
-
-    useEffect(() => {
-        const subscription = oauthForm.watch((value) => {
-            if (value.firstName && value.lastName) {
-                setGeneratedUsername(generateUsername(value.firstName, value.lastName));
-            } else {
-                setGeneratedUsername("");
-            }
-        });
-        return () => subscription.unsubscribe();
-    }, [oauthForm]);
 
     const role = codeContext?.code_type;
     const isStudent = role === "STUDENT";
 
-    useEffect(() => {
-        if (!isStudent) {
-            const subscription = nonStudentForm.watch((value) => {
-                if (value.firstName && value.lastName) {
-                    setGeneratedUsername(generateUsername(value.firstName, value.lastName));
-                } else {
-                    setGeneratedUsername("");
-                }
-            });
-            return () => subscription.unsubscribe();
-        }
-    }, [isStudent, nonStudentForm]);
-
-    useEffect(() => {
-        if (isStudent) {
-            const subscription = studentForm.watch((value) => {
-                if (value.firstName && value.lastName) {
-                    setGeneratedUsername(generateUsername(value.firstName, value.lastName));
-                } else {
-                    setGeneratedUsername("");
-                }
-            });
-            return () => subscription.unsubscribe();
-        }
-    }, [isStudent, studentForm]);
-
     const handleApiError = (
         error: ApiError,
-        form: UseFormReturn<StudentRegisterForm> | UseFormReturn<NonStudentLocalForm> | UseFormReturn<OAuthForm>
+        form: UseFormReturn<StudentRegisterForm> | UseFormReturn<NonStudentLocalForm> | UseFormReturn<OAuthNameForm>
     ) => {
         const errorData = error.response?.data;
         if (typeof errorData === "object" && errorData !== null && !Array.isArray(errorData)) {
             if ("errors" in errorData && Array.isArray((errorData as { errors?: string[] }).errors)) {
                 const passwordErrors = (errorData as { errors: string[] }).errors;
-                form.setError("password", { type: "manual", message: passwordErrors.join(" ") });
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (form as UseFormReturn<any>).setError("password", { type: "manual", message: passwordErrors.join(" ") });
                 return;
             }
 
             let hasFieldError = false;
-            const validFields = isStudent 
+            const validFields = isStudent
                 ? new Set<string>(["firstName", "lastName", "email", "password", "confirmPassword"])
                 : showOauthForm
                     ? new Set<string>(["firstName", "lastName"])
                     : new Set<string>(["firstName", "lastName", "email", "password", "confirmPassword"]);
-            
+
             Object.entries(errorData as Record<string, unknown>).forEach(([field, messages]) => {
                 if (validFields.has(field)) {
                     const message = Array.isArray(messages) ? String(messages[0]) : String(messages);
@@ -233,21 +180,22 @@ function RegisterPageContent() {
         setIsLoading(true);
         setGeneralError(null);
         try {
-            const fullName = `${data.firstName.trim()} ${data.lastName.trim()}`;
             const payload = {
                 method: "LOCAL",
                 code: validatedCode,
-                name: fullName,
+                firstName: data.firstName.trim(),
+                lastName: data.lastName.trim(),
                 password: data.password,
+                confirmPassword: data.confirmPassword,
                 ...(data.email ? { email: data.email } : {}),
             };
 
             const res = await api.post("/registration/accounts", payload);
-            const responseData = res.data as StudentRegisterResponse;
-            
+            const responseData = res.data as RegisterResponse;
+
             setRegisteredUsername(responseData.username);
             setShowSuccess(true);
-            
+
             toast.success(`Account created! Your username is: ${responseData.username}`);
         } catch (error: unknown) {
             handleApiError(error as ApiError, studentForm);
@@ -263,15 +211,15 @@ function RegisterPageContent() {
             const payload = {
                 method: "LOCAL",
                 code: validatedCode,
-                firstName: data.firstName,
-                lastName: data.lastName,
+                firstName: data.firstName.trim(),
+                lastName: data.lastName.trim(),
                 email: data.email,
                 password: data.password,
                 confirmPassword: data.confirmPassword,
             };
 
             const res = await api.post("/registration/accounts", payload);
-            const responseData = res.data as NonStudentRegisterResponse;
+            const responseData = res.data as RegisterResponse;
 
             const { accessToken, role, name } = responseData;
             Cookies.set("access_token", accessToken, { expires: 1 });
@@ -298,7 +246,7 @@ function RegisterPageContent() {
         },
     });
 
-    const handleOAuthRegistration = async (data: OAuthForm) => {
+    const handleOAuthRegistration = async (data: OAuthNameForm) => {
         setIsLoading(true);
         setGeneralError(null);
         try {
@@ -306,12 +254,12 @@ function RegisterPageContent() {
                 method: "OAUTH",
                 code: validatedCode,
                 accessToken: googleAccessToken,
-                firstName: data.firstName,
-                lastName: data.lastName,
+                firstName: data.firstName.trim(),
+                lastName: data.lastName.trim(),
             };
 
             const res = await api.post("/registration/accounts", payload);
-            const responseData = res.data as NonStudentRegisterResponse;
+            const responseData = res.data as RegisterResponse;
 
             const { accessToken, role, name } = responseData;
             Cookies.set("access_token", accessToken, { expires: 1 });
@@ -550,16 +498,6 @@ function RegisterPageContent() {
                                         </div>
                                     </div>
 
-                                    {generatedUsername && (
-                                        <div className="rounded-md bg-slate-100 p-3 text-sm">
-                                            <p className="text-slate-600 mb-1">Your username will be:</p>
-                                            <p className="font-semibold text-slate-900 text-lg">{generatedUsername}</p>
-                                            <p className="text-xs text-slate-500 mt-1">
-                                                (If taken, a number may be added)
-                                            </p>
-                                        </div>
-                                    )}
-
                                     <div className="grid gap-2">
                                         <Label htmlFor="email">
                                             Email <span className="text-slate-400">(Optional)</span>
@@ -631,7 +569,7 @@ function RegisterPageContent() {
                                     </Button>
                                 </div>
                             </form>
-) : registrationMethod === "LOCAL" ? (
+                        ) : registrationMethod === "LOCAL" ? (
                             <form onSubmit={nonStudentForm.handleSubmit(handleNonStudentLocalRegistration)}>
                                 <div className="grid gap-4">
                                     <div className="grid grid-cols-2 gap-4">
@@ -675,16 +613,6 @@ function RegisterPageContent() {
                                             )}
                                         </div>
                                     </div>
-
-                                    {generatedUsername && (
-                                        <div className="rounded-md bg-slate-100 p-3 text-sm">
-                                            <p className="text-slate-600 mb-1">Your username will be:</p>
-                                            <p className="font-semibold text-slate-900 text-lg">{generatedUsername}</p>
-                                            <p className="text-xs text-slate-500 mt-1">
-                                                (If taken, a number may be added)
-                                            </p>
-                                        </div>
-                                    )}
 
                                     <div className="grid gap-2">
                                         <Label htmlFor="email">Email</Label>
@@ -761,15 +689,15 @@ function RegisterPageContent() {
                                     <div className="rounded-md bg-blue-50 p-3 text-sm text-blue-900 flex items-start">
                                         <Mail className="mr-2 h-5 w-5 text-blue-600 shrink-0" />
                                         <p className="text-blue-700">
-                                            Complete your registration with Google
+                                            Google authenticated. Enter your name to complete registration.
                                         </p>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="grid gap-2">
-                                            <Label htmlFor="firstName">First Name</Label>
+                                            <Label htmlFor="oauth-firstName">First Name</Label>
                                             <Input
-                                                id="firstName"
+                                                id="oauth-firstName"
                                                 placeholder="Jane"
                                                 disabled={isLoading}
                                                 className={
@@ -787,9 +715,9 @@ function RegisterPageContent() {
                                         </div>
 
                                         <div className="grid gap-2">
-                                            <Label htmlFor="lastName">Last Name</Label>
+                                            <Label htmlFor="oauth-lastName">Last Name</Label>
                                             <Input
-                                                id="lastName"
+                                                id="oauth-lastName"
                                                 placeholder="Doe"
                                                 disabled={isLoading}
                                                 className={
@@ -807,16 +735,6 @@ function RegisterPageContent() {
                                         </div>
                                     </div>
 
-                                    {generatedUsername && (
-                                        <div className="rounded-md bg-slate-100 p-3 text-sm">
-                                            <p className="text-slate-600 mb-1">Your username will be:</p>
-                                            <p className="font-semibold text-slate-900 text-lg">{generatedUsername}</p>
-                                            <p className="text-xs text-slate-500 mt-1">
-                                                (If taken, a number may be added)
-                                            </p>
-                                        </div>
-                                    )}
-
                                     <Button disabled={isLoading}>
                                         {isLoading && (
                                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -831,16 +749,15 @@ function RegisterPageContent() {
                                     <Mail className="mx-auto h-12 w-12 text-slate-400 mb-4" />
                                     <h3 className="text-lg font-semibold mb-2">Register with Google</h3>
                                     <p className="text-sm text-slate-600 mb-4">
-                                        Click below to complete registration using your Google account
+                                        Click below to authenticate with Google, then complete your registration
                                     </p>
-                                    
+
                                     <Button
                                         onClick={() => registerWithGoogle()}
                                         disabled={isLoading}
                                         variant="outline"
                                     >
                                         {isLoading ? (
-                                            
                                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                         ) : (
                                           <svg
@@ -858,10 +775,8 @@ function RegisterPageContent() {
                                             d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"
                                             ></path>
                                         </svg>
-                                        
                                         )}
                                         Continue with Google
-                                        
                                     </Button>
                                 </div>
                             </div>
@@ -875,14 +790,14 @@ function RegisterPageContent() {
                     href="/login"
                     className="hover:text-brand underline underline-offset-4"
                 >
-                    Already have an account? Sign In 
+                    Already have an account? Sign In
                 </Link>
             </p>
         </>
     );
 }
 
-export default function RegisterPage() { 
+export default function RegisterPage() {
     return (
         <GoogleOAuthProvider
       clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ""}

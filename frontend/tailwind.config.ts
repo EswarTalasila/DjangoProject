@@ -1,7 +1,7 @@
 import type { Config } from "tailwindcss"
 
 const config = {
-  darkMode: ["class"],
+  darkMode: "class",
   // CRITICAL FIX: Ensure these paths point to 'app' and 'components' at the root
   content: [
     './pages/**/*.{ts,tsx}',

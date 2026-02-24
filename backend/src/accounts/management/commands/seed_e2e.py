@@ -40,10 +40,12 @@ class Command(BaseCommand):
         )
         admin_name = os.environ.get("E2E_ADMIN_NAME") or os.environ.get("ADMIN_USERNAME", "Admin")
 
-        teacher_username = os.environ.get("E2E_TEACHER_USERNAME", "teacher@example.com")
+        # Use non-email identifiers by default to avoid colliding with real users'
+        # email identifiers in development/testing datasets.
+        teacher_username = os.environ.get("E2E_TEACHER_USERNAME", "e2e-teacher")
         teacher_password = os.environ.get("E2E_TEACHER_PASSWORD", "teacherpass")
 
-        student_username = os.environ.get("E2E_STUDENT_USERNAME", "student@example.com")
+        student_username = os.environ.get("E2E_STUDENT_USERNAME", "e2e-student")
         student_password = os.environ.get("E2E_STUDENT_PASSWORD", "studentpass")
 
         self._ensure_admin(admin_username, admin_name, admin_password, force_password)

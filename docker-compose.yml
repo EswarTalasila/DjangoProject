@@ -133,6 +133,7 @@ services:
       - eel-network
     command: >
       sh -c "python src/manage.py migrate &&
+             python src/manage.py collectstatic --noinput &&
              python src/manage.py ensure_admin &&
              if [ \"$${ENVIRONMENT}\" = \"testing\" ]; then python src/manage.py seed_e2e; fi &&
              python src/manage.py runserver 0.0.0.0:8000"
@@ -186,8 +187,8 @@ services:
       - e2e
     working_dir: /work/frontend
     environment:
-      - E2E_BASE_URL=${E2E_BASE_URL:-http://localhost:3000}
-      - E2E_API_URL=${E2E_API_URL:-http://localhost:8000/api/v1}
+      - E2E_BASE_URL=${E2E_BASE_URL:-http://frontend:3000}
+      - E2E_API_URL=${E2E_API_URL:-http://backend:8000/api/v1}
     volumes:
       - ./frontend:/work/frontend:cached
       - playwright_node_modules:/work/frontend/node_modules

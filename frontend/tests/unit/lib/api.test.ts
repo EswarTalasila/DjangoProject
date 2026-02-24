@@ -45,6 +45,28 @@ describe("api client", () => {
     expect(response.data).toEqual({ ok: true });
   });
 
+  it("does not attach bearer token on public auth/registration endpoints", async () => {
+    Cookies.set("access_token", "token-123");
+
+    server.use(
+      http.post(`${API_BASE}/auth/sessions`, ({ request }) => {
+        if (!request.headers.get("authorization")) {
+          return HttpResponse.json({ ok: true });
+        }
+        return HttpResponse.json({ detail: "Authorization header should be absent" }, { status: 400 });
+      }),
+    );
+
+    const api = await loadApiClient();
+    const response = await api.post("/auth/sessions", {
+      identifier: "teacher@example.com",
+      password: "change-me",
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.data).toEqual({ ok: true });
+  });
+
   it("clears auth cookies on 401 response", async () => {
     Cookies.set("access_token", "expired-token");
     Cookies.set("refresh_token", "stale-refresh");

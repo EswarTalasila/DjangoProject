@@ -632,9 +632,14 @@ def login_with_google(request):
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
+    oauth_identifier = f"oauth:{normalize_username_identifier(str(email))}"
+    if not check_identifier_throttle("oauth-login", oauth_identifier):
+        return _identifier_throttle_response("oauth-login", oauth_identifier)
+
     account = OAuthAccount.objects.filter(provider=OAuthProvider.GOOGLE, subject=subject).first()
     if account:
         if primary_role(account.user) == Role.STUDENT:
+            register_identifier_failure("oauth-login", oauth_identifier)
             return Response(
                 {"detail": "Google OAuth is not supported for student accounts."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -648,11 +653,13 @@ def login_with_google(request):
         if not found_user:
             found_user = User.objects.filter(username__iexact=email).first()
         if not found_user:
+            register_identifier_failure("oauth-login", oauth_identifier)
             return Response(
                 {"detail": "Invalid identifier or password."},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
         if primary_role(found_user) == Role.STUDENT:
+            register_identifier_failure("oauth-login", oauth_identifier)
             return Response(
                 {"detail": "Google OAuth is not supported for student accounts."},
                 status=status.HTTP_403_FORBIDDEN,
@@ -663,6 +670,7 @@ def login_with_google(request):
         link_or_create_oauth_account(found_user, subject, email)
         user = found_user
 
+    clear_identifier_failures("oauth-login", oauth_identifier)
     refresh = RefreshToken.for_user(user)
     body = build_user_response(user, str(refresh.access_token), str(refresh))
     return Response(body, status=status.HTTP_200_OK)
