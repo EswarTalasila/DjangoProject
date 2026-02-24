@@ -33,7 +33,7 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path("api/v1/users/", include("accounts.urls_users")),
     # Top-level resources (moved from nested paths)
     path("api/v1/enrollments", account_views.join_course_with_code),
-    path("api/v1/user-batches", account_views.bulk_create),
+    path("api/v1/sudo-grants/me", account_views.my_sudo_grant),
     path("api/v1/sudo-grants", account_views.grant_sudo),
     path("api/v1/sudo-grants/<int:grant_id>", account_views.revoke_sudo),
     path("api/v1/codes", account_views.codes_collection),

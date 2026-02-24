@@ -133,7 +133,7 @@ services:
       - eel-network
     command: >
       sh -c "python src/manage.py migrate &&
-             python src/manage.py collectstatic --noinput &&
+             if [ \"$${ENVIRONMENT}\" = \"production\" ]; then python src/manage.py collectstatic --noinput; fi &&
              python src/manage.py ensure_admin &&
              if [ \"$${ENVIRONMENT}\" = \"testing\" ]; then python src/manage.py seed_e2e; fi &&
              python src/manage.py runserver 0.0.0.0:8000"
