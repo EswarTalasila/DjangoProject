@@ -54,10 +54,10 @@ def _role_set(user) -> set[str]:
     """
     if not user or not getattr(user, "is_authenticated", False):
         return set()
-    cached = getattr(user, "_cached_role_set", None)
+    cached: set[str] | None = getattr(user, "_cached_role_set", None)
     if cached is not None:
         return cached
-    roles = set(user.roles.values_list("role", flat=True))
+    roles: set[str] = set(user.roles.values_list("role", flat=True))
     user._cached_role_set = roles
     return roles
 

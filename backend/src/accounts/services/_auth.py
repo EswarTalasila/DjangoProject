@@ -26,7 +26,7 @@ def build_user_response(user: User, access_token: str, refresh_token: str | None
         Dict with username/name/accessToken/tokenType/role/id fields
     """
     role = primary_role(user)
-    payload: dict[str, str] = {
+    payload: dict[str, str | None] = {
         "email": user.email or None,
         "username": user.username,
         "name": user.name,

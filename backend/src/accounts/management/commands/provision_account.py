@@ -85,6 +85,8 @@ class Command(BaseCommand):
         elif role == "student":
             self._ensure_provisioned("teacher")
             user = self._provision_student(creds)
+        else:
+            raise CommandError(f"Unknown role: {role}")
 
         self._print_account(role, user, creds, tag="provisioned", success=True)
 
@@ -145,7 +147,7 @@ class Command(BaseCommand):
             expires_at=timezone.now() + timedelta(hours=1),
             course_id=course.id if course else None,
         )
-        return codes[0].plaintext_code
+        return codes[0].plaintext_code  # type: ignore[attr-defined]
 
     def _provision_researcher(self, creds):
         admin = self._get_admin()

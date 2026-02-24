@@ -22,5 +22,7 @@ def paginate(queryset_or_list, request, transform_fn=None):
     """
     paginator = StandardPagination()
     page = paginator.paginate_queryset(queryset_or_list, request)
+    if page is None:
+        page = []
     data = [transform_fn(item) for item in page] if transform_fn else list(page)
     return paginator.get_paginated_response(data)
