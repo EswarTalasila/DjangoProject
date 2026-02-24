@@ -1,8 +1,9 @@
-import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
+import { getSessionProfile } from "@/lib/auth-session";
 import { LucideIcon } from "lucide-react";
 
-export type Role = "ADMIN" | "TEACHER" | "RESEARCHER" | "STUDENT";
+export type Role = "TEACHER" | "RESEARCHER" | "STUDENT";
 
 export type NavItem =
   | { type: "header"; label: string }
@@ -11,25 +12,6 @@ export type NavItem =
 
 
 const NAV_BY_ROLE: Record<Role, NavItem[]> = {
-  ADMIN: [
-    { type: "header", label: "Overview" },
-    { type: "link", label: "Dashboard", href: "/dashboard" },
-
-    { type: "divider" },
-    { type: "header", label: "Accounts" },
-    { type: "link", label: "Account Home", href: "/dashboard/account" },
-    { type: "link", label: "Create Account", href: "/dashboard/account/create" },
-
-    { type: "divider" },
-    { type: "header", label: "Assessments" },
-    { type: "link", label: "Assessment List", href: "/dashboard/assessments" },
-    { type: "link", label: "Create Template", href: "/dashboard/assessment-template/create" },
-
-    { type: "divider" },
-    { type: "header", label: "System" },
-    { type: "link", label: "Settings", href: "/dashboard/settings" },
-  ],
-
   TEACHER: [
     { type: "header", label: "Overview" },
     { type: "link", label: "Dashboard", href: "/dashboard" },
@@ -88,8 +70,11 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
 };
 
 export async function SidebarWrapper() {
-  const cookieStore = await cookies();
-  const userRole = (cookieStore.get("user_role")?.value || "STUDENT") as Role;
+  const profile = await getSessionProfile();
+  if (!profile) {
+    redirect("/login");
+  }
+  const userRole = profile.role as Role;
 
   const items = NAV_BY_ROLE[userRole] ?? NAV_BY_ROLE.STUDENT;
   return <Sidebar role={userRole} items={items} />;

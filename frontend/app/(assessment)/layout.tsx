@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { Sidebar } from '@/components/layout/sidebar';
+import { SidebarWrapper } from '@/components/layout/sidebarWrapper';
 import { getSessionProfile } from '@/lib/auth-session';
 
 export default async function AssessmentsLayout({
@@ -14,7 +14,7 @@ export default async function AssessmentsLayout({
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
-      <Sidebar />
+      <SidebarWrapper />
       <div className="flex flex-col flex-1">
         <header className="h-16 border-b bg-white flex items-center justify-between px-8">
           <h2 className="text-sm font-medium text-slate-500 uppercase tracking-wider">
