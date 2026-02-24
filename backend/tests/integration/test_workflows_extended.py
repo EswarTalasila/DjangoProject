@@ -29,7 +29,7 @@ def create_admin_client(username: str, password: str) -> tuple[User, APIClient]:
     admin.is_staff = True
     admin.save()
     client = APIClient()
-    login(client, admin.username, password)
+    client.force_authenticate(user=admin)
     return admin, client
 
 

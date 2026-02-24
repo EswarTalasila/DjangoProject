@@ -20,6 +20,11 @@ def login(client: APIClient, username: str, password: str) -> dict:
     return payload
 
 
+def admin_authenticate(client: APIClient, user: User) -> None:
+    """Authenticate admin via force_authenticate (admins are blocked from API login)."""
+    client.force_authenticate(user=user)
+
+
 def step(message: str) -> None:
     print(f"[workflow] {message}")
 
@@ -42,8 +47,8 @@ class TestWorkflows:
         admin.save()
 
         admin_client = APIClient()
-        step("Admin login")
-        login(admin_client, admin.username, "adminpass")
+        step("Admin login (force_authenticate — admins blocked from API login)")
+        admin_authenticate(admin_client, admin)
 
         step("Admin creates assessment")
         assessment_payload = {

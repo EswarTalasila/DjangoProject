@@ -198,7 +198,7 @@ class TestAuthRegCompletion:
 
     # AUTH-UC-02 remaining tests
     def test_AUTH_UC_02(self, api_client, monkeypatch):
-        """Domain aggregator: OAuth login succeeds for admin, researcher, and teacher."""
+        """Domain aggregator: OAuth login succeeds for non-admin roles; admin is blocked."""
         admin = self._make_user(
             role="ADMIN",
             username="uc02-admin@example.com",
@@ -215,8 +215,14 @@ class TestAuthRegCompletion:
             email="uc02-teacher@example.com",
         )
 
+        # Admin OAuth blocked
+        admin_response = self._oauth_login(
+            api_client, monkeypatch, subject="uc02-sub-admin", email=admin.email
+        )
+        assert admin_response.status_code == 403
+
+        # Non-admin roles succeed
         for subject, email in [
-            ("uc02-sub-admin", admin.email),
             ("uc02-sub-researcher", researcher.email),
             ("uc02-sub-teacher", teacher.email),
         ]:
@@ -225,7 +231,7 @@ class TestAuthRegCompletion:
             assert "accessToken" in response.json()
 
     def test_AUTH_UC_02_ADMIN(self, api_client, monkeypatch):
-        """Admin account can authenticate via OAuth."""
+        """Admin OAuth login is blocked with 403."""
         admin = self._make_user(
             role="ADMIN",
             username="uc02-admin-role@example.com",
@@ -237,8 +243,8 @@ class TestAuthRegCompletion:
             subject="uc02-admin-role-sub",
             email=admin.email,
         )
-        assert response.status_code == 200
-        assert response.json()["role"] == "ADMIN"
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Admin accounts must use Django admin."
 
     def test_AUTH_UC_02_RESEARCHER(self, api_client, monkeypatch):
         """Researcher account can authenticate via OAuth."""
@@ -285,7 +291,7 @@ class TestAuthRegCompletion:
 
     # AUTH-UC-03 / AUTH-CN-02 remaining tests
     def test_AUTH_UC_03_ADMIN(self, api_client):
-        """Admin can refresh an access token using a valid refresh token."""
+        """Admin password login is blocked; cannot obtain tokens to refresh."""
         admin = self._make_user(
             role="ADMIN",
             username="uc03-admin@example.com",
@@ -296,13 +302,8 @@ class TestAuthRegCompletion:
             identifier=admin.email,
             password="StartPass123!",
         )
-        assert login.status_code == 200
-        refresh = api_client.post(
-            "/api/v1/auth/token-exchanges",
-            {"refreshToken": login.json()["refreshToken"]},
-            format="json",
-        )
-        assert refresh.status_code == 200
+        assert login.status_code == 403
+        assert login.json()["detail"] == "Admin accounts must use Django admin."
 
     def test_AUTH_UC_03_RESEARCHER(self, api_client):
         """Researcher can refresh an access token using a valid refresh token."""
@@ -415,17 +416,18 @@ class TestAuthRegCompletion:
         assert refresh.status_code == 401
 
     def test_AUTH_UC_04_ADMIN(self, api_client):
-        """Admin can change password and old refresh tokens are invalidated."""
+        """Admin password login is blocked; cannot reach password change flow."""
         admin = self._make_user(
             role="ADMIN",
             username="uc04-admin@example.com",
             email="uc04-admin@example.com",
         )
-        self._assert_change_password_success(
+        login = self._login(
             api_client,
             identifier=admin.email,
             password="StartPass123!",
         )
+        assert login.status_code == 403
 
     def test_AUTH_UC_04_RESEARCHER(self, api_client):
         """Researcher can change password and old refresh tokens are invalidated."""
@@ -700,7 +702,7 @@ class TestAuthRegCompletion:
         assert invalidated.status_code == 401
 
     def test_AUTH_UC_08(self, api_client):
-        """Domain aggregator: logout invalidates sessions for all roles."""
+        """Domain aggregator: logout invalidates sessions for non-admin roles; admin is blocked."""
         admin = self._make_user(
             role="ADMIN",
             username="uc08-admin@example.com",
@@ -721,7 +723,10 @@ class TestAuthRegCompletion:
             username="uc08-student",
             email="uc08-student@example.com",
         )
-        self._assert_logout_roundtrip(api_client, identifier=admin.email, password="StartPass123!")
+        # Admin login blocked
+        admin_login = self._login(api_client, identifier=admin.email, password="StartPass123!")
+        assert admin_login.status_code == 403
+
         self._assert_logout_roundtrip(
             api_client,
             identifier=researcher.email,
@@ -737,13 +742,14 @@ class TestAuthRegCompletion:
         )
 
     def test_AUTH_UC_08_ADMIN(self, api_client):
-        """Admin can logout and invalidate refresh token."""
+        """Admin password login is blocked; cannot reach logout flow."""
         admin = self._make_user(
             role="ADMIN",
             username="uc08-admin-only@example.com",
             email="uc08-admin-only@example.com",
         )
-        self._assert_logout_roundtrip(api_client, identifier=admin.email, password="StartPass123!")
+        login = self._login(api_client, identifier=admin.email, password="StartPass123!")
+        assert login.status_code == 403
 
     def test_AUTH_UC_08_RESEARCHER(self, api_client):
         """Researcher can logout and invalidate refresh token."""
