@@ -35,7 +35,6 @@ class TestResearcherSudoPermissions:
             SudoPermission.CREATE_STUDENT.value,
             SudoPermission.EDIT_USER.value,
             SudoPermission.DELETE_USER.value,
-            SudoPermission.BULK_CREATE.value,
             SudoPermission.ISSUE_STUDENT_RESET_CODE.value,
             SudoPermission.ISSUE_RESEARCHER_RESET_CODE.value,
             SudoPermission.CREATE_RESEARCHER_CODES.value,

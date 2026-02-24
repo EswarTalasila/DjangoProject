@@ -184,7 +184,7 @@ class TestSudoTraceability:
 
     def test_SUDO_UC_04_E1(self, api_client, teacher_user, admin_user):
         """SUDO-UC-04-E1 edit denied outside allowed scope."""
-        account_route_tests.TestAccountRoutes().test_USER_UC_03_E2(
+        account_route_tests.TestAccountRoutes().test_USER_UC_02_E1(
             api_client, teacher_user, admin_user
         )
 
@@ -217,51 +217,3 @@ class TestSudoTraceability:
     def test_SUDO_UC_05_E1(self, admin_user):
         """SUDO-UC-05-E1 insufficient permission on delete."""
         permission_tests.test_can_delete_user_student_requester_returns_false(admin_user)
-
-    # --- SUDO-UC-06 Bulk user creation with sudo scopes ---
-
-    def test_SUDO_UC_06(self, api_client, admin_user):
-        """SUDO-UC-06 aggregate bulk create flow."""
-        account_route_tests.TestAccountRoutes().test_USER_UC_02_ADMIN(api_client, admin_user)
-
-    def test_SUDO_UC_06_ADMIN(self, api_client, admin_user):
-        """SUDO-UC-06 admin variant."""
-        account_route_tests.TestAccountRoutes().test_USER_UC_02_ADMIN(api_client, admin_user)
-
-    def test_SUDO_UC_06_E1(self, api_client):
-        """SUDO-UC-06-E1 missing BULK_CREATE permission."""
-        account_error_tests.TestAccountErrorPaths().test_bulk_create_requires_sudo_for_researcher(
-            api_client
-        )
-
-    def test_SUDO_UC_06_RESEARCHER_BULK_CREATE(self, api_client):
-        """Researcher with BULK_CREATE permission can bulk-create users."""
-        admin = UserFactory()
-        admin.is_staff = True
-        admin.save(update_fields=["is_staff"])
-        researcher = UserFactory()
-        UserRole.objects.create(user=researcher, role=Role.RESEARCHER)
-        ResearcherProfile.objects.create(user=researcher)
-        SudoGrantFactory(
-            user=researcher,
-            granted_by=admin,
-            permissions=[
-                SudoPermission.BULK_CREATE.value,
-                SudoPermission.CREATE_TEACHER.value,
-            ],
-        )
-
-        api_client.force_authenticate(user=researcher)
-        response = api_client.post(
-            "/api/v1/user-batches",
-            [
-                {
-                    "email": "fr3-bulk-teacher@example.com",
-                    "name": "FR3 Bulk Teacher",
-                    "role": "ROLE_TEACHER",
-                }
-            ],
-            format="json",
-        )
-        assert response.status_code == 201
-        assert response.json() == 1

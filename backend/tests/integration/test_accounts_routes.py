@@ -75,15 +75,28 @@ class TestAccountRoutes:
         return user
 
     def _assert_auth_uc_01_role_login(
-        self, api_client, *, role: str, identifier: str, password: str = "StartPass123!"
+        self,
+        api_client,
+        *,
+        role: str,
+        identifier: str,
+        password: str = "StartPass123!",
+        expected_status: int = 200,
+        expected_detail: str | None = None,
     ) -> None:
         response = api_client.post(
             "/api/v1/auth/sessions",
             {"identifier": identifier, "password": password},
             format="json",
         )
-        assert response.status_code == 200
+        assert response.status_code == expected_status
         payload = response.json()
+        if expected_status != 200:
+            if expected_detail is not None:
+                assert payload["detail"] == expected_detail
+            assert "accessToken" not in payload
+            assert "refreshToken" not in payload
+            return
         assert "accessToken" in payload
         assert "refreshToken" in payload
         assert payload["role"] == role
@@ -257,17 +270,7 @@ class TestAccountRoutes:
         assert "email is required" in response.json()["detail"]
 
     def test_AUTH_UC_01(self, api_client):
-        """Domain aggregator: all role-specific AUTH-UC-01 login paths must pass."""
-        self._create_user_for_auth_uc_01(
-            role="ADMIN",
-            username="admin-login",
-            email="admin-login@example.com",
-        )
-        self._assert_auth_uc_01_role_login(
-            api_client,
-            role="ADMIN",
-            identifier="admin-login@example.com",
-        )
+        """Domain aggregator: all supported role-specific AUTH-UC-01 login paths must pass."""
 
         self._create_user_for_auth_uc_01(
             role=Role.RESEARCHER,
@@ -303,7 +306,7 @@ class TestAccountRoutes:
         )
 
     def test_AUTH_UC_01_ADMIN(self, api_client):
-        """ADMIN login via identifier."""
+        """ADMIN login via API is blocked and redirected to Django admin flow."""
         self._create_user_for_auth_uc_01(
             role="ADMIN",
             username="admin-role",
@@ -313,6 +316,8 @@ class TestAccountRoutes:
             api_client,
             role="ADMIN",
             identifier="admin-role@example.com",
+            expected_status=403,
+            expected_detail="Admin accounts must use Django admin.",
         )
 
     def test_AUTH_UC_01_RESEARCHER(self, api_client):
@@ -899,7 +904,7 @@ class TestAccountRoutes:
         assert forbidden.status_code == 403
 
     def test_USER_UC_01_ADMIN(self, api_client, admin_user):
-        """Admin can create a teacher account."""
+        """Admin can create a teacher account; response contains user object."""
         api_client.force_authenticate(user=admin_user)
         payload = {
             "email": "teacher-contact@example.com",
@@ -909,8 +914,13 @@ class TestAccountRoutes:
         }
         response = api_client.post("/api/v1/users", payload, format="json")
         assert response.status_code == 201
+        body = response.json()
+        assert body["name"] == "Teacher Name"
+        assert body["email"] == "teacher-contact@example.com"
+        assert body["role"] == Role.TEACHER
+        assert "id" in body
+        assert "username" in body
         created = User.objects.get(email="teacher-contact@example.com")
-        assert created.email == "teacher-contact@example.com"
         assert created.teacher_profile is not None
 
     def test_USER_UC_01_E2(self, api_client, teacher_user):
@@ -976,7 +986,7 @@ class TestAccountRoutes:
         student.refresh_from_db()
         assert student.username == original_username
 
-    def test_USER_UC_03_E2(self, api_client, teacher_user, admin_user):
+    def test_USER_UC_02_E1(self, api_client, teacher_user, admin_user):
         """Teacher edit is denied for a non-owned target user."""
         api_client.force_authenticate(user=teacher_user)
         payload = {
@@ -985,42 +995,26 @@ class TestAccountRoutes:
         response = api_client.patch(f"/api/v1/users/{admin_user.id}", payload, format="json")
         assert response.status_code == 403
 
-    def test_USER_UC_05_ADMIN(self, api_client, admin_user, teacher_user):
-        """Staff listing returns teacher and researcher users."""
+    def test_USER_UC_04_ADMIN(self, api_client, admin_user, teacher_user):
+        """Staff listing returns teacher and researcher users with plain role strings."""
         api_client.force_authenticate(user=admin_user)
         response = api_client.get("/api/v1/users/staff")
         assert response.status_code == 200
-        # Endpoint returns TEACHER and RESEARCHER roles only (not staff-only admins)
-        usernames = {entry["username"] for entry in response.json()["results"]}
+        results = response.json()["results"]
+        usernames = {entry["username"] for entry in results}
         assert teacher_user.username in usernames
+        for entry in results:
+            assert entry["role"] in (Role.TEACHER, Role.RESEARCHER)
+            assert not entry["role"].startswith("ROLE_")
 
-    def test_USER_UC_02_ADMIN(self, api_client, admin_user):
-        """Bulk create returns the number of users created."""
-        api_client.force_authenticate(user=admin_user)
-        payload = [
-            {
-                "email": "bulk1@example.com",
-                "name": "Bulk One",
-                "role": "ROLE_TEACHER",
-            },
-            {
-                "email": "bulk2@example.com",
-                "name": "Bulk Two",
-                "role": "ROLE_TEACHER",
-            },
-        ]
-        response = api_client.post("/api/v1/user-batches", payload, format="json")
-        assert response.status_code == 201
-        assert response.json() == 2
-
-    def test_USER_UC_04_E1(self, api_client, admin_user, teacher_user):
+    def test_USER_UC_03_E1(self, api_client, admin_user, teacher_user):
         """Non-admin user deletion attempts are forbidden."""
         api_client.force_authenticate(user=teacher_user)
         response = api_client.delete(f"/api/v1/users/{admin_user.id}")
         assert response.status_code == 403
 
     def test_USER_UC_01(self, api_client, admin_user):
-        """Created user is assigned exactly one role."""
+        """Created user is assigned exactly one role; response returns user object."""
         api_client.force_authenticate(user=admin_user)
         payload = {
             "email": "single@example.com",
@@ -1030,6 +1024,10 @@ class TestAccountRoutes:
         }
         response = api_client.post("/api/v1/users", payload, format="json")
         assert response.status_code == 201
+        body = response.json()
+        assert body["role"] == Role.TEACHER
+        assert body["email"] == "single@example.com"
+        assert body["name"] == "Single Role"
         roles = UserRole.objects.filter(user__email="single@example.com")
         assert roles.count() == 1
         assert roles.first().role == Role.TEACHER

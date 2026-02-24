@@ -4,8 +4,8 @@
 |-------|-------|
 | **Status** | DRAFT |
 | **Scope** | Canonical endpoint index for active FR domains |
-| **Applies To** | FR-01 (AUTH), FR-02 (REG) |
-| **Last Updated** | 2026-02-19 |
+| **Applies To** | FR-01 (AUTH), FR-02 (REG), FR-04 (USER) |
+| **Last Updated** | 2026-02-24 |
 
 ---
 
@@ -17,6 +17,7 @@ Detailed behavior remains in per-domain FR docs; this page consolidates endpoint
 Primary sources:
 - `requirements/FR-01-Auth.md`
 - `requirements/FR-02-Registration.md`
+- `requirements/FR-04-User.md`
 
 ---
 
@@ -51,7 +52,7 @@ Example:
 
 ---
 
-## 3) Endpoint Index (AUTH + REG)
+## 3) Endpoint Index (AUTH + REG + USER)
 
 | Domain | UC | Method | Path | Auth | Roles | State Model | Request (summary) | Error IDs | Constraints | Tests | Status |
 |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -70,6 +71,10 @@ Example:
 | REG | REG-UC-03 | GET | `/api/v1/codes` | Access token | ADMIN, RESEARCHER, TEACHER | List | filters/pagination (draft) | REG-UC-03-E1 | REG-CN-04, REG-CN-05, REG-CN-22 | `test_REG_UC_03_*` | Proposed |
 | REG | REG-UC-03 | GET | `/api/v1/codes/{id}` | Access token | ADMIN, RESEARCHER, TEACHER | Detail | none | REG-UC-03-E1 | REG-CN-04, REG-CN-22 | `test_REG_UC_03_*` | Proposed |
 | REG | REG-UC-03 | PATCH | `/api/v1/codes/{id}` | Access token | ADMIN, RESEARCHER, TEACHER | `ACTIVE -> REVOKED`; `REVOKED|EXPIRED|EXHAUSTED -> ARCHIVED` | status + optional reason | REG-UC-03-E1/E2 | REG-CN-05, REG-CN-15, REG-CN-22 | `test_REG_UC_03_*` | Proposed |
+| USER | USER-UC-01 | POST | `/api/v1/users` | Access token | ADMIN, RESEARCHER, TEACHER | Creates user + role + profile | name + optional role/password/email (username rejected) | USER-UC-01-E1/E2/E3/E4/E5 | USER-CN-01, USER-CN-02, USER-CN-03, USER-CN-06, USER-CN-07 | `test_USER_UC_01_*` | Proposed |
+| USER | USER-UC-02 | PATCH | `/api/v1/users/{user_id}` | Access token | ADMIN, RESEARCHER, TEACHER | Updates user fields + optional role transition | name/email/password/role (username immutable) | USER-UC-02-E1/E2/E3/E4/E5 | USER-CN-01, USER-CN-02, USER-CN-03, USER-CN-04, USER-CN-05, USER-CN-06, USER-CN-08 | `test_USER_UC_02_*` | Proposed |
+| USER | USER-UC-03 | DELETE | `/api/v1/users/{user_id}` | Access token | ADMIN, RESEARCHER, TEACHER | Deletes user by ID | none | USER-UC-03-E1/E2 | USER-CN-01, USER-CN-05, USER-CN-08 | `test_USER_UC_03_*` | Proposed |
+| USER | USER-UC-04 | GET | `/api/v1/users/staff` | Access token | ADMIN, RESEARCHER | Paginated staff directory (teachers/researchers) | filters/pagination | USER-UC-04-E1 | USER-CN-09 | `test_USER_UC_04_*` | Proposed |
 
 ---
 
@@ -107,6 +112,8 @@ Example payloads:
   - `requirements/FR-01-Auth.md`
 - Requirement source for REG endpoints:
   - `requirements/FR-02-Registration.md`
+- Requirement source for USER endpoints:
+  - `requirements/FR-04-User.md`
 - Testing policy and naming:
   - `Testing-Index.md`
 - Cross-cutting API policy:
@@ -129,7 +136,7 @@ When endpoint definitions conflict, update FR docs first, then synchronize this 
 - **Endpoint Standardization v1 (FR-01/FR-02/FR-03):** Renamed verb-based paths to noun-based resource paths.
 - AUTH: `login` → `sessions`, `oauth/google` → `sessions/oauth`, `refresh` → `token-exchanges`, `logout` → `session-revocations`, `password/change` → `password` (PATCH), `reset-codes/verify` → `reset-code-validations`, `reset-codes/complete` → `password-resets`.
 - REG: `validate-code` → `code-validations`, `local`/`oauth` merged into `accounts` (dispatched by `method` field: LOCAL or OAUTH), `student/join-course` → top-level `/enrollments`.
-- SUDO routes moved to top-level resources (`/sudo-grants`, `/user-batches`).
+- SUDO routes moved to top-level resources (`/sudo-grants`).
 - User delete switched from username-based to ID-based: `DELETE /users/{user_id}`.
 - ID-based CRUD for resources; token/body-based for sensitive reset workflows.
 
@@ -138,3 +145,12 @@ When endpoint definitions conflict, update FR docs first, then synchronize this 
   - Added `POST /api/v1/auth/password-reset-codes`
   - Retired reset-request and status-lookup queue from active index
   - Kept `POST /api/v1/auth/reset-code-validations` and `POST /api/v1/auth/password-resets` for code consumption
+
+### 2026-02-24
+- Added FR-04 USER endpoint index entries:
+  - `POST /api/v1/users`
+  - `PATCH /api/v1/users/{user_id}`
+  - `DELETE /api/v1/users/{user_id}`
+  - `GET /api/v1/users/staff`
+- Removed `POST /api/v1/user-batches` from active contract and backend routes; registration code flows (FR-02) are the supported bulk onboarding path.
+- Updated active scope from AUTH+REG to AUTH+REG+USER.

@@ -15,8 +15,9 @@ Output Serializers (for response formatting):
     UserRoleSerializer: Role records
 
 Note:
-    The RoleChoiceField handles legacy ROLE_* format from the Java API,
-    converting "ROLE_TEACHER" to "TEACHER" for internal use.
+    The RoleChoiceField accepts legacy ROLE_* format from the Java API
+    on input, converting "ROLE_TEACHER" to "TEACHER" for internal use.
+    Output serializers return plain role strings (TEACHER, not ROLE_TEACHER).
 """
 
 from collections.abc import Mapping
@@ -101,15 +102,12 @@ class UserOutputSerializer(serializers.ModelSerializer):
     """
     Formats user data for API responses.
 
-    Includes the user's primary role in ROLE_* format for
-    backwards compatibility with frontend expectations.
-
     Fields:
         id: User's database ID
         name: Display name
         username: Login identifier
         email: Contact/login email when present
-        role: Role as ROLE_RESEARCHER, ROLE_TEACHER, or ROLE_STUDENT
+        role: Plain role string (RESEARCHER, TEACHER, or STUDENT)
     """
 
     role = serializers.SerializerMethodField()
@@ -122,14 +120,13 @@ class UserOutputSerializer(serializers.ModelSerializer):
 
     def get_role(self, obj):
         """
-        Return the user's primary role as a ROLE_* string.
+        Return the user's primary role as a plain string.
 
-        Falls back to ROLE_STUDENT if no role is assigned.
+        Falls back to STUDENT if no role is assigned.
         Uses .all() instead of .values_list() to leverage prefetch_related cache.
         """
         roles = list(obj.roles.all())
-        value = roles[0].role if roles else Role.STUDENT
-        return f"ROLE_{value}"
+        return roles[0].role if roles else Role.STUDENT
 
 
 class RegistrationCodeValidateInputSerializer(serializers.Serializer):
