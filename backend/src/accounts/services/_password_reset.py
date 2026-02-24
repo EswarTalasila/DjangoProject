@@ -52,6 +52,8 @@ def _teacher_can_issue_for_student(*, teacher: User, student: User) -> bool:
 
 def _authorize_reset_issuance(*, issuer: User, target: User) -> None:
     """Raise PermissionError when issuer is not allowed to issue for the target user."""
+    if issuer.pk == target.pk:
+        raise PermissionError("Permission denied.")
     if target.is_staff:
         raise PermissionError("Reset codes cannot be issued for admin accounts.")
 

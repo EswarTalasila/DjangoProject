@@ -94,7 +94,7 @@ class StudentOutputSerializer(serializers.Serializer):
         id: Student's user ID
         name: Display name
         username: Student login identifier
-        role: Always "ROLE_STUDENT" for students
+        role: Always "STUDENT" for students
         consent: Data collection consent status
         courseId: ID of the course they're enrolled in (context-dependent)
     """
