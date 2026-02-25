@@ -5,7 +5,7 @@
 | **Status** | DRAFT |
 | **Scope** | Canonical endpoint index for active FR domains |
 | **Applies To** | FR-01 (AUTH), FR-02 (REG), FR-04 (USER) |
-| **Last Updated** | 2026-02-24 |
+| **Last Updated** | 2026-02-25 |
 
 ---
 
@@ -42,8 +42,8 @@ Example:
 
 ### Auth Convention
 - `None` means unauthenticated endpoint
-- `Access token` means authenticated user endpoint
-- `Refresh token` is only for refresh workflow
+- `Authenticated session` means endpoint requires a valid access token (cookie or Bearer header)
+- `Refresh token` means cookie-backed refresh (body fallback supported)
 - `Issuer` means authenticated user passing role/scope checks for reset-code issuance
 
 ### Error Convention (Draft)
@@ -58,9 +58,9 @@ Example:
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | AUTH | AUTH-UC-01 | POST | `/api/v1/auth/sessions` | None | ALL | N/A | identifier + password | AUTH-UC-01-E1/E2/E3 | AUTH-CN-01, AUTH-CN-03, AUTH-CN-04, AUTH-CN-12 | `test_AUTH_UC_01_*` | Proposed |
 | AUTH | AUTH-UC-02 | POST | `/api/v1/auth/sessions/oauth` | None | ALL | N/A | oauth token/authorization callback payload | AUTH-UC-02-E1/E2 | AUTH-CN-04 | `test_AUTH_UC_02_*` | Proposed |
-| AUTH | AUTH-UC-03 | POST | `/api/v1/auth/token-exchanges` | Refresh token | ALL | N/A | refresh token | (standard auth error) | AUTH-CN-02 | `test_AUTH_UC_03_*` | Proposed |
-| AUTH | AUTH-UC-08 | POST | `/api/v1/auth/session-revocations` | Access token | ALL | N/A | refresh token | (none) | AUTH-CN-11 | `test_AUTH_UC_08_*` | Proposed |
-| AUTH | AUTH-UC-04 | PATCH | `/api/v1/auth/password` | Access token | ALL | N/A | current password + new password + confirm | AUTH-UC-04-E1/E2 | AUTH-CN-01, AUTH-CN-11 | `test_AUTH_UC_04_*` | Proposed |
+| AUTH | AUTH-UC-03 | POST | `/api/v1/auth/token-exchanges` | Refresh token (cookie or body) | ALL | N/A | refresh token (optional when cookie present) | (standard auth error) | AUTH-CN-02 | `test_AUTH_UC_03_*` | Proposed |
+| AUTH | AUTH-UC-08 | POST | `/api/v1/auth/session-revocations` | Authenticated session + refresh token | ALL | N/A | refresh token (optional when cookie present) | (none) | AUTH-CN-11 | `test_AUTH_UC_08_*` | Proposed |
+| AUTH | AUTH-UC-04 | PATCH | `/api/v1/auth/password` | Authenticated session | ALL | N/A | current password + new password + confirm | AUTH-UC-04-E1/E2 | AUTH-CN-01, AUTH-CN-11 | `test_AUTH_UC_04_*` | Proposed |
 | AUTH | AUTH-UC-07 | POST | `/api/v1/auth/password-reset-codes` | Issuer | ADMIN, RESEARCHER, TEACHER | Issuer-generated reset code profile | targetUserId | AUTH-UC-07-E1/E2 | AUTH-CN-05, AUTH-CN-06, AUTH-CN-10 | `test_AUTH_UC_07_*` | Proposed |
 | AUTH | AUTH-UC-05 | POST | `/api/v1/auth/reset-code-validations` | None | RESEARCHER, TEACHER, STUDENT | N/A | identifier + reset code | AUTH-UC-05-E1 | AUTH-CN-07 | `test_AUTH_UC_05_*` | Proposed |
 | AUTH | AUTH-UC-05 | POST | `/api/v1/auth/password-resets` | None | RESEARCHER, TEACHER, STUDENT | Consumes reset code | identifier + reset code + new password + confirm | AUTH-UC-05-E2 | AUTH-CN-01, AUTH-CN-07, AUTH-CN-11 | `test_AUTH_UC_05_*` | Proposed |
@@ -154,3 +154,9 @@ When endpoint definitions conflict, update FR docs first, then synchronize this 
   - `GET /api/v1/users/staff`
 - Removed `POST /api/v1/user-batches` from active contract and backend routes; registration code flows (FR-02) are the supported bulk onboarding path.
 - Updated active scope from AUTH+REG to AUTH+REG+USER.
+
+### 2026-02-25
+- AUTH session transport updated to HttpOnly cookies:
+  - login and OAuth login set `access_token` and `refresh_token` cookies
+  - refresh and logout accept refresh token from cookie (request-body fallback preserved)
+  - `POST /api/v1/auth/token-exchanges` response now returns an acknowledgement message and updates cookies

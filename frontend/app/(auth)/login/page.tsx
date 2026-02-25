@@ -27,7 +27,6 @@ const loginSchema = z.object({
 type LoginForm = z.infer<typeof loginSchema>;
 type ApiError = { response?: { data?: unknown } };
 type LoginSuccessPayload = {
-  accessToken: string;
   role?: string;
   name?: string;
 };

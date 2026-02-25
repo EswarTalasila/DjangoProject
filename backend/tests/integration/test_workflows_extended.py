@@ -16,7 +16,9 @@ def login(client: APIClient, username: str, password: str) -> dict:
     )
     assert response.status_code == 200
     payload = response.json()
-    client.credentials(HTTP_AUTHORIZATION=f"Bearer {payload['accessToken']}")
+    access_cookie = response.cookies.get("access_token")
+    assert access_cookie is not None
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {access_cookie.value}")
     return payload
 
 

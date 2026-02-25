@@ -27,6 +27,21 @@ from courses.models import Course, Enrollment
 
 @pytest.mark.django_db
 class TestAccountRoutes:
+    @staticmethod
+    def _assert_auth_cookies(response) -> None:
+        assert "access_token" in response.cookies
+        assert "refresh_token" in response.cookies
+        assert response.cookies["access_token"]["httponly"]
+        assert response.cookies["refresh_token"]["httponly"]
+
+    @staticmethod
+    def _refresh_cookie_value(response) -> str:
+        return response.cookies["refresh_token"].value
+
+    @staticmethod
+    def _access_cookie_value(response) -> str:
+        return response.cookies["access_token"].value
+
     def _student_code(self, teacher_user, code="INVITE1", course_name="Course A", max_uses=5):
         course = Course.objects.create(
             name=course_name, teacher_profile=teacher_user.teacher_profile
@@ -97,8 +112,7 @@ class TestAccountRoutes:
             assert "accessToken" not in payload
             assert "refreshToken" not in payload
             return
-        assert "accessToken" in payload
-        assert "refreshToken" in payload
+        self._assert_auth_cookies(response)
         assert payload["role"] == role
 
     def test_REG_UC_01_STUDENT(self, api_client):
@@ -125,8 +139,7 @@ class TestAccountRoutes:
         )
         assert response.status_code == 201
         payload = response.json()
-        assert "accessToken" in payload
-        assert "refreshToken" in payload
+        self._assert_auth_cookies(response)
         assert payload["role"] == Role.STUDENT
         user = User.objects.get(username=payload["username"])
         role = user.roles.values_list("role", flat=True).first()
@@ -191,7 +204,7 @@ class TestAccountRoutes:
         payload = response.json()
         assert payload["role"] == Role.RESEARCHER
         assert payload["username"].startswith("roauth")
-        assert "refreshToken" in payload
+        self._assert_auth_cookies(response)
 
         user = User.objects.get(username=payload["username"])
         assert user.email == "researcher-oauth@example.com"
@@ -219,7 +232,7 @@ class TestAccountRoutes:
         local_payload = local_response.json()
         assert local_payload["role"] == Role.RESEARCHER
         assert local_payload["username"] == "lresear0"
-        assert "refreshToken" in local_payload
+        self._assert_auth_cookies(local_response)
 
     def test_REG_UC_01_TEACHER(self, api_client, researcher_user):
         """Teacher invite code supports local non-student registration."""
@@ -245,7 +258,7 @@ class TestAccountRoutes:
         payload = response.json()
         assert payload["role"] == Role.TEACHER
         assert payload["username"] == "lteache0"
-        assert "refreshToken" in payload
+        self._assert_auth_cookies(response)
 
     def test_REG_UC_01_E3(self, api_client, researcher_user):
         """Non-student local registration requires email."""
@@ -681,7 +694,7 @@ class TestAccountRoutes:
             format="json",
         )
         assert login_response.status_code == 200
-        refresh_token = login_response.json()["refreshToken"]
+        refresh_token = self._refresh_cookie_value(login_response)
 
         refresh_response = api_client.post(
             "/api/v1/auth/token-exchanges",
@@ -689,7 +702,8 @@ class TestAccountRoutes:
             format="json",
         )
         assert refresh_response.status_code == 200
-        assert "accessToken" in refresh_response.json()
+        assert refresh_response.json()["message"] == "Session refreshed."
+        assert "access_token" in refresh_response.cookies
 
         api_client.force_authenticate(user=user)
         logout_response = api_client.post(
@@ -728,7 +742,8 @@ class TestAccountRoutes:
 
         refresh_response = api_client.post("/api/v1/auth/token-exchanges", {}, format="json")
         assert refresh_response.status_code == 200
-        assert "accessToken" in refresh_response.json()
+        assert refresh_response.json()["message"] == "Session refreshed."
+        assert "access_token" in refresh_response.cookies
 
         # No force_authenticate and no Authorization header: IsAuthenticated uses access cookie.
         logout_response = api_client.post("/api/v1/auth/session-revocations", {}, format="json")
@@ -753,9 +768,10 @@ class TestAccountRoutes:
             format="json",
         )
         assert login_response.status_code == 200
-        payload = login_response.json()
-        refresh_token = payload["refreshToken"]
-        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {payload['accessToken']}")
+        refresh_token = self._refresh_cookie_value(login_response)
+        api_client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {self._access_cookie_value(login_response)}"
+        )
 
         change_response = api_client.patch(
             "/api/v1/auth/password",

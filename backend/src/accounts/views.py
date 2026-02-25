@@ -7,8 +7,9 @@ This module provides REST API views for:
 - Password management (set initial password, reset password)
 - Bulk user creation for administrators
 
-All endpoints return JSON responses. Authentication uses JWT tokens via
-SimpleJWT. Role-based access control is enforced via permission classes.
+All endpoints return JSON responses. Authentication uses JWT via SimpleJWT
+with HttpOnly cookie transport. Role-based access control is enforced via
+permission classes.
 
 Endpoints:
     POST /api/v1/auth/sessions          - Username/password authentication
@@ -34,7 +35,7 @@ Endpoints:
 
 import json
 import logging
-from typing import Any, cast
+from typing import Any, Literal, cast
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -124,7 +125,7 @@ logger = logging.getLogger(__name__)
 USERNAME_IMMUTABLE_DETAIL = "username is system-managed and must not be provided"
 ACCESS_COOKIE_NAME = "access_token"
 REFRESH_COOKIE_NAME = "refresh_token"
-AUTH_COOKIE_SAMESITE = "Lax"
+AUTH_COOKIE_SAMESITE: Literal["Lax"] = "Lax"
 
 
 def _cookie_secure() -> bool:
@@ -135,27 +136,29 @@ def _set_auth_cookies(
     response: Response, *, access_token: str | None = None, refresh_token: str | None = None
 ) -> Response:
     """Attach HttpOnly auth cookies to a response."""
-    cookie_kwargs = {
-        "httponly": True,
-        "secure": _cookie_secure(),
-        "samesite": AUTH_COOKIE_SAMESITE,
-        "path": "/",
-    }
     if access_token is not None:
-        access_max_age = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
+        access_lifetime = cast("Any", settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"])
+        access_max_age = int(access_lifetime.total_seconds())
         response.set_cookie(
             ACCESS_COOKIE_NAME,
             access_token,
             max_age=access_max_age,
-            **cookie_kwargs,
+            httponly=True,
+            secure=_cookie_secure(),
+            samesite=AUTH_COOKIE_SAMESITE,
+            path="/",
         )
     if refresh_token is not None:
-        refresh_max_age = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
+        refresh_lifetime = cast("Any", settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"])
+        refresh_max_age = int(refresh_lifetime.total_seconds())
         response.set_cookie(
             REFRESH_COOKIE_NAME,
             refresh_token,
             max_age=refresh_max_age,
-            **cookie_kwargs,
+            httponly=True,
+            secure=_cookie_secure(),
+            samesite=AUTH_COOKIE_SAMESITE,
+            path="/",
         )
     return response
 
@@ -272,7 +275,7 @@ def _register_local(request, payload):
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         refresh = RefreshToken.for_user(user)
-        body = build_user_response(user, str(refresh.access_token), str(refresh))
+        body = build_user_response(user)
         body["message"] = "User registered"
         body["courseId"] = enrollment.course_id
         body["createdNewUser"] = True
@@ -288,7 +291,7 @@ def _register_local(request, payload):
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
     refresh = RefreshToken.for_user(user)
-    body = build_user_response(user, str(refresh.access_token), str(refresh))
+    body = build_user_response(user)
     body["message"] = "User registered"
     body["createdNewUser"] = True
     body["alreadyEnrolled"] = False
@@ -342,7 +345,7 @@ def _register_oauth(request, payload):
         return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
 
     refresh = RefreshToken.for_user(user)
-    body = build_user_response(user, str(refresh.access_token), str(refresh))
+    body = build_user_response(user)
     body["message"] = "User registered"
     body["courseId"] = None
     body["createdNewUser"] = True
@@ -571,9 +574,13 @@ def login(request):
 
     clear_identifier_failures("login", identifier)
     refresh = RefreshToken.for_user(user)
-    body = build_user_response(user, str(refresh.access_token), str(refresh))
+    body = build_user_response(user)
     response = Response(body, status=status.HTTP_200_OK)
-    return _set_auth_cookies(response, access_token=str(refresh.access_token), refresh_token=str(refresh))
+    return _set_auth_cookies(
+        response,
+        access_token=str(refresh.access_token),
+        refresh_token=str(refresh),
+    )
 
 
 @api_view(["GET"])
@@ -604,16 +611,10 @@ def refresh(request):
         serializer.is_valid(raise_exception=True)
         refresh_token = serializer.validated_data["refreshToken"]
     try:
-        token = RefreshToken(refresh_token)
+        token = RefreshToken(cast("Any", refresh_token))
     except TokenError:
         return Response({"detail": "Invalid refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
-    response = Response(
-        {
-            "accessToken": str(token.access_token),
-            "tokenType": "Bearer",
-        },
-        status=status.HTTP_200_OK,
-    )
+    response = Response({"message": "Session refreshed."}, status=status.HTTP_200_OK)
     return _set_auth_cookies(response, access_token=str(token.access_token))
 
 
@@ -671,7 +672,7 @@ def change_password(request):
 @permission_classes([AllowAny])
 def login_with_google(request):
     """
-    Authenticate a user via Google OAuth, returning a JWT token.
+    Authenticate a user via Google OAuth and establish auth cookies.
 
     The frontend completes Google Sign-In and sends the access token here.
     This endpoint verifies the token with Google, then either:
@@ -689,11 +690,13 @@ def login_with_google(request):
 
     Returns:
         200: {
-            "accessToken": "eyJ...",  # JWT access token
-            "tokenType": "Bearer",
             "role": "STUDENT|TEACHER|RESEARCHER",
-            "id": "123"
+            "id": "123",
+            "username": "user123",
+            "name": "Display Name",
+            "email": "user@example.com"
         }
+        (also sets HttpOnly access_token + refresh_token cookies)
         400: "accessToken is required" if missing
         401: "Access token verification failed" if Google rejects token
         401: "Access token verification failed" if Google response is invalid
@@ -775,9 +778,13 @@ def login_with_google(request):
 
     clear_identifier_failures("oauth-login", oauth_identifier)
     refresh = RefreshToken.for_user(user)
-    body = build_user_response(user, str(refresh.access_token), str(refresh))
+    body = build_user_response(user)
     response = Response(body, status=status.HTTP_200_OK)
-    return _set_auth_cookies(response, access_token=str(refresh.access_token), refresh_token=str(refresh))
+    return _set_auth_cookies(
+        response,
+        access_token=str(refresh.access_token),
+        refresh_token=str(refresh),
+    )
 
 
 @api_view(["POST"])
@@ -914,7 +921,11 @@ def create_user(request):
     create_payload = dict(payload)
     create_payload["username"] = generate_managed_username(name=payload["name"])
     try:
-        user = create_user_from_payload(create_payload, role_override=requested_role, creator=request.user)
+        user = create_user_from_payload(
+            create_payload,
+            role_override=requested_role,
+            creator=request.user,
+        )
     except ValueError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     return Response(UserOutputSerializer(user).data, status=status.HTTP_201_CREATED)
@@ -1065,6 +1076,7 @@ def my_sudo_grant(request):
         status=status.HTTP_200_OK,
     )
 
+
 @api_view(["POST"])
 @permission_classes([IsResearcherOrAdmin])
 def grant_sudo(request):
@@ -1147,9 +1159,3 @@ def revoke_sudo(request, grant_id: int):
         return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
     except PermissionError as e:
         return Response({"detail": str(e)}, status=status.HTTP_403_FORBIDDEN)
-    
-@api_view(["GET"]) 
-@permission_classes([IsAuthenticated])
-def me(request):
-    role = primary_role(request.user);
-    return Response({"role":role});

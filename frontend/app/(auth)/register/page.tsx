@@ -36,9 +36,6 @@ type RegisterResponse = {
     username: string;
     name: string;
     email: string | null;
-    accessToken: string;
-    refreshToken: string;
-    tokenType: string;
     role: RoleType;
     id: string;
     courseId: number | null;

@@ -502,7 +502,7 @@ class TestAccountErrorPaths:
         assert "method must be LOCAL or OAUTH" in response.json()["detail"]
 
     def test_registration_student_response_shape(self, api_client):
-        """Student registration returns complete unified response with JWT and null email."""
+        """Student registration returns unified response and sets auth cookies."""
 
         teacher = self._make_teacher("teacher-shape-student")
         course = Course.objects.create(
@@ -539,15 +539,14 @@ class TestAccountErrorPaths:
 
         # All required fields present
         assert payload["message"] == "User registered"
-        assert "accessToken" in payload
-        assert "refreshToken" in payload
-        assert payload["tokenType"] == "Bearer"
         assert payload["role"] == Role.STUDENT
         assert "id" in payload
         assert "username" in payload
         assert "name" in payload
         assert payload["createdNewUser"] is True
         assert payload["alreadyEnrolled"] is False
+        assert response.cookies["access_token"]["httponly"]
+        assert response.cookies["refresh_token"]["httponly"]
 
         # Student-specific: email null, courseId present
         assert payload["email"] is None or payload["email"] == ""
@@ -557,7 +556,7 @@ class TestAccountErrorPaths:
         assert "@" not in payload["username"]
 
     def test_registration_teacher_response_shape(self, api_client, researcher_user):
-        """Teacher registration returns complete unified response with email and null courseId."""
+        """Teacher registration returns unified response and sets auth cookies."""
 
         from accounts.models import RegistrationCode, RegistrationCodeType
 
@@ -590,15 +589,14 @@ class TestAccountErrorPaths:
 
         # All required fields present
         assert payload["message"] == "User registered"
-        assert "accessToken" in payload
-        assert "refreshToken" in payload
-        assert payload["tokenType"] == "Bearer"
         assert payload["role"] == Role.TEACHER
         assert "id" in payload
         assert "username" in payload
         assert "name" in payload
         assert payload["createdNewUser"] is True
         assert payload["alreadyEnrolled"] is False
+        assert response.cookies["access_token"]["httponly"]
+        assert response.cookies["refresh_token"]["httponly"]
 
         # Non-student: email present, courseId null
         assert payload["email"] == "shape-teacher@example.com"

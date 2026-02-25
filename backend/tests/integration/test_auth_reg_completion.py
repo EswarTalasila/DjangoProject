@@ -110,6 +110,24 @@ class TestAuthRegCompletion:
             format="json",
         )
 
+    @staticmethod
+    def _assert_auth_cookies(response) -> None:
+        """Assert HttpOnly auth cookies are set on a response."""
+        assert "access_token" in response.cookies
+        assert "refresh_token" in response.cookies
+        assert response.cookies["access_token"]["httponly"]
+        assert response.cookies["refresh_token"]["httponly"]
+
+    @staticmethod
+    def _refresh_cookie_value(response) -> str:
+        """Return refresh token value from response cookies."""
+        return response.cookies["refresh_token"].value
+
+    @staticmethod
+    def _access_cookie_value(response) -> str:
+        """Return access token value from response cookies."""
+        return response.cookies["access_token"].value
+
     def _oauth_login(self, api_client, monkeypatch, *, subject: str, email: str):
         """Perform OAuth login with mocked Google userinfo response."""
         monkeypatch.setattr(
@@ -228,7 +246,7 @@ class TestAuthRegCompletion:
         ]:
             response = self._oauth_login(api_client, monkeypatch, subject=subject, email=email)
             assert response.status_code == 200
-            assert "accessToken" in response.json()
+            self._assert_auth_cookies(response)
 
     def test_AUTH_UC_02_ADMIN(self, api_client, monkeypatch):
         """Admin OAuth login is blocked with 403."""
@@ -318,9 +336,10 @@ class TestAuthRegCompletion:
             password="StartPass123!",
         )
         assert login.status_code == 200
+        self._assert_auth_cookies(login)
         refresh = api_client.post(
             "/api/v1/auth/token-exchanges",
-            {"refreshToken": login.json()["refreshToken"]},
+            {"refreshToken": self._refresh_cookie_value(login)},
             format="json",
         )
         assert refresh.status_code == 200
@@ -338,9 +357,10 @@ class TestAuthRegCompletion:
             password="StartPass123!",
         )
         assert login.status_code == 200
+        self._assert_auth_cookies(login)
         refresh = api_client.post(
             "/api/v1/auth/token-exchanges",
-            {"refreshToken": login.json()["refreshToken"]},
+            {"refreshToken": self._refresh_cookie_value(login)},
             format="json",
         )
         assert refresh.status_code == 200
@@ -358,9 +378,10 @@ class TestAuthRegCompletion:
             password="StartPass123!",
         )
         assert login.status_code == 200
+        self._assert_auth_cookies(login)
         refresh = api_client.post(
             "/api/v1/auth/token-exchanges",
-            {"refreshToken": login.json()["refreshToken"]},
+            {"refreshToken": self._refresh_cookie_value(login)},
             format="json",
         )
         assert refresh.status_code == 200
@@ -378,8 +399,9 @@ class TestAuthRegCompletion:
             password="StartPass123!",
         )
         assert login.status_code == 200
-        access = AccessToken(login.json()["accessToken"])
-        refresh = RefreshToken(login.json()["refreshToken"])
+        self._assert_auth_cookies(login)
+        access = AccessToken(self._access_cookie_value(login))
+        refresh = RefreshToken(self._refresh_cookie_value(login))
         access_lifetime = access["exp"] - access["iat"]
         refresh_lifetime = refresh["exp"] - refresh["iat"]
         expected_access = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
@@ -394,7 +416,8 @@ class TestAuthRegCompletion:
         """Shared role behavior for AUTH-UC-04 success path."""
         login = self._login(api_client, identifier=identifier, password=password)
         assert login.status_code == 200
-        refresh_token = login.json()["refreshToken"]
+        self._assert_auth_cookies(login)
+        refresh_token = self._refresh_cookie_value(login)
         user_id = login.json()["id"]
         user = User.objects.get(id=user_id)
         api_client.force_authenticate(user=user)
@@ -569,8 +592,10 @@ class TestAuthRegCompletion:
         )
         assert first.status_code == 200
         assert second.status_code == 200
-        refresh_1 = first.json()["refreshToken"]
-        refresh_2 = second.json()["refreshToken"]
+        self._assert_auth_cookies(first)
+        self._assert_auth_cookies(second)
+        refresh_1 = self._refresh_cookie_value(first)
+        refresh_2 = self._refresh_cookie_value(second)
 
         api_client.force_authenticate(user=teacher)
         change = api_client.patch(
@@ -685,7 +710,8 @@ class TestAuthRegCompletion:
         """Shared logout behavior for role-specific UC-08 tests."""
         login = self._login(api_client, identifier=identifier, password=password)
         assert login.status_code == 200
-        refresh_token = login.json()["refreshToken"]
+        self._assert_auth_cookies(login)
+        refresh_token = self._refresh_cookie_value(login)
         user = User.objects.get(id=login.json()["id"])
         api_client.force_authenticate(user=user)
         logout = api_client.post(

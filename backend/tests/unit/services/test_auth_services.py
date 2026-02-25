@@ -121,16 +121,17 @@ def test_authenticate_user_success_and_failure():
 @pytest.mark.django_db
 @pytest.mark.unit
 def test_build_user_response_refresh_optional():
-    """Response payload includes role/id and optional refresh token."""
+    """Response payload includes role/id without JWT token fields."""
 
     user = _make_user(username="resp-user", role=Role.RESEARCHER, email="resp-user@example.com")
 
-    with_refresh = build_user_response(user, "access", "refresh")
-    no_refresh = build_user_response(user, "access")
+    payload = build_user_response(user)
 
-    assert with_refresh["refreshToken"] == "refresh"
-    assert no_refresh.get("refreshToken") is None
-    assert with_refresh["role"] == Role.RESEARCHER
+    assert payload["role"] == Role.RESEARCHER
+    assert payload["id"] == str(user.id)
+    assert payload["username"] == user.username
+    assert payload.get("accessToken") is None
+    assert payload.get("refreshToken") is None
 
 
 @pytest.mark.django_db

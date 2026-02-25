@@ -11,32 +11,26 @@ from ..models import OAuthAccount, OAuthProvider, User
 from ._utils import normalize_username_identifier
 
 
-def build_user_response(user: User, access_token: str, refresh_token: str | None = None) -> dict:
+def build_user_response(user: User) -> dict:
     """
     Build the login response payload for a user.
 
     This creates the response structure expected by the frontend after
-    successful authentication, including the JWT token and user metadata.
+    successful authentication, including user metadata only.
 
     Args:
         user: The authenticated user
-        access_token: The JWT access token to include
-
     Returns:
-        Dict with username/name/accessToken/tokenType/role/id fields
+        Dict with username/name/role/id/email fields
     """
     role = primary_role(user)
     payload: dict[str, str | None] = {
         "email": user.email or None,
         "username": user.username,
         "name": user.name,
-        "accessToken": access_token,
-        "tokenType": "Bearer",
         "role": role,
         "id": str(user.id),
     }
-    if refresh_token:
-        payload["refreshToken"] = refresh_token
     return payload
 
 
