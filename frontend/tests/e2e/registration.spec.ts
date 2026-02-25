@@ -1,10 +1,7 @@
 import type { APIRequestContext } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
-const rawApiBaseUrl = process.env.E2E_API_URL || "http://backend:8000/api/v1";
-const API_BASE_URL = rawApiBaseUrl
-  .replace("localhost:8000", "backend:8000")
-  .replace("127.0.0.1:8000", "backend:8000");
+const API_BASE_URL = process.env.E2E_API_URL || "http://localhost:8000/api/v1";
 const teacherIdentifier = process.env.E2E_TEACHER_USERNAME || "e2e-teacher";
 const teacherPassword = process.env.E2E_TEACHER_PASSWORD || "teacherpass";
 
@@ -33,14 +30,9 @@ async function waitForBackendReady(context: APIRequestContext) {
 async function createStudentRegistrationCode(context: APIRequestContext) {
   const login = await waitForBackendReady(context);
   expect(login.ok()).toBeTruthy();
-  const loginBody = await login.json();
-  const accessToken = loginBody.accessToken as string;
-  expect(accessToken).toBeTruthy();
 
+  // Session is cookie-backed; subsequent requests in this context reuse auth cookies.
   const createCourse = await context.post(`${API_BASE_URL}/courses/`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
     data: {
       name: `E2E Course ${Date.now()}`,
     },
@@ -52,9 +44,6 @@ async function createStudentRegistrationCode(context: APIRequestContext) {
 
   const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
   const createCode = await context.post(`${API_BASE_URL}/codes`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
     data: {
       codeType: "STUDENT",
       count: 1,
@@ -98,15 +87,17 @@ test.describe("Registration flow", () => {
     expect(registerBody.username).toBeTruthy();
     expect(registerBody.role).toBe("STUDENT");
 
-    const login = await request.post(`${API_BASE_URL}/auth/sessions`, {
+  const login = await request.post(`${API_BASE_URL}/auth/sessions`, {
       data: {
         identifier: registerBody.username,
         password,
       },
-    });
-    expect(login.ok()).toBeTruthy();
-    const loginBody = await login.json();
-    expect(loginBody.role).toBe("STUDENT");
-    expect(loginBody.accessToken).toBeTruthy();
   });
+  expect(login.ok()).toBeTruthy();
+  const loginBody = await login.json();
+  expect(loginBody.role).toBe("STUDENT");
+  const setCookie = login.headers()["set-cookie"] || "";
+  expect(setCookie).toContain("access_token=");
+  expect(setCookie).toContain("refresh_token=");
+});
 });
