@@ -223,7 +223,6 @@ function RegisterPageContent() {
 
             const { accessToken, role, name } = responseData;
             Cookies.set("access_token", accessToken, { expires: 1 });
-            if (role) Cookies.set("user_role", role);
             Cookies.set("user_name", name || "User", { expires: 1 });
 
             toast.success("Account created successfully!");
@@ -263,7 +262,6 @@ function RegisterPageContent() {
 
             const { accessToken, role, name } = responseData;
             Cookies.set("access_token", accessToken, { expires: 1 });
-            if (role) Cookies.set("user_role", role);
             Cookies.set("user_name", name || "User", { expires: 1 });
 
             toast.success("Account created with Google!");

@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Cookies from "js-cookie";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { 
-  LayoutDashboard, 
-  BookOpen, 
-  FileText, 
-  CheckSquare, 
+import {
+  LayoutDashboard,
+  BookOpen,
+  FileText,
+  CheckSquare,
   Settings,
   LogOut
 } from "lucide-react";
@@ -90,6 +91,9 @@ export function Sidebar({ role, items }: SidebarProps) {
           variant="ghost" 
           className="w-full justify-start gap-3 text-red-600 hover:bg-[#a9c17f]"
           onClick={() => {
+             Cookies.remove("access_token");
+             Cookies.remove("refresh_token");
+             Cookies.remove("user_name");
              window.location.href = "/login";
           }}
         >

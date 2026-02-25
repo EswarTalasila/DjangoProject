@@ -61,14 +61,12 @@ function LoginPageContent() {
     if (role === "ADMIN") {
       Cookies.remove("access_token");
       Cookies.remove("refresh_token");
-      Cookies.remove("user_role");
       Cookies.remove("user_name");
       setAdminBlocked(true);
       return;
     }
 
     Cookies.set("access_token", accessToken, { expires: 1 });
-    if (role) Cookies.set("user_role", role);
     Cookies.set("user_name", name || "Instructor", { expires: 1 });
 
     router.push("/dashboard");
