@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -201,7 +201,9 @@ describe("Register page", () => {
 
     // Simulate Google auth success — triggers the name form
     await waitFor(() => expect(capturedGoogleOnSuccess).not.toBeNull());
-    capturedGoogleOnSuccess!({ access_token: "google-token-123" });
+    await act(async () => {
+      capturedGoogleOnSuccess!({ access_token: "google-token-123" });
+    });
 
     // Name form should appear — submit empty to trigger validation
     const completeBtn = await screen.findByRole("button", { name: "Complete Registration" });
