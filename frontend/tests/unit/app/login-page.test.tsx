@@ -57,7 +57,7 @@ describe("Login page", () => {
     expect(link).toHaveAttribute("href", "http://localhost:8000/admin/");
   });
 
-  it("submits local login and stores auth cookies", async () => {
+  it("submits local login and stores display-name cookie", async () => {
     mockApiPost.mockResolvedValueOnce({
       data: { accessToken: "access-token", role: "TEACHER", name: "Morgan Blake" },
     });
@@ -76,7 +76,7 @@ describe("Login page", () => {
         password: "change-me",
       });
     });
-    expect(mockCookiesSet).toHaveBeenCalledWith("access_token", "access-token", { expires: 1 });
+    expect(mockCookiesSet).toHaveBeenCalledWith("user_name", "Morgan Blake", { expires: 1 });
     expect(mockPush).toHaveBeenCalledWith("/dashboard");
   });
 

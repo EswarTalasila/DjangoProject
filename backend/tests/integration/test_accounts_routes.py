@@ -706,6 +706,36 @@ class TestAccountRoutes:
         )
         assert refresh_after_logout.status_code == 401
 
+    def test_AUTH_CN_10_COOKIE_HTTPONLY(self, api_client):
+        """Login sets HttpOnly auth cookies and cookie-backed auth works for refresh/logout."""
+        user = User.objects.create_user(
+            username="cookie-auth-user",
+            email="cookie-auth@example.com",
+            name="Cookie Auth User",
+            password="StartPass123!",
+        )
+        UserRole.objects.create(user=user, role=Role.TEACHER)
+        TeacherProfile.objects.create(user=user)
+
+        login_response = api_client.post(
+            "/api/v1/auth/sessions",
+            {"identifier": "cookie-auth@example.com", "password": "StartPass123!"},
+            format="json",
+        )
+        assert login_response.status_code == 200
+        assert login_response.cookies["access_token"]["httponly"]
+        assert login_response.cookies["refresh_token"]["httponly"]
+
+        refresh_response = api_client.post("/api/v1/auth/token-exchanges", {}, format="json")
+        assert refresh_response.status_code == 200
+        assert "accessToken" in refresh_response.json()
+
+        # No force_authenticate and no Authorization header: IsAuthenticated uses access cookie.
+        logout_response = api_client.post("/api/v1/auth/session-revocations", {}, format="json")
+        assert logout_response.status_code == 200
+        assert "access_token" in logout_response.cookies
+        assert "refresh_token" in logout_response.cookies
+
     def test_AUTH_UC_04(self, api_client):
         """Password change invalidates existing refresh tokens and requires re-login."""
         user = User.objects.create_user(

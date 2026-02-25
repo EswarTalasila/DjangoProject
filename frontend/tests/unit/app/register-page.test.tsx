@@ -105,7 +105,7 @@ describe("Register page", () => {
     expect(screen.getByText("atorres0")).toBeInTheDocument();
   });
 
-  it("submits teacher local registration and stores auth cookies", async () => {
+  it("submits teacher local registration and stores display-name cookie", async () => {
     mockApiPost.mockResolvedValueOnce({
       data: { valid: true, code_type: "TEACHER", context: {} },
     });
@@ -161,7 +161,7 @@ describe("Register page", () => {
     const secondPayload = mockApiPost.mock.calls[1][1];
     expect(secondPayload).not.toHaveProperty("name");
     expect(secondPayload).not.toHaveProperty("username");
-    expect(mockCookiesSet).toHaveBeenCalledWith("access_token", "access-token", { expires: 1 });
+    expect(mockCookiesSet).toHaveBeenCalledWith("user_name", "Morgan Blake", { expires: 1 });
     expect(mockPush).toHaveBeenCalledWith("/dashboard");
   });
 

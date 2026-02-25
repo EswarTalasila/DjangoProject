@@ -38,6 +38,7 @@ from typing import Any, cast
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import status
@@ -121,6 +122,58 @@ from .services import (
 User = get_user_model()
 logger = logging.getLogger(__name__)
 USERNAME_IMMUTABLE_DETAIL = "username is system-managed and must not be provided"
+ACCESS_COOKIE_NAME = "access_token"
+REFRESH_COOKIE_NAME = "refresh_token"
+AUTH_COOKIE_SAMESITE = "Lax"
+
+
+def _cookie_secure() -> bool:
+    return bool(getattr(settings, "ENVIRONMENT", "") == "production")
+
+
+def _set_auth_cookies(
+    response: Response, *, access_token: str | None = None, refresh_token: str | None = None
+) -> Response:
+    """Attach HttpOnly auth cookies to a response."""
+    cookie_kwargs = {
+        "httponly": True,
+        "secure": _cookie_secure(),
+        "samesite": AUTH_COOKIE_SAMESITE,
+        "path": "/",
+    }
+    if access_token is not None:
+        access_max_age = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
+        response.set_cookie(
+            ACCESS_COOKIE_NAME,
+            access_token,
+            max_age=access_max_age,
+            **cookie_kwargs,
+        )
+    if refresh_token is not None:
+        refresh_max_age = int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds())
+        response.set_cookie(
+            REFRESH_COOKIE_NAME,
+            refresh_token,
+            max_age=refresh_max_age,
+            **cookie_kwargs,
+        )
+    return response
+
+
+def _clear_auth_cookies(response: Response) -> Response:
+    """Expire auth cookies from the client."""
+    response.delete_cookie(ACCESS_COOKIE_NAME, path="/", samesite=AUTH_COOKIE_SAMESITE)
+    response.delete_cookie(REFRESH_COOKIE_NAME, path="/", samesite=AUTH_COOKIE_SAMESITE)
+    return response
+
+
+def _extract_refresh_token(request) -> str | None:
+    """Read refresh token from request body first, then cookie fallback."""
+    body_token = request.data.get("refreshToken") if isinstance(request.data, dict) else None
+    if isinstance(body_token, str) and body_token.strip():
+        return body_token
+    cookie_token = request.COOKIES.get(REFRESH_COOKIE_NAME)
+    return cookie_token if cookie_token else None
 
 
 def _identifier_throttle_response(scope: str, identifier: str) -> Response:
@@ -224,7 +277,10 @@ def _register_local(request, payload):
         body["courseId"] = enrollment.course_id
         body["createdNewUser"] = True
         body["alreadyEnrolled"] = False
-        return Response(body, status=status.HTTP_201_CREATED)
+        response = Response(body, status=status.HTTP_201_CREATED)
+        return _set_auth_cookies(
+            response, access_token=str(refresh.access_token), refresh_token=str(refresh)
+        )
 
     try:
         user = redeem_non_student_local_invite(validated)
@@ -237,7 +293,10 @@ def _register_local(request, payload):
     body["createdNewUser"] = True
     body["alreadyEnrolled"] = False
     body["courseId"] = None
-    return Response(body, status=status.HTTP_201_CREATED)
+    response = Response(body, status=status.HTTP_201_CREATED)
+    return _set_auth_cookies(
+        response, access_token=str(refresh.access_token), refresh_token=str(refresh)
+    )
 
 
 def _register_oauth(request, payload):
@@ -288,7 +347,10 @@ def _register_oauth(request, payload):
     body["courseId"] = None
     body["createdNewUser"] = True
     body["alreadyEnrolled"] = False
-    return Response(body, status=status.HTTP_201_CREATED)
+    response = Response(body, status=status.HTTP_201_CREATED)
+    return _set_auth_cookies(
+        response, access_token=str(refresh.access_token), refresh_token=str(refresh)
+    )
 
 
 @api_view(["POST"])
@@ -510,7 +572,8 @@ def login(request):
     clear_identifier_failures("login", identifier)
     refresh = RefreshToken.for_user(user)
     body = build_user_response(user, str(refresh.access_token), str(refresh))
-    return Response(body, status=status.HTTP_200_OK)
+    response = Response(body, status=status.HTTP_200_OK)
+    return _set_auth_cookies(response, access_token=str(refresh.access_token), refresh_token=str(refresh))
 
 
 @api_view(["GET"])
@@ -535,30 +598,39 @@ def current_user_profile(request):
 @throttle_classes([AnonAuthThrottle])
 def refresh(request):
     """Exchange a refresh token for a new access token."""
-    serializer = RefreshTokenSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
+    refresh_token = _extract_refresh_token(request)
+    if not refresh_token:
+        serializer = RefreshTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        refresh_token = serializer.validated_data["refreshToken"]
     try:
-        token = RefreshToken(serializer.validated_data["refreshToken"])
+        token = RefreshToken(refresh_token)
     except TokenError:
         return Response({"detail": "Invalid refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
-    return Response(
+    response = Response(
         {
             "accessToken": str(token.access_token),
             "tokenType": "Bearer",
         },
         status=status.HTTP_200_OK,
     )
+    return _set_auth_cookies(response, access_token=str(token.access_token))
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def logout(request):
     """Invalidate a refresh token and end the current session."""
-    serializer = RefreshTokenSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    if not blacklist_refresh_token(serializer.validated_data["refreshToken"]):
+    refresh_token = _extract_refresh_token(request)
+    if not refresh_token:
+        serializer = RefreshTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        refresh_token = serializer.validated_data["refreshToken"]
+
+    if not blacklist_refresh_token(refresh_token):
         return Response({"detail": "Invalid refresh token."}, status=status.HTTP_400_BAD_REQUEST)
-    return Response({"message": "Logged out."}, status=status.HTTP_200_OK)
+    response = Response({"message": "Logged out."}, status=status.HTTP_200_OK)
+    return _clear_auth_cookies(response)
 
 
 @api_view(["PATCH"])
@@ -704,7 +776,8 @@ def login_with_google(request):
     clear_identifier_failures("oauth-login", oauth_identifier)
     refresh = RefreshToken.for_user(user)
     body = build_user_response(user, str(refresh.access_token), str(refresh))
-    return Response(body, status=status.HTTP_200_OK)
+    response = Response(body, status=status.HTTP_200_OK)
+    return _set_auth_cookies(response, access_token=str(refresh.access_token), refresh_token=str(refresh))
 
 
 @api_view(["POST"])
@@ -1080,4 +1153,3 @@ def revoke_sudo(request, grant_id: int):
 def me(request):
     role = primary_role(request.user);
     return Response({"role":role});
-

@@ -221,8 +221,7 @@ function RegisterPageContent() {
             const res = await api.post("/registration/accounts", payload);
             const responseData = res.data as RegisterResponse;
 
-            const { accessToken, role, name } = responseData;
-            Cookies.set("access_token", accessToken, { expires: 1 });
+            const { name } = responseData;
             Cookies.set("user_name", name || "User", { expires: 1 });
 
             toast.success("Account created successfully!");
@@ -260,8 +259,7 @@ function RegisterPageContent() {
             const res = await api.post("/registration/accounts", payload);
             const responseData = res.data as RegisterResponse;
 
-            const { accessToken, role, name } = responseData;
-            Cookies.set("access_token", accessToken, { expires: 1 });
+            const { name } = responseData;
             Cookies.set("user_name", name || "User", { expires: 1 });
 
             toast.success("Account created with Google!");

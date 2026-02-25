@@ -57,16 +57,13 @@ function LoginPageContent() {
 
   // Shared success handler for both password and Google login
   const handleLoginSuccess = (data: LoginSuccessPayload) => {
-    const { accessToken, role, name } = data;
+    const { role, name } = data;
     if (role === "ADMIN") {
-      Cookies.remove("access_token");
-      Cookies.remove("refresh_token");
       Cookies.remove("user_name");
       setAdminBlocked(true);
       return;
     }
 
-    Cookies.set("access_token", accessToken, { expires: 1 });
     Cookies.set("user_name", name || "Instructor", { expires: 1 });
 
     router.push("/dashboard");
