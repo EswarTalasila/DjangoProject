@@ -1,24 +1,20 @@
-import { Sidebar } from "@/components/layout/sidebar";
-import { cookies } from "next/headers"; // Import cookies
-import { redirect } from "next/navigation"; // Import redirect
+import { redirect } from "next/navigation";
+import { SidebarWrapper } from "@/components/layout/sidebarWrapper";
+import { getSessionProfile } from "@/lib/auth-session";
 
-export default async function CoursesLayout({ // Make this async
+export default async function CoursesLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // 1. Check for the token
-  const cookieStore = await cookies();
-  const token = cookieStore.get("access_token");
-
-  // 2. If no token exists, redirect to login
-  if (!token) {
+  const profile = await getSessionProfile();
+  if (!profile) {
     redirect("/login");
   }
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
-      <Sidebar />
+      <SidebarWrapper />
       <div className="flex flex-col flex-1">
         <header className="h-16 border-b bg-white flex items-center justify-between px-8">
           <h2 className="text-sm font-medium text-slate-500 uppercase tracking-wider">

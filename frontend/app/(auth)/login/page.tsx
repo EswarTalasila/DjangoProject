@@ -18,7 +18,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, AlertCircle } from "lucide-react";
-import { ApiError } from "next/dist/server/api-utils";
 
 const loginSchema = z.object({
   identifier: z.string().min(1, "Identifier is required"),
