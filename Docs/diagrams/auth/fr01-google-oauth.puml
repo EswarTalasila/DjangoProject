@@ -1,0 +1,116 @@
+@startuml
+!theme plain
+skinparam sequenceArrowThickness 1.5
+skinparam sequenceParticipantBorderColor #333
+skinparam sequenceLifeLineBorderColor #999
+skinparam noteBorderColor #CCC
+skinparam noteBackgroundColor #FEFCE8
+skinparam sequenceGroupBorderColor #666
+skinparam defaultFontSize 11
+
+title **FR-01: Google OAuth Login**\nPOST /api/v1/auth/sessions/oauth\n<size:10>No throttle decorator (per-identifier throttle only)</size>
+
+actor       "Client"        as C
+participant "Frontend\n(Next.js)"   as FE  #E8F4FD
+participant "OAuthView\n(views.py:579)"    as V  #E8F0E8
+participant "Google API\nhttps://googleapis.com\n/oauth2/v3/userinfo" as G  #FFF8E1
+participant "AuthService\n(_auth.py)"       as A  #FFF3E0
+database    "PostgreSQL"    as DB #F3E5F5
+participant "SimpleJWT"     as JWT #FCE4EC
+
+== Google Token Acquisition ==
+C -> FE : Click "Sign in with Google"
+FE -> G : @react-oauth/google\nuseGoogleLogin() flow
+G --> FE : access_token (Google OAuth2)
+
+== Request ==
+FE -> V : POST /api/v1/auth/sessions/oauth\n**{accessToken: "ya29..."}**
+
+== Google Token Verification ==
+V -> G : GET /oauth2/v3/userinfo\nAuthorization: Bearer {accessToken}\nTimeout: 10s
+alt #FFE0E0 network error / timeout / invalid token
+  G --> V : HTTP error or timeout
+  V --> FE : **401** {"detail": "Access token verification failed."}
+  FE --> C : Show error
+end
+G --> V : **200** {sub, email, email_verified, name, picture}
+note right of V
+  Extract from Google response:
+  - subject = userinfo["sub"] (Google user ID)
+  - email = userinfo["email"]
+  Both must be non-empty strings
+end note
+alt #FFE0E0 missing sub or email
+  V --> FE : **401** {"detail": "Access token verification failed."}
+  FE --> C : Show error
+end
+
+== Per-Identifier Rate Limiting ==
+V -> A : check_identifier_throttle(\n  "oauth-login",\n  "oauth:{normalized_email}")
+alt #FFE0E0 5+ failures in 900s
+  V --> FE : **429** Too many attempts
+  FE --> C : Show rate limit
+end
+
+== Account Resolution ==
+V -> DB : SELECT * FROM accounts_oauthaccount\nWHERE provider='GOOGLE'\n  AND subject={sub}
+
+alt existing OAuth account found
+  DB --> V : oauth_account (with .user FK)
+  V -> DB : primary_role(oauth_account.user)
+  alt #FFE0E0 user role is STUDENT
+    V -> A : register_identifier_failure(...)
+    V --> FE : **403** {"detail": "Google OAuth is not\nsupported for student accounts."}
+    FE --> C : Show restriction
+  end
+  V -> DB : UPDATE accounts_oauthaccount\nSET email={email},\n    last_login_at=NOW()
+  V -> V : user = oauth_account.user
+
+else #F5F5F5 no OAuth account — try email/username match
+  V -> DB : SELECT * FROM accounts_user\nWHERE email ILIKE {email}
+  alt no email match
+    V -> DB : SELECT * FROM accounts_user\nWHERE username ILIKE {email}\n(legacy username-as-email)
+  end
+  alt #FFE0E0 no user found at all
+    V -> A : register_identifier_failure(...)
+    V --> FE : **401** {"detail": "Invalid identifier or password."}
+    FE --> C : Show "no account" error
+  end
+  V -> DB : primary_role(found_user)
+  alt #FFE0E0 user role is STUDENT
+    V -> A : register_identifier_failure(...)
+    V --> FE : **403** {"detail": "Google OAuth is not\nsupported for student accounts."}
+    FE --> C : Show restriction
+  end
+  note right of V
+    Link Google account to existing user:
+    Backfill email if user.email is blank
+  end note
+  V -> DB : UPDATE accounts_user SET email={email}\nWHERE id={user.id} AND email IS NULL
+  V -> DB : INSERT INTO accounts_oauthaccount\n(user_id, provider='GOOGLE',\n subject={sub}, email={email})\nON CONFLICT(provider, subject)\nDO UPDATE SET email={email}
+  V -> V : user = found_user
+end
+
+== Success: Token Generation ==
+V -> A : clear_identifier_failures("oauth-login", ...)
+V -> JWT : RefreshToken.for_user(user)
+JWT -> DB : INSERT INTO outstandingtoken
+V -> A : build_user_response(user, access, refresh)
+
+V --> FE : **200** OK
+note right of V
+  Response body:
+  {
+    "accessToken": "eyJ...",
+    "tokenType": "Bearer",
+    "role": "TEACHER|RESEARCHER",
+    "id": "456",
+    "username": "normalized",
+    "name": "Display Name",
+    "email": "user@gmail.com"
+  }
+  (Students never reach this point)
+end note
+FE -> FE : Set cookies + redirect /dashboard
+
+@enduml

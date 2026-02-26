@@ -1,0 +1,194 @@
+@startuml
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam classFontSize 12
+skinparam classAttributeFontSize 10
+skinparam classBorderColor #333
+skinparam classBackgroundColor #FAFAFA
+skinparam arrowColor #666
+skinparam packageBorderColor #999
+skinparam packageBackgroundColor #F8F8F8
+skinparam defaultFontSize 10
+
+title **FR-01: Auth Domain — Class Diagram**\n<size:10>Service layer, views, permissions, and dependencies</size>
+
+package "views.py" as views #E8F0E8 {
+  class "Auth Views" as AuthViews <<functions>> {
+    --
+    + login(request) : Response
+      POST /auth/sessions
+      [AllowAny, AnonAuthThrottle]
+    + login_with_google(request) : Response
+      POST /auth/sessions/oauth
+      [AllowAny, AnonAuthThrottle]
+    + refresh(request) : Response
+      POST /auth/token-exchanges
+      [AllowAny, AnonAuthThrottle]
+    + logout(request) : Response
+      POST /auth/session-revocations
+      [IsAuthenticated]
+    + change_password(request) : Response
+      PATCH /auth/password
+      [IsAuthenticated]
+    --
+    + issue_password_reset_code_view(request)
+      POST /auth/password-reset-codes
+      [IsTeacherOrAbove]
+    + verify_reset_code(request) : Response
+      POST /auth/reset-code-validations
+      [AllowAny, AnonBurstThrottle]
+    + complete_reset_code(request) : Response
+      POST /auth/password-resets
+      [AllowAny, AnonBurstThrottle]
+    --
+    - _google_userinfo(access_token) : dict
+    - _identifier_throttle_response(scope, id)
+  }
+}
+
+package "services/" as svc #FFF3E0 {
+  class "AuthService\n(_auth.py)" as Auth {
+    --
+    + build_user_response(user, access,
+      refresh?) : dict
+    + authenticate_user(username,
+      password) : User | None
+    + find_user_by_identifier(
+      identifier) : User | None
+    + invalidate_user_sessions(
+      user) : int
+    + blacklist_refresh_token(
+      refresh_token) : bool
+    + link_or_create_oauth_account(
+      user, subject, email) : OAuthAccount
+  }
+
+  class "PasswordResetService\n(_password_reset.py)" as PwReset {
+    --
+    + issue_password_reset_code(
+      issuer, target_user_id)
+      : (Request, str)  «atomic»
+    + verify_password_reset_code(
+      identifier, reset_code)
+      : Code | None
+    + complete_password_reset(
+      identifier, reset_code,
+      new_password) : User  «atomic»
+    + cleanup_temporary_reset_codes(
+      now?) : dict  «atomic»
+    --
+    - _authorize_reset_issuance(
+      issuer, target) : None
+    - _expire_open_reset_requests(
+      target_user, reviewer) : None
+    - _teacher_can_issue_for_student(
+      teacher, student) : bool
+  }
+
+  class "Utils\n(_utils.py)" as Utils {
+    --
+    **Constants:**
+    LOGIN_RATE_LIMIT_ATTEMPTS = 5
+    LOGIN_RATE_LIMIT_WINDOW = 900s
+    DEFAULT_RESET_CODE_WINDOW = 30min
+    --
+    + password_strength_errors(
+      password) : list[str]
+    + check_identifier_throttle(
+      scope, identifier) : bool
+    + register_identifier_failure(
+      scope, identifier) : None
+    + clear_identifier_failures(
+      scope, identifier) : None
+    + identifier_throttle_retry_after(
+      scope, identifier) : int
+    + identifier_allowed_for_user(
+      identifier, user) : bool
+    + normalize_username_identifier(
+      username) : str
+    + identifier_in_use(
+      identifier, exclude?) : bool
+    --
+    - _hash_secret_token(value) : str
+    - _generate_secret_token(
+      prefix, nbytes) : str
+  }
+}
+
+package "core/" as core #E8F4FD {
+  class "Permissions\n(permissions.py)" as Perms {
+    --
+    + primary_role(user) : str
+    + has_role(user, role) : bool
+    + has_any_role(user, roles) : bool
+    + has_sudo_permission(
+      user, permission) : bool
+    --
+    «classes»
+    IsTeacherOrAbove
+    IsResearcherOrAdmin
+    IsAuthenticated (DRF)
+    AllowAny (DRF)
+  }
+
+  class "Throttles\n(throttles.py)" as Throttles {
+    --
+    AnonAuthThrottle
+      scope: "anon_auth" (20/min)
+    AnonBurstThrottle
+      scope: "anon_burst" (5/min)
+  }
+}
+
+package "SimpleJWT" as jwt #FCE4EC {
+  class "RefreshToken" as RT {
+    --
+    + for_user(user) : RefreshToken
+    + access_token : AccessToken
+    + blacklist() : BlacklistedToken
+  }
+
+  class "OutstandingToken" as OT {
+    user_id, jti, token,
+    created_at, expires_at
+  }
+
+  class "BlacklistedToken" as BT {
+    token_id → OutstandingToken
+    blacklisted_at
+  }
+}
+
+' === Dependencies ===
+
+AuthViews --> Auth : "authenticate,\nbuild response,\ninvalidate sessions"
+AuthViews --> PwReset : "issue, verify,\ncomplete reset"
+AuthViews --> Utils : "password_strength_errors,\ncheck_identifier_throttle"
+AuthViews --> Perms : "permission classes"
+AuthViews --> Throttles : "throttle classes"
+AuthViews --> RT : "token generation"
+
+PwReset --> Auth : "find_user_by_identifier"
+PwReset --> Utils : "hash tokens,\ngenerate tokens,\npassword_strength_errors"
+PwReset --> Perms : "primary_role,\nhas_sudo_permission"
+
+Auth --> Perms : "primary_role"
+Auth --> Utils : "normalize_username"
+Auth ..> OT : "queries for\nsession invalidation"
+Auth ..> BT : "creates on\nlogout/invalidate"
+Auth ..> RT : "blacklist()"
+
+RT ..> OT : "creates on\nfor_user()"
+RT ..> BT : "creates on\nblacklist()"
+
+note right of PwReset
+  **Authorization tree:**
+  1. Self-issuance blocked (all roles)
+  2. Admin targets blocked
+  3. Admin → any non-admin
+  4. Teacher → enrolled students only
+  5. Researcher → teachers (default)
+     + students/researchers (with sudo)
+end note
+
+@enduml

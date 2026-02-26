@@ -1,0 +1,78 @@
+@startuml
+!theme plain
+skinparam stateBorderColor #333
+skinparam stateBackgroundColor #FAFAFA
+skinparam stateFontSize 12
+skinparam arrowColor #666
+skinparam defaultFontSize 10
+skinparam noteBackgroundColor #FEFCE8
+skinparam noteBorderColor #CCC
+
+title **FR-01: PasswordResetCode — State Diagram**\n<size:10>Code lifecycle: UNUSED → USED or EXPIRED → DELETED</size>
+
+state "UNUSED" as unused #C8E6C9 {
+  unused : used_at = NULL
+  unused : expires_at > now
+  unused : Hash matches valid
+  unused :  APPROVED request
+}
+
+state "USED" as used #B3E5FC {
+  used : used_at = <timestamp>
+  used : Password was
+  used :  successfully reset
+  used : One-time use enforced
+}
+
+state "EXPIRED (functionally)" as expired #FFCDD2 {
+  expired : expires_at <= now
+  expired : Query filter on
+  expired :  status=APPROVED
+  expired :  won't match
+}
+
+state "DELETED (row removed)" as deleted #E0E0E0 {
+  deleted : Physical deletion
+  deleted : by cleanup job
+}
+
+[*] --> unused : issue_password_reset_code()\nINSERT with used_at=NULL,\ncode_hash=SHA256(plaintext),\nexpires_at=request.expires_at
+
+unused --> used : **complete_password_reset()**\nSET used_at = NOW()\n(within @transaction.atomic\n + SELECT FOR UPDATE)\nPassword updated, code consumed
+
+unused --> expired : **Time expires**\nexpires_at <= now\n(detected on next lookup)
+
+used --> deleted : **cleanup_temporary_reset_codes()**\nDELETE FROM password_reset_codes\nWHERE used_at IS NOT NULL
+
+expired --> deleted : **cleanup_temporary_reset_codes()**\nDELETE FROM password_reset_codes\nWHERE request.status = EXPIRED
+
+note right of unused
+  **One-time use enforcement:**
+  complete_password_reset() sets
+  used_at = NOW() within an atomic
+  transaction with SELECT FOR UPDATE.
+
+  Future queries filter on
+  used_at IS NULL, so a used
+  code can never match again.
+end note
+
+note right of used
+  **Hashing:** SHA-256 hexdigest
+  (not HMAC — simpler than
+   registration code hashing)
+  Plaintext format: RESET-{24 hex}
+  Only hash stored in DB.
+end note
+
+note bottom of deleted
+  **Relationship:**
+  PasswordResetCode has a OneToOne FK
+  to PasswordResetRequest. When the
+  request expires, its code becomes
+  functionally dead. The cleanup job
+  physically deletes the code row
+  (CASCADE from request deletion).
+end note
+
+@enduml

@@ -1,0 +1,98 @@
+@startuml
+!theme plain
+skinparam sequenceArrowThickness 1.5
+skinparam sequenceParticipantBorderColor #333
+skinparam sequenceLifeLineBorderColor #999
+skinparam noteBorderColor #CCC
+skinparam noteBackgroundColor #FEFCE8
+skinparam sequenceGroupBorderColor #666
+skinparam defaultFontSize 11
+
+title **FR-02: Registration Code Validation**\nPOST /api/v1/registration/code-validations\n<size:10>Auth: AllowAny | Throttle: AnonAuthThrottle (20/min)</size>
+
+actor       "User"           as C
+participant "Frontend\n(Next.js)"      as FE  #E8F4FD
+participant "validate_registration\n_code_view\n(views.py:296)"      as V  #E8F0E8
+participant "RegistrationService\n(_registration.py)" as RS  #FFF3E0
+participant "Utils\n(_utils.py)"       as U   #FFF3E0
+database    "PostgreSQL"               as DB  #F3E5F5
+
+== Request ==
+C -> FE : Enter registration code
+FE -> V : POST /api/v1/registration/\ncode-validations\n**{code: "REG-A1B2C3..."}**
+
+== Serializer Validation ==
+V -> V : RegistrationCodeValidateInput\nSerializer(data=request.data)
+note right of V
+  Fields:
+  - code: CharField(max=64)
+end note
+alt #FFE0E0 missing code
+  V --> FE : **400** {"code": ["This field\nis required."]}
+end
+
+== Code Lookup (Non-Locking Read) ==
+V -> RS : validate_registration_code(code)
+RS -> U : normalize_registration_code_input(\n  code) → strip().upper()
+RS -> U : _registration_code_hashes_for_lookup(\n  code)
+note right of U
+  Builds HMAC-SHA256 hashes using:
+  [SECRET_KEY, *SECRET_KEY_FALLBACKS]
+  (deduped, order preserved)
+  Enables seamless key rotation.
+end note
+
+RS -> DB : SELECT * FROM registration_codes\nWHERE code_hash = {candidate_hash_1}
+note right of DB : Tries each candidate\nhash in sequence until\nmatch found or exhausted
+
+alt #FFE0E0 no matching code found
+  RS --> V : None
+  V --> FE : **400** {"detail": "Invalid or\nexpired code"}
+end
+
+RS -> RS : Validity checks:
+note right of RS
+  1. archived_at IS NULL? (not archived)
+  2. is_active == True? (not revoked)
+  3. expires_at > now? (not expired)
+  4. times_used < max_uses? (not exhausted)
+  All four must pass.
+end note
+alt #FFE0E0 any check fails
+  RS --> V : None
+  V --> FE : **400** {"detail": "Invalid or\nexpired code"}
+end
+
+RS --> V : record (valid RegistrationCode)
+
+== Build Context ==
+V -> V : Build response context
+alt record has course association
+  V -> V : context["course_name"]\n= record.course.name
+  alt course has teacher_profile with user
+    V -> V : context["teacher_name"]\n= teacher_profile.user.name
+  end
+end
+
+== Response ==
+V --> FE : **200** OK
+note right of V
+  {
+    "valid": true,
+    "code_type": "STUDENT"|"TEACHER"|"RESEARCHER",
+    "context": {
+      "course_name": "Physics 101",
+      "teacher_name": "Dr. Smith"
+    }
+  }
+end note
+note right of FE
+  Frontend uses code_type to:
+  - Show/hide email field
+    (required for non-students)
+  - Show/hide password fields
+    (hidden for OAuth path)
+  - Show course context for students
+end note
+
+@enduml
