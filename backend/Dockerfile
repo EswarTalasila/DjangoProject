@@ -57,9 +57,10 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /app/src /app/src
 COPY --from=builder /app/pyproject.toml /app/pyproject.toml
 
-# Create non-root user
+# Create non-root user and pre-create staticfiles directory
 RUN groupadd --system django && \
     useradd --system --gid django --create-home django && \
+    mkdir -p /app/staticfiles && \
     chown -R django:django /app
 
 USER django

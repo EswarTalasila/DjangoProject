@@ -31,6 +31,7 @@ const PUBLIC_ENDPOINTS = new Set([
 
 const api = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -44,32 +45,39 @@ function normalizeRequestPath(url?: string): string {
     : withoutQuery;
 }
 
-api.interceptors.request.use((config) => {
-  const path = normalizeRequestPath(config.url);
-  if (PUBLIC_ENDPOINTS.has(path)) {
-    return config;
-  }
-
-  const token = Cookies.get('access_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
 // Response Interceptor: Handle 401 (Unauthorized)
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config ?? {};
+    const path = normalizeRequestPath(originalRequest.url);
+    const retryState = originalRequest as { _retry?: boolean };
+
+    if (
+      error.response?.status === 401 &&
+      !retryState._retry &&
+      path !== '/auth/token-exchanges' &&
+      !PUBLIC_ENDPOINTS.has(path)
+    ) {
+      retryState._retry = true;
+      try {
+        await api.post('/auth/token-exchanges', {});
+        return api(originalRequest);
+      } catch {
+        Cookies.remove('user_name');
+        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+          window.location.href = '/login';
+        }
+      }
+    }
+
     if (error.response?.status === 401) {
-      // If token expired, clear it and redirect to login
-      Cookies.remove('access_token');
-      Cookies.remove('refresh_token');
-      // Optional: Redirect logic here
+      Cookies.remove('user_name');
       if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
         window.location.href = '/login';
       }
     }
+
     return Promise.reject(error);
   }
 );

@@ -76,7 +76,7 @@
 **Main Flow:**
 1. User enters identifier + password.
 2. System validates credentials.
-3. On success, return access token/session and role.
+3. On success, return user profile payload and set HttpOnly auth cookies.
 4. User is redirected to dashboard.
 
 **Postcondition:** Active session established.
@@ -223,13 +223,13 @@
 
 **Roles:** ALL
 
-**Preconditions:** Refresh token is valid and not expired.
+**Preconditions:** Refresh token (cookie or request body) is valid and not expired.
 
 **Trigger:** Client calls refresh endpoint.
 
-**Main Flow:** Validate refresh token → return new access token.
+**Main Flow:** Validate refresh token → set a new access-token cookie.
 
-**Postcondition:** Updated access token.
+**Postcondition:** Updated access-token cookie.
 
 **Role Coverage:**
 
@@ -631,14 +631,14 @@ Applies to all roles. Reset requests are removed; issuance always starts from an
 |--------|------|------|----|
 | POST | `/api/v1/auth/sessions` | None | AUTH-UC-01 |
 | POST | `/api/v1/auth/sessions/oauth` | None | AUTH-UC-02 |
-| POST | `/api/v1/auth/token-exchanges` | Refresh token | AUTH-UC-03 |
-| POST | `/api/v1/auth/session-revocations` | Access token | AUTH-UC-08 |
+| POST | `/api/v1/auth/token-exchanges` | Refresh token (cookie or body) | AUTH-UC-03 |
+| POST | `/api/v1/auth/session-revocations` | Authenticated session + refresh token (cookie or body) | AUTH-UC-08 |
 
 ### Password Change
 
 | Method | Path | Auth | UC |
 |--------|------|------|----|
-| PATCH | `/api/v1/auth/password` | Access token | AUTH-UC-04 |
+| PATCH | `/api/v1/auth/password` | Authenticated session | AUTH-UC-04 |
 
 ### Reset Code Issuance (Issuer-Driven)
 

@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Cookies from "js-cookie";
+import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { 
-  LayoutDashboard, 
-  BookOpen, 
-  FileText, 
-  CheckSquare, 
+import {
+  LayoutDashboard,
+  BookOpen,
+  FileText,
+  CheckSquare,
   Settings,
   LogOut
 } from "lucide-react";
@@ -89,8 +91,15 @@ export function Sidebar({ role, items }: SidebarProps) {
         <Button 
           variant="ghost" 
           className="w-full justify-start gap-3 text-red-600 hover:bg-[#a9c17f]"
-          onClick={() => {
+          onClick={async () => {
+            try {
+              await api.post("/auth/session-revocations", {});
+            } catch {
+              // Continue logout UX even if backend session revocation fails.
+            } finally {
+             Cookies.remove("user_name");
              window.location.href = "/login";
+            }
           }}
         >
           <LogOut className="h-5 w-5" />

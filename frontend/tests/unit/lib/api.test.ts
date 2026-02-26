@@ -17,24 +17,30 @@ describe("api client", () => {
   beforeEach(() => {
     Cookies.remove("access_token");
     Cookies.remove("refresh_token");
+    Cookies.remove("user_name");
     window.history.pushState({}, "", "/dashboard");
   });
 
   afterEach(() => {
     Cookies.remove("access_token");
     Cookies.remove("refresh_token");
+    Cookies.remove("user_name");
   });
 
-  it("attaches bearer token from cookie", async () => {
-    Cookies.set("access_token", "token-123");
+  it("retries protected requests after a successful refresh", async () => {
+    let secureAttempts = 0;
+    let refreshAttempts = 0;
 
     server.use(
       http.get(`${API_BASE}/secure`, ({ request }) => {
-        if (request.headers.get("authorization") === "Bearer token-123") {
-          return HttpResponse.json({ ok: true });
-        }
-
-        return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+        secureAttempts += 1;
+        expect(request.headers.get("authorization")).toBeNull();
+        if (secureAttempts === 1) return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+        return HttpResponse.json({ ok: true });
+      }),
+      http.post(`${API_BASE}/auth/token-exchanges`, () => {
+        refreshAttempts += 1;
+        return HttpResponse.json({ message: "Session refreshed." });
       }),
     );
 
@@ -43,11 +49,11 @@ describe("api client", () => {
 
     expect(response.status).toBe(200);
     expect(response.data).toEqual({ ok: true });
+    expect(secureAttempts).toBe(2);
+    expect(refreshAttempts).toBe(1);
   });
 
   it("does not attach bearer token on public auth/registration endpoints", async () => {
-    Cookies.set("access_token", "token-123");
-
     server.use(
       http.post(`${API_BASE}/auth/sessions`, ({ request }) => {
         if (!request.headers.get("authorization")) {
@@ -67,14 +73,18 @@ describe("api client", () => {
     expect(response.data).toEqual({ ok: true });
   });
 
-  it("clears auth cookies on 401 response", async () => {
-    Cookies.set("access_token", "expired-token");
-    Cookies.set("refresh_token", "stale-refresh");
+  it("clears user_name when refresh fails with 401", async () => {
+    Cookies.set("user_name", "Teacher User");
     window.history.pushState({}, "", "/login");
+    let refreshAttempts = 0;
 
     server.use(
       http.get(`${API_BASE}/unauthorized`, () => {
         return HttpResponse.json({ detail: "Unauthorized" }, { status: 401 });
+      }),
+      http.post(`${API_BASE}/auth/token-exchanges`, () => {
+        refreshAttempts += 1;
+        return HttpResponse.json({ detail: "Invalid refresh token." }, { status: 401 });
       }),
     );
 
@@ -83,7 +93,7 @@ describe("api client", () => {
       response: { status: 401 },
     });
 
-    expect(Cookies.get("access_token")).toBeUndefined();
-    expect(Cookies.get("refresh_token")).toBeUndefined();
+    expect(refreshAttempts).toBe(1);
+    expect(Cookies.get("user_name")).toBeUndefined();
   });
 });

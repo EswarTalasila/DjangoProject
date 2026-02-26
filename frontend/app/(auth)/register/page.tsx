@@ -36,9 +36,6 @@ type RegisterResponse = {
     username: string;
     name: string;
     email: string | null;
-    accessToken: string;
-    refreshToken: string;
-    tokenType: string;
     role: RoleType;
     id: string;
     courseId: number | null;
@@ -221,9 +218,7 @@ function RegisterPageContent() {
             const res = await api.post("/registration/accounts", payload);
             const responseData = res.data as RegisterResponse;
 
-            const { accessToken, role, name } = responseData;
-            Cookies.set("access_token", accessToken, { expires: 1 });
-            if (role) Cookies.set("user_role", role);
+            const { name } = responseData;
             Cookies.set("user_name", name || "User", { expires: 1 });
 
             toast.success("Account created successfully!");
@@ -261,9 +256,7 @@ function RegisterPageContent() {
             const res = await api.post("/registration/accounts", payload);
             const responseData = res.data as RegisterResponse;
 
-            const { accessToken, role, name } = responseData;
-            Cookies.set("access_token", accessToken, { expires: 1 });
-            if (role) Cookies.set("user_role", role);
+            const { name } = responseData;
             Cookies.set("user_name", name || "User", { expires: 1 });
 
             toast.success("Account created with Google!");

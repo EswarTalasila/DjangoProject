@@ -7,8 +7,9 @@ This module provides REST API views for:
 - Password management (set initial password, reset password)
 - Bulk user creation for administrators
 
-All endpoints return JSON responses. Authentication uses JWT tokens via
-SimpleJWT. Role-based access control is enforced via permission classes.
+All endpoints return JSON responses. Authentication uses JWT via SimpleJWT
+with HttpOnly cookie transport. Role-based access control is enforced via
+permission classes.
 
 Endpoints:
     POST /api/v1/auth/sessions          - Username/password authentication
@@ -28,17 +29,17 @@ Endpoints:
     PATCH /api/v1/users/{id}            - Update user (teacher/admin, sudoed researcher)
     DELETE /api/v1/users/{id}           - Delete user (teacher/admin, sudoed researcher)
     GET /api/v1/users/staff             - List staff (researcher/admin)
-    POST /api/v1/user-batches           - Bulk create users (admin only)
     POST /api/v1/sudo-grants            - Grant sudo permissions
     DELETE /api/v1/sudo-grants/{id}     - Revoke sudo grant
 """
 
 import json
 import logging
-from typing import Any, cast
+from typing import Any, Literal, cast
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import status
@@ -52,7 +53,6 @@ from core.pagination import paginate
 from core.permissions import (
     IsResearcherOrAdmin,
     IsTeacherOrAbove,
-    has_sudo_permission,
     primary_role,
 )
 from core.throttles import AnonAuthThrottle, AnonBurstThrottle
@@ -62,6 +62,7 @@ from .models import (
     OAuthProvider,
     RegistrationCodeType,
     Role,
+    SudoGrant,
     SudoPermission,
 )
 from .serializers import (
@@ -122,6 +123,60 @@ from .services import (
 User = get_user_model()
 logger = logging.getLogger(__name__)
 USERNAME_IMMUTABLE_DETAIL = "username is system-managed and must not be provided"
+ACCESS_COOKIE_NAME = "access_token"
+REFRESH_COOKIE_NAME = "refresh_token"
+AUTH_COOKIE_SAMESITE: Literal["Lax"] = "Lax"
+
+
+def _cookie_secure() -> bool:
+    return bool(getattr(settings, "ENVIRONMENT", "") == "production")
+
+
+def _set_auth_cookies(
+    response: Response, *, access_token: str | None = None, refresh_token: str | None = None
+) -> Response:
+    """Attach HttpOnly auth cookies to a response."""
+    if access_token is not None:
+        access_lifetime = cast("Any", settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"])
+        access_max_age = int(access_lifetime.total_seconds())
+        response.set_cookie(
+            ACCESS_COOKIE_NAME,
+            access_token,
+            max_age=access_max_age,
+            httponly=True,
+            secure=_cookie_secure(),
+            samesite=AUTH_COOKIE_SAMESITE,
+            path="/",
+        )
+    if refresh_token is not None:
+        refresh_lifetime = cast("Any", settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"])
+        refresh_max_age = int(refresh_lifetime.total_seconds())
+        response.set_cookie(
+            REFRESH_COOKIE_NAME,
+            refresh_token,
+            max_age=refresh_max_age,
+            httponly=True,
+            secure=_cookie_secure(),
+            samesite=AUTH_COOKIE_SAMESITE,
+            path="/",
+        )
+    return response
+
+
+def _clear_auth_cookies(response: Response) -> Response:
+    """Expire auth cookies from the client."""
+    response.delete_cookie(ACCESS_COOKIE_NAME, path="/", samesite=AUTH_COOKIE_SAMESITE)
+    response.delete_cookie(REFRESH_COOKIE_NAME, path="/", samesite=AUTH_COOKIE_SAMESITE)
+    return response
+
+
+def _extract_refresh_token(request) -> str | None:
+    """Read refresh token from request body first, then cookie fallback."""
+    body_token = request.data.get("refreshToken") if isinstance(request.data, dict) else None
+    if isinstance(body_token, str) and body_token.strip():
+        return body_token
+    cookie_token = request.COOKIES.get(REFRESH_COOKIE_NAME)
+    return cookie_token if cookie_token else None
 
 
 def _identifier_throttle_response(scope: str, identifier: str) -> Response:
@@ -220,12 +275,15 @@ def _register_local(request, payload):
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
         refresh = RefreshToken.for_user(user)
-        body = build_user_response(user, str(refresh.access_token), str(refresh))
+        body = build_user_response(user)
         body["message"] = "User registered"
         body["courseId"] = enrollment.course_id
         body["createdNewUser"] = True
         body["alreadyEnrolled"] = False
-        return Response(body, status=status.HTTP_201_CREATED)
+        response = Response(body, status=status.HTTP_201_CREATED)
+        return _set_auth_cookies(
+            response, access_token=str(refresh.access_token), refresh_token=str(refresh)
+        )
 
     try:
         user = redeem_non_student_local_invite(validated)
@@ -233,12 +291,15 @@ def _register_local(request, payload):
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
     refresh = RefreshToken.for_user(user)
-    body = build_user_response(user, str(refresh.access_token), str(refresh))
+    body = build_user_response(user)
     body["message"] = "User registered"
     body["createdNewUser"] = True
     body["alreadyEnrolled"] = False
     body["courseId"] = None
-    return Response(body, status=status.HTTP_201_CREATED)
+    response = Response(body, status=status.HTTP_201_CREATED)
+    return _set_auth_cookies(
+        response, access_token=str(refresh.access_token), refresh_token=str(refresh)
+    )
 
 
 def _register_oauth(request, payload):
@@ -284,12 +345,15 @@ def _register_oauth(request, payload):
         return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
 
     refresh = RefreshToken.for_user(user)
-    body = build_user_response(user, str(refresh.access_token), str(refresh))
+    body = build_user_response(user)
     body["message"] = "User registered"
     body["courseId"] = None
     body["createdNewUser"] = True
     body["alreadyEnrolled"] = False
-    return Response(body, status=status.HTTP_201_CREATED)
+    response = Response(body, status=status.HTTP_201_CREATED)
+    return _set_auth_cookies(
+        response, access_token=str(refresh.access_token), refresh_token=str(refresh)
+    )
 
 
 @api_view(["POST"])
@@ -502,11 +566,38 @@ def login(request):
         return Response(
             {"detail": "Invalid identifier or password."}, status=status.HTTP_401_UNAUTHORIZED
         )
+    if user.is_staff:
+        return Response(
+            {"detail": "Admin accounts must use Django admin."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
     clear_identifier_failures("login", identifier)
     refresh = RefreshToken.for_user(user)
-    body = build_user_response(user, str(refresh.access_token), str(refresh))
-    return Response(body, status=status.HTTP_200_OK)
+    body = build_user_response(user)
+    response = Response(body, status=status.HTTP_200_OK)
+    return _set_auth_cookies(
+        response,
+        access_token=str(refresh.access_token),
+        refresh_token=str(refresh),
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def current_user_profile(request):
+    """Return authenticated user profile for frontend role gating."""
+    return Response(
+        {
+            "id": str(request.user.id),
+            "name": request.user.name,
+            "username": request.user.username,
+            "email": request.user.email,
+            "role": primary_role(request.user),
+            "isStaff": bool(request.user.is_staff),
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["POST"])
@@ -514,30 +605,33 @@ def login(request):
 @throttle_classes([AnonAuthThrottle])
 def refresh(request):
     """Exchange a refresh token for a new access token."""
-    serializer = RefreshTokenSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
+    refresh_token = _extract_refresh_token(request)
+    if not refresh_token:
+        serializer = RefreshTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        refresh_token = serializer.validated_data["refreshToken"]
     try:
-        token = RefreshToken(serializer.validated_data["refreshToken"])
+        token = RefreshToken(cast("Any", refresh_token))
     except TokenError:
         return Response({"detail": "Invalid refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
-    return Response(
-        {
-            "accessToken": str(token.access_token),
-            "tokenType": "Bearer",
-        },
-        status=status.HTTP_200_OK,
-    )
+    response = Response({"message": "Session refreshed."}, status=status.HTTP_200_OK)
+    return _set_auth_cookies(response, access_token=str(token.access_token))
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def logout(request):
     """Invalidate a refresh token and end the current session."""
-    serializer = RefreshTokenSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    if not blacklist_refresh_token(serializer.validated_data["refreshToken"]):
+    refresh_token = _extract_refresh_token(request)
+    if not refresh_token:
+        serializer = RefreshTokenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        refresh_token = serializer.validated_data["refreshToken"]
+
+    if not blacklist_refresh_token(refresh_token):
         return Response({"detail": "Invalid refresh token."}, status=status.HTTP_400_BAD_REQUEST)
-    return Response({"message": "Logged out."}, status=status.HTTP_200_OK)
+    response = Response({"message": "Logged out."}, status=status.HTTP_200_OK)
+    return _clear_auth_cookies(response)
 
 
 @api_view(["PATCH"])
@@ -578,7 +672,7 @@ def change_password(request):
 @permission_classes([AllowAny])
 def login_with_google(request):
     """
-    Authenticate a user via Google OAuth, returning a JWT token.
+    Authenticate a user via Google OAuth and establish auth cookies.
 
     The frontend completes Google Sign-In and sends the access token here.
     This endpoint verifies the token with Google, then either:
@@ -596,11 +690,13 @@ def login_with_google(request):
 
     Returns:
         200: {
-            "accessToken": "eyJ...",  # JWT access token
-            "tokenType": "Bearer",
             "role": "STUDENT|TEACHER|RESEARCHER",
-            "id": "123"
+            "id": "123",
+            "username": "user123",
+            "name": "Display Name",
+            "email": "user@example.com"
         }
+        (also sets HttpOnly access_token + refresh_token cookies)
         400: "accessToken is required" if missing
         401: "Access token verification failed" if Google rejects token
         401: "Access token verification failed" if Google response is invalid
@@ -644,6 +740,11 @@ def login_with_google(request):
                 {"detail": "Google OAuth is not supported for student accounts."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        if account.user.is_staff:
+            return Response(
+                {"detail": "Admin accounts must use Django admin."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         account.email = email
         account.last_login_at = timezone.now()
         account.save(update_fields=["email", "last_login_at"])
@@ -664,6 +765,11 @@ def login_with_google(request):
                 {"detail": "Google OAuth is not supported for student accounts."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+        if found_user.is_staff:
+            return Response(
+                {"detail": "Admin accounts must use Django admin."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if not found_user.email:
             found_user.email = email
             found_user.save(update_fields=["email"])
@@ -672,8 +778,13 @@ def login_with_google(request):
 
     clear_identifier_failures("oauth-login", oauth_identifier)
     refresh = RefreshToken.for_user(user)
-    body = build_user_response(user, str(refresh.access_token), str(refresh))
-    return Response(body, status=status.HTTP_200_OK)
+    body = build_user_response(user)
+    response = Response(body, status=status.HTTP_200_OK)
+    return _set_auth_cookies(
+        response,
+        access_token=str(refresh.access_token),
+        refresh_token=str(refresh),
+    )
 
 
 @api_view(["POST"])
@@ -691,7 +802,7 @@ def issue_password_reset_code_view(request):
         )
     except ValueError as exc:
         detail = str(exc)
-        status_code = status.HTTP_404_NOT_FOUND
+        status_code: int = status.HTTP_404_NOT_FOUND
         if "not found" not in detail.lower():
             status_code = status.HTTP_400_BAD_REQUEST
         return Response({"detail": detail}, status=status_code)
@@ -778,7 +889,7 @@ def create_user(request):
         }
 
     Returns:
-        201: "User created successfully."
+        201: Created user object {id, name, username, email, role}
         400: "name is required" if missing
         403: "Forbidden" if requester lacks permission for requested role
 
@@ -810,10 +921,14 @@ def create_user(request):
     create_payload = dict(payload)
     create_payload["username"] = generate_managed_username(name=payload["name"])
     try:
-        create_user_from_payload(create_payload, role_override=requested_role, creator=request.user)
+        user = create_user_from_payload(
+            create_payload,
+            role_override=requested_role,
+            creator=request.user,
+        )
     except ValueError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
-    return Response({"detail": "User created successfully."}, status=status.HTTP_201_CREATED)
+    return Response(UserOutputSerializer(user).data, status=status.HTTP_201_CREATED)
 
 
 @api_view(["PATCH", "DELETE"])
@@ -875,7 +990,8 @@ def _edit_user(request, user_id: int):
     if payload.get("role"):
         set_single_role(user, payload["role"])
         ensure_profiles_for_role(user, payload["role"], creator=request.user)
-    return Response({"detail": "User edited successfully."}, status=status.HTTP_200_OK)
+    user.refresh_from_db()
+    return Response(UserOutputSerializer(user).data, status=status.HTTP_200_OK)
 
 
 def _delete_user(request, user_id: int):
@@ -893,11 +1009,10 @@ def _delete_user(request, user_id: int):
 @permission_classes([IsResearcherOrAdmin])
 def list_staff(request):
     """
-    List all non-student users (researchers, teachers, and admins).
+    List staff directory users (researchers and teachers).
 
-    Used by the admin/researcher dashboard to display staff members who can
-    create courses and manage students. Researchers have read access for
-    data oversight; admins have full access.
+    Used by researcher/admin dashboard views to display non-admin staff
+    accounts for management workflows.
 
     Returns:
         200: [
@@ -905,14 +1020,10 @@ def list_staff(request):
                 "id": 123,
                 "name": "Teacher Name",
                 "username": "teacher@example.com",
-                "role": "ROLE_TEACHER"  # Includes ROLE_ prefix for frontend
+                "role": "TEACHER"
             },
             ...
         ]
-
-    Note:
-        The role field includes the "ROLE_" prefix for compatibility
-        with the Angular frontend's role-based routing.
     """
     users = (
         User.objects.filter(roles__role__in=[Role.TEACHER, Role.RESEARCHER])
@@ -923,86 +1034,47 @@ def list_staff(request):
     return paginate(users, request, transform_fn=lambda u: UserOutputSerializer(u).data)
 
 
-@api_view(["POST"])
-@permission_classes([IsResearcherOrAdmin])
-def bulk_create(request):
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_sudo_grant(request):
     """
-    Create multiple user accounts in a single request.
+    Return current-user sudo grant permissions for frontend capability gating.
 
-    Processes a list of user objects and creates valid ones, silently
-    skipping invalid entries. Useful for importing users from CSV or
-    spreadsheet exports.
-
-    Request Body:
-        [
-            {
-                "name": "User One",
-                "email": "user1@example.com",
-                "role": "STUDENT",     # Optional, defaults to STUDENT
-                "password": "optional" # Optional
-            },
-            {
-                "name": "User Two",
-                "email": "user2@example.com"
-            },
-            ...
-        ]
-
-    Returns:
-        200: Integer count of successfully created users
-
-    Skipped Entries:
-        - Missing required fields (name)
-        - Duplicate email/identifier collisions
-        - Invalid serializer data
-        - Roles requester cannot create (non-admin trying to create admin)
-
-    Permission Rules:
-        - Admin (is_staff): Full access
-        - Researcher with BULK_CREATE sudo permission: Can bulk create
-
-    Note:
-        Failed entries are silently skipped. For detailed error reporting,
-        use individual create_user calls instead.
+    Admin users are treated as full capability.
+    Non-admin users return explicit SudoGrant state when present.
     """
-    # Researchers need BULK_CREATE sudo permission
-    if not request.user.is_staff and not has_sudo_permission(
-        request.user, SudoPermission.BULK_CREATE
-    ):
-        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
-    if not isinstance(request.data, list):
-        return Response({"detail": "Expected list of users"}, status=status.HTTP_400_BAD_REQUEST)
-    for entry in request.data:
-        if isinstance(entry, dict) and "username" in entry:
-            return Response(
-                {"detail": USERNAME_IMMUTABLE_DETAIL},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-    created = 0
-    for entry in request.data:
-        serializer = UserInputSerializer(data=entry)
-        if not serializer.is_valid():
-            continue
-        payload = serializer.validated_data
-        if not payload.get("name"):
-            continue
-        requested_role = payload.get("role") or Role.STUDENT
-        if not can_create_user(request.user, requested_role):
-            continue
-        if requested_role != Role.STUDENT and not payload.get("email"):
-            continue
-        if payload.get("email") and identifier_in_use(payload.get("email")):
-            continue
-        create_payload = dict(payload)
-        create_payload["username"] = generate_managed_username(name=payload["name"])
-        try:
-            create_user_from_payload(
-                create_payload, role_override=requested_role, creator=request.user
-            )
-            created += 1
-        except ValueError:
-            continue
-    return Response(created, status=status.HTTP_201_CREATED)
+    if request.user.is_staff:
+        return Response(
+            {
+                "hasSudo": True,
+                "canGrantSudo": True,
+                "permissions": [p.value for p in SudoPermission],
+                "isStaff": True,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    grant = SudoGrant.objects.filter(user=request.user).first()
+    if not grant:
+        return Response(
+            {
+                "hasSudo": False,
+                "canGrantSudo": False,
+                "permissions": [],
+                "isStaff": False,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    return Response(
+        {
+            "hasSudo": True,
+            "canGrantSudo": bool(grant.can_grant_sudo),
+            "permissions": grant.permissions,
+            "isStaff": False,
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(["POST"])
@@ -1087,10 +1159,3 @@ def revoke_sudo(request, grant_id: int):
         return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
     except PermissionError as e:
         return Response({"detail": str(e)}, status=status.HTTP_403_FORBIDDEN)
-    
-@api_view(["GET"]) 
-@permission_classes([IsAuthenticated])
-def me(request):
-    role = primary_role(request.user);
-    return Response({"role":role});
-

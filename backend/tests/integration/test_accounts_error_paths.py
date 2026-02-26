@@ -252,28 +252,6 @@ class TestAccountErrorPaths:
         assert response.status_code == 400
         assert response.data["detail"] == "Email already taken"
 
-    def test_bulk_create_requires_sudo_for_researcher(self, api_client):
-        """Researcher without BULK_CREATE sudo receives forbidden response."""
-
-        researcher = User.objects.create_user(
-            username="researcher-bulk-no-sudo",
-            email="researcher-bulk-no-sudo@example.com",
-            name="Researcher",
-            password="StartPass123!",
-        )
-        UserRole.objects.create(user=researcher, role=Role.RESEARCHER)
-        from accounts.models import ResearcherProfile
-
-        ResearcherProfile.objects.create(user=researcher)
-
-        api_client.force_authenticate(user=researcher)
-        response = api_client.post(
-            "/api/v1/user-batches",
-            [{"name": "X"}],
-            format="json",
-        )
-        assert response.status_code == 403
-
     def test_code_detail_patch_not_found(self, api_client):
         """Code transition endpoint returns 404 for unknown code id."""
 
@@ -524,7 +502,7 @@ class TestAccountErrorPaths:
         assert "method must be LOCAL or OAUTH" in response.json()["detail"]
 
     def test_registration_student_response_shape(self, api_client):
-        """Student registration returns complete unified response with JWT and null email."""
+        """Student registration returns unified response and sets auth cookies."""
 
         teacher = self._make_teacher("teacher-shape-student")
         course = Course.objects.create(
@@ -561,15 +539,14 @@ class TestAccountErrorPaths:
 
         # All required fields present
         assert payload["message"] == "User registered"
-        assert "accessToken" in payload
-        assert "refreshToken" in payload
-        assert payload["tokenType"] == "Bearer"
         assert payload["role"] == Role.STUDENT
         assert "id" in payload
         assert "username" in payload
         assert "name" in payload
         assert payload["createdNewUser"] is True
         assert payload["alreadyEnrolled"] is False
+        assert response.cookies["access_token"]["httponly"]
+        assert response.cookies["refresh_token"]["httponly"]
 
         # Student-specific: email null, courseId present
         assert payload["email"] is None or payload["email"] == ""
@@ -579,7 +556,7 @@ class TestAccountErrorPaths:
         assert "@" not in payload["username"]
 
     def test_registration_teacher_response_shape(self, api_client, researcher_user):
-        """Teacher registration returns complete unified response with email and null courseId."""
+        """Teacher registration returns unified response and sets auth cookies."""
 
         from accounts.models import RegistrationCode, RegistrationCodeType
 
@@ -612,15 +589,14 @@ class TestAccountErrorPaths:
 
         # All required fields present
         assert payload["message"] == "User registered"
-        assert "accessToken" in payload
-        assert "refreshToken" in payload
-        assert payload["tokenType"] == "Bearer"
         assert payload["role"] == Role.TEACHER
         assert "id" in payload
         assert "username" in payload
         assert "name" in payload
         assert payload["createdNewUser"] is True
         assert payload["alreadyEnrolled"] is False
+        assert response.cookies["access_token"]["httponly"]
+        assert response.cookies["refresh_token"]["httponly"]
 
         # Non-student: email present, courseId null
         assert payload["email"] == "shape-teacher@example.com"
@@ -942,7 +918,7 @@ class TestAccountErrorPaths:
     # --- Branch-coverage additions for views.py ---
 
     def test_edit_user_name_update(self, api_client, admin_user):
-        """Edit user name field is accepted and applied."""
+        """Edit user name field is accepted and returned in user object."""
 
         teacher = self._make_teacher("teacher-name-edit")
         api_client.force_authenticate(user=admin_user)
@@ -952,9 +928,13 @@ class TestAccountErrorPaths:
             format="json",
         )
         assert response.status_code == 200
+        body = response.json()
+        assert body["name"] == "Updated Name"
+        assert body["id"] == teacher.id
+        assert body["role"] == Role.TEACHER
 
     def test_edit_user_password_update(self, api_client, admin_user):
-        """Edit user password field triggers password change."""
+        """Edit user password field triggers password change; returns user object."""
 
         teacher = self._make_teacher("teacher-pw-edit")
         api_client.force_authenticate(user=admin_user)
@@ -964,9 +944,12 @@ class TestAccountErrorPaths:
             format="json",
         )
         assert response.status_code == 200
+        body = response.json()
+        assert body["id"] == teacher.id
+        assert "password" not in body
 
     def test_edit_user_role_change(self, api_client, admin_user):
-        """Edit user role change triggers role reassignment and profile creation."""
+        """Edit user role change triggers role reassignment; returns updated role."""
 
         from accounts.models import ResearcherProfile
 
@@ -978,6 +961,8 @@ class TestAccountErrorPaths:
             format="json",
         )
         assert response.status_code == 200
+        body = response.json()
+        assert body["role"] == Role.RESEARCHER
         assert ResearcherProfile.objects.filter(user=teacher).exists()
 
     def test_edit_user_email_required_non_student(self, api_client, admin_user):
@@ -1047,75 +1032,3 @@ class TestAccountErrorPaths:
         assert response.status_code == 200
         teacher.refresh_from_db()
         assert teacher.email == "teacher-no-email-oauth"
-
-    def test_bulk_create_skips_invalid_entries(self, api_client):
-        """Bulk create skips entries with missing fields and invalid roles."""
-
-        admin = User.objects.create_user(
-            username="admin-bulk-skip",
-            email="admin-bulk-skip@example.com",
-            name="Admin",
-            password="StartPass123!",
-            is_staff=True,
-        )
-        api_client.force_authenticate(user=admin)
-
-        response = api_client.post(
-            "/api/v1/user-batches",
-            [
-                # Missing name
-                {"email": "no-name@example.com"},
-                # Student create skipped (admin cannot create student via this matrix)
-                {"name": "Valid Student"},
-                # Valid researcher (admin can create)
-                {
-                    "name": "Valid Researcher",
-                    "role": "RESEARCHER",
-                    "email": "valid-researcher-bulk@example.com",
-                },
-                # Non-student without email (should be skipped)
-                {"name": "No Email", "role": "TEACHER"},
-            ],
-            format="json",
-        )
-        assert response.status_code == 201
-        assert response.data == 1
-
-    def test_bulk_create_rejects_username_field(self, api_client):
-        """Bulk create rejects caller-supplied username values."""
-
-        admin = User.objects.create_user(
-            username="admin-bulk-username-reject",
-            email="admin-bulk-username-reject@example.com",
-            name="Admin",
-            password="StartPass123!",
-            is_staff=True,
-        )
-        api_client.force_authenticate(user=admin)
-
-        response = api_client.post(
-            "/api/v1/user-batches",
-            [{"username": "caller-bulk", "name": "Bulk User"}],
-            format="json",
-        )
-        assert response.status_code == 400
-        assert response.data["detail"] == "username is system-managed and must not be provided"
-
-    def test_bulk_create_rejects_non_list(self, api_client):
-        """Bulk create rejects non-list body."""
-
-        admin = User.objects.create_user(
-            username="admin-bulk-nonlist",
-            email="admin-bulk-nonlist@example.com",
-            name="Admin",
-            password="StartPass123!",
-            is_staff=True,
-        )
-        api_client.force_authenticate(user=admin)
-
-        response = api_client.post(
-            "/api/v1/user-batches",
-            {"name": "not-a-list"},
-            format="json",
-        )
-        assert response.status_code == 400

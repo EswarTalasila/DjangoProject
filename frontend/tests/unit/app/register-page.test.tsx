@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -105,7 +105,7 @@ describe("Register page", () => {
     expect(screen.getByText("atorres0")).toBeInTheDocument();
   });
 
-  it("submits teacher local registration and stores auth cookies", async () => {
+  it("submits teacher local registration and stores display-name cookie", async () => {
     mockApiPost.mockResolvedValueOnce({
       data: { valid: true, code_type: "TEACHER", context: {} },
     });
@@ -161,7 +161,7 @@ describe("Register page", () => {
     const secondPayload = mockApiPost.mock.calls[1][1];
     expect(secondPayload).not.toHaveProperty("name");
     expect(secondPayload).not.toHaveProperty("username");
-    expect(mockCookiesSet).toHaveBeenCalledWith("access_token", "access-token", { expires: 1 });
+    expect(mockCookiesSet).toHaveBeenCalledWith("user_name", "Morgan Blake", { expires: 1 });
     expect(mockPush).toHaveBeenCalledWith("/dashboard");
   });
 
@@ -201,7 +201,9 @@ describe("Register page", () => {
 
     // Simulate Google auth success — triggers the name form
     await waitFor(() => expect(capturedGoogleOnSuccess).not.toBeNull());
-    capturedGoogleOnSuccess!({ access_token: "google-token-123" });
+    await act(async () => {
+      capturedGoogleOnSuccess!({ access_token: "google-token-123" });
+    });
 
     // Name form should appear — submit empty to trigger validation
     const completeBtn = await screen.findByRole("button", { name: "Complete Registration" });

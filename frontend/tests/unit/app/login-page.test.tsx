@@ -57,7 +57,7 @@ describe("Login page", () => {
     expect(link).toHaveAttribute("href", "http://localhost:8000/admin/");
   });
 
-  it("submits local login and stores auth cookies", async () => {
+  it("submits local login and stores display-name cookie", async () => {
     mockApiPost.mockResolvedValueOnce({
       data: { accessToken: "access-token", role: "TEACHER", name: "Morgan Blake" },
     });
@@ -76,8 +76,37 @@ describe("Login page", () => {
         password: "change-me",
       });
     });
-    expect(mockCookiesSet).toHaveBeenCalledWith("access_token", "access-token", { expires: 1 });
+    expect(mockCookiesSet).toHaveBeenCalledWith("user_name", "Morgan Blake", { expires: 1 });
     expect(mockPush).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("blocks admin login and shows admin-console guidance", async () => {
+    mockApiPost.mockRejectedValueOnce({
+      response: { data: { detail: "Admin accounts must use Django admin." } },
+    });
+
+    const LoginPage = await loadLoginPage();
+    render(<LoginPage />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Identifier"), "admin@example.com");
+    await user.type(screen.getByLabelText("Password"), "change-me");
+    await user.click(screen.getByRole("button", { name: "Sign In" }));
+
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith("/auth/sessions", {
+        identifier: "admin@example.com",
+        password: "change-me",
+      });
+    });
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockCookiesSet).not.toHaveBeenCalled();
+    expect(await screen.findByText("Admin accounts must use Django admin.")).toBeInTheDocument();
+    expect(await screen.findByText("Use Django Admin")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Django Admin" })).toHaveAttribute(
+      "href",
+      "http://localhost:8000/admin/",
+    );
   });
 
   it("maps field-level backend validation errors", async () => {

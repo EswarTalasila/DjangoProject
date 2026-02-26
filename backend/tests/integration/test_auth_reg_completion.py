@@ -110,6 +110,24 @@ class TestAuthRegCompletion:
             format="json",
         )
 
+    @staticmethod
+    def _assert_auth_cookies(response) -> None:
+        """Assert HttpOnly auth cookies are set on a response."""
+        assert "access_token" in response.cookies
+        assert "refresh_token" in response.cookies
+        assert response.cookies["access_token"]["httponly"]
+        assert response.cookies["refresh_token"]["httponly"]
+
+    @staticmethod
+    def _refresh_cookie_value(response) -> str:
+        """Return refresh token value from response cookies."""
+        return response.cookies["refresh_token"].value
+
+    @staticmethod
+    def _access_cookie_value(response) -> str:
+        """Return access token value from response cookies."""
+        return response.cookies["access_token"].value
+
     def _oauth_login(self, api_client, monkeypatch, *, subject: str, email: str):
         """Perform OAuth login with mocked Google userinfo response."""
         monkeypatch.setattr(
@@ -198,7 +216,7 @@ class TestAuthRegCompletion:
 
     # AUTH-UC-02 remaining tests
     def test_AUTH_UC_02(self, api_client, monkeypatch):
-        """Domain aggregator: OAuth login succeeds for admin, researcher, and teacher."""
+        """Domain aggregator: OAuth login succeeds for non-admin roles; admin is blocked."""
         admin = self._make_user(
             role="ADMIN",
             username="uc02-admin@example.com",
@@ -215,17 +233,23 @@ class TestAuthRegCompletion:
             email="uc02-teacher@example.com",
         )
 
+        # Admin OAuth blocked
+        admin_response = self._oauth_login(
+            api_client, monkeypatch, subject="uc02-sub-admin", email=admin.email
+        )
+        assert admin_response.status_code == 403
+
+        # Non-admin roles succeed
         for subject, email in [
-            ("uc02-sub-admin", admin.email),
             ("uc02-sub-researcher", researcher.email),
             ("uc02-sub-teacher", teacher.email),
         ]:
             response = self._oauth_login(api_client, monkeypatch, subject=subject, email=email)
             assert response.status_code == 200
-            assert "accessToken" in response.json()
+            self._assert_auth_cookies(response)
 
     def test_AUTH_UC_02_ADMIN(self, api_client, monkeypatch):
-        """Admin account can authenticate via OAuth."""
+        """Admin OAuth login is blocked with 403."""
         admin = self._make_user(
             role="ADMIN",
             username="uc02-admin-role@example.com",
@@ -237,8 +261,8 @@ class TestAuthRegCompletion:
             subject="uc02-admin-role-sub",
             email=admin.email,
         )
-        assert response.status_code == 200
-        assert response.json()["role"] == "ADMIN"
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Admin accounts must use Django admin."
 
     def test_AUTH_UC_02_RESEARCHER(self, api_client, monkeypatch):
         """Researcher account can authenticate via OAuth."""
@@ -285,7 +309,7 @@ class TestAuthRegCompletion:
 
     # AUTH-UC-03 / AUTH-CN-02 remaining tests
     def test_AUTH_UC_03_ADMIN(self, api_client):
-        """Admin can refresh an access token using a valid refresh token."""
+        """Admin password login is blocked; cannot obtain tokens to refresh."""
         admin = self._make_user(
             role="ADMIN",
             username="uc03-admin@example.com",
@@ -296,13 +320,8 @@ class TestAuthRegCompletion:
             identifier=admin.email,
             password="StartPass123!",
         )
-        assert login.status_code == 200
-        refresh = api_client.post(
-            "/api/v1/auth/token-exchanges",
-            {"refreshToken": login.json()["refreshToken"]},
-            format="json",
-        )
-        assert refresh.status_code == 200
+        assert login.status_code == 403
+        assert login.json()["detail"] == "Admin accounts must use Django admin."
 
     def test_AUTH_UC_03_RESEARCHER(self, api_client):
         """Researcher can refresh an access token using a valid refresh token."""
@@ -317,9 +336,10 @@ class TestAuthRegCompletion:
             password="StartPass123!",
         )
         assert login.status_code == 200
+        self._assert_auth_cookies(login)
         refresh = api_client.post(
             "/api/v1/auth/token-exchanges",
-            {"refreshToken": login.json()["refreshToken"]},
+            {"refreshToken": self._refresh_cookie_value(login)},
             format="json",
         )
         assert refresh.status_code == 200
@@ -337,9 +357,10 @@ class TestAuthRegCompletion:
             password="StartPass123!",
         )
         assert login.status_code == 200
+        self._assert_auth_cookies(login)
         refresh = api_client.post(
             "/api/v1/auth/token-exchanges",
-            {"refreshToken": login.json()["refreshToken"]},
+            {"refreshToken": self._refresh_cookie_value(login)},
             format="json",
         )
         assert refresh.status_code == 200
@@ -357,9 +378,10 @@ class TestAuthRegCompletion:
             password="StartPass123!",
         )
         assert login.status_code == 200
+        self._assert_auth_cookies(login)
         refresh = api_client.post(
             "/api/v1/auth/token-exchanges",
-            {"refreshToken": login.json()["refreshToken"]},
+            {"refreshToken": self._refresh_cookie_value(login)},
             format="json",
         )
         assert refresh.status_code == 200
@@ -377,8 +399,9 @@ class TestAuthRegCompletion:
             password="StartPass123!",
         )
         assert login.status_code == 200
-        access = AccessToken(login.json()["accessToken"])
-        refresh = RefreshToken(login.json()["refreshToken"])
+        self._assert_auth_cookies(login)
+        access = AccessToken(self._access_cookie_value(login))
+        refresh = RefreshToken(self._refresh_cookie_value(login))
         access_lifetime = access["exp"] - access["iat"]
         refresh_lifetime = refresh["exp"] - refresh["iat"]
         expected_access = int(settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"].total_seconds())
@@ -393,7 +416,8 @@ class TestAuthRegCompletion:
         """Shared role behavior for AUTH-UC-04 success path."""
         login = self._login(api_client, identifier=identifier, password=password)
         assert login.status_code == 200
-        refresh_token = login.json()["refreshToken"]
+        self._assert_auth_cookies(login)
+        refresh_token = self._refresh_cookie_value(login)
         user_id = login.json()["id"]
         user = User.objects.get(id=user_id)
         api_client.force_authenticate(user=user)
@@ -415,17 +439,18 @@ class TestAuthRegCompletion:
         assert refresh.status_code == 401
 
     def test_AUTH_UC_04_ADMIN(self, api_client):
-        """Admin can change password and old refresh tokens are invalidated."""
+        """Admin password login is blocked; cannot reach password change flow."""
         admin = self._make_user(
             role="ADMIN",
             username="uc04-admin@example.com",
             email="uc04-admin@example.com",
         )
-        self._assert_change_password_success(
+        login = self._login(
             api_client,
             identifier=admin.email,
             password="StartPass123!",
         )
+        assert login.status_code == 403
 
     def test_AUTH_UC_04_RESEARCHER(self, api_client):
         """Researcher can change password and old refresh tokens are invalidated."""
@@ -567,8 +592,10 @@ class TestAuthRegCompletion:
         )
         assert first.status_code == 200
         assert second.status_code == 200
-        refresh_1 = first.json()["refreshToken"]
-        refresh_2 = second.json()["refreshToken"]
+        self._assert_auth_cookies(first)
+        self._assert_auth_cookies(second)
+        refresh_1 = self._refresh_cookie_value(first)
+        refresh_2 = self._refresh_cookie_value(second)
 
         api_client.force_authenticate(user=teacher)
         change = api_client.patch(
@@ -683,7 +710,8 @@ class TestAuthRegCompletion:
         """Shared logout behavior for role-specific UC-08 tests."""
         login = self._login(api_client, identifier=identifier, password=password)
         assert login.status_code == 200
-        refresh_token = login.json()["refreshToken"]
+        self._assert_auth_cookies(login)
+        refresh_token = self._refresh_cookie_value(login)
         user = User.objects.get(id=login.json()["id"])
         api_client.force_authenticate(user=user)
         logout = api_client.post(
@@ -700,7 +728,7 @@ class TestAuthRegCompletion:
         assert invalidated.status_code == 401
 
     def test_AUTH_UC_08(self, api_client):
-        """Domain aggregator: logout invalidates sessions for all roles."""
+        """Domain aggregator: logout invalidates sessions for non-admin roles; admin is blocked."""
         admin = self._make_user(
             role="ADMIN",
             username="uc08-admin@example.com",
@@ -721,7 +749,10 @@ class TestAuthRegCompletion:
             username="uc08-student",
             email="uc08-student@example.com",
         )
-        self._assert_logout_roundtrip(api_client, identifier=admin.email, password="StartPass123!")
+        # Admin login blocked
+        admin_login = self._login(api_client, identifier=admin.email, password="StartPass123!")
+        assert admin_login.status_code == 403
+
         self._assert_logout_roundtrip(
             api_client,
             identifier=researcher.email,
@@ -737,13 +768,14 @@ class TestAuthRegCompletion:
         )
 
     def test_AUTH_UC_08_ADMIN(self, api_client):
-        """Admin can logout and invalidate refresh token."""
+        """Admin password login is blocked; cannot reach logout flow."""
         admin = self._make_user(
             role="ADMIN",
             username="uc08-admin-only@example.com",
             email="uc08-admin-only@example.com",
         )
-        self._assert_logout_roundtrip(api_client, identifier=admin.email, password="StartPass123!")
+        login = self._login(api_client, identifier=admin.email, password="StartPass123!")
+        assert login.status_code == 403
 
     def test_AUTH_UC_08_RESEARCHER(self, api_client):
         """Researcher can logout and invalidate refresh token."""

@@ -27,7 +27,6 @@ const loginSchema = z.object({
 type LoginForm = z.infer<typeof loginSchema>;
 type ApiError = { response?: { data?: unknown } };
 type LoginSuccessPayload = {
-  accessToken: string;
   role?: string;
   name?: string;
 };
@@ -48,6 +47,7 @@ function LoginPageContent() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
+  const [adminBlocked, setAdminBlocked] = useState(false);
 
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
@@ -56,16 +56,16 @@ function LoginPageContent() {
 
   // Shared success handler for both password and Google login
   const handleLoginSuccess = (data: LoginSuccessPayload) => {
-    const { accessToken, role, name } = data;
-    const admin_error = "Can't login as admin";
-    Cookies.set("access_token", accessToken, { expires: 1 });
-    if (role) Cookies.set("user_role", role);
-    if (role === "TEACHER" || role === "STUDENT" || role === "RESEARCHER") {
-       Cookies.set("user_name", name || "Instructor", { expires: 1 });
-        router.push("/dashboard");
-    } else {
-      handleLoginError(admin_error as ApiError);
-    }  
+    const { role, name } = data;
+    if (role === "ADMIN") {
+      Cookies.remove("user_name");
+      setAdminBlocked(true);
+      return;
+    }
+
+    Cookies.set("user_name", name || "Instructor", { expires: 1 });
+
+    router.push("/dashboard");
   };
 
   const handleLoginError = (error: ApiError) => {
@@ -107,6 +107,9 @@ function LoginPageContent() {
           ? detail
           : "Authentication failed. Please check your credentials.";
 
+    if (errorMessage === "Admin accounts must use Django admin.") {
+      setAdminBlocked(true);
+    }
     setGeneralError(errorMessage);
   };
 
@@ -114,6 +117,7 @@ function LoginPageContent() {
   const onSubmit = async (data: LoginForm) => {
     setIsLoading(true);
     setGeneralError(null);
+    setAdminBlocked(false);
     try {
       const res = await api.post("/auth/sessions", data);
       handleLoginSuccess(res.data);
@@ -128,6 +132,7 @@ function LoginPageContent() {
     onSuccess: async (tokenResponse) => {
       setIsLoading(true);
       setGeneralError(null);
+      setAdminBlocked(false);
       try {
         const res = await api.post("/auth/sessions/oauth", {
           accessToken: tokenResponse.access_token,
@@ -167,6 +172,19 @@ function LoginPageContent() {
             <AlertCircle className="h-4 w-4 text-red-600" />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>{generalError}</AlertDescription>
+          </Alert>
+        )}
+        {adminBlocked && (
+          <Alert className="bg-blue-50 text-blue-900 border-blue-200">
+            <AlertCircle className="h-4 w-4 text-blue-600" />
+            <AlertTitle>Use Django Admin</AlertTitle>
+            <AlertDescription>
+              Admin accounts use the Django admin site.{" "}
+              <a href={adminConsoleHref} className="underline underline-offset-4">
+                Open Django Admin
+              </a>
+              .
+            </AlertDescription>
           </Alert>
         )}
 
@@ -259,7 +277,7 @@ function LoginPageContent() {
           variant="outline"
       >
           {isLoading ? (
-              
+
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
             <svg
@@ -277,10 +295,10 @@ function LoginPageContent() {
               d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"
               ></path>
           </svg>
-          
+
           )}
           Continue with Google
-          
+
       </Button>
       </div>
 
