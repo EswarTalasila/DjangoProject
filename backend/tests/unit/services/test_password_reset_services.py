@@ -128,8 +128,21 @@ def test_issue_password_reset_code_teacher_scope_enforced():
     assert reset_request.requested_role == Role.STUDENT
     assert reset_code.startswith("RESET-")
 
-    with pytest.raises(PermissionError, match="Teachers can only issue"):
+    with pytest.raises(PermissionError, match="Permission denied"):
         issue_password_reset_code(issuer=teacher, target_user_id=teacher.id)
+
+
+@pytest.mark.django_db
+@pytest.mark.unit
+def test_issue_password_reset_code_blocks_self_issuance_for_all_roles():
+    """Self-issuance is denied for admin, researcher, and teacher issuers."""
+    admin = _make_admin("admin-self-target")
+    researcher = _make_researcher("researcher-self-target")
+    teacher = _make_teacher("teacher-self-target")
+
+    for issuer in (admin, researcher, teacher):
+        with pytest.raises(PermissionError, match="Permission denied"):
+            issue_password_reset_code(issuer=issuer, target_user_id=issuer.id)
 
 
 @pytest.mark.django_db

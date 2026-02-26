@@ -1,6 +1,6 @@
-import { redirect } from 'next/navigation';
-import { SidebarWrapper } from '@/components/layout/sidebarWrapper';
-import { getSessionProfile } from '@/lib/auth-session';
+import { redirect } from "next/navigation";
+import { SidebarWrapper } from "@/components/layout/sidebarWrapper";
+import { getSessionProfile } from "@/lib/auth-session";
 
 export default async function CoursesLayout({
   children,
@@ -9,7 +9,7 @@ export default async function CoursesLayout({
 }) {
   const profile = await getSessionProfile();
   if (!profile) {
-    redirect('/login');
+    redirect("/login");
   }
 
   return (

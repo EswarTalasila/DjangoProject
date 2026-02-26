@@ -1,6 +1,6 @@
-import { redirect } from 'next/navigation';
-import { SidebarWrapper } from '@/components/layout/sidebarWrapper';
-import { getSessionProfile } from '@/lib/auth-session';
+import { SidebarWrapper } from "@/components/layout/sidebarWrapper";
+import { redirect } from "next/navigation";
+import { getSessionProfile } from "@/lib/auth-session";
 
 export default async function DashboardLayout({
   children,
@@ -9,7 +9,7 @@ export default async function DashboardLayout({
 }) {
   const profile = await getSessionProfile();
   if (!profile) {
-    redirect('/login');
+    redirect("/login");
   }
 
   return (

@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers';
+import { cookies } from "next/headers";
 
 export type SessionProfile = {
   id: string;
@@ -9,46 +9,36 @@ export type SessionProfile = {
   isStaff: boolean;
 };
 
-const VALID_ROLES = ['TEACHER', 'RESEARCHER', 'STUDENT'] as const;
+const VALID_ROLES = ["TEACHER", "RESEARCHER", "STUDENT"] as const;
 
 function resolveApiBaseUrl() {
-  const configured = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+  const configured = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
   try {
     const url = new URL(configured);
     if (
-      (url.hostname === 'localhost' || url.hostname === '127.0.0.1') &&
+      (url.hostname === "localhost" || url.hostname === "127.0.0.1") &&
       process.env.PROXY_TARGET
     ) {
-      const proxyTarget = process.env.PROXY_TARGET.replace(/\/$/, '');
+      const proxyTarget = process.env.PROXY_TARGET.replace(/\/$/, "");
       return `${proxyTarget}/api/v1`;
     }
-    return url.toString().replace(/\/$/, '');
+    return url.toString().replace(/\/$/, "");
   } catch {
-    return configured.replace(/\/$/, '');
+    return configured.replace(/\/$/, "");
   }
 }
 
-/**
- * Fetch the current user's session profile from /auth/me.
- *
- * Returns the profile if the JWT is valid and the role is an allowed
- * frontend role (TEACHER, RESEARCHER, STUDENT). Returns null on any
- * failure (missing token, expired JWT, ADMIN role, network error).
- *
- * Safe to call from both layouts and pages — Next.js deduplicates
- * fetch calls within the same server request.
- */
 export async function getSessionProfile(): Promise<SessionProfile | null> {
   const cookieStore = await cookies();
-  const accessToken = cookieStore.get('access_token')?.value;
+  const accessToken = cookieStore.get("access_token")?.value;
   if (!accessToken) return null;
 
   let response: Response;
   try {
     response = await fetch(`${resolveApiBaseUrl()}/auth/me`, {
-      method: 'GET',
+      method: "GET",
       headers: { Authorization: `Bearer ${accessToken}` },
-      cache: 'no-store',
+      cache: "no-store",
     });
   } catch {
     return null;

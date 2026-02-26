@@ -1,0 +1,88 @@
+@startuml
+!theme plain
+skinparam stateBorderColor #333
+skinparam stateBackgroundColor #FAFAFA
+skinparam stateFontSize 12
+skinparam arrowColor #666
+skinparam defaultFontSize 10
+skinparam noteBackgroundColor #FEFCE8
+skinparam noteBorderColor #CCC
+
+title **FR-02: Registration Code — State Diagram**\n<size:10>Lifecycle states computed by registration_code_status()</size>
+
+state "ACTIVE" as active #C8E6C9 {
+  active : is_active = True
+  active : archived_at = NULL
+  active : times_used < max_uses
+  active : expires_at > now
+}
+
+state "EXHAUSTED" as exhausted #FFE0B2 {
+  exhausted : times_used >= max_uses
+  exhausted : (is_active set to False
+  exhausted :  during final redemption)
+}
+
+state "EXPIRED" as expired #FFCDD2 {
+  expired : expires_at <= now
+  expired : (time-based, automatic)
+}
+
+state "REVOKED" as revoked #E1BEE7 {
+  revoked : is_active = False
+  revoked : (manual deactivation
+  revoked :  via PATCH endpoint)
+}
+
+state "ARCHIVED" as archived #CFD8DC {
+  archived : archived_at = now()
+  archived : (soft-delete, hidden
+  archived :  from default list view)
+}
+
+[*] --> active : create_registration_codes()\nINSERT with is_active=True,\ntimes_used=0
+
+active --> active : **Code redeemed**\n(times_used < max_uses - 1)\nredeem_student_invite()\nredeem_non_student_local_invite()\nredeem_non_student_oauth_invite()\nredeem_student_join_course()
+
+active --> exhausted : **Final redemption**\ntimes_used reaches max_uses\nis_active set to False
+
+active --> expired : **Time passes**\nexpires_at <= now\n(detected on next query)
+
+active --> revoked : **Manual revoke**\ntransition_registration_code_status(\n  next_status="REVOKED")\nSets is_active = False
+
+exhausted --> archived : **Archive**\ntransition_registration_code_status(\n  next_status="ARCHIVED")\nSets archived_at = now()
+
+expired --> archived : **Archive**\ntransition_registration_code_status(\n  next_status="ARCHIVED")
+
+revoked --> archived : **Archive**\ntransition_registration_code_status(\n  next_status="ARCHIVED")
+
+note right of active
+  **Status determination priority**
+  (from registration_code_status):
+  1. archived_at != NULL → ARCHIVED
+  2. expires_at <= now → EXPIRED
+  3. times_used >= max_uses → EXHAUSTED
+  4. not is_active → REVOKED
+  5. else → **ACTIVE**
+
+  Priority means EXPIRED overrides
+  EXHAUSTED and REVOKED when time
+  passes (a revoked code becomes
+  EXPIRED after its expiry date).
+end note
+
+note left of revoked
+  **Revocation is permanent.**
+  Cannot be un-revoked.
+  Only transition out
+  is to ARCHIVED.
+end note
+
+note bottom of archived
+  **Archive = soft delete.**
+  Hidden from GET /codes by default.
+  Visible only with ?includeArchived=true.
+  No further transitions possible.
+end note
+
+@enduml

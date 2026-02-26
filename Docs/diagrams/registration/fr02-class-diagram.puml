@@ -1,0 +1,291 @@
+@startuml
+!theme plain
+skinparam classAttributeIconSize 0
+skinparam classFontSize 12
+skinparam classAttributeFontSize 10
+skinparam classBorderColor #333
+skinparam classBackgroundColor #FAFAFA
+skinparam arrowColor #666
+skinparam packageBorderColor #999
+skinparam packageBackgroundColor #F8F8F8
+skinparam defaultFontSize 10
+
+title **FR-02: Registration Domain — Class Diagram**\n<size:10>Service layer, views, permissions, and dependencies</size>
+
+package "views.py" as views #E8F0E8 {
+  class "Registration Views" as RegViews <<functions>> {
+    --
+    + register_account(request)
+      POST /registration/accounts
+      [AllowAny, AnonAuthThrottle]
+    + validate_registration_code_view(request)
+      POST /registration/code-validations
+      [AllowAny, AnonAuthThrottle]
+    + join_course_with_code(request)
+      POST /enrollments
+      [IsAuthenticated]
+    --
+    + codes_collection(request)
+      GET|POST /codes
+      [IsAuthenticated]
+    + code_detail(request, code_id)
+      GET|PATCH /codes/{id}
+      [IsAuthenticated]
+    --
+    - _register_local(request, payload)
+    - _register_oauth(request, payload)
+    - _list_codes(request)
+    - _create_codes(request)
+    - _google_userinfo(access_token)
+    - _serialize_registration_code(record)
+  }
+}
+
+package "services/" as svc #FFF3E0 {
+  class "RegistrationService\n(_registration.py)" as RegSvc {
+    --
+    + validate_registration_code(
+      code) : RegistrationCode | None
+    + redeem_student_invite(
+      payload) : (User, Enrollment)
+      «atomic»
+    + redeem_student_join_course(
+      user, code) : (Enrollment, bool)
+      «atomic»
+    + redeem_non_student_local_invite(
+      payload) : User  «atomic»
+    + redeem_non_student_oauth_invite(
+      *, code, oauth_subject, oauth_email,
+      first_name, last_name,
+      email_verified, picture_url) : User
+      «atomic»
+    + create_registration_codes(
+      *, creator, code_type, count,
+      uses_per_code, expires_at,
+      course_id?, metadata?)
+      : list[RegistrationCode]  «atomic»
+    + registration_code_scope_queryset(
+      user, include_related?) : QuerySet
+    + transition_registration_code_status(
+      *, actor, registration_code_id,
+      next_status) : RegistrationCode
+      «atomic»
+    + registration_code_status(
+      registration_code, now?)
+      : str
+    --
+    - _select_valid_code_for_update(
+      code) : RegistrationCode | None
+    - _ensure_student_enrollment(
+      user, course) : (Enrollment, bool)
+    - _can_generate_code_type(
+      user, code_type) : bool
+    - _role_from_registration_code_type(
+      code_type) : Role
+  }
+
+  class "RolesService\n(_roles.py)" as RolesSvc {
+    --
+    + create_user_from_payload(
+      payload, role_override?,
+      creator?) : User  «atomic»
+    + set_single_role(
+      user, role) : None
+    + ensure_profiles_for_role(
+      user, role, creator?) : None
+    + can_create_user(
+      request_user, role) : bool
+    + can_edit_user(
+      request_user, target, role) : bool
+    + can_delete_user(
+      request_user, target) : bool
+    + teacher_owns_student(
+      teacher, student) : bool
+    --
+    - _get_role_value(role?) : Role
+  }
+
+  class "AuthService\n(_auth.py)" as Auth {
+    --
+    + build_user_response(
+      user, access, refresh?) : dict
+    + link_or_create_oauth_account(
+      user, subject, email)
+      : OAuthAccount
+  }
+
+  class "Utils\n(_utils.py)" as Utils {
+    --
+    **Constants:**
+    REG_CODE_TOKEN_BYTES = 12
+    REG_CODE_HMAC_SALT = "registration-code"
+    REG_CODE_PREFIX_LENGTH = 8
+    MANAGED_USERNAME_LENGTH = 8
+    MANAGED_USERNAME_BASE = 7
+    --
+    + registration_code_hash(
+      code, secret?) : str
+    + registration_code_prefix(
+      code) : str
+    + normalize_registration_code_input(
+      code) : str
+    + generate_managed_username(
+      *, first_name?, last_name?,
+      name?) : str
+    + identifier_in_use(
+      identifier, exclude?) : bool
+    + normalize_username_identifier(
+      username) : str
+    + password_strength_errors(
+      password) : list[str]
+    --
+    - _registration_code_hashes_for_lookup(
+      code) : list[str]
+    - _generate_secret_token(
+      prefix, nbytes) : str
+    - _managed_username_seed(
+      first_name, last_name, name) : str
+    - _normalize_registration_name(
+      first, last, name) : tuple
+    - _unique_username_from_base(
+      base) : str
+    - _compact_alnum(value) : str
+  }
+
+  class "SudoService\n(_sudo.py)" as SudoSvc {
+    --
+    + grant_sudo_to_researcher(
+      granter, grantee,
+      permissions, can_grant_sudo?)
+      : SudoGrant  «atomic»
+    + revoke_sudo_grant(
+      revoker, grant_id) : None
+      «atomic»
+    --
+    - _can_grant_permissions(
+      granter, permissions,
+      can_grant_sudo) : (bool, str)
+    --
+    NON_DELEGABLE_PERMISSIONS =
+      {CREATE_RESEARCHER_CODES}
+  }
+}
+
+package "core/" as core #E8F4FD {
+  class "Permissions\n(permissions.py)" as Perms {
+    --
+    + primary_role(user) : str
+    + has_role(user, role) : bool
+    + has_sudo_permission(
+      user, permission) : bool
+    --
+    «permission classes»
+    IsTeacherOrAbove
+    IsAuthenticated
+    AllowAny
+  }
+
+  class "Pagination\n(pagination.py)" as Pag {
+    --
+    StandardPagination
+      default_limit=50
+      max_limit=200
+    + paginate(queryset, request,
+      transform_fn?) : dict
+  }
+}
+
+package "Serializers\n(serializers.py)" as ser #FCE4EC {
+  class "StrictFieldsSerializer" as Strict {
+    Rejects unknown fields
+    with 400 {"field": ["Unknown field."]}
+  }
+
+  class "StudentInviteRegisterSerializer" as SIR {
+    extends StrictFieldsSerializer
+    --
+    code : CharField(64)
+    firstName : CharField(255)
+    lastName : CharField(255)
+    email : EmailField(320, optional)
+    password : CharField(255, no_trim)
+    confirmPassword : CharField(255, no_trim)
+  }
+
+  class "RegistrationOAuthSerializer" as ROS {
+    extends StrictFieldsSerializer
+    --
+    code : CharField(64)
+    accessToken : CharField
+    firstName : CharField(255)
+    lastName : CharField(255)
+  }
+
+  class "RegistrationCodeCreateSerializer" as RCCS {
+    extends StrictFieldsSerializer
+    --
+    codeType : RoleChoiceField
+    count : IntegerField(min=1)
+    usesPerCode : IntegerField(min=1)
+    expiresAt : DateTimeField
+    courseId : IntegerField(optional)
+    metadata : DictField(optional)
+  }
+
+  class "RegistrationCodeUpdateSerializer" as RCUS {
+    extends StrictFieldsSerializer
+    --
+    status : ChoiceField
+      {REVOKED, ARCHIVED}
+    reason : CharField(255, optional)
+  }
+}
+
+' === Dependencies ===
+
+RegViews --> RegSvc : "validate, redeem,\ncreate, transition"
+RegViews --> Auth : "build_user_response,\nlink_or_create_oauth"
+RegViews --> Utils : "password_strength_errors"
+RegViews --> Perms : "permission classes"
+RegViews --> Pag : "paginate code lists"
+RegViews --> SIR
+RegViews --> ROS
+RegViews --> RCCS
+RegViews --> RCUS
+
+RegSvc --> RolesSvc : "create_user_from_payload"
+RegSvc --> Auth : "link_or_create_oauth_account"
+RegSvc --> Utils : "hash, generate,\nnormalize, username"
+RegSvc --> Perms : "primary_role,\nhas_sudo_permission"
+
+RolesSvc --> Utils : "normalize_username"
+RolesSvc --> Perms : "primary_role,\nhas_sudo_permission"
+
+SudoSvc --> Perms : "primary_role"
+
+SIR --|> Strict
+ROS --|> Strict
+RCCS --|> Strict
+RCUS --|> Strict
+
+note right of RegSvc
+  **Code generation authorization:**
+  Admin: RESEARCHER codes only
+  Researcher: TEACHER (always)
+    + STUDENT/RESEARCHER (with sudo)
+  Teacher: STUDENT codes (own courses)
+  Student: none
+end note
+
+note right of Utils
+  **Username scheme:**
+  8 chars fixed width
+  Seed: first initial + last name
+  Pad to 7 + digit index
+  e.g. "jsmith00"
+  **Code format:**
+  REG-{24 hex chars} (28 total)
+  HMAC-SHA256 stored, plaintext returned
+end note
+
+@enduml

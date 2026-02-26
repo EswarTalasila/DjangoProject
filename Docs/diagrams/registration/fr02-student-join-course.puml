@@ -1,0 +1,114 @@
+@startuml
+!theme plain
+skinparam sequenceArrowThickness 1.5
+skinparam sequenceParticipantBorderColor #333
+skinparam sequenceLifeLineBorderColor #999
+skinparam noteBorderColor #CCC
+skinparam noteBackgroundColor #FEFCE8
+skinparam sequenceGroupBorderColor #666
+skinparam defaultFontSize 11
+
+title **FR-02: Student Join Course (Existing Account)**\nPOST /api/v1/enrollments\n<size:10>Auth: IsAuthenticated | No throttle</size>
+
+actor       "Student"        as C
+participant "Frontend\n(Next.js)"      as FE  #E8F4FD
+participant "join_course_\nwith_code\n(views.py:325)"  as V  #E8F0E8
+participant "RegistrationService\n(_registration.py)" as RS  #FFF3E0
+participant "Utils\n(_utils.py)"       as U   #FFF3E0
+database    "PostgreSQL"               as DB  #F3E5F5
+
+== Request ==
+C -> FE : Enter course invite code
+FE -> V : POST /api/v1/enrollments\nAuthorization: Bearer {access_token}\n**{code: "REG-C3D4E5..."}**
+
+== Serializer Validation ==
+V -> V : StudentJoinCourseSerializer(\n  data=request.data)
+note right of V
+  Fields:
+  - code: CharField(max=64)
+end note
+alt #FFE0E0 missing code
+  V --> FE : **400** {"code": ["This field\nis required."]}
+end
+
+== Role Gate ==
+V -> V : primary_role(request.user)\n== STUDENT?
+alt #FFE0E0 not a student
+  V --> FE : **403** {"detail": "Only student accounts\ncan redeem student codes"}
+end
+
+== Redeem Student Join Course ==
+V -> RS : redeem_student_join_course(\n  user=request.user, code=code)
+note right of RS : @transaction.atomic
+
+=== Role Double-Check ===
+RS -> RS : primary_role(user) == STUDENT?
+alt #FFE0E0 not student
+  RS --> V : PermissionError("Only student\naccounts can redeem student codes")
+  V --> FE : **403**
+end
+
+=== SELECT FOR UPDATE ===
+RS -> U : _registration_code_hashes_for_lookup(code)
+RS -> DB : SELECT * FROM registration_codes\nWHERE code_hash = <hash>\n**FOR UPDATE**
+alt #FFE0E0 code invalid / expired / exhausted
+  RS --> V : ValueError("Invalid or\nexpired code")
+  V --> FE : **400**
+end
+
+=== Code Type Check ===
+alt #FFE0E0 code_type != STUDENT
+  RS --> V : ValueError("Invalid code type\nfor student registration")
+  V --> FE : **400**
+end
+
+=== Course Association ===
+alt #FFE0E0 no course_id or course is None
+  RS --> V : ValueError("Code is missing\ncourse association")
+  V --> FE : **400**
+end
+
+=== Enrollment ===
+RS -> DB : SELECT * FROM student_profiles\nWHERE user_id={user.id}
+alt #FFE0E0 no student profile
+  RS --> V : ValueError("Student profile\nnot found")
+  V --> FE : **400**
+end
+
+RS -> DB : SELECT * FROM enrollments\nWHERE course_id={course.id}\n  AND student_profile_id={profile.id}
+alt already enrolled
+  note right of RS
+    Code is **NOT** consumed.
+    Student keeps their existing
+    enrollment, code stays active.
+  end note
+  RS --> V : (enrollment, already_enrolled=True)
+  V --> FE : **201** {"message": "Already enrolled",\n"alreadyEnrolled": true, ...}
+end
+
+RS -> DB : INSERT INTO enrollments\n(course_id={course.id},\n student_profile_id={profile.id},\n status='ACTIVE')
+
+=== Consume Code ===
+RS -> DB : UPDATE registration_codes\nSET times_used = times_used + 1,\n    is_active = (times_used < max_uses)\nWHERE id={code.id}
+note right of DB
+  Code only consumed on
+  **new** enrollments.
+end note
+
+RS --> V : (enrollment, already_enrolled=False)
+
+== Response ==
+V --> FE : **201** Created
+note right of V
+  {
+    "message": "Invite redeemed",
+    "username": "jsmith00",
+    "name": "John Smith",
+    "courseId": 42,
+    "createdNewUser": false,
+    "alreadyEnrolled": false
+  }
+end note
+FE --> C : Redirect to course dashboard
+
+@enduml

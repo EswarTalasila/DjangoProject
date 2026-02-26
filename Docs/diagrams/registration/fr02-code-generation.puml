@@ -1,0 +1,201 @@
+@startuml
+!theme plain
+skinparam sequenceArrowThickness 1.5
+skinparam sequenceParticipantBorderColor #333
+skinparam sequenceLifeLineBorderColor #999
+skinparam noteBorderColor #CCC
+skinparam noteBackgroundColor #FEFCE8
+skinparam sequenceGroupBorderColor #666
+skinparam defaultFontSize 11
+
+title **FR-02: Registration Code Generation**\nPOST /api/v1/codes\n<size:10>Auth: IsAuthenticated | No throttle</size>
+
+actor       "Issuer\n(Teacher/Admin/\nResearcher)" as I
+participant "Frontend\n(Next.js)"      as FE  #E8F4FD
+participant "codes_collection\n(views.py:436)"   as V  #E8F0E8
+participant "RegistrationCode\nCreateSerializer\n(serializers.py:181)" as S  #E8F0E8
+participant "RegistrationService\n(_registration.py)" as RS  #FFF3E0
+participant "Utils\n(_utils.py)"       as U   #FFF3E0
+database    "PostgreSQL"               as DB  #F3E5F5
+
+== Request ==
+I -> FE : Configure code generation\n(type, count, uses, expiry, course)
+FE -> V : POST /api/v1/codes\nAuthorization: Bearer {token}\n**{codeType, count, usesPerCode,\n expiresAt, courseId?, metadata?}**
+
+== Serializer Validation ==
+V -> S : RegistrationCodeCreateSerializer(\n  data=request.data)
+note right of S
+  Fields:
+  - codeType: RoleChoiceField
+      choices: STUDENT, TEACHER, RESEARCHER
+  - count: IntegerField(min=1)
+  - usesPerCode: IntegerField(min=1)
+  - expiresAt: DateTimeField (ISO-8601)
+  - courseId: IntegerField(min=1, optional)
+  - metadata: DictField(optional)
+end note
+alt #FFE0E0 missing required fields
+  S --> V : ValidationError
+  V --> FE : **400**
+end
+alt #FFE0E0 metadata with count != 1
+  S --> V : ValidationError
+  V --> FE : **400** {"count": "count must be 1\nwhen metadata is provided"}
+end
+alt #FFE0E0 metadata with codeType != TEACHER
+  S --> V : ValidationError
+  V --> FE : **400** {"metadata": "metadata is only\nsupported for teacher code generation"}
+end
+
+== Create Registration Codes ==
+V -> RS : create_registration_codes(\n  creator, code_type, count,\n  uses_per_code, expires_at,\n  course_id, metadata)
+note right of RS : @transaction.atomic
+
+=== Authorization: _can_generate_code_type ===
+RS -> RS : _can_generate_code_type(\n  user, code_type)
+
+note over RS #FEFCE8
+  **Authorization Matrix:**
+  ┌──────────────┬─────────┬─────────┬────────────┐
+  │ Actor        │ STUDENT │ TEACHER │ RESEARCHER │
+  ├──────────────┼─────────┼─────────┼────────────┤
+  │ Admin        │   ✗     │   ✗     │   ✓        │
+  │ Researcher   │ sudo¹   │   ✓     │  sudo²     │
+  │ Teacher      │   ✓     │   ✗     │   ✗        │
+  │ Student      │   ✗     │   ✗     │   ✗        │
+  └──────────────┴─────────┴─────────┴────────────┘
+  ¹ CREATE_STUDENT sudo permission
+  ² CREATE_RESEARCHER_CODES sudo permission
+end note
+
+alt #FFE0E0 not authorized
+  RS --> V : PermissionError("Not authorized to\ngenerate this code type.")
+  V --> FE : **403**
+end
+
+=== Input Validation ===
+alt #FFE0E0 expires_at <= now
+  RS --> V : ValueError("expiresAt must\nbe in the future.")
+  V --> FE : **400**
+end
+alt #FFE0E0 count < 1
+  RS --> V : ValueError("count must be >= 1.")
+  V --> FE : **400**
+end
+alt #FFE0E0 uses_per_code < 1
+  RS --> V : ValueError("usesPerCode\nmust be >= 1.")
+  V --> FE : **400**
+end
+
+=== Student Code: Course Validation ===
+alt codeType == STUDENT
+  alt #FFE0E0 courseId missing
+    RS --> V : ValueError("courseId is required\nfor student codes.")
+    V --> FE : **400**
+  end
+  RS -> DB : SELECT * FROM courses\nWHERE id={courseId}
+  alt #FFE0E0 course not found
+    RS --> V : ValueError("Course not found.")
+    V --> FE : **400**
+  end
+  alt issuer is TEACHER
+    alt #FFE0E0 course.teacher_profile.user != issuer
+      RS --> V : PermissionError("Teachers can only\ngenerate codes for their\nown courses.")
+      V --> FE : **403**
+    end
+  end
+else codeType != STUDENT
+  alt #FFE0E0 courseId provided
+    RS --> V : ValueError("courseId is only valid\nfor student code generation.")
+    V --> FE : **400**
+  end
+end
+
+=== Metadata Validation ===
+alt metadata provided
+  alt #FFE0E0 codeType != TEACHER
+    RS --> V : ValueError("metadata is only valid\nfor teacher code generation.")
+    V --> FE : **400**
+  end
+  alt #FFE0E0 count != 1
+    RS --> V : ValueError("metadata can only be\nset when count is 1.")
+    V --> FE : **400**
+  end
+end
+
+=== Code Generation Loop (repeat for each count) ===
+
+loop for i in range(count)
+  RS -> U : _generate_secret_token("REG",\n  nbytes=12)
+  note right of U
+    Format: "REG-{secrets.token_hex(12).upper()}"
+    Example: "REG-A1B2C3D4E5F6A7B8C9D0E1F2"
+    Length: 28 characters (4 prefix + 24 hex)
+  end note
+  U --> RS : candidate = "REG-A1B2..."
+
+  RS -> U : registration_code_hash(candidate)
+  note right of U
+    1. normalize: str(code).strip().upper()
+    2. salted_hmac("registration-code",
+         normalized,
+         secret=SECRET_KEY,
+         algorithm="sha256"
+       ).hexdigest()
+    → 64-char hex digest
+  end note
+  U --> RS : persisted_hash
+
+  RS -> DB : SELECT EXISTS FROM registration_codes\nWHERE code_hash IN (<candidate_hashes>)
+  note right of DB : Collision check\n(regenerate if found)
+
+  RS -> U : registration_code_prefix(candidate)
+  note right of U
+    First 8 chars of normalized code
+    e.g. "REG-A1B2"
+  end note
+  U --> RS : prefix = "REG-A1B2"
+
+  RS -> DB : INSERT INTO registration_codes\n(code_hash={64-char HMAC-SHA256},\n code_prefix={8-char prefix},\n code_type='STUDENT'|'TEACHER'|'RESEARCHER',\n created_by_user_id={issuer.id},\n course_id={course_id|NULL},\n max_uses={uses_per_code},\n times_used=0,\n expires_at={expires_at},\n is_active=True,\n metadata={dict|NULL})
+end
+
+note right of RS #FEFCE8
+  **Stored in DB:** HMAC-SHA256 hash only
+  **Returned to caller:** plaintext code
+  Code can NEVER be recovered from DB
+  (same pattern as password reset codes)
+end note
+
+RS --> V : list of RegistrationCode objects\n(each with transient .plaintext_code)
+
+== Response ==
+V --> FE : **201** Created
+note right of V
+  {
+    "count": 3,
+    "codes": [
+      {
+        "id": 101,
+        "code": "REG-A1B2C3D4E5F6A7B8C9D0E1F2",
+        "codePrefix": "REG-A1B2",
+        "codeType": "STUDENT",
+        "status": "ACTIVE",
+        "maxUses": 1,
+        "timesUsed": 0,
+        "usesRemaining": 1,
+        "expiresAt": "2026-03-01T00:00:00Z",
+        "isActive": true,
+        "courseId": 42,
+        "courseName": "Physics 101",
+        "metadata": null,
+        "createdByUserId": 5,
+        "createdAt": "2026-02-24T...",
+        "archivedAt": null
+      },
+      ...
+    ]
+  }
+end note
+FE -> I : Show codes in dialog\n(one-time display, copy button)
+
+@enduml

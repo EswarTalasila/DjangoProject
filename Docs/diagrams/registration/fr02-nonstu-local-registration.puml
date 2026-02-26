@@ -1,0 +1,157 @@
+@startuml
+!theme plain
+skinparam sequenceArrowThickness 1.5
+skinparam sequenceParticipantBorderColor #333
+skinparam sequenceLifeLineBorderColor #999
+skinparam noteBorderColor #CCC
+skinparam noteBackgroundColor #FEFCE8
+skinparam sequenceGroupBorderColor #666
+skinparam defaultFontSize 11
+
+title **FR-02: Teacher/Researcher LOCAL Registration**\nPOST /api/v1/registration/accounts\n<size:10>Auth: AllowAny | Throttle: AnonAuthThrottle (20/min) | method=LOCAL</size>
+
+actor       "New Teacher/\nResearcher"  as C
+participant "Frontend\n(Next.js)"      as FE  #E8F4FD
+participant "register_account\n(views.py:173)" as V  #E8F0E8
+participant "StudentInviteRegister\nSerializer\n(serializers.py:141)" as S  #E8F0E8
+participant "RegistrationService\n(_registration.py)" as RS  #FFF3E0
+participant "Utils\n(_utils.py)"       as U   #FFF3E0
+participant "RolesService\n(_roles.py)" as R  #FFF3E0
+database    "PostgreSQL"               as DB  #F3E5F5
+participant "SimpleJWT"                as JWT #FCE4EC
+
+== Request ==
+C -> FE : Enter code + name + email + password
+FE -> V : POST /api/v1/registration/accounts\n**{method: "LOCAL", code: "REG-X9Y8...",\n firstName, lastName,\n email: "teacher@school.edu",\n password, confirmPassword}**
+
+== Dispatch ==
+V -> V : method = "LOCAL" → _register_local()
+
+== Serializer + Password Validation ==
+V -> S : validate(payload)
+note right of S
+  Same serializer as student.
+  email field is optional but
+  required by service for non-students.
+end note
+alt #FFE0E0 missing fields / unknown fields
+  S --> V : **400** ValidationError
+end
+
+V -> V : password == confirmPassword?
+alt #FFE0E0 mismatch
+  V --> FE : **400** {"detail": "Passwords do not match."}
+end
+
+V -> U : password_strength_errors(password)
+alt #FFE0E0 policy violated
+  V --> FE : **400** {"detail": "Password does not meet\npolicy requirements.", "errors": [...]}
+end
+
+== Code Pre-Validation ==
+V -> RS : validate_registration_code(code)
+RS -> U : HMAC-SHA256 hash lookup
+RS -> DB : SELECT * FROM registration_codes\nWHERE code_hash IN (<candidates>)
+alt #FFE0E0 invalid/expired/exhausted
+  RS --> V : None
+  V --> FE : **400** {"detail": "Invalid or expired code"}
+end
+RS --> V : record (code_type = TEACHER or RESEARCHER)
+
+== Branch: Non-Student Code ==
+V -> V : code_type != STUDENT\n→ non-student flow
+
+== Redeem Non-Student Local Invite ==
+V -> RS : redeem_non_student_local_invite(payload)
+note right of RS : @transaction.atomic
+
+=== SELECT FOR UPDATE ===
+RS -> DB : SELECT * FROM registration_codes\nWHERE code_hash = <hash>\n**FOR UPDATE**
+alt #FFE0E0 code invalid on re-check
+  RS --> V : ValueError("Invalid or expired code")
+  V --> FE : **400**
+end
+
+RS -> RS : code_type != STUDENT? ✓
+alt #FFE0E0 code_type == STUDENT
+  RS --> V : ValueError("Student code flows\nrequire student registration")
+  V --> FE : **400**
+end
+
+=== Validate Required Fields ===
+alt #FFE0E0 missing firstName or lastName
+  RS --> V : ValueError("firstName and lastName\nare required for non-student\nregistration")
+  V --> FE : **400**
+end
+alt #FFE0E0 missing email
+  RS --> V : ValueError("email is required\nfor non-student registration")
+  V --> FE : **400**
+end
+
+=== Email Uniqueness Check ===
+RS -> U : identifier_in_use(email)
+U -> DB : SELECT EXISTS FROM app_users\nWHERE username ILIKE {email}\n   OR email ILIKE {email}
+alt #FFE0E0 email already taken
+  RS --> V : ValueError("Email already taken")
+  V --> FE : **400**
+end
+
+=== Generate Username ===
+RS -> U : generate_managed_username(\n  first_name, last_name)
+note right of U
+  Same 8-char scheme as students.
+  e.g. "Jane Doe" → "jdoe0000"
+end note
+U --> RS : username = "jdoe0000"
+
+=== Map Code Type → Role ===
+RS -> RS : _role_from_registration_code_type(\n  code_type)
+note right of RS
+  TEACHER code → Role.TEACHER
+  RESEARCHER code → Role.RESEARCHER
+end note
+
+=== Create User ===
+RS -> R : create_user_from_payload(\n  {username, email, name, password},\n  role_override=TEACHER|RESEARCHER,\n  creator=None)
+R -> DB : INSERT INTO app_users\n(username='jdoe0000',\n name='Jane Doe',\n email='teacher@school.edu',\n password_hash=PBKDF2(password),\n enabled=True)
+R -> DB : DELETE FROM user_roles\nWHERE user_id={user.id}
+R -> DB : INSERT INTO user_roles\n(user_id, role='TEACHER'|'RESEARCHER')
+
+alt role = TEACHER
+  R -> DB : INSERT INTO teacher_profiles\n(user_id)
+else role = RESEARCHER
+  R -> DB : INSERT INTO researcher_profiles\n(user_id)
+end
+note right of R : No enrollment for\nnon-student accounts
+
+=== Consume Code ===
+RS -> DB : UPDATE registration_codes\nSET times_used = times_used + 1,\n    is_active = (times_used < max_uses)\nWHERE id={code.id}
+
+RS --> V : user
+
+== Token Generation ==
+V -> JWT : RefreshToken.for_user(user)
+JWT -> DB : INSERT INTO outstandingtoken
+JWT --> V : refresh + access tokens
+
+== Response ==
+V --> FE : **201** Created
+note right of V
+  {
+    "accessToken": "eyJ...",
+    "tokenType": "Bearer",
+    "refreshToken": "eyJ...",
+    "role": "TEACHER" | "RESEARCHER",
+    "id": "456",
+    "username": "jdoe0000",
+    "name": "Jane Doe",
+    "email": "teacher@school.edu",
+    "message": "User registered",
+    "courseId": null,
+    "createdNewUser": true,
+    "alreadyEnrolled": false
+  }
+end note
+FE -> FE : Set cookies + redirect /dashboard
+
+@enduml

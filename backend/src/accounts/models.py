@@ -286,7 +286,6 @@ class SudoPermission(models.TextChoices):
         CREATE_RESEARCHER_CODES: Can generate researcher invite codes
         EDIT_USER: Can edit user accounts (within user role space)
         DELETE_USER: Can delete user accounts (within user role space)
-        BULK_CREATE: Can use bulk user creation endpoints
         ISSUE_STUDENT_RESET_CODE: Can issue student reset codes (researcher sudo extension)
         ISSUE_RESEARCHER_RESET_CODE: Can issue researcher reset codes (researcher sudo extension)
 
@@ -301,7 +300,6 @@ class SudoPermission(models.TextChoices):
     CREATE_RESEARCHER_CODES = "CREATE_RESEARCHER_CODES", "Create Researcher Codes"
     EDIT_USER = "EDIT_USER", "Edit User"
     DELETE_USER = "DELETE_USER", "Delete User"
-    BULK_CREATE = "BULK_CREATE", "Bulk Create"
     ISSUE_STUDENT_RESET_CODE = "ISSUE_STUDENT_RESET_CODE", "Issue Student Reset Code"
     ISSUE_RESEARCHER_RESET_CODE = "ISSUE_RESEARCHER_RESET_CODE", "Issue Researcher Reset Code"
 

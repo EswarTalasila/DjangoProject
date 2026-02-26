@@ -1,0 +1,228 @@
+@startuml
+!theme plain
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+skinparam classFontSize 12
+skinparam classAttributeFontSize 10
+skinparam classBorderColor #333
+skinparam classBackgroundColor #FAFAFA
+skinparam arrowColor #666
+skinparam defaultFontSize 10
+
+title **FR-02: Registration Domain — Entity-Relationship Diagram**\n<size:10>Tables, columns, constraints, and foreign key relationships</size>
+
+entity "app_users" as User #E8F0E8 {
+  * **id** : serial <<PK>>
+  --
+  * username : varchar(320) <<UNIQUE>>
+  email : varchar(320) <<UNIQUE where NOT NULL>>
+  * name : varchar(255)
+  password_hash : varchar(128) <<nullable>>
+  * enabled : boolean [default: true]
+  * is_staff : boolean [default: false]
+  * is_superuser : boolean [default: false]
+  last_login : timestamptz <<nullable>>
+  * created_at : timestamptz <<auto>>
+  * updated_at : timestamptz <<auto>>
+  --
+  <<index>> idx_user_username (username)
+  <<index>> idx_user_email (email)
+}
+
+entity "user_roles" as UserRole #E8F4FD {
+  * **id** : serial <<PK>>
+  --
+  * user_id : integer <<FK → app_users>>
+  * role : varchar(32)
+    {RESEARCHER | TEACHER | STUDENT}
+  --
+  <<constraint>> uq_user_role
+    UNIQUE(user_id, role)
+}
+
+entity "researcher_profiles" as RP #E8F4FD {
+  * **id** : serial <<PK>>
+  --
+  * user_id : integer <<FK → app_users>>
+    <<OneToOne>>
+  * created_at : timestamptz <<auto>>
+  --
+  <<constraint>> uq_researcher_user
+    UNIQUE(user_id)
+}
+
+entity "teacher_profiles" as TP #E8F4FD {
+  * **id** : serial <<PK>>
+  --
+  * user_id : integer <<FK → app_users>>
+    <<OneToOne>>
+  * created_at : timestamptz <<auto>>
+  --
+  <<constraint>> uq_teacher_user
+    UNIQUE(user_id)
+}
+
+entity "student_profiles" as SP #E8F4FD {
+  * **id** : serial <<PK>>
+  --
+  * user_id : integer <<FK → app_users>>
+    <<OneToOne>>
+  * created_by_user_id : integer <<FK → app_users>>
+  * consent : boolean [default: false]
+  * created_at : timestamptz <<auto>>
+  --
+  <<constraint>> uq_student_user
+    UNIQUE(user_id)
+  <<index>> idx_student_created_by
+    (created_by_user_id)
+}
+
+entity "sudo_grants" as SG #FFF3E0 {
+  * **id** : serial <<PK>>
+  --
+  * user_id : integer <<FK → app_users>>
+    <<OneToOne>>
+  * granted_by_id : integer <<FK → app_users>>
+  * granted_at : timestamptz <<auto>>
+  * can_grant_sudo : boolean [default: false]
+  * permissions : jsonb [default: []]
+    {CREATE_TEACHER, CREATE_STUDENT,
+     CREATE_RESEARCHER_CODES,
+     EDIT_USER, DELETE_USER,
+     ISSUE_STUDENT_RESET_CODE,
+     ISSUE_RESEARCHER_RESET_CODE}
+}
+
+entity "registration_codes" as RC #FFF8E1 {
+  * **id** : serial <<PK>>
+  --
+  * code_hash : varchar(64) <<UNIQUE>>
+  * code_prefix : varchar(8)
+  * code_type : varchar(32)
+    {STUDENT | TEACHER | RESEARCHER}
+  * created_by_user_id : integer <<FK → app_users>>
+  course_id : integer <<FK → courses, nullable>>
+  * max_uses : positive integer [default: 1]
+  * times_used : positive integer [default: 0]
+  * expires_at : timestamptz
+  * is_active : boolean [default: true]
+  metadata : jsonb <<nullable>>
+  archived_at : timestamptz <<nullable>>
+  * created_at : timestamptz <<auto>>
+  --
+  <<constraint>> uq_registration_code_hash
+    UNIQUE(code_hash)
+  <<index>> idx_registration_code_hash
+  <<index>> idx_registration_code_prefix
+  <<index>> idx_registration_code_type
+  <<index>> idx_registration_course
+  <<index>> idx_registration_expires
+  <<index>> idx_registration_archived
+}
+
+entity "courses" as Course #F3E5F5 {
+  * **id** : serial <<PK>>
+  --
+  * name : varchar(255)
+  * teacher_profile_id : integer
+    <<FK → teacher_profiles>>
+  * created_at : timestamptz <<auto>>
+  --
+  <<index>> idx_course_name (name)
+  <<index>> idx_course_teacher
+    (teacher_profile_id)
+}
+
+entity "enrollments" as Enroll #F3E5F5 {
+  * **id** : serial <<PK>>
+  --
+  * course_id : integer <<FK → courses>>
+  * student_profile_id : integer
+    <<FK → student_profiles>>
+  * enrolled_at : timestamptz <<auto>>
+  * status : varchar(32)
+    {ACTIVE | DROPPED}
+  --
+  <<constraint>> uq_enrollment_course_student
+    UNIQUE(course_id, student_profile_id)
+  <<index>> idx_enroll_course (course_id)
+  <<index>> idx_enroll_student
+    (student_profile_id)
+}
+
+entity "oauth_accounts" as OAuth #FFF8E1 {
+  * **id** : serial <<PK>>
+  --
+  * user_id : integer <<FK → app_users>>
+  * provider : varchar(32) {GOOGLE}
+  * subject : varchar(255)
+  * email : varchar(320)
+  email_verified : boolean <<nullable>>
+  picture_url : varchar(512) <<nullable>>
+  * created_at : timestamptz <<auto>>
+  last_login_at : timestamptz <<nullable>>
+  --
+  <<constraint>> uq_oauth_provider_subject
+    UNIQUE(provider, subject)
+}
+
+' === Relationships ===
+
+' User → Roles & Profiles
+User ||--o{ UserRole : "CASCADE"
+User ||--o| RP : "CASCADE"
+User ||--o| TP : "CASCADE"
+User ||--o| SP : "CASCADE\nuser → student_profile"
+User ||--o{ SP : "PROTECT\ncreated_by"
+
+' User → Sudo
+User ||--o| SG : "CASCADE\nuser → sudo_grant"
+User ||--o{ SG : "PROTECT\ngranted_by"
+
+' User → Registration Codes
+User ||--o{ RC : "PROTECT\ncreated_by"
+
+' User → OAuth
+User ||--o{ OAuth : "CASCADE"
+
+' Teacher → Course
+TP ||--o{ Course : "PROTECT\nteacher_profile → courses"
+
+' Course → Enrollment
+Course ||--o{ Enroll : "CASCADE"
+SP ||--o{ Enroll : "CASCADE"
+
+' Course → Registration Codes
+Course ||--o{ RC : "PROTECT\ncourse → registration_codes"
+
+note bottom of RC
+  **Hashing:** HMAC-SHA256 via Django salted_hmac
+  Salt: "registration-code"
+  Key: SECRET_KEY (with fallback rotation)
+  Plaintext format: REG-{24 hex chars}
+  Stored: 64-char hex digest (hash only)
+  Prefix: first 8 chars for display
+end note
+
+note right of SP
+  **created_by:** Self-referencing
+  when student self-registers.
+  Points to teacher/researcher
+  when created via dashboard.
+end note
+
+note bottom of SG
+  **permissions** is a JSON array
+  of SudoPermission enum values.
+  Controls: code generation,
+  user management, reset issuance.
+end note
+
+note right of Enroll
+  **Created during:**
+  - Student registration (redeem_student_invite)
+  - Course join (redeem_student_join_course)
+  **Unique per** (course, student_profile)
+end note
+
+@enduml

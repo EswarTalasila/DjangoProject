@@ -72,7 +72,7 @@ def enrollment_to_student_dto(enrollment: Enrollment) -> EnrollmentStudentDTO:
         id=user.id if user else None,
         name=user.name if user else None,
         username=user.username if user else None,
-        role="ROLE_STUDENT",
+        role="STUDENT",
         consent=bool(student_profile.consent) if student_profile else False,
         courseId=enrollment.course_id,
     )
