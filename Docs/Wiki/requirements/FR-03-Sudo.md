@@ -18,7 +18,7 @@
 - SudoGrant lifecycle: grant, update, revoke elevated permissions for researchers
 - Permission evaluation: role-based + sudo-based authorization checks across all user management operations
 - Escalation prevention: subset-only delegation, admin-only `can_grant_sudo`, no cross-space escalation
-- Permission enum: CREATE_TEACHER, CREATE_STUDENT, CREATE_RESEARCHER_CODES, EDIT_USER, DELETE_USER, ISSUE_STUDENT_RESET_CODE, ISSUE_RESEARCHER_RESET_CODE
+- Permission enum: CREATE_TEACHER, CREATE_STUDENT, CREATE_RESEARCHER_CODES, EDIT_USER, DELETE_USER, ISSUE_STUDENT_RESET_CODE, ISSUE_RESEARCHER_RESET_CODE, VIEW_IDENTIFIABLE_VIZ, EXPORT_IDENTIFIABLE
 - Issuer-based reset authority expansion for researchers via sudo flags (no reset-request workflow)
 - Researcher capabilities without sudo (read-only data oversight)
 
@@ -528,6 +528,8 @@
 | `DELETE_USER` | Delete teacher and student accounts | `DELETE /api/v1/users/{user_id}` |
 | `ISSUE_STUDENT_RESET_CODE` | Allow researcher to issue reset codes for students (outside teacher-owned course flow) | `POST /api/v1/auth/password-reset-codes` (target role STUDENT) |
 | `ISSUE_RESEARCHER_RESET_CODE` | Allow researcher to issue reset codes for other researchers | `POST /api/v1/auth/password-reset-codes` (target role RESEARCHER) |
+| `VIEW_IDENTIFIABLE_VIZ` | Allow researcher to view identifiable fields (courseId, courseName, assignmentId, assessmentTitle) in visualization responses | `GET /api/v1/visualizations/*` (FR-09 VIZ-CN-01) |
+| `EXPORT_IDENTIFIABLE` | Allow researcher to export identifiable fields (studentId, studentName, courseId, etc.) in CSV exports when `identifiable=true` query param is set | `GET /api/v1/exports/*` (FR-10 EXP-CN-01) |
 
 - Default role behavior (no sudo permission required): researcher can issue teacher reset codes; teacher can issue student reset codes in owned courses.
 - **Applies to:** SUDO-UC-03, SUDO-UC-04, SUDO-UC-05
@@ -685,6 +687,8 @@ EDIT_USER         — Edit user accounts (within user role space)
 DELETE_USER       — Delete user accounts (within user role space)
 ISSUE_STUDENT_RESET_CODE — Researcher can issue reset codes for students (sudo extension)
 ISSUE_RESEARCHER_RESET_CODE — Researcher can issue reset codes for researchers (sudo extension)
+VIEW_IDENTIFIABLE_VIZ — Researcher can view identifiable fields in visualization data (FR-09)
+EXPORT_IDENTIFIABLE — Researcher can export identifiable fields in CSV exports (FR-10)
 ```
 
 ### SudoGrant Model
@@ -726,6 +730,8 @@ FR-03 defines the permission model that other FR domains reference:
 | FR-02 REG | REG-CN-10 references role hierarchy + sudo for code generation | `CREATE_STUDENT` and `CREATE_RESEARCHER_CODES` sudo expand researcher code generation scope |
 | FR-05 CRS | Course visibility uses role hierarchy | Researcher read access to all courses (defined in FR-05) |
 | FR-06 ASMT | Assessment CRUD uses role hierarchy | Researcher full access to assessments (defined in FR-06) |
+| FR-09 VIZ | VIZ-CN-01 uses `VIEW_IDENTIFIABLE_VIZ` sudo to gate researcher access to identifiable fields | `has_sudo_permission(user, VIEW_IDENTIFIABLE_VIZ)` controls anonymization in VIZ endpoints |
+| FR-10 EXP | EXP-CN-01 uses `EXPORT_IDENTIFIABLE` sudo to gate researcher access to identifiable fields in CSV exports | `has_sudo_permission(user, EXPORT_IDENTIFIABLE)` + explicit `identifiable=true` query param required |
 | FR-12 ENV | Admin bootstrap creates system admin | `ensure_admin` sets `is_staff=True` without user role |
 
 ---
