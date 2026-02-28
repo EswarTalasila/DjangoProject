@@ -4,6 +4,9 @@ import pytest
 
 from assessments.models import Assessment, GradingMode, Question, QuestionKind
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestAssessmentRoutes:

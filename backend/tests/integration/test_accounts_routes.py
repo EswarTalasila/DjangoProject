@@ -24,6 +24,9 @@ from accounts.models import (
 from accounts.services import registration_code_hash, registration_code_prefix
 from courses.models import Course, Enrollment
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestAccountRoutes:
@@ -373,6 +376,16 @@ class TestAccountRoutes:
         assert payload["code_type"] == RegistrationCodeType.STUDENT
         assert payload["context"]["course_name"] == "Biology"
 
+    def test_REG_UC_01_E1_CODE_VALIDATION(self, api_client):
+        """Validate-code returns generic invalid response for bad/expired codes."""
+        response = api_client.post(
+            "/api/v1/registration/code-validations",
+            {"code": "REG-UC01-E1-INVALID"},
+            format="json",
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Invalid or expired code"
+
     def test_REG_UC_01a_STUDENT(self, api_client, teacher_user):
         """Authenticated student can redeem another code to join an additional course."""
         first_code = self._student_code(teacher_user, code="INVITE-FIRST", course_name="Math")
@@ -402,7 +415,12 @@ class TestAccountRoutes:
             format="json",
         )
         assert redeem_res.status_code == 201
-        assert redeem_res.json()["alreadyEnrolled"] is False
+        redeem_payload = redeem_res.json()
+        assert redeem_payload["alreadyEnrolled"] is False
+        assert redeem_payload["createdNewUser"] is False
+        assert redeem_payload["message"] == "Invite redeemed"
+        assert redeem_payload["username"] == username
+        assert redeem_payload["courseId"] == second_code.course_id
 
         enrollment_count = Enrollment.objects.filter(student_profile=user.student_profile).count()
         assert enrollment_count == 2
@@ -640,6 +658,12 @@ class TestAccountRoutes:
         listed_code = next(entry for entry in listed_payload if entry["id"] == code.id)
         assert listed_code["code"] is None
         assert listed_code["codePrefix"] == registration_code_prefix("LIFE-ONE")
+
+        detail_response = api_client.get(f"/api/v1/codes/{code.id}")
+        assert detail_response.status_code == 200
+        detail_payload = detail_response.json()
+        assert detail_payload["code"] is None
+        assert detail_payload["codePrefix"] == registration_code_prefix("LIFE-ONE")
 
         revoke_response = api_client.patch(
             f"/api/v1/codes/{code.id}",
@@ -1033,13 +1057,14 @@ class TestAccountRoutes:
         assert student.username == original_username
 
     def test_USER_UC_02_E1(self, api_client, teacher_user, admin_user):
-        """Teacher edit is denied for a non-owned target user."""
+        """Teacher edit outside scope is masked as not found."""
         api_client.force_authenticate(user=teacher_user)
         payload = {
             "name": "Admin Updated",
         }
         response = api_client.patch(f"/api/v1/users/{admin_user.id}", payload, format="json")
-        assert response.status_code == 403
+        assert response.status_code == 404
+        assert response.json()["detail"] == "User not found"
 
     def test_USER_UC_04_ADMIN(self, api_client, admin_user, teacher_user):
         """Staff listing returns teacher and researcher users with plain role strings."""
@@ -1053,11 +1078,25 @@ class TestAccountRoutes:
             assert entry["role"] in (Role.TEACHER, Role.RESEARCHER)
             assert not entry["role"].startswith("ROLE_")
 
+    def test_USER_UC_04_E1(self, api_client, teacher_user):
+        """Staff listing is forbidden for non-admin/non-researcher callers."""
+        api_client.force_authenticate(user=teacher_user)
+        response = api_client.get("/api/v1/users/staff")
+        assert response.status_code == 403
+
     def test_USER_UC_03_E1(self, api_client, admin_user, teacher_user):
-        """Non-admin user deletion attempts are forbidden."""
+        """Delete outside scope is masked as not found."""
         api_client.force_authenticate(user=teacher_user)
         response = api_client.delete(f"/api/v1/users/{admin_user.id}")
-        assert response.status_code == 403
+        assert response.status_code == 404
+        assert response.json()["detail"] == "User not found"
+
+    def test_USER_UC_03_E2(self, api_client, admin_user):
+        """Delete request returns 404 when target user does not exist."""
+        api_client.force_authenticate(user=admin_user)
+        response = api_client.delete("/api/v1/users/99999999")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "User not found"
 
     def test_USER_UC_01(self, api_client, admin_user):
         """Created user is assigned exactly one role; response returns user object."""

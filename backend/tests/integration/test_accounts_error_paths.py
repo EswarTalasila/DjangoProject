@@ -12,6 +12,9 @@ from accounts.services import registration_code_hash, registration_code_prefix
 from courses.models import Course
 from tests.factories import OAuthAccountFactory
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestAccountErrorPaths:
@@ -272,7 +275,7 @@ class TestAccountErrorPaths:
         assert response.status_code == 404
 
     def test_logout_invalid_refresh_token(self, api_client, teacher_user):
-        """Logout returns 400 when refresh token is malformed/invalid."""
+        """Logout remains idempotent and clears cookies even with invalid refresh token."""
 
         api_client.force_authenticate(user=teacher_user)
         response = api_client.post(
@@ -280,7 +283,10 @@ class TestAccountErrorPaths:
             {"refreshToken": "not-a-valid-refresh"},
             format="json",
         )
-        assert response.status_code == 400
+        assert response.status_code == 200
+        assert response.json()["message"] == "Logged out."
+        assert "access_token" in response.cookies
+        assert "refresh_token" in response.cookies
 
     def test_registration_local_enforces_auth_cn01_password_policy(self, api_client):
         """Local registration rejects weak passwords per AUTH-CN-01."""

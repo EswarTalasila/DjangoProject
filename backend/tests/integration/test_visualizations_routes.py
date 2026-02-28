@@ -8,6 +8,9 @@ from assignments.models import Assignment
 from courses.models import Course, Enrollment, EnrollmentStatus
 from submissions.models import Answer, ShortAnswerAnswer, Submission, SubmissionStatus
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestVisualizationRoutes:

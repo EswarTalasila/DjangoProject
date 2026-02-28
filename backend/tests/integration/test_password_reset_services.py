@@ -87,7 +87,7 @@ def _enroll_student_with_teacher(*, teacher: User, student: User) -> Course:
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_issue_password_reset_code_target_not_found():
     """Issuance rejects unknown target user IDs."""
     admin = _make_admin("admin-target-missing")
@@ -97,7 +97,7 @@ def test_issue_password_reset_code_target_not_found():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_issue_password_reset_code_blocks_admin_targets():
     """Issuance rejects admin targets, even when issuer is admin."""
     issuer = _make_admin("admin-issuer")
@@ -108,7 +108,7 @@ def test_issue_password_reset_code_blocks_admin_targets():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_issue_password_reset_code_teacher_scope_enforced():
     """Teacher can issue only for enrolled students in their owned courses."""
     admin = _make_admin("admin-teacher-scope")
@@ -133,7 +133,7 @@ def test_issue_password_reset_code_teacher_scope_enforced():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_issue_password_reset_code_blocks_self_issuance_for_all_roles():
     """Self-issuance is denied for admin, researcher, and teacher issuers."""
     admin = _make_admin("admin-self-target")
@@ -146,7 +146,7 @@ def test_issue_password_reset_code_blocks_self_issuance_for_all_roles():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_issue_password_reset_code_researcher_default_permissions():
     """Researcher default issuance is teacher-only without sudo extensions."""
     admin = _make_admin("admin-researcher-default")
@@ -168,7 +168,7 @@ def test_issue_password_reset_code_researcher_default_permissions():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_issue_password_reset_code_researcher_sudo_extensions():
     """Researcher sudo flags enable student/researcher issuance targets."""
     admin = _make_admin("admin-researcher-sudo")
@@ -197,7 +197,7 @@ def test_issue_password_reset_code_researcher_sudo_extensions():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_issue_password_reset_code_admin_ignores_teacher_scope():
     """Admin can issue for eligible non-admin roles without enrollment constraints."""
     admin = _make_admin("admin-global-reset")
@@ -212,7 +212,7 @@ def test_issue_password_reset_code_admin_ignores_teacher_scope():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_issue_password_reset_code_reissue_invalidates_prior_code():
     """A new issuance expires the prior approved request/code for the same target."""
     admin = _make_admin("admin-reissue")
@@ -231,7 +231,7 @@ def test_issue_password_reset_code_reissue_invalidates_prior_code():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_verify_password_reset_code_handles_unknown_invalid_and_expired():
     """Verify returns None for unknown identifier, bad code, and expired codes."""
     admin = _make_admin("admin-verify")
@@ -251,7 +251,7 @@ def test_verify_password_reset_code_handles_unknown_invalid_and_expired():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_complete_password_reset_rejects_invalid_or_expired_code():
     """Complete rejects bad codes and expired codes."""
     admin = _make_admin("admin-complete-invalid")
@@ -270,7 +270,7 @@ def test_complete_password_reset_rejects_invalid_or_expired_code():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_complete_password_reset_rejects_weak_or_reused_password():
     """Complete enforces password strength and rejects reusing current password."""
     admin = _make_admin("admin-complete-policy")
@@ -290,7 +290,7 @@ def test_complete_password_reset_rejects_weak_or_reused_password():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_complete_password_reset_marks_code_used_and_prevents_reuse():
     """Successful completion consumes the code and blocks second use."""
     admin = _make_admin("admin-complete-happy")
@@ -309,7 +309,7 @@ def test_complete_password_reset_marks_code_used_and_prevents_reuse():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_cleanup_temporary_reset_codes_expires_requests_and_deletes_codes():
     """Cleanup expires approved requests for expired codes and deletes artifacts."""
     admin = _make_admin("admin-cleanup")

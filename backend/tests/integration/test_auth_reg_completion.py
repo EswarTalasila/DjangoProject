@@ -30,6 +30,9 @@ from accounts.services import (
 )
 from courses.models import Course, Enrollment, EnrollmentStatus
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestAuthRegCompletion:

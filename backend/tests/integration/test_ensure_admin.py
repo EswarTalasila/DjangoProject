@@ -13,7 +13,7 @@ from accounts.models import User
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_ensure_admin_creates_admin_when_missing(monkeypatch):
     """Creates startup admin user when no matching account exists."""
 
@@ -39,7 +39,7 @@ def test_ensure_admin_creates_admin_when_missing(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_ensure_admin_reconciles_existing_user(monkeypatch):
     """Existing user matching email/username is promoted/reconciled to admin."""
 
@@ -75,7 +75,7 @@ def test_ensure_admin_reconciles_existing_user(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_ensure_admin_skips_when_existing_already_correct(monkeypatch):
     """No-op message emitted when admin already matches target config."""
 
@@ -105,7 +105,7 @@ def test_ensure_admin_skips_when_existing_already_correct(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_ensure_admin_production_requires_valid_email(monkeypatch):
     """Production bootstrap rejects invalid admin email values."""
 
@@ -124,7 +124,7 @@ def test_ensure_admin_production_requires_valid_email(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_ensure_admin_production_rejects_weak_password(monkeypatch):
     """Production bootstrap rejects weak/default passwords."""
 
@@ -143,7 +143,7 @@ def test_ensure_admin_production_rejects_weak_password(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_ensure_admin_production_rejects_empty_email(monkeypatch):
     """Production bootstrap rejects empty admin email."""
 
@@ -162,7 +162,7 @@ def test_ensure_admin_production_rejects_empty_email(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_ensure_admin_production_rejects_default_email(monkeypatch):
     """Production bootstrap rejects default/weak admin email."""
 
@@ -181,7 +181,7 @@ def test_ensure_admin_production_rejects_default_email(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_ensure_admin_production_rejects_empty_password(monkeypatch):
     """Production bootstrap rejects empty admin password."""
 
@@ -200,7 +200,7 @@ def test_ensure_admin_production_rejects_empty_password(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_ensure_admin_reconciles_only_email_mismatch(monkeypatch):
     """User found by username but email differs triggers reconciliation."""
 

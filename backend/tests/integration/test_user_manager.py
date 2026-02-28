@@ -8,7 +8,7 @@ from accounts.models import User
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_create_user_requires_username_and_name():
     """create_user validates required username and name fields."""
 
@@ -20,7 +20,7 @@ def test_create_user_requires_username_and_name():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_create_user_normalizes_identifiers_and_hashes_password():
     """create_user normalizes username/email and hashes provided password."""
 
@@ -37,7 +37,7 @@ def test_create_user_normalizes_identifiers_and_hashes_password():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_create_superuser_enforces_staff_and_superuser_flags():
     """create_superuser rejects explicit false values for required admin flags."""
 

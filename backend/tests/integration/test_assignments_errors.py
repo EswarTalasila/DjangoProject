@@ -5,6 +5,9 @@ from django.utils import timezone
 
 from assessments.models import Assessment, GradingMode
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestAssignmentErrors:

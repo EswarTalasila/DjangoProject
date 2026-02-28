@@ -11,7 +11,7 @@ from tests.factories import RegistrationCodeFactory
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_registration_code_clean_rejects_invalid_usage_bounds():
     """RegistrationCode.clean enforces max_uses/times_used boundaries."""
 
@@ -41,7 +41,7 @@ def test_registration_code_clean_rejects_invalid_usage_bounds():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_registration_code_clean_accepts_boundary_values():
     """times_used == max_uses is valid boundary condition."""
 

@@ -88,8 +88,8 @@ class TestJWTConfiguration:
         assert settings.SIMPLE_JWT["BLACKLIST_AFTER_ROTATION"] is True
 
     def test_jwt_access_token_lifetime(self):
-        """ACCESS_TOKEN_LIFETIME must be 1 hour to limit the exposure window of bearer tokens."""
-        assert settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"] == timedelta(hours=1)
+        """ACCESS_TOKEN_LIFETIME must be 15 minutes to tighten bearer-token exposure window."""
+        assert settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"] == timedelta(minutes=15)
 
     def test_jwt_refresh_token_lifetime(self):
         """REFRESH_TOKEN_LIFETIME must be 24 hours to limit the refresh window without forcing daily re-login."""

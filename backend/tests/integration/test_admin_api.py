@@ -14,6 +14,9 @@ import pytest
 from accounts.models import ResearcherProfile, Role, SudoGrant, SudoPermission, UserRole
 from tests.factories import SudoGrantFactory, UserFactory
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestAdminSudo:

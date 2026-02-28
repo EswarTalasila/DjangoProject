@@ -621,7 +621,7 @@ def refresh(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def logout(request):
-    """Invalidate a refresh token and end the current session."""
+    """End the current session and clear auth cookies (idempotent)."""
     refresh_token = _extract_refresh_token(request)
     if not refresh_token:
         serializer = RefreshTokenSerializer(data=request.data)
@@ -629,7 +629,10 @@ def logout(request):
         refresh_token = serializer.validated_data["refreshToken"]
 
     if not blacklist_refresh_token(refresh_token):
-        return Response({"detail": "Invalid refresh token."}, status=status.HTTP_400_BAD_REQUEST)
+        # Logout should remain idempotent from the client's perspective.
+        # Even with malformed/expired refresh tokens, clear local auth cookies.
+        response = Response({"message": "Logged out."}, status=status.HTTP_200_OK)
+        return _clear_auth_cookies(response)
     response = Response({"message": "Logged out."}, status=status.HTTP_200_OK)
     return _clear_auth_cookies(response)
 
@@ -958,7 +961,8 @@ def _edit_user(request, user_id: int):
         return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     requested_role = payload.get("role") or primary_role(user)
     if not can_edit_user(request.user, user, requested_role):
-        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        # Mask authorization scope checks as not-found to avoid target enumeration.
+        return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     next_email = user.email
 
     if payload.get("name"):
@@ -1000,7 +1004,8 @@ def _delete_user(request, user_id: int):
     if not user:
         return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     if not can_delete_user(request.user, user):
-        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        # Mask authorization scope checks as not-found to avoid target enumeration.
+        return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     user.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
 

@@ -5,6 +5,9 @@ import pytest
 from accounts.models import User
 from courses.models import Course, Enrollment
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestCourseRoutes:
