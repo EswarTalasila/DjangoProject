@@ -3,10 +3,11 @@
 | Field | Value |
 |-------|-------|
 | **Status** | READY |
-| **Date** | 2026-02-13 |
+| **Date** | 2026-02-28 |
 | **Domain** | REG |
 | **Applies To** | ADMIN (system role), RESEARCHER, TEACHER, STUDENT |
 | **Related Issues** | #29 (code-gated auth/registration), #28 (role hierarchy/sudo) |
+| **Dependencies** | FR-01 AUTH (shared code generator, login after registration), FR-03 SUDO (role hierarchy for code generation scope), FR-05 CRS (course linkage for student codes) |
 
 ---
 
@@ -28,6 +29,11 @@
 - Admin self-registration (bootstrapped via environment)
 - Email-based invites or SMTP workflows
 - Account disabling as a side-effect of code revocation
+
+### Core Intent
+- Gate all user registration behind validated access codes with role-specific policies.
+- Automate student enrollment via course-linked registration codes.
+- Support both local and OAuth registration paths for non-student roles.
 
 ---
 
@@ -117,48 +123,10 @@
 - Trigger: Student code flow attempts OAuth registration
 - Behavior: Clear unsupported-flow error; prompt student local registration flow
 
-**Tests:**
-
-**Backend Unit:**
-- test_REG_UC_01 (aggregator)
-- test_REG_UC_01_RESEARCHER
-- test_REG_UC_01_TEACHER
-- test_REG_UC_01_STUDENT
-- test_REG_UC_01_E1
-- test_REG_UC_01_E2
-- test_REG_UC_01_E3
-- test_REG_UC_01_E4
-- test_REG_UC_01_E5
-- test_REG_CN_16 (username generation + collision suffix)
-- test_REG_CN_03 (atomic transaction)
-- test_REG_CN_13 (auto-enroll)
-
-**Frontend Unit:**
-- test_REG_UC_01_code_validation
-- test_REG_UC_01_local_form_validation
-- test_REG_UC_01_student_username_preview
-- test_REG_UC_01_oauth_entry
-- test_REG_UC_01_error_display
-
-**Backend Integration:**
-- test_REG_UC_01_local_registration_flow
-- test_REG_UC_01_oauth_registration_flow
-- test_REG_UC_01_student_auto_enroll
-- test_REG_UC_01_student_username_collision_suffix
-
-**Frontend Integration:**
-- N/A (covered by E2E registration flows)
-
-**Security:**
-- N/A (covered by backend code validation and constraint tests)
-
-**E2E (Playwright):**
-- test_REG_UC_01_e2e_local
-- test_REG_UC_01_e2e_oauth
-
-**System Tests (Black Box):**
-- ST-REG-UC-01
-- ST-REG-UC-01-E1
+**Tests (representative):**
+- test_REG_UC_01, test_REG_UC_01_RESEARCHER, test_REG_UC_01_TEACHER, test_REG_UC_01_STUDENT
+- test_REG_UC_01_E1 through test_REG_UC_01_E5
+- test_REG_CN_16, test_REG_CN_03, test_REG_CN_13
 
 ---
 
@@ -190,35 +158,9 @@
 - Trigger: Non-student role attempts course-join redemption endpoint
 - Behavior: Access denied
 
-**Tests:**
-
-**Backend Unit:**
-- test_REG_UC_01a_STUDENT
-- test_REG_UC_01a_E1
-- test_REG_UC_01a_E2
-- test_REG_CN_03 (atomic transaction)
-- test_REG_CN_20 (idempotent already-enrolled semantics)
-
-**Frontend Unit:**
-- test_REG_UC_01a_join_code_form
-- test_REG_UC_01a_already_enrolled_message
-
-**Backend Integration:**
-- test_REG_UC_01a_join_course_flow
-- test_REG_UC_01a_already_enrolled_no_usage_decrement
-
-**Frontend Integration:**
-- N/A (covered by E2E join-course flow)
-
-**Security:**
-- N/A (covered by backend role and code-state enforcement tests)
-
-**E2E (Playwright):**
-- test_REG_UC_01a_e2e_join_course
-
-**System Tests (Black Box):**
-- ST-REG-UC-01a
-- ST-REG-UC-01a-E1
+**Tests (representative):**
+- test_REG_UC_01a_STUDENT, test_REG_UC_01a_E1, test_REG_UC_01a_E2
+- test_REG_CN_03, test_REG_CN_20
 
 ---
 
@@ -274,46 +216,10 @@
 - Trigger: User lacks permission for target role
 - Behavior: Access denied
 
-**Tests:**
-
-**Backend Unit:**
-- test_REG_UC_02 (aggregator)
-- test_REG_UC_02_ADMIN
-- test_REG_UC_02_RESEARCHER
-- test_REG_UC_02_TEACHER
-- test_REG_UC_02_E1
-- test_REG_UC_02_E2
-- test_REG_UC_02_E3
-- test_REG_UC_02_E4
-- test_REG_UC_02_E5
-- test_REG_CN_07 (count + uses)
-- test_REG_CN_11 (metadata -> single code)
-- test_REG_CN_12 (expiry required)
-- test_REG_CN_10 (role hierarchy + sudo scope)
-
-**Frontend Unit:**
-- test_REG_UC_02_form_validation
-- test_REG_UC_02_expiry_picker
-- test_REG_UC_02_metadata_toggle
-
-**Backend Integration:**
-- test_REG_UC_02_generate_codes_admin
-- test_REG_UC_02_generate_codes_researcher
-- test_REG_UC_02_generate_codes_teacher
-
-**Frontend Integration:**
-- N/A (covered by E2E code-generation flows)
-
-**Security:**
-- N/A (covered by backend permission and lifecycle constraint tests)
-
-**E2E (Playwright):**
-- test_REG_UC_02_e2e_generate_teacher_codes
-- test_REG_UC_02_e2e_generate_student_codes
-
-**System Tests (Black Box):**
-- ST-REG-UC-02
-- ST-REG-UC-02-E5
+**Tests (representative):**
+- test_REG_UC_02, test_REG_UC_02_ADMIN, test_REG_UC_02_RESEARCHER, test_REG_UC_02_TEACHER
+- test_REG_UC_02_E1 through test_REG_UC_02_E5
+- test_REG_CN_07, test_REG_CN_11, test_REG_CN_12, test_REG_CN_10
 
 ---
 
@@ -355,43 +261,10 @@
 - Trigger: Revoke or archive not allowed for current state
 - Behavior: Error message; state unchanged
 
-**Tests:**
-
-**Backend Unit:**
-- test_REG_UC_03 (aggregator)
-- test_REG_UC_03_ADMIN
-- test_REG_UC_03_RESEARCHER
-- test_REG_UC_03_TEACHER
-- test_REG_UC_03_E1
-- test_REG_UC_03_E2
-- test_REG_CN_04 (scope)
-- test_REG_CN_05 (lifecycle states)
-- test_REG_CN_15 (revoke/archive semantics)
-
-**Frontend Unit:**
-- test_REG_UC_03_list_view
-- test_REG_UC_03_detail_view
-- test_REG_UC_03_revoke_confirm
-- test_REG_UC_03_archive_action
-
-**Backend Integration:**
-- test_REG_UC_03_list_scope
-- test_REG_UC_03_revoke_flow
-- test_REG_UC_03_archive_flow
-
-**Frontend Integration:**
-- N/A (covered by E2E lifecycle flows)
-
-**Security:**
-- N/A (covered by backend scope and transition gate tests)
-
-**E2E (Playwright):**
-- test_REG_UC_03_e2e_revoke
-- test_REG_UC_03_e2e_archive
-
-**System Tests (Black Box):**
-- ST-REG-UC-03
-- ST-REG-UC-03-E2
+**Tests (representative):**
+- test_REG_UC_03, test_REG_UC_03_ADMIN, test_REG_UC_03_RESEARCHER, test_REG_UC_03_TEACHER
+- test_REG_UC_03_E1, test_REG_UC_03_E2
+- test_REG_CN_04, test_REG_CN_05, test_REG_CN_15
 
 ---
 
@@ -516,36 +389,11 @@
 
 ---
 
-## 6) Code State Machines
+## 6) Infrastructure Contract
 
-### Code Status States
+### 6.1 Endpoint Contract
 
-```
-[Generated] → Active → Exhausted (uses = 0)
-                 → Expired (time elapsed)
-                 → Revoked (manual)
-
-Exhausted / Expired / Revoked → Archived (visibility-only)
-```
-
-### Registration Transaction
-
-```
-[Code Validated] → [User Created] → [Code Usage Decremented] → [Enroll Student (if applicable)]
-```
-
-### Student Course Join Redemption
-
-```
-[Student Authenticated] → [Code Validated] → [Enroll Student]
-                                            → [Already Enrolled (idempotent success)]
-```
-
----
-
-## 7) Endpoints (Draft)
-
-### Registration
+#### Registration
 
 | Method | Path | Auth | UC |
 |--------|------|------|----|
@@ -557,13 +405,13 @@ Notes:
 - `POST /api/v1/registration/accounts` accepts a `method` field: `"LOCAL"` or `"OAUTH"`. OAuth is for RESEARCHER/TEACHER registration flows only.
 - STUDENT registration must use `method: "LOCAL"` so username generation and immutability are enforced.
 
-### Code Generation
+#### Code Generation
 
 | Method | Path | Auth | UC |
 |--------|------|------|----|
 | POST | `/api/v1/codes` | Access token | REG-UC-02 |
 
-### Code Lifecycle
+#### Code Lifecycle
 
 | Method | Path | Auth | UC |
 |--------|------|------|----|
@@ -577,9 +425,32 @@ Notes:
 
 > Endpoints are proposed and can be adjusted during implementation.
 
----
+### 6.2 Code State Machines
 
-## 8) Wireframe Mapping
+#### Code Status States
+
+```
+[Generated] → Active → Exhausted (uses = 0)
+                 → Expired (time elapsed)
+                 → Revoked (manual)
+
+Exhausted / Expired / Revoked → Archived (visibility-only)
+```
+
+#### Registration Transaction
+
+```
+[Code Validated] → [User Created] → [Code Usage Decremented] → [Enroll Student (if applicable)]
+```
+
+#### Student Course Join Redemption
+
+```
+[Student Authenticated] → [Code Validated] → [Enroll Student]
+                                            → [Already Enrolled (idempotent success)]
+```
+
+### 6.3 Wireframe Mapping
 
 | UC / Error | Wireframe Screens |
 |------------|-------------------|
@@ -602,7 +473,146 @@ Notes:
 
 ---
 
-## 9) Shared Code Generation (Implementation Note)
+## 7) Error Model
+
+| Scenario | Behavior | Contract |
+|----------|----------|----------|
+| Invalid/expired/exhausted/revoked access code | Generic error; no code state revealed | `400` |
+| Weak password or mismatch confirm | Field-level validation errors | `400` |
+| Missing required fields (name, password, email for non-student) | Required field errors | `400` |
+| OAuth cancelled/failed or missing email | OAuth error; return to registration choice | `400` |
+| Student code attempts OAuth registration | Unsupported-flow error; prompt local registration | `403` |
+| Invalid count or uses per code | Validation error | `400` |
+| Missing/invalid expiration | Validation error; expiration required | `400` |
+| Teacher generating student code without course | Validation error; course required | `400` |
+| Metadata with count > 1 | Error; single code required with metadata | `400` |
+| Insufficient permission for target role | Access denied | `403` |
+| Access code outside visibility scope | Access denied | `403` |
+| Invalid state transition (revoke/archive) | Error; state unchanged | `409` |
+| Non-student attempts course-join endpoint | Access denied | `403` |
+
+---
+
+## 8) Test Strategy by Layer
+
+**Naming Convention:** `test_REG_UC_##[_ROLE|_E#]`, `test_REG_CN_##`, `ST-REG-UC-##`
+
+### Backend Unit
+- test_REG_UC_01 (aggregator)
+- test_REG_UC_01_RESEARCHER
+- test_REG_UC_01_TEACHER
+- test_REG_UC_01_STUDENT
+- test_REG_UC_01_E1
+- test_REG_UC_01_E2
+- test_REG_UC_01_E3
+- test_REG_UC_01_E4
+- test_REG_UC_01_E5
+- test_REG_UC_01a_STUDENT
+- test_REG_UC_01a_E1
+- test_REG_UC_01a_E2
+- test_REG_UC_02 (aggregator)
+- test_REG_UC_02_ADMIN
+- test_REG_UC_02_RESEARCHER
+- test_REG_UC_02_TEACHER
+- test_REG_UC_02_E1
+- test_REG_UC_02_E2
+- test_REG_UC_02_E3
+- test_REG_UC_02_E4
+- test_REG_UC_02_E5
+- test_REG_UC_03 (aggregator)
+- test_REG_UC_03_ADMIN
+- test_REG_UC_03_RESEARCHER
+- test_REG_UC_03_TEACHER
+- test_REG_UC_03_E1
+- test_REG_UC_03_E2
+- test_REG_CN_01 (code entropy)
+- test_REG_CN_03 (atomic transaction)
+- test_REG_CN_04 (scope)
+- test_REG_CN_05 (lifecycle states)
+- test_REG_CN_07 (count + uses)
+- test_REG_CN_10 (role hierarchy + sudo scope)
+- test_REG_CN_11 (metadata -> single code)
+- test_REG_CN_12 (expiry required)
+- test_REG_CN_13 (auto-enroll)
+- test_REG_CN_15 (revoke/archive semantics)
+- test_REG_CN_16 (username generation + collision suffix)
+- test_REG_CN_20 (idempotent already-enrolled semantics)
+
+### Backend Integration
+- test_REG_UC_01_local_registration_flow
+- test_REG_UC_01_oauth_registration_flow
+- test_REG_UC_01_student_auto_enroll
+- test_REG_UC_01_student_username_collision_suffix
+- test_REG_UC_01a_join_course_flow
+- test_REG_UC_01a_already_enrolled_no_usage_decrement
+- test_REG_UC_02_generate_codes_admin
+- test_REG_UC_02_generate_codes_researcher
+- test_REG_UC_02_generate_codes_teacher
+- test_REG_UC_03_list_scope
+- test_REG_UC_03_revoke_flow
+- test_REG_UC_03_archive_flow
+
+### Frontend Unit
+- test_REG_UC_01_code_validation
+- test_REG_UC_01_local_form_validation
+- test_REG_UC_01_student_username_preview
+- test_REG_UC_01_oauth_entry
+- test_REG_UC_01_error_display
+- test_REG_UC_01a_join_code_form
+- test_REG_UC_01a_already_enrolled_message
+- test_REG_UC_02_form_validation
+- test_REG_UC_02_expiry_picker
+- test_REG_UC_02_metadata_toggle
+- test_REG_UC_03_list_view
+- test_REG_UC_03_detail_view
+- test_REG_UC_03_revoke_confirm
+- test_REG_UC_03_archive_action
+
+### E2E (Playwright)
+- test_REG_UC_01_e2e_local
+- test_REG_UC_01_e2e_oauth
+- test_REG_UC_01a_e2e_join_course
+- test_REG_UC_02_e2e_generate_teacher_codes
+- test_REG_UC_02_e2e_generate_student_codes
+- test_REG_UC_03_e2e_revoke
+- test_REG_UC_03_e2e_archive
+
+### System Tests (Black Box)
+- ST-REG-UC-01
+- ST-REG-UC-01-E1
+- ST-REG-UC-01a
+- ST-REG-UC-01a-E1
+- ST-REG-UC-02
+- ST-REG-UC-02-E5
+- ST-REG-UC-03
+- ST-REG-UC-03-E2
+
+---
+
+## 9) NFR Cross-References
+
+- **Security**
+  - REG-CN-01 code entropy (NFR-SEC-02)
+  - REG-CN-22 hash-at-rest (NFR-SEC-07)
+- **Privacy**
+  - REG-CN-10 role hierarchy (NFR-PRIV-01)
+- **Reliability**
+  - REG-CN-03 atomic registration (NFR-REL-01)
+
+---
+
+## 10) Cross-Domain References
+
+| Domain | REG dependency | Integration note |
+|--------|----------------|------------------|
+| FR-01 AUTH | Shared code generator with different policy profiles | Registration codes use same core generator as reset codes |
+| FR-03 SUDO | Role hierarchy + sudo for code generation scope | CREATE_STUDENT/CREATE_RESEARCHER_CODES sudo expand researcher code generation |
+| FR-05 CRS | Course linkage for student codes | Student codes require course FK; registration auto-enrolls |
+| FR-12 ENV | Admin bootstrap; no admin self-registration | Admin accounts created via ensure_admin only |
+
+---
+
+## 11) Current Implementation Alignment Notes
 
 Registration codes use the same **core code generator** as password reset codes (AUTH), with a **registration-specific policy**.
 
@@ -610,3 +620,10 @@ Registration codes use the same **core code generator** as password reset codes 
 - **Reset policy:** short-lived, single-use, target-bound, issuer-generated (no request-token queue)
 
 This is an implementation detail; requirements remain scoped under REG and AUTH.
+
+**Implementation notes:**
+1. **Code generator reuse.** The shared code generator in AUTH produces high-entropy codes. REG wraps it with registration-specific storage, usage tracking, and lifecycle states. Both domains share entropy and format but diverge on persistence and state management.
+2. **Username generation service.** A shared `generate_managed_username(first_name, last_name)` function is needed. It normalizes to `first_initial + last_name`, truncates/pads to 8 chars, and appends a trailing numeric index. Collision resolution queries existing usernames with the same prefix and increments the index.
+3. **OAuth integration.** Non-student OAuth registration reuses the same Google OAuth provider configured for AUTH login. The registration flow collects the display name in-app after the OAuth callback returns.
+4. **Student course enrollment.** Registration auto-enrollment and join-course redemption both use the same `Enrollment.objects.get_or_create()` pattern from FR-05 CRS, ensuring idempotent enrollment semantics.
+5. **HMAC code storage.** Code validation hashes the incoming plaintext with the same deterministic salt used at generation time and compares against the stored digest. The salt is per-deployment (not per-code) to enable O(1) lookup by hash.

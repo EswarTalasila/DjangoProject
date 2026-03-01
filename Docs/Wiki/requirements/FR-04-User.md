@@ -1,16 +1,22 @@
-# FR-04 User Management (USER) — Detailed Spec (v1.1)
+# FR-04 User Management (USER) — Detailed Spec (v5)
 
 | Field | Value |
 |-------|-------|
 | **Status** | COMPLETE |
-| **Date** | 2026-02-24 |
+| **Date** | 2026-02-28 |
 | **Domain** | USER |
 | **Applies To** | ADMIN (system role), RESEARCHER, TEACHER |
+| **Dependencies** | FR-03 SUDO (role matrix, sudo permissions for elevated user management) |
 | **Related Issues** | #28 (role hierarchy and sudo interaction) |
 
 ---
 
 ## 1) Scope
+
+### Core Intent
+- Provide privileged user lifecycle operations (create, edit, delete) within the user-role space.
+- Enforce role-based and ownership-based authorization with sudo-driven capability extension.
+- Maintain system-managed username immutability and identifier uniqueness across all user operations.
 
 ### In Scope
 - Privileged user lifecycle in user-role space (`RESEARCHER`, `TEACHER`, `STUDENT`):
@@ -206,7 +212,9 @@
 
 ---
 
-## 6) Endpoint Contract (Section 7)
+## 6) Infrastructure Contract
+
+### 6.1 Endpoint Contract
 
 | Method | Path | Auth | UC |
 |--------|------|------|-----|
@@ -217,37 +225,29 @@
 
 ---
 
-## 7) Traceability and Verification Notes
+## 7) Error Model
 
-- USER behavior is covered by:
-  - `tests/integration/test_accounts_routes.py`
-  - `tests/integration/test_accounts_error_paths.py`
-  - `tests/unit/services/test_permission_services.py`
-- Additional endpoint-focused coverage:
-  - `tests/integration/test_sudo_traceability.py` (FR-03 elevated USER paths)
-  - `tests/integration/test_sudo_grants_me.py` (`/sudo-grants/me` capability gating consumed by USER dashboards)
-- FR-03 sudo traceability tests intentionally reference USER flows for elevated variants.
-- Wireframes/UI for FR-04-specific admin console flows are not required for backend contract completeness and are tracked separately.
-
----
-
-## 8) NFR Cross-References
-
-The following NFRs are applicable to FR-04 endpoints and flows:
-
-- **NFR-Security**
-  - Role/sudo/ownership authorization is enforced server-side for all USER write operations.
-  - Username immutability and identifier uniqueness prevent identity tampering/collision.
-- **NFR-Reliability**
-  - USER APIs return deterministic status codes and structured error payloads.
-- **NFR-Performance**
-  - Staff listing uses pagination and prefetch (`prefetch_related("roles")`) for stable list performance.
-- **NFR-Maintainability**
-  - USER authorization logic is centralized in permission/service helpers (`can_create_user`, `can_edit_user`, `can_delete_user`).
+| Scenario | Behavior | Contract |
+|----------|----------|----------|
+| Missing required name (create) | Validation error | `400` |
+| Forbidden by role matrix (create) | Access denied | `403` |
+| Non-student create missing email | Validation error | `400` |
+| Email already taken | Duplicate identifier | `409` |
+| Caller supplied username (create) | Rejected; username is system-managed | `400` |
+| Forbidden by scope matrix (edit) | Access denied | `403` |
+| Admin/staff target edit via role flows | Protected from role-flow edits | `403` |
+| Username update attempt (edit) | Immutable field rejection | `400` |
+| Duplicate email (edit) | Duplicate identifier | `409` |
+| Non-student email removed (edit) | Required field error | `400` |
+| Forbidden by scope matrix (delete) | Access denied | `403` |
+| Target user not found (delete) | Not found | `404` |
+| Forbidden for non-admin/non-researcher (list staff) | Access denied | `403` |
 
 ---
 
-## 9) Test Strategy by Layer
+## 8) Test Strategy by Layer
+
+**Naming Convention:** `test_USER_UC_##[_ROLE|_E#]`, `test_USER_CN_##`, `ST-USER-UC-##`
 
 ### Backend Unit
 - Permission matrix and ownership logic:
@@ -268,9 +268,7 @@ The following NFRs are applicable to FR-04 endpoints and flows:
 - USER-relevant access gates are covered in accounts integration/security suites.
 - FR-03 sudo tests provide security coverage for elevated USER actions.
 
----
-
-## 10) System Test Definitions (Black-Box)
+### System Tests (Black Box)
 
 These IDs define end-to-end black-box checks for USER behavior:
 
@@ -282,3 +280,38 @@ These IDs define end-to-end black-box checks for USER behavior:
 Current status:
 - System test IDs are defined here for traceability.
 - Execution is currently represented by backend integration coverage; dedicated external black-box harness is tracked separately.
+
+---
+
+## 9) NFR Cross-References
+
+The following NFRs are applicable to FR-04 endpoints and flows:
+
+- **NFR-Security**
+  - Role/sudo/ownership authorization is enforced server-side for all USER write operations.
+  - Username immutability and identifier uniqueness prevent identity tampering/collision.
+- **NFR-Reliability**
+  - USER APIs return deterministic status codes and structured error payloads.
+- **NFR-Performance**
+  - Staff listing uses pagination and prefetch (`prefetch_related("roles")`) for stable list performance.
+- **NFR-Maintainability**
+  - USER authorization logic is centralized in permission/service helpers (`can_create_user`, `can_edit_user`, `can_delete_user`).
+
+---
+
+## 10) Cross-Domain References
+
+| Domain | USER dependency | Integration note |
+|--------|----------------|------------------|
+| FR-02 REG | Registration creates user accounts | REG-UC-01 creates accounts that USER endpoints subsequently manage |
+| FR-03 SUDO | Role matrix and sudo permissions | USER-UC-01..03 authorization delegated to FR-03 can_create/edit/delete_user functions |
+| FR-05 CRS | Course enrollment for teacher ownership boundary | USER-CN-05 teacher ownership determined via enrollment records |
+
+---
+
+## 11) Current Implementation Alignment Notes
+
+1. USER behavior is covered by `tests/integration/test_accounts_routes.py` and `tests/integration/test_accounts_error_paths.py`, with permission logic unit-tested in `tests/unit/services/test_permission_services.py`.
+2. Additional endpoint-focused coverage exists in `tests/integration/test_sudo_traceability.py` (FR-03 elevated USER paths) and `tests/integration/test_sudo_grants_me.py` (`/sudo-grants/me` capability gating consumed by USER dashboards).
+3. FR-03 sudo traceability tests intentionally reference USER flows for elevated variants.
+4. Wireframes/UI for FR-04-specific admin console flows are not required for backend contract completeness and are tracked separately.
