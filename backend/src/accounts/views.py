@@ -29,6 +29,7 @@ Endpoints:
     PATCH /api/v1/users/{id}            - Update user (teacher/admin, sudoed researcher)
     DELETE /api/v1/users/{id}           - Delete user (teacher/admin, sudoed researcher)
     GET /api/v1/users/staff             - List staff (researcher/admin)
+    GET /api/v1/sudo-grants             - List sudo grants (own grants for researcher, all for admin)
     POST /api/v1/sudo-grants            - Grant sudo permissions
     DELETE /api/v1/sudo-grants/{id}     - Revoke sudo grant
 """
@@ -1079,9 +1080,42 @@ def my_sudo_grant(request):
     )
 
 
-@api_view(["POST"])
+def _list_sudo_grants(request):
+    """Return sudo grants visible to the current user."""
+    if request.user.is_staff:
+        grants = SudoGrant.objects.select_related("user", "granted_by").all()
+    else:
+        grants = SudoGrant.objects.select_related("user", "granted_by").filter(
+            granted_by=request.user
+        )
+
+    results = [
+        {
+            "id": g.id,
+            "user": {
+                "id": g.user.id,
+                "username": g.user.username,
+                "name": g.user.name or g.user.username,
+            },
+            "permissions": g.permissions,
+            "canGrantSudo": g.can_grant_sudo,
+            "grantedAt": g.granted_at.isoformat(),
+        }
+        for g in grants
+    ]
+    return Response(results, status=status.HTTP_200_OK)
+
+
+@api_view(["GET", "POST"])
 @permission_classes([IsResearcherOrAdmin])
-def grant_sudo(request):
+def sudo_grants_collection(request):
+    """Dispatch GET (list) and POST (grant) for sudo grants."""
+    if request.method == "GET":
+        return _list_sudo_grants(request)
+    return _grant_sudo(request)
+
+
+def _grant_sudo(request):
     """
     Grant sudo permissions to a researcher.
 

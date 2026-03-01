@@ -243,3 +243,77 @@ class TestSudoTraceability:
     def test_SUDO_UC_02_researcher_revoke_other_blocked(self, api_client):
         """Integration: researcher cannot revoke another's grant."""
         researcher_tests.TestResearcherSudoDelegation().test_RESEARCHER_UC_22_E1(api_client)
+
+    # --- List sudo grants (GET /sudo-grants) ---
+
+    def test_SUDO_list_grants_researcher_sees_own(self, api_client):
+        """Researcher with can_grant_sudo sees only grants they created."""
+        granter = UserFactory()
+        UserRole.objects.create(user=granter, role=Role.RESEARCHER)
+        ResearcherProfile.objects.create(user=granter)
+        SudoGrantFactory(
+            user=granter,
+            can_grant_sudo=True,
+            permissions=[SudoPermission.CREATE_TEACHER.value],
+        )
+
+        grantee = UserFactory()
+        UserRole.objects.create(user=grantee, role=Role.RESEARCHER)
+        ResearcherProfile.objects.create(user=grantee)
+        SudoGrantFactory(
+            user=grantee,
+            granted_by=granter,
+            permissions=[SudoPermission.CREATE_TEACHER.value],
+        )
+
+        api_client.force_authenticate(user=granter)
+        response = api_client.get("/api/v1/sudo-grants")
+        assert response.status_code == 200
+        assert len(response.data) == 1
+        assert response.data[0]["user"]["id"] == grantee.id
+
+    def test_SUDO_list_grants_admin_sees_all(self, api_client, admin_user):
+        """Admin sees all sudo grants."""
+        r1 = UserFactory()
+        UserRole.objects.create(user=r1, role=Role.RESEARCHER)
+        ResearcherProfile.objects.create(user=r1)
+        SudoGrantFactory(user=r1, permissions=[SudoPermission.CREATE_TEACHER.value])
+
+        r2 = UserFactory()
+        UserRole.objects.create(user=r2, role=Role.RESEARCHER)
+        ResearcherProfile.objects.create(user=r2)
+        SudoGrantFactory(user=r2, permissions=[SudoPermission.EDIT_USER.value])
+
+        api_client.force_authenticate(user=admin_user)
+        response = api_client.get("/api/v1/sudo-grants")
+        assert response.status_code == 200
+        assert len(response.data) >= 2
+
+    def test_SUDO_list_grants_response_shape(self, api_client, admin_user):
+        """List response includes expected fields."""
+        r = UserFactory()
+        UserRole.objects.create(user=r, role=Role.RESEARCHER)
+        ResearcherProfile.objects.create(user=r)
+        SudoGrantFactory(
+            user=r,
+            permissions=[SudoPermission.CREATE_TEACHER.value],
+            can_grant_sudo=True,
+        )
+
+        api_client.force_authenticate(user=admin_user)
+        response = api_client.get("/api/v1/sudo-grants")
+        assert response.status_code == 200
+        grant = response.data[0]
+        assert "id" in grant
+        assert "user" in grant
+        assert "permissions" in grant
+        assert "canGrantSudo" in grant
+        assert "grantedAt" in grant
+        assert grant["user"]["id"] == r.id
+        assert grant["user"]["username"] == r.username
+
+    def test_SUDO_list_grants_unauthorized(self, api_client, teacher_user):
+        """Teacher cannot list sudo grants."""
+        api_client.force_authenticate(user=teacher_user)
+        response = api_client.get("/api/v1/sudo-grants")
+        assert response.status_code == 403
