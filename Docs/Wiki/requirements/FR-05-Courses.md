@@ -1,4 +1,4 @@
-# FR-05 Courses and Enrollment Management (CRS) — Detailed Spec (v1)
+# FR-05 Courses and Enrollment Management (CRS) — Detailed Spec (v5)
 
 | Field | Value |
 |-------|-------|
@@ -7,6 +7,7 @@
 | **Domain** | CRS |
 | **Applies To** | ADMIN (system role), RESEARCHER, TEACHER, STUDENT |
 | **Related Issues** | TBD |
+| **Dependencies** | FR-02 REG (code-gated student registration), FR-04 USER (student account lifecycle), FR-14 ARCH (archive lifecycle) |
 
 ---
 
@@ -36,6 +37,11 @@
 - Assignment/submission authoring and grading flows (FR-06/FR-07/FR-08).
 - Course data archive/export system (future requirement dependency; see CRS-CN-12).
 - Wireframes and Playwright E2E scripts (tracked separately).
+
+### Core Intent
+- Provide teacher-owned course lifecycle with ownership-bounded CRUD operations.
+- Enforce enrollment lifecycle semantics (ACTIVE/DROPPED) with data integrity protections.
+- Maintain authorization matrix for course visibility across privileged roles.
 
 ---
 
@@ -316,7 +322,9 @@
 
 ---
 
-## 6) Endpoint Contract
+## 6) Infrastructure Contract
+
+### 6.1 Endpoint Contract
 
 | Method | Path | Auth | UC |
 |--------|------|------|-----|
@@ -394,7 +402,19 @@ Expected statuses by UC:
 
 ---
 
-## 10) Current Implementation Alignment Notes
+## 10) Cross-Domain References
+
+| Domain | CRS dependency | Integration note |
+|--------|----------------|------------------|
+| FR-02 REG | Code-gated student registration creates accounts enrolled via CRS | Registration flow may trigger enrollment; shared student identity |
+| FR-04 USER | Student account lifecycle | CRS enrollment references User accounts; drop does not delete user (CRS-CN-05) |
+| FR-07 ASGN | Assignment creation requires course ownership | ASGN-UC-01 validates `can_manage_course` from CRS-CN-01 |
+| FR-08 SUB | Submission provisioning at enrollment | CRS-UC-07 creates placeholder submissions for enrolled students |
+| FR-14 ARCH | Course archive lifecycle | ARCH-UC-03 archives courses; CRS-CN-12 requires data archival before deletion |
+
+---
+
+## 11) Current Implementation Alignment Notes
 
 This draft defines the target FR-05 contract. Current code has known deltas that must be resolved before FR-05 can be marked COMPLETE:
 

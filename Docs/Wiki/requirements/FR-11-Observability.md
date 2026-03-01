@@ -1,4 +1,4 @@
-# FR-11 Observability (OBS) — Detailed Spec (v1)
+# FR-11 Observability (OBS) — Detailed Spec (v5)
 
 | Field | Value |
 |-------|-------|

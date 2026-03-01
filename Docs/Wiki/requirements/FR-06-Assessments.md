@@ -1,4 +1,4 @@
-# FR-06 Assessments (ASMT) — Detailed Spec (v1)
+# FR-06 Assessments (ASMT) — Detailed Spec (v5)
 
 | Field | Value |
 |-------|-------|
@@ -7,6 +7,7 @@
 | **Domain** | ASMT |
 | **Applies To** | ADMIN (system role), RESEARCHER, TEACHER |
 | **Related Issues** | TBD |
+| **Dependencies** | FR-07 ASGN (assignment references), FR-08 SUB (submission data), FR-14 ARCH (archive lifecycle) |
 
 ---
 
@@ -42,6 +43,11 @@
 
 ### Deprecations
 - `POST /api/v1/assessments/{assessment_id}/teacher-self-assess` — deprecated. Route still exists in codebase; removal target: next FR-06 implementation release.
+
+### Core Intent
+- Provide researcher-authored assessment templates with multi-type question support and grading mode configuration.
+- Enforce two-tier mutation policy: unreferenced assessments allow full CRUD; referenced assessments are protected from destructive changes.
+- Support assessment archive lifecycle to retire templates without breaking existing assignments.
 
 ---
 
@@ -314,7 +320,9 @@
 
 ---
 
-## 6) Endpoint Contract
+## 6) Infrastructure Contract
+
+### 6.1 Endpoint Contract
 
 | Method | Path | Auth | UC |
 |--------|------|------|-----|
@@ -396,7 +404,18 @@ Expected statuses by UC:
 
 ---
 
-## 10) Current Implementation Alignment Notes
+## 10) Cross-Domain References
+
+| Domain | ASMT dependency | Integration note |
+|--------|-----------------|------------------|
+| FR-05 CRS | Course context for assignment creation | Assessments are global templates; course scoping happens at assignment level (FR-07) |
+| FR-07 ASGN | Assignment references block mutation | ASGN-CN-04 enforces archived assessment check; ASMT-CN-05/06 block delete/update when assignments exist |
+| FR-08 SUB | Submission answers tied to question structure | Question replacement (ASMT-CN-08) is blocked when submissions exist via assignment reference check |
+| FR-14 ARCH | Assessment archive lifecycle | ARCH-UC-01 archives assessments; blocks new assignment creation from archived templates |
+
+---
+
+## 11) Current Implementation Alignment Notes
 
 This draft defines the target FR-06 contract. Current code has known deltas that must be resolved before FR-06 can be marked COMPLETE:
 

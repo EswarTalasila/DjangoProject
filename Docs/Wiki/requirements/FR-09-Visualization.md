@@ -1,4 +1,4 @@
-# FR-09 Visualization (VIZ) — Detailed Spec (v1)
+# FR-09 Visualization (VIZ) — Detailed Spec (v5)
 
 | Field | Value |
 |-------|-------|

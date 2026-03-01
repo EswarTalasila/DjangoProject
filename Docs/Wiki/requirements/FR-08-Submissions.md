@@ -1,4 +1,4 @@
-# FR-08 Submissions (SUB) — Detailed Spec (v1)
+# FR-08 Submissions (SUB) — Detailed Spec (v5)
 
 | Field | Value |
 |-------|-------|
@@ -7,6 +7,7 @@
 | **Domain** | SUB |
 | **Applies To** | ADMIN (system role), RESEARCHER, TEACHER, STUDENT |
 | **Related Issues** | TBD |
+| **Dependencies** | FR-05 CRS (course enrollment), FR-06 ASMT (assessment/question types), FR-07 ASGN (assignment lifecycle and archive), FR-14 ARCH (archive status gates) |
 
 ---
 
@@ -39,6 +40,11 @@
 - Due-date enforcement at submission time (`due_at` is a visibility filter in FR-07 `ASGN-CN-08`, not a submission blocker; archive is the hard deadline mechanism).
 - Bulk grading across multiple submissions.
 - Wireframes and Playwright E2E scripts (tracked separately).
+
+### Core Intent
+- Manage submission lifecycle from pre-creation through draft, submit, and grading with role-appropriate access controls.
+- Support auto-grading on submit for eligible question types with hybrid grading mode for mixed assessments.
+- Enforce archive-based hard deadline semantics and student self-access restrictions across all submission operations.
 
 ### Deprecations
 - Teacher self-assessment flow: `teacher_self_assess` view function is implemented but not wired to any URL pattern (dead code). `GET /api/v1/teachers/{teacher_id}/submissions` is a legacy endpoint with no active write path — the corresponding create route was never wired. Related to deprecated `TEACHER` audience type from FR-07 (`ASGN-CN-11`). Removal target: next FR-08 implementation release.
@@ -402,7 +408,9 @@
 
 ---
 
-## 6) Endpoint Contract
+## 6) Infrastructure Contract
+
+### 6.1 Endpoint Contract
 
 | Method | Path | Auth | UC |
 |--------|------|------|-----|
@@ -494,7 +502,21 @@ Expected statuses by UC:
 
 ---
 
-## 10) Current Implementation Alignment Notes
+## 10) Cross-Domain References
+
+| Domain | SUB dependency | Integration note |
+|--------|----------------|------------------|
+| FR-05 CRS | Course enrollment for submission access | Student must be enrolled in assignment's course for write operations (SUB-CN-02) |
+| FR-06 ASMT | Assessment question types and grading modes | Answer types match question types from ASMT; grading mode determines auto-grade behavior (SUB-CN-03) |
+| FR-07 ASGN | Assignment lifecycle and archive gates | Submission pre-creation at assignment time (ASGN-CN-05); archive blocks writes (SUB-CN-06, SUB-CN-07) |
+| FR-09 VIZ | Visualization data source | VIZ aggregates computed from submission records and status values |
+| FR-10 EXP | Export data source | EXP exports submission-level data including answers and scores |
+| FR-14 ARCH | Archive status gates | Archived assignments block new submissions and freeze drafts |
+| FR-15 IMG | Image attachments | IMG-UC-01..04 attach images to submissions; post-submit lock shared with SUB status |
+
+---
+
+## 11) Current Implementation Alignment Notes
 
 This draft defines the target FR-08 contract. Current code has known deltas that must be resolved before FR-08 can be marked COMPLETE:
 

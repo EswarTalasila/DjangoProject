@@ -1,4 +1,4 @@
-# FR-10 Export (EXP) — Detailed Spec (v1)
+# FR-10 Export (EXP) — Detailed Spec (v5)
 
 | Field | Value |
 |-------|-------|

@@ -26,6 +26,7 @@
 - Deployment templates for production/staging environments
 
 ### Out of Scope
+- GitHub Actions CI/CD pipeline configuration (documented as future work, not yet implemented)
 - Production hosting infrastructure (cloud provider, VPS, Kubernetes)
 - Certificate automation (certbot/letsencrypt)
 - Container registry and image publishing
@@ -123,10 +124,10 @@
 
 ---
 
-### INFRA-UC-02 — Run Automated CI Pipeline (Deferred)
+### INFRA-UC-02 — Run Automated CI Pipeline
 
 **Roles:** CI Pipeline
-**Trigger:** PR opened or updated via GitHub Actions workflow (target-state; not yet implemented).
+**Trigger:** PR opened or updated (future: GitHub Actions workflow trigger).
 
 **Preconditions:**
 - Code checked out.

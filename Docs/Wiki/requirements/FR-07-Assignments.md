@@ -1,4 +1,4 @@
-# FR-07 Assignments (ASGN) — Detailed Spec (v1)
+# FR-07 Assignments (ASGN) — Detailed Spec (v5)
 
 | Field | Value |
 |-------|-------|
@@ -7,6 +7,7 @@
 | **Domain** | ASGN |
 | **Applies To** | ADMIN (system role), RESEARCHER, TEACHER, STUDENT |
 | **Related Issues** | TBD |
+| **Dependencies** | FR-05 CRS (course ownership), FR-06 ASMT (assessment templates), FR-08 SUB (submission data), FR-14 ARCH (archive lifecycle) |
 
 ---
 
@@ -43,6 +44,11 @@
 
 ### Deprecations
 - `TEACHER` audience type — deprecated. Still present in `models.py` (`AudienceType` enum) and `serializers.py` (validation logic). Removal target: next FR-07 implementation release.
+
+### Core Intent
+- Provide teacher-created, course-scoped assignment lifecycle with scheduling and archive support.
+- Enforce atomic submission pre-creation for enrolled students on assignment creation.
+- Maintain creator-only mutation policy with two-tier delete semantics based on submission progress.
 
 ---
 
@@ -348,7 +354,9 @@
 
 ---
 
-## 6) Endpoint Contract
+## 6) Infrastructure Contract
+
+### 6.1 Endpoint Contract
 
 | Method | Path | Auth | UC |
 |--------|------|------|-----|
@@ -435,7 +443,19 @@ Expected statuses by UC:
 
 ---
 
-## 10) Current Implementation Alignment Notes
+## 10) Cross-Domain References
+
+| Domain | ASGN dependency | Integration note |
+|--------|-----------------|------------------|
+| FR-05 CRS | Course ownership gate on creation | ASGN-CN-10 requires `can_manage_course` from CRS-CN-01 for assignment creation |
+| FR-06 ASMT | Assessment template source | Assignments reference assessment templates; archived assessment check enforces ASMT-CN-13 |
+| FR-08 SUB | Submission pre-creation and lifecycle | ASGN-CN-05 atomic submission provisioning; ASGN-CN-06 blocks delete when submissions progressed |
+| FR-09 VIZ | Visualization aggregates per assignment | VIZ-UC-03 computes grade distribution from assignment submissions |
+| FR-14 ARCH | Assignment archive lifecycle | ARCH-UC-02 archives assignments; blocks new submissions and draft edits |
+
+---
+
+## 11) Current Implementation Alignment Notes
 
 This draft defines the target FR-07 contract. Current code has known deltas that must be resolved before FR-07 can be marked COMPLETE:
 
