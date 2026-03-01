@@ -1,7 +1,16 @@
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
-import { getSessionProfile } from "@/lib/auth-session";
-import { LucideIcon } from "lucide-react";
+import { getSessionProfile, getSudoCapabilities } from "@/lib/auth-session";
+import {
+  LayoutDashboard,
+  BookOpen,
+  FileText,
+  CheckSquare,
+  KeyRound,
+  Download,
+  Shield,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 export type Role = "TEACHER" | "RESEARCHER" | "STUDENT";
 
@@ -10,6 +19,43 @@ export type NavItem =
   | { type: "divider" }
   | { type: "link"; label: string; href: string; icon?: LucideIcon };
 
+export type NavLink = { label: string; href: string };
+
+export type NavGroup = {
+  label: string;
+  icon: LucideIcon;
+  links: NavLink[];
+};
+
+const GROUP_ICONS: Record<string, LucideIcon> = {
+  Overview: LayoutDashboard,
+  Courses: BookOpen,
+  Assessments: FileText,
+  "Assignments & Grading": CheckSquare,
+  Registration: KeyRound,
+  Exports: Download,
+  Delegation: Shield,
+};
+
+function groupNavItems(items: NavItem[]): NavGroup[] {
+  const groups: NavGroup[] = [];
+  let current: NavGroup | null = null;
+
+  for (const item of items) {
+    if (item.type === "header") {
+      if (current) groups.push(current);
+      current = {
+        label: item.label,
+        icon: GROUP_ICONS[item.label] ?? LayoutDashboard,
+        links: [],
+      };
+    } else if (item.type === "link" && current) {
+      current.links.push({ label: item.label, href: item.href });
+    }
+  }
+  if (current) groups.push(current);
+  return groups;
+}
 
 const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   TEACHER: [
@@ -32,10 +78,6 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "header", label: "Assignments & Grading" },
     { type: "link", label: "Create Assignment", href: "/dashboard/teacher/assignments/create" },
     { type: "link", label: "Gradebook", href: "/dashboard/teacher/gradebook" },
-
-    { type: "divider" },
-    { type: "header", label: "System" },
-    { type: "link", label: "Settings", href: "/dashboard/settings" },
   ],
 
   RESEARCHER: [
@@ -55,8 +97,8 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "link", label: "Registration Codes", href: "/dashboard/codes" },
 
     { type: "divider" },
-    { type: "header", label: "System" },
-    { type: "link", label: "Settings", href: "/dashboard/settings" },
+    { type: "header", label: "Delegation" },
+    { type: "link", label: "Sudo Delegation", href: "/dashboard/sudo" },
   ],
 
   STUDENT: [
@@ -67,10 +109,6 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "header", label: "Assessments" },
     { type: "link", label: "Mood Meter", href: "/dashboard/mood-meter" },
     { type: "link", label: "My Assignments", href: "/dashboard/assignments" },
-
-    { type: "divider" },
-    { type: "header", label: "System" },
-    { type: "link", label: "Settings", href: "/dashboard/settings" },
   ],
 };
 
@@ -81,6 +119,27 @@ export async function SidebarWrapper() {
   }
   const userRole = profile.role as Role;
 
-  const items = NAV_BY_ROLE[userRole] ?? NAV_BY_ROLE.STUDENT;
-  return <Sidebar role={userRole} items={items} />;
+  let items = [...(NAV_BY_ROLE[userRole] ?? NAV_BY_ROLE.STUDENT)];
+
+  if (userRole === "RESEARCHER") {
+    const sudo = await getSudoCapabilities();
+    const canGrantSudo = sudo?.canGrantSudo === true;
+    if (!canGrantSudo) {
+      items = items.filter(
+        (item) =>
+          !(item.type === "header" && item.label === "Delegation") &&
+          !(item.type === "link" && item.href === "/dashboard/sudo")
+      );
+      // Remove consecutive dividers that may remain after filtering.
+      items = items.filter((item, index) => {
+        if (item.type !== "divider") return true;
+        const prev = items[index - 1];
+        const next = items[index + 1];
+        if (!prev || !next) return false;
+        return prev.type !== "divider" && next.type !== "divider";
+      });
+    }
+  }
+  const groups = groupNavItems(items);
+  return <Sidebar role={userRole} groups={groups} />;
 }
