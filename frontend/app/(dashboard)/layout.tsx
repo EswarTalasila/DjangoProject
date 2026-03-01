@@ -1,6 +1,7 @@
 import { SidebarWrapper } from "@/components/layout/sidebarWrapper";
 import { redirect } from "next/navigation";
 import { getSessionProfile } from "@/lib/auth-session";
+import { UserAvatarMenu } from "@/components/layout/userAvatarMenu";
 
 export default async function DashboardLayout({
   children,
@@ -21,7 +22,11 @@ export default async function DashboardLayout({
             Ready, Set, Resilience
           </h2>
           <div className="flex items-center gap-4">
-             <div className="h-8 w-8 rounded-full bg-slate-200" />
+            <UserAvatarMenu
+              name={profile.name}
+              username={profile.username}
+              role={profile.role}
+            />
           </div>
         </header>
 
