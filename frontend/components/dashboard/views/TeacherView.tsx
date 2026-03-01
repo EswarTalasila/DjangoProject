@@ -46,7 +46,7 @@ export default function TeacherView() {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [registrationCode, setRegistrationCode] = useState<string | null>(null);
+  const [registrationCodes, setRegistrationCodes] = useState<string[]>([]);
   const [isCodeDialogOpen, setIsCodeDialogOpen] = useState(false);
   const [isCreateCodeDialogOpen, setIsCreateCodeDialogOpen] = useState(false);
   const [selectedCourseIdForCode, setSelectedCourseIdForCode] = useState<number | null>(null);
@@ -103,20 +103,26 @@ export default function TeacherView() {
     setIsCreateCodeDialogOpen(true);
   }
 
-  async function handleGenerateInviteCode(config: { usesPerCode: number; expiresAt: string }) {
+  async function handleGenerateInviteCode(config: {
+    count: number;
+    usesPerCode: number;
+    expiresAt: string;
+  }) {
     if (!selectedCourseIdForCode) return;
     setIsLoading(true);
     try {
       const response = await createRegistrationCodes({
         codeType: 'STUDENT',
-        count: 1,
+        count: config.count,
         usesPerCode: config.usesPerCode,
         expiresAt: config.expiresAt,
         courseId: selectedCourseIdForCode,
       });
-      const code = response.codes?.[0]?.code;
-      if (!code) throw new Error('Registration code was not returned by the server.');
-      setRegistrationCode(code);
+      const plainCodes = response.codes
+        .map((c) => c.code)
+        .filter((c): c is string => c != null);
+      if (plainCodes.length === 0) throw new Error('Registration code was not returned by the server.');
+      setRegistrationCodes(plainCodes);
       setIsCreateCodeDialogOpen(false);
       setIsCodeDialogOpen(true);
     } catch (error: unknown) {
@@ -182,6 +188,7 @@ export default function TeacherView() {
         hideCodeType
         onSubmit={async (values) =>
           handleGenerateInviteCode({
+            count: values.count,
             usesPerCode: values.usesPerCode,
             expiresAt: values.expiresAt,
           })
@@ -190,7 +197,7 @@ export default function TeacherView() {
       <RegistrationCodeDialog
         open={isCodeDialogOpen}
         onOpenChange={setIsCodeDialogOpen}
-        code={registrationCode}
+        codes={registrationCodes}
       />
       <ResetCodeDialog
         open={isResetDialogOpen}

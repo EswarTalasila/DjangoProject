@@ -17,6 +17,7 @@ import { type RegistrationCodeType } from '@/lib/registration-code-api';
 
 type FormValues = {
   codeType: RegistrationCodeType;
+  count: number;
   usesPerCode: number;
   expiresAt: string;
 };
@@ -61,6 +62,7 @@ export function CreateRegistrationCodeDialog({
   onSubmit,
 }: CreateRegistrationCodeDialogProps) {
   const [codeType, setCodeType] = useState<RegistrationCodeType>(initialCodeType);
+  const [count, setCount] = useState(1);
   const [usesPerCode, setUsesPerCode] = useState(1);
   const [expiresAt, setExpiresAt] = useState(defaultExpiryLocalValue());
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +70,7 @@ export function CreateRegistrationCodeDialog({
   useEffect(() => {
     if (!open) return;
     setCodeType(initialCodeType);
+    setCount(1);
     setUsesPerCode(1);
     setExpiresAt(defaultExpiryLocalValue());
     setError(null);
@@ -80,6 +83,10 @@ export function CreateRegistrationCodeDialog({
 
   async function handleCreate() {
     setError(null);
+    if (count < 1) {
+      setError('Number of codes must be at least 1.');
+      return;
+    }
     if (usesPerCode < 1) {
       setError('Uses per code must be at least 1.');
       return;
@@ -95,6 +102,7 @@ export function CreateRegistrationCodeDialog({
     }
     await onSubmit({
       codeType,
+      count,
       usesPerCode,
       expiresAt: parsed.toISOString(),
     });
@@ -127,6 +135,18 @@ export function CreateRegistrationCodeDialog({
               </select>
             </div>
           ) : null}
+
+          <div className="grid gap-2">
+            <Label htmlFor="code-count">Number of codes</Label>
+            <Input
+              id="code-count"
+              type="number"
+              min={1}
+              value={count}
+              onChange={(event) => setCount(Number(event.target.value))}
+              disabled={isLoading}
+            />
+          </div>
 
           <div className="grid gap-2">
             <Label htmlFor="uses-per-code">Uses per code</Label>

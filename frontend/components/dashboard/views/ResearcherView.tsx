@@ -40,7 +40,7 @@ export default function ResearcherView() {
   const [resetTargetName, setResetTargetName] = useState<string | null>(null);
   const [resetExpiresAt, setResetExpiresAt] = useState<string | null>(null);
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
-  const [registrationCode, setRegistrationCode] = useState<string | null>(null);
+  const [registrationCodes, setRegistrationCodes] = useState<string[]>([]);
   const [isRegistrationCodeDialogOpen, setIsRegistrationCodeDialogOpen] = useState(false);
   const [isCreateCodeDialogOpen, setIsCreateCodeDialogOpen] = useState(false);
 
@@ -94,6 +94,7 @@ export default function ResearcherView() {
 
   async function handleGenerateInviteCode(config: {
     codeType: 'TEACHER' | 'RESEARCHER';
+    count: number;
     usesPerCode: number;
     expiresAt: string;
   }) {
@@ -101,13 +102,15 @@ export default function ResearcherView() {
     try {
       const response = await createRegistrationCodes({
         codeType: config.codeType,
-        count: 1,
+        count: config.count,
         usesPerCode: config.usesPerCode,
         expiresAt: config.expiresAt,
       });
-      const code = response.codes?.[0]?.code;
-      if (!code) throw new Error('Registration code was not returned by the server.');
-      setRegistrationCode(code);
+      const plainCodes = response.codes
+        .map((c) => c.code)
+        .filter((c): c is string => c != null);
+      if (plainCodes.length === 0) throw new Error('Registration code was not returned by the server.');
+      setRegistrationCodes(plainCodes);
       setIsCreateCodeDialogOpen(false);
       setIsRegistrationCodeDialogOpen(true);
     } catch (error: unknown) {
@@ -151,6 +154,7 @@ export default function ResearcherView() {
         onSubmit={async (values) =>
           handleGenerateInviteCode({
             codeType: values.codeType as 'TEACHER' | 'RESEARCHER',
+            count: values.count,
             usesPerCode: values.usesPerCode,
             expiresAt: values.expiresAt,
           })
@@ -159,7 +163,7 @@ export default function ResearcherView() {
       <RegistrationCodeDialog
         open={isRegistrationCodeDialogOpen}
         onOpenChange={setIsRegistrationCodeDialogOpen}
-        code={registrationCode}
+        codes={registrationCodes}
       />
       <ResetCodeDialog
         open={isResetDialogOpen}

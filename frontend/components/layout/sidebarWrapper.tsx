@@ -19,6 +19,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "divider" },
     { type: "header", label: "Courses" },
     { type: "link", label: "My Courses", href: "/dashboard/courses" },
+    { type: "link", label: "Registration Codes", href: "/dashboard/codes" },
 
     //TODO: Further implementation of teacher side is required. They need a way to view students and add students to their course
 
@@ -48,6 +49,10 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "divider" },
     { type: "header", label: "Exports" },
     { type: "link", label: "Download Exports", href: "/dashboard/research/exports" },
+
+    { type: "divider" },
+    { type: "header", label: "Registration" },
+    { type: "link", label: "Registration Codes", href: "/dashboard/codes" },
 
     { type: "divider" },
     { type: "header", label: "System" },

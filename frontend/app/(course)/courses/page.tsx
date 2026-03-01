@@ -19,7 +19,7 @@ export default function CoursesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isMutating, setIsMutating] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [registrationCode, setRegistrationCode] = useState<string | null>(null);
+  const [registrationCodes, setRegistrationCodes] = useState<string[]>([]);
   const [isCodeDialogOpen, setIsCodeDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -77,7 +77,7 @@ export default function CoursesPage() {
     setIsMutating(true);
     try {
       const code = await createStudentRegistrationCode(courseId);
-      setRegistrationCode(code);
+      setRegistrationCodes([code]);
       setIsCodeDialogOpen(true);
     } catch (error: unknown) {
       const detail =
@@ -99,7 +99,7 @@ export default function CoursesPage() {
       <RegistrationCodeDialog
         open={isCodeDialogOpen}
         onOpenChange={setIsCodeDialogOpen}
-        code={registrationCode}
+        codes={registrationCodes}
       />
 
       <div className="flex items-center justify-between space-y-2">
