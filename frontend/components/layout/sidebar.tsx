@@ -37,13 +37,17 @@ export function Sidebar({ role, groups }: SidebarProps) {
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
   const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isGroupActive = useCallback(
-    (group: NavGroup) =>
-      group.links.some(
-        (link) =>
-          pathname === link.href || pathname.startsWith(`${link.href}/`)
-      ),
+  const isLinkActive = useCallback(
+    (href: string) =>
+      href === "/dashboard"
+        ? pathname === "/dashboard"
+        : pathname === href || pathname.startsWith(`${href}/`),
     [pathname]
+  );
+
+  const isGroupActive = useCallback(
+    (group: NavGroup) => group.links.some((link) => isLinkActive(link.href)),
+    [isLinkActive]
   );
 
   const handleMouseEnter = (label: string) => {
@@ -97,7 +101,7 @@ export function Sidebar({ role, groups }: SidebarProps) {
                   "absolute left-full top-0 ml-0 min-w-[180px] z-50",
                   "bg-sidebar border border-sidebar-border rounded-r-lg shadow-lg",
                   "transition-all duration-200 ease-out origin-left",
-                  isOpen || active
+                  isOpen
                     ? "opacity-100 scale-x-100 pointer-events-auto"
                     : "opacity-0 scale-x-0 pointer-events-none"
                 )}
@@ -107,9 +111,7 @@ export function Sidebar({ role, groups }: SidebarProps) {
                 </div>
                 <div className="py-1">
                   {group.links.map((link) => {
-                    const linkActive =
-                      pathname === link.href ||
-                      pathname.startsWith(`${link.href}/`);
+                    const linkActive = isLinkActive(link.href);
                     return (
                       <Link
                         key={link.href}
