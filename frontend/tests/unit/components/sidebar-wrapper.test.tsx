@@ -1,19 +1,17 @@
 import { render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import type { NavItem } from '@/components/layout/sidebarWrapper';
+import type { NavGroup } from '@/components/layout/sidebarWrapper';
 
-function findLinks(items: NavItem[]): Array<{ label: string; href: string }> {
-  return items
-    .filter((item): item is Extract<NavItem, { type: 'link' }> => item.type === 'link')
-    .map(({ label, href }) => ({ label, href }));
+function findLinks(groups: NavGroup[]): Array<{ label: string; href: string }> {
+  return groups.flatMap((g) => g.links.map(({ label, href }) => ({ label, href })));
 }
 
 describe('Sidebar navigation configuration', () => {
   it('TEACHER nav includes Registration Codes under Courses', async () => {
     vi.resetModules();
 
-    let capturedItems: NavItem[] = [];
+    let capturedGroups: NavGroup[] = [];
     let capturedRole = '';
 
     vi.doMock('@/lib/auth-session', () => ({
@@ -23,6 +21,12 @@ describe('Sidebar navigation configuration', () => {
         lastName: 'User',
         username: 'testuser',
       }),
+      getSudoCapabilities: vi.fn().mockResolvedValue({
+        hasSudo: false,
+        canGrantSudo: false,
+        permissions: [],
+        isStaff: false,
+      }),
     }));
 
     vi.doMock('next/navigation', () => ({
@@ -31,9 +35,9 @@ describe('Sidebar navigation configuration', () => {
     }));
 
     vi.doMock('@/components/layout/sidebar', () => ({
-      Sidebar: ({ role, items }: { role: string; items: NavItem[] }) => {
+      Sidebar: ({ role, groups }: { role: string; groups: NavGroup[] }) => {
         capturedRole = role;
-        capturedItems = items;
+        capturedGroups = groups;
         return null;
       },
     }));
@@ -43,7 +47,7 @@ describe('Sidebar navigation configuration', () => {
     render(element);
 
     expect(capturedRole).toBe('TEACHER');
-    const links = findLinks(capturedItems);
+    const links = findLinks(capturedGroups);
     const regCodeLink = links.find((l) => l.label === 'Registration Codes');
     expect(regCodeLink).toBeDefined();
     expect(regCodeLink!.href).toBe('/dashboard/codes');
@@ -56,7 +60,7 @@ describe('Sidebar navigation configuration', () => {
   it('RESEARCHER nav includes Registration Codes', async () => {
     vi.resetModules();
 
-    let capturedItems: NavItem[] = [];
+    let capturedGroups: NavGroup[] = [];
 
     vi.doMock('@/lib/auth-session', () => ({
       getSessionProfile: vi.fn().mockResolvedValue({
@@ -65,41 +69,11 @@ describe('Sidebar navigation configuration', () => {
         lastName: 'Researcher',
         username: 'researcher',
       }),
-    }));
-
-    vi.doMock('next/navigation', () => ({
-      redirect: vi.fn(),
-      usePathname: vi.fn().mockReturnValue('/dashboard'),
-    }));
-
-    vi.doMock('@/components/layout/sidebar', () => ({
-      Sidebar: ({ items }: { role: string; items: NavItem[] }) => {
-        capturedItems = items;
-        return null;
-      },
-    }));
-
-    const { SidebarWrapper } = await import('@/components/layout/sidebarWrapper');
-    const element = await SidebarWrapper();
-    render(element);
-
-    const links = findLinks(capturedItems);
-    const regCodeLink = links.find((l) => l.label === 'Registration Codes');
-    expect(regCodeLink).toBeDefined();
-    expect(regCodeLink!.href).toBe('/dashboard/codes');
-  });
-
-  it('STUDENT nav does NOT include Registration Codes', async () => {
-    vi.resetModules();
-
-    let capturedItems: NavItem[] = [];
-
-    vi.doMock('@/lib/auth-session', () => ({
-      getSessionProfile: vi.fn().mockResolvedValue({
-        role: 'STUDENT',
-        firstName: 'Test',
-        lastName: 'Student',
-        username: 'student',
+      getSudoCapabilities: vi.fn().mockResolvedValue({
+        hasSudo: true,
+        canGrantSudo: true,
+        permissions: ['CREATE_TEACHER'],
+        isStaff: false,
       }),
     }));
 
@@ -109,8 +83,8 @@ describe('Sidebar navigation configuration', () => {
     }));
 
     vi.doMock('@/components/layout/sidebar', () => ({
-      Sidebar: ({ items }: { role: string; items: NavItem[] }) => {
-        capturedItems = items;
+      Sidebar: ({ groups }: { role: string; groups: NavGroup[] }) => {
+        capturedGroups = groups;
         return null;
       },
     }));
@@ -119,7 +93,52 @@ describe('Sidebar navigation configuration', () => {
     const element = await SidebarWrapper();
     render(element);
 
-    const links = findLinks(capturedItems);
+    const links = findLinks(capturedGroups);
+    const regCodeLink = links.find((l) => l.label === 'Registration Codes');
+    expect(regCodeLink).toBeDefined();
+    expect(regCodeLink!.href).toBe('/dashboard/codes');
+    const sudoLink = links.find((l) => l.label === 'Sudo Delegation');
+    expect(sudoLink).toBeDefined();
+    expect(sudoLink!.href).toBe('/dashboard/sudo');
+  });
+
+  it('STUDENT nav does NOT include Registration Codes', async () => {
+    vi.resetModules();
+
+    let capturedGroups: NavGroup[] = [];
+
+    vi.doMock('@/lib/auth-session', () => ({
+      getSessionProfile: vi.fn().mockResolvedValue({
+        role: 'STUDENT',
+        firstName: 'Test',
+        lastName: 'Student',
+        username: 'student',
+      }),
+      getSudoCapabilities: vi.fn().mockResolvedValue({
+        hasSudo: false,
+        canGrantSudo: false,
+        permissions: [],
+        isStaff: false,
+      }),
+    }));
+
+    vi.doMock('next/navigation', () => ({
+      redirect: vi.fn(),
+      usePathname: vi.fn().mockReturnValue('/dashboard'),
+    }));
+
+    vi.doMock('@/components/layout/sidebar', () => ({
+      Sidebar: ({ groups }: { role: string; groups: NavGroup[] }) => {
+        capturedGroups = groups;
+        return null;
+      },
+    }));
+
+    const { SidebarWrapper } = await import('@/components/layout/sidebarWrapper');
+    const element = await SidebarWrapper();
+    render(element);
+
+    const links = findLinks(capturedGroups);
     const regCodeLink = links.find((l) => l.label === 'Registration Codes');
     expect(regCodeLink).toBeUndefined();
   });
@@ -136,6 +155,7 @@ describe('Sidebar navigation configuration', () => {
 
     vi.doMock('@/lib/auth-session', () => ({
       getSessionProfile: vi.fn().mockResolvedValue(null),
+      getSudoCapabilities: vi.fn().mockResolvedValue(null),
     }));
 
     vi.doMock('next/navigation', () => ({
@@ -151,5 +171,46 @@ describe('Sidebar navigation configuration', () => {
     await expect(SidebarWrapper()).rejects.toThrow('NEXT_REDIRECT');
 
     expect(mockRedirect).toHaveBeenCalledWith('/login');
+  });
+
+  it('RESEARCHER nav hides Sudo Delegation without canGrantSudo', async () => {
+    vi.resetModules();
+
+    let capturedGroups: NavGroup[] = [];
+
+    vi.doMock('@/lib/auth-session', () => ({
+      getSessionProfile: vi.fn().mockResolvedValue({
+        role: 'RESEARCHER',
+        firstName: 'Test',
+        lastName: 'Researcher',
+        username: 'researcher',
+      }),
+      getSudoCapabilities: vi.fn().mockResolvedValue({
+        hasSudo: true,
+        canGrantSudo: false,
+        permissions: ['CREATE_TEACHER'],
+        isStaff: false,
+      }),
+    }));
+
+    vi.doMock('next/navigation', () => ({
+      redirect: vi.fn(),
+      usePathname: vi.fn().mockReturnValue('/dashboard'),
+    }));
+
+    vi.doMock('@/components/layout/sidebar', () => ({
+      Sidebar: ({ groups }: { role: string; groups: NavGroup[] }) => {
+        capturedGroups = groups;
+        return null;
+      },
+    }));
+
+    const { SidebarWrapper } = await import('@/components/layout/sidebarWrapper');
+    const element = await SidebarWrapper();
+    render(element);
+
+    const links = findLinks(capturedGroups);
+    const sudoLink = links.find((l) => l.label === 'Sudo Delegation');
+    expect(sudoLink).toBeUndefined();
   });
 });
