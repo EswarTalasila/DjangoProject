@@ -630,13 +630,6 @@ Applies to all roles. Reset requests are removed; issuance always starts from an
 - `backend/tests/unit/services/test_password_reset_services.py::test_issue_password_reset_code_researcher_sudo_extensions`
 - `backend/tests/unit/services/test_password_reset_services.py::test_issue_password_reset_code_admin_ignores_teacher_scope`
 - `backend/tests/unit/services/test_password_reset_services.py::test_issue_password_reset_code_blocks_self_issuance_for_all_roles`
-- `backend/tests/unit/fr013/test_accounts_routes_unit.py`
-- `backend/tests/unit/fr013/test_accounts_error_paths_unit.py`
-- `backend/tests/unit/fr013/test_auth_reg_completion_unit.py`
-- `backend/tests/unit/fr013/test_auth_errors_unit.py`
-- `backend/tests/unit/fr013/test_auth_reset_issuance_unit.py`
-- `backend/tests/unit/fr013/test_admin_login_block_unit.py`
-- `backend/tests/unit/fr013/test_auth_me_unit.py`
 
 ### Backend Integration
 
@@ -735,17 +728,8 @@ This is an implementation detail; requirements remain scoped under AUTH and REG.
 Primary FR-01 unit coverage lives in:
 - `backend/tests/unit/services/test_auth_services.py`
 - `backend/tests/unit/services/test_password_reset_services.py`
-- `backend/tests/unit/fr013/test_accounts_routes_unit.py`
-- `backend/tests/unit/fr013/test_accounts_error_paths_unit.py`
-- `backend/tests/unit/fr013/test_auth_reg_completion_unit.py`
-- `backend/tests/unit/fr013/test_auth_errors_unit.py`
-- `backend/tests/unit/fr013/test_auth_reset_issuance_unit.py`
-- `backend/tests/unit/fr013/test_admin_login_block_unit.py`
-- `backend/tests/unit/fr013/test_auth_me_unit.py`
 - `frontend/tests/unit/app/login-page.test.tsx`
 - `frontend/tests/unit/app/register-page.test.tsx`
 - `frontend/tests/unit/app/forgot-password-page.test.tsx`
 - `frontend/tests/unit/lib/auth-session.test.ts`
 - `frontend/tests/unit/lib/password-reset-api.test.ts`
-
-The temporary FR-01..FR-03 unit bridge file has been removed. Coverage is now enforced through direct FR-mapped unit suites under `backend/tests/unit/fr013/`.

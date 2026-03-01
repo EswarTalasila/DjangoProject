@@ -536,12 +536,3 @@ This draft defines the target FR-08 contract. Current code has known deltas that
 14. Add missing FR-08 traceability tests for constraints and error paths.
 15. Preserve paginated listing behavior on submission list endpoints during FR-08 changes.
 
----
-
-## Unit Coverage Bridge (Temporary)
-
-To raise `tests/unit --cov=src` while FR operations are still stabilizing, the unit suite includes bridge modules that execute existing submission integration scenarios:
-- `backend/tests/unit/bridge/test_submissions_bridge.py`
-- `backend/tests/unit/bridge/test_visualization_workflow_bridge.py`
-
-These bridges are temporary and will be replaced with narrower unit tests as FR-08 implementation details settle.
