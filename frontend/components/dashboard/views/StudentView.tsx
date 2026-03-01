@@ -74,15 +74,15 @@ export default function StudentView() {
   }
 
   return (
-    <div className="space-y-8 p-8 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-6xl mx-auto">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-[#61323e]">Student Dashboard</h1>
-        <p className="text-[#754d28] mt-1">Join courses and view your enrollments.</p>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Student Dashboard</h1>
+        <p className="text-muted-foreground mt-1">Join courses and view your enrollments.</p>
       </div>
 
-      <Card className="border-[#ebe9e7] shadow-sm">
+      <Card className="border-border shadow-sm">
         <CardHeader>
-          <CardTitle className="text-lg text-[#2b6ea4]">Join a Course</CardTitle>
+          <CardTitle className="text-lg text-primary">Join a Course</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="flex items-end gap-3">
@@ -91,17 +91,17 @@ export default function StudentView() {
               <Input
                 id="code"
                 placeholder="Enter your course code"
-                className="border-[#ebe9e7] focus-visible:ring-[#2b6ea4]"
+                className="border-border focus-visible:ring-ring"
                 disabled={isSubmitting}
                 {...register('code')}
               />
               {errors.code ? (
-                <p className="text-sm text-red-600">{errors.code.message}</p>
+                <p className="text-sm text-destructive">{errors.code.message}</p>
               ) : null}
             </div>
             <Button
               type="submit"
-              className="bg-[#2b6ea4] hover:bg-[#205a86] text-white"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground"
               disabled={isSubmitting}
             >
               {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -112,16 +112,16 @@ export default function StudentView() {
       </Card>
 
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold text-[#61323e]">My Courses</h2>
+        <h2 className="text-xl font-semibold text-foreground">My Courses</h2>
 
-        {loadError ? <p className="text-sm text-red-600">{loadError}</p> : null}
-        {isBootstrapping ? <p className="text-sm text-[#754d28]">Loading courses...</p> : null}
+        {loadError ? <p className="text-sm text-destructive">{loadError}</p> : null}
+        {isBootstrapping ? <p className="text-sm text-muted-foreground">Loading courses...</p> : null}
 
         {!isBootstrapping && !courses.length ? (
-          <Card className="border-[#ebe9e7] border-dashed">
+          <Card className="border-border border-dashed">
             <CardContent className="py-8 text-center">
-              <BookOpen className="mx-auto h-10 w-10 text-[#754d28] opacity-40 mb-3" />
-              <p className="text-sm text-[#754d28]">
+              <BookOpen className="mx-auto h-10 w-10 text-muted-foreground opacity-40 mb-3" />
+              <p className="text-sm text-muted-foreground">
                 No courses yet. Enter a course code above to get started.
               </p>
             </CardContent>
@@ -133,18 +133,18 @@ export default function StudentView() {
             {courses.map((course) => (
               <Card
                 key={course.id}
-                className="border-[#ebe9e7] hover:border-[#2b6ea4] transition-colors"
+                className="border-border hover:border-primary transition-colors"
               >
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-lg font-semibold text-[#2b6ea4]">
+                  <CardTitle className="text-lg text-primary font-semibold">
                     {course.name}
                   </CardTitle>
-                  <p className="text-sm text-[#754d28] mt-1 font-mono bg-[#eff6f7] px-2 py-0.5 rounded inline-block">
+                  <p className="text-xs text-muted-foreground font-mono bg-muted px-2 py-0.5 inline-block">
                     Course #{course.id}
                   </p>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-sm text-[#754d28] border-t border-[#ebe9e7] pt-3">
+                  <div className="text-sm text-muted-foreground border-t border-border pt-3">
                     Enrolled
                   </div>
                 </CardContent>

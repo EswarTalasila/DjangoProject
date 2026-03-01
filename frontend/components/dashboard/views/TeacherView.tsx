@@ -2,14 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  BookOpen,
   ChevronDown,
   ChevronUp,
-  ClipboardCheck,
   MoreVertical,
   Plus,
   Search,
-  Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -26,6 +23,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { createCourse, listCourses, type CourseSummary } from '@/lib/course-api';
+import { cn } from '@/lib/utils';
 import {
   issuePasswordResetCode,
   listStudentsInCourse,
@@ -169,14 +167,9 @@ export default function TeacherView() {
   }
 
   const totalStudents = courses.reduce((sum, course) => sum + course.studentCount, 0);
-  const stats = [
-    { label: 'Total Students', value: String(totalStudents), icon: Users, color: 'text-[#2b6ea4]' },
-    { label: 'Active Courses', value: String(courses.length), icon: BookOpen, color: 'text-[#61323e]' },
-    { label: 'Pending Grades', value: 'N/A', icon: ClipboardCheck, color: 'text-[#754d28]' },
-  ];
 
   return (
-    <div className="space-y-8 p-8 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-6xl mx-auto">
       <CreateRegistrationCodeDialog
         open={isCreateCodeDialogOpen}
         onOpenChange={setIsCreateCodeDialogOpen}
@@ -185,7 +178,7 @@ export default function TeacherView() {
         description="Set usage count and expiration before creating the code."
         allowedCodeTypes={['STUDENT']}
         initialCodeType="STUDENT"
-        hideCodeType
+        lockCodeType
         onSubmit={async (values) =>
           handleGenerateInviteCode({
             count: values.count,
@@ -209,11 +202,11 @@ export default function TeacherView() {
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-[#61323e]">Teacher Dashboard</h1>
-          <p className="text-[#754d28] mt-1">Manage your courses and issue student reset codes.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Teacher Dashboard</h1>
+          <p className="text-muted-foreground mt-1">Manage your courses and issue student reset codes.</p>
         </div>
         <Button
-          className="bg-[#2b6ea4] hover:bg-[#205a86] text-white"
+          className="bg-primary hover:bg-primary/90 text-primary-foreground"
           onClick={handleCreateCourse}
           disabled={isLoading}
         >
@@ -222,38 +215,37 @@ export default function TeacherView() {
         </Button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="border-[#ebe9e7] shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-[#754d28]">{stat.label}</CardTitle>
-              <stat.icon className={`h-4 w-4 ${stat.color}`} />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-[#61323e]">{stat.value}</div>
-            </CardContent>
-          </Card>
+      <div className="flex items-center gap-0 divide-x divide-border bg-muted px-4 py-3 rounded-sm">
+        {[
+          { label: 'Students', value: totalStudents },
+          { label: 'Active Courses', value: courses.length },
+          { label: 'Pending Grades', value: '\u2014' },
+        ].map((stat) => (
+          <div key={stat.label} className="flex items-baseline gap-2 px-6 first:pl-0 last:pr-0">
+            <span className="text-2xl font-bold text-foreground">{stat.value}</span>
+            <span className="text-sm text-muted-foreground">{stat.label}</span>
+          </div>
         ))}
       </div>
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-[#61323e]">Your Courses</h2>
+          <h2 className="text-xl font-semibold text-foreground">Your Courses</h2>
           <div className="relative w-64">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-[#754d28]" />
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search courses..."
-              className="pl-8 border-[#ebe9e7] focus-visible:ring-[#2b6ea4]"
+              className="pl-8 border-border focus-visible:ring-ring"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
         </div>
 
-        {loadError ? <p className="text-sm text-red-600">{loadError}</p> : null}
-        {isBootstrapping ? <p className="text-sm text-[#754d28]">Loading courses...</p> : null}
+        {loadError ? <p className="text-sm text-destructive">{loadError}</p> : null}
+        {isBootstrapping ? <p className="text-sm text-muted-foreground">Loading courses...</p> : null}
         {!isBootstrapping && !filteredCourses.length ? (
-          <p className="text-sm text-[#754d28]">No courses found.</p>
+          <p className="text-sm text-muted-foreground">No courses found.</p>
         ) : null}
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -264,21 +256,21 @@ export default function TeacherView() {
             return (
               <Card
                 key={course.id}
-                className="border-[#ebe9e7] hover:border-[#2b6ea4] transition-colors group"
+                className="border-border hover:border-primary transition-colors group"
               >
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-2">
                   <div className="flex justify-between items-start">
                     <div>
-                      <CardTitle className="text-lg font-semibold text-[#2b6ea4]">
+                      <CardTitle className="text-lg text-primary font-semibold">
                         {course.name}
                       </CardTitle>
-                      <p className="text-sm text-[#754d28] mt-1 font-mono bg-[#eff6f7] px-2 py-0.5 rounded inline-block">
+                      <p className="text-xs text-muted-foreground font-mono bg-muted px-2 py-0.5 inline-block mt-1">
                         Course #{course.id}
                       </p>
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0 text-[#754d28]" disabled={isLoading}>
+                        <Button variant="ghost" className="h-8 w-8 p-0 text-muted-foreground" disabled={isLoading}>
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -294,12 +286,11 @@ export default function TeacherView() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex justify-between text-sm text-[#754d28] border-t border-[#ebe9e7] pt-4 mt-2">
+                  <div className="flex justify-between text-sm text-muted-foreground border-t border-border pt-3 mt-1">
                     <div className="flex items-center">
-                      <Users className="mr-1 h-4 w-4 opacity-70" />
                       {course.studentCount} Students
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => void toggleStudents(course.id)}>
+                    <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => void toggleStudents(course.id)}>
                       {isExpanded ? (
                         <>
                           <ChevronUp className="mr-1 h-4 w-4" />
@@ -315,33 +306,29 @@ export default function TeacherView() {
                   </div>
 
                   {isExpanded ? (
-                    <div className="mt-4 border-t border-[#ebe9e7] pt-3">
+                    <div className="mt-3 border-t border-border pt-3">
                       {isLoadingStudents ? (
-                        <p className="text-xs text-[#754d28]">Loading students...</p>
+                        <p className="text-xs text-muted-foreground">Loading students...</p>
                       ) : students.length ? (
-                        <div className="space-y-2">
-                          {students.map((student) => (
-                            <div
-                              key={student.id}
-                              className="flex items-center justify-between rounded border border-[#ebe9e7] p-2"
-                            >
-                              <div>
-                                <p className="text-sm font-medium text-[#61323e]">{student.name}</p>
-                                <p className="text-xs text-[#754d28]">@{student.username}</p>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={isLoading}
-                                onClick={() => void handleIssueResetCode(student)}
-                              >
-                                Issue Reset
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
+                        <table className="w-full text-sm">
+                          <tbody>
+                            {students.map((student, i) => (
+                              <tr key={student.id} className={cn("transition-colors", i % 2 === 1 && "bg-muted/50")}>
+                                <td className="py-2 pr-3">
+                                  <p className="font-medium text-foreground">{student.name}</p>
+                                  <p className="text-xs text-muted-foreground">@{student.username}</p>
+                                </td>
+                                <td className="py-2 text-right">
+                                  <Button size="sm" variant="outline" disabled={isLoading} onClick={() => void handleIssueResetCode(student)}>
+                                    Issue Reset
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       ) : (
-                        <p className="text-xs text-[#754d28]">No students enrolled.</p>
+                        <p className="text-xs text-muted-foreground">No students enrolled.</p>
                       )}
                     </div>
                   ) : null}

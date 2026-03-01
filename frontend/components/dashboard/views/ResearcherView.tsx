@@ -1,14 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { BookOpen, ClipboardCheck, Search, Users } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { CreateRegistrationCodeDialog } from '@/components/codes/CreateRegistrationCodeDialog';
 import { RegistrationCodeDialog } from '@/components/codes/RegistrationCodeDialog';
 import { ResetCodeDialog } from '@/components/codes/ResetCodeDialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { listCourses } from '@/lib/course-api';
 import {
@@ -120,25 +119,15 @@ export default function ResearcherView() {
     }
   }
 
-  const stats = [
-    { label: 'Teachers', value: String(teachers.length), icon: Users, color: 'text-[#2b6ea4]' },
-    { label: 'Active Courses', value: String(courseCount), icon: BookOpen, color: 'text-[#61323e]' },
-    {
-      label: 'Reset Capability',
-      value: 'Teacher',
-      icon: ClipboardCheck,
-      color: 'text-[#754d28]',
-    },
-  ];
   const canCreateResearcherCodes = Boolean(
-    sudoGrant?.isStaff || sudoGrant?.permissions.includes('CREATE_RESEARCHER_CODES'),
+    sudoGrant?.isStaff || sudoGrant?.permissions.includes('ISSUE_RESEARCHER_REG_CODE'),
   );
   const allowedCodeTypes: Array<'TEACHER' | 'RESEARCHER'> = canCreateResearcherCodes
     ? ['TEACHER', 'RESEARCHER']
     : ['TEACHER'];
 
   return (
-    <div className="space-y-8 p-8 max-w-7xl mx-auto">
+    <div className="space-y-6 max-w-6xl mx-auto">
       <CreateRegistrationCodeDialog
         open={isCreateCodeDialogOpen}
         onOpenChange={setIsCreateCodeDialogOpen}
@@ -175,13 +164,13 @@ export default function ResearcherView() {
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-[#61323e]">Researcher Dashboard</h1>
-          <p className="text-[#754d28] mt-1">Issue password reset codes for teacher accounts.</p>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Researcher Dashboard</h1>
+          <p className="text-muted-foreground mt-1">Issue password reset codes for teacher accounts.</p>
         </div>
 
         <div className="flex items-center gap-3">
           <Button
-            className="bg-[#2b6ea4] hover:bg-[#205a86] text-white"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
             disabled={isActionLoading}
             onClick={() => setIsCreateCodeDialogOpen(true)}
           >
@@ -190,57 +179,56 @@ export default function ResearcherView() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="border-[#ebe9e7] shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-[#754d28]">{stat.label}</CardTitle>
-              <stat.icon className={`h-4 w-4 ${stat.color}`} />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-[#61323e]">{stat.value}</div>
-            </CardContent>
-          </Card>
+      <div className="flex items-center gap-0 divide-x divide-border bg-muted px-4 py-3 rounded-sm">
+        {[
+          { label: 'Teachers', value: teachers.length },
+          { label: 'Active Courses', value: courseCount },
+          { label: 'Reset Capability', value: 'Teacher' },
+        ].map((stat) => (
+          <div key={stat.label} className="flex items-baseline gap-2 px-6 first:pl-0 last:pr-0">
+            <span className="text-2xl font-bold text-foreground">{stat.value}</span>
+            <span className="text-sm text-muted-foreground">{stat.label}</span>
+          </div>
         ))}
       </div>
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-[#61323e]">Teacher Accounts</h2>
+          <h2 className="text-xl font-semibold text-foreground">Teacher Accounts</h2>
           <div className="relative w-64">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-[#754d28]" />
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search teachers..."
-              className="pl-8 border-[#ebe9e7] focus-visible:ring-[#2b6ea4]"
+              className="pl-8 border-border focus-visible:ring-ring"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
         </div>
 
-        {loadError ? <p className="text-sm text-red-600">{loadError}</p> : null}
-        {isLoading ? <p className="text-sm text-[#754d28]">Loading teachers...</p> : null}
+        {loadError ? <p className="text-sm text-destructive">{loadError}</p> : null}
+        {isLoading ? <p className="text-sm text-muted-foreground">Loading teachers...</p> : null}
         {!isLoading && !filteredTeachers.length ? (
-          <p className="text-sm text-[#754d28]">No teacher accounts found.</p>
+          <p className="text-sm text-muted-foreground">No teacher accounts found.</p>
         ) : null}
 
-        <div className="rounded-md border border-[#ebe9e7]">
+        <div className="rounded-sm border border-border overflow-hidden">
           <table className="w-full">
-            <thead className="bg-[#faf9f8] border-b border-[#ebe9e7]">
+            <thead className="bg-muted border-b border-border">
               <tr>
-                <th className="text-left p-4 text-sm font-medium text-[#754d28]">Name</th>
-                <th className="text-left p-4 text-sm font-medium text-[#754d28]">Email</th>
-                <th className="text-left p-4 text-sm font-medium text-[#754d28]">Username</th>
-                <th className="text-left p-4 text-sm font-medium text-[#754d28]">Actions</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Username</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredTeachers.map((teacher) => (
-                <tr key={teacher.id} className="border-b border-[#ebe9e7] last:border-0 hover:bg-[#faf9f8]">
-                  <td className="p-4 text-sm font-medium text-[#2b6ea4]">{teacher.name}</td>
-                  <td className="p-4 text-sm text-[#754d28]">{teacher.email || '-'}</td>
-                  <td className="p-4 text-sm text-[#61323e]">@{teacher.username}</td>
-                  <td className="p-4">
+                <tr key={teacher.id} className="even:bg-muted/50 hover:bg-accent transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-foreground">{teacher.name}</td>
+                  <td className="px-4 py-3 text-sm text-muted-foreground">{teacher.email || '-'}</td>
+                  <td className="px-4 py-3 text-sm text-foreground font-mono">@{teacher.username}</td>
+                  <td className="px-4 py-3">
                     <Button
                       size="sm"
                       variant="outline"
