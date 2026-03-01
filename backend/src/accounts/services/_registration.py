@@ -1,5 +1,7 @@
 """Registration code management and redemption."""
 
+import re
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -18,6 +20,15 @@ from ..models import (
 )
 from ._auth import link_or_create_oauth_account
 from ._roles import create_user_from_payload
+_NAME_RE = re.compile(r"^[A-Za-z]+$")
+
+
+def _validate_name_field(value: str, field: str) -> None:
+    """Raise ValueError if a name field contains non-letter characters."""
+    if not _NAME_RE.match(value):
+        raise ValueError(f"{field} must contain only letters.")
+
+
 from ._utils import (
     REGISTRATION_CODE_STATUS_ACTIVE,
     REGISTRATION_CODE_STATUS_ARCHIVED,
@@ -134,6 +145,8 @@ def redeem_student_invite(payload: dict) -> tuple[User, Enrollment]:
 
     if not first_name or not last_name:
         raise ValueError("firstName and lastName are required when creating a new student account")
+    _validate_name_field(first_name, "firstName")
+    _validate_name_field(last_name, "lastName")
     provided_name = f"{first_name} {last_name}".strip()
     generated_username = generate_managed_username(first_name=first_name, last_name=last_name)
     user = create_user_from_payload(
@@ -205,6 +218,8 @@ def redeem_non_student_local_invite(payload: dict) -> User:
 
     if not first_name or not last_name:
         raise ValueError("firstName and lastName are required for non-student registration")
+    _validate_name_field(first_name, "firstName")
+    _validate_name_field(last_name, "lastName")
     if not email:
         raise ValueError("email is required for non-student registration")
     if identifier_in_use(email):
@@ -278,6 +293,8 @@ def redeem_non_student_oauth_invite(
     resolved_last = (last_name or "").strip()
     if not resolved_first or not resolved_last:
         raise ValueError("firstName and lastName are required for OAuth registration")
+    _validate_name_field(resolved_first, "firstName")
+    _validate_name_field(resolved_last, "lastName")
     resolved_name = f"{resolved_first} {resolved_last}".strip()
     resolved_username = generate_managed_username(
         first_name=resolved_first,
@@ -328,16 +345,16 @@ def registration_code_status(registration_code: RegistrationCode, *, now=None) -
 def _can_generate_code_type(user: User, code_type: str) -> bool:
     """Check role-based code generation permissions."""
     if user.is_staff:
-        return code_type == RegistrationCodeType.RESEARCHER
+        return True
 
     request_role = primary_role(user)
     if request_role == Role.RESEARCHER:
         if code_type == RegistrationCodeType.RESEARCHER:
-            return has_sudo_permission(user, SudoPermission.CREATE_RESEARCHER_CODES)
+            return has_sudo_permission(user, SudoPermission.ISSUE_RESEARCHER_REG_CODE)
         if code_type == RegistrationCodeType.TEACHER:
             return True
         return code_type == RegistrationCodeType.STUDENT and has_sudo_permission(
-            user, SudoPermission.CREATE_STUDENT
+            user, SudoPermission.ISSUE_STUDENT_REG_CODE
         )
     if request_role == Role.TEACHER:
         return code_type == RegistrationCodeType.STUDENT
@@ -419,7 +436,7 @@ def registration_code_scope_queryset(user: User, *, include_related: bool = True
     request_role = primary_role(user)
     if request_role == Role.RESEARCHER:
         allowed_types = [RegistrationCodeType.TEACHER]
-        if has_sudo_permission(user, SudoPermission.CREATE_STUDENT):
+        if has_sudo_permission(user, SudoPermission.ISSUE_STUDENT_REG_CODE):
             allowed_types.append(RegistrationCodeType.STUDENT)
         return base.filter(created_by=user, code_type__in=allowed_types)
     if request_role == Role.TEACHER:

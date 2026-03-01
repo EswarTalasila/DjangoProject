@@ -407,17 +407,17 @@ def test_can_grant_permissions_cannot_grant_sudo_flag():
 @pytest.mark.django_db
 @pytest.mark.unit
 def test_can_grant_permissions_non_delegable_researcher_code_permission():
-    """Researchers cannot delegate CREATE_RESEARCHER_CODES even if they hold it."""
+    """Researchers cannot delegate ISSUE_RESEARCHER_REG_CODE even if they hold it."""
 
     admin = _mk_user(username="admin-nd", role=Role.RESEARCHER, staff=True)
     researcher = _mk_user(username="researcher-nd", role=Role.RESEARCHER)
     SudoGrantFactory(
         user=researcher,
         granted_by=admin,
-        permissions=["CREATE_RESEARCHER_CODES"],
+        permissions=["ISSUE_RESEARCHER_REG_CODE"],
         can_grant_sudo=True,
     )
 
-    allowed, message = _can_grant_permissions(researcher, ["CREATE_RESEARCHER_CODES"], False)
+    allowed, message = _can_grant_permissions(researcher, ["ISSUE_RESEARCHER_REG_CODE"], False)
     assert allowed is False
     assert "non-delegable" in message

@@ -14,6 +14,11 @@ function setupModuleMocks() {
     updateRegistrationCodeStatus: mockUpdateRegistrationCodeStatus,
     createRegistrationCodes: mockCreateRegistrationCodes,
   }));
+  vi.doMock('@/lib/course-api', () => ({
+    listCourses: vi.fn().mockResolvedValue([
+      { id: 1, name: 'Test Course', studentCount: 0, assignmentIds: [] },
+    ]),
+  }));
   vi.doMock('sonner', () => ({
     toast: { success: mockToastSuccess, error: mockToastError },
   }));
@@ -266,5 +271,67 @@ describe('CodeManagementView', () => {
     await waitFor(() => {
       expect(screen.getByText('Generate registration code')).toBeInTheDocument();
     });
+  });
+
+  it('researcher without ISSUE_STUDENT_REG_CODE sees fixed teacher code type', async () => {
+    mockListRegistrationCodes.mockResolvedValueOnce({
+      count: 0,
+      next: null,
+      previous: null,
+      results: [],
+    });
+
+    const CodeManagementView = await loadCodeManagementView();
+    render(
+      <CodeManagementView userRole="RESEARCHER" researcherPermissions={[]} isStaff={false} />,
+    );
+
+    const user = userEvent.setup();
+    await waitFor(() => {
+      expect(screen.getByText('No registration codes found.')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Generate Code/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Generate registration code')).toBeInTheDocument();
+    });
+
+    const select = screen.getByLabelText('Code type') as HTMLSelectElement;
+    const options = Array.from(select.options).map((option) => option.value);
+    expect(options).toEqual(['TEACHER']);
+    expect(select).toBeDisabled();
+    expect(screen.getByText('Your permissions only allow this code type.')).toBeInTheDocument();
+  });
+
+  it('researcher with ISSUE_STUDENT_REG_CODE can choose student code type', async () => {
+    mockListRegistrationCodes.mockResolvedValueOnce({
+      count: 0,
+      next: null,
+      previous: null,
+      results: [],
+    });
+
+    const CodeManagementView = await loadCodeManagementView();
+    render(
+      <CodeManagementView
+        userRole="RESEARCHER"
+        researcherPermissions={['ISSUE_STUDENT_REG_CODE']}
+        isStaff={false}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await waitFor(() => {
+      expect(screen.getByText('No registration codes found.')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('button', { name: /Generate Code/i }));
+
+    const select = await screen.findByLabelText('Code type');
+    const options = Array.from((select as HTMLSelectElement).options).map((option) => option.value);
+    expect(options).toContain('TEACHER');
+    expect(options).toContain('STUDENT');
+    expect(options).not.toContain('RESEARCHER');
   });
 });

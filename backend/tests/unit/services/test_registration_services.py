@@ -203,7 +203,7 @@ def test_create_registration_codes_metadata_rules_enforced():
 @pytest.mark.django_db
 @pytest.mark.unit
 def test_create_registration_codes_researcher_requires_sudo_for_researcher_codes():
-    """Researcher code generation requires CREATE_RESEARCHER_CODES sudo permission."""
+    """Researcher code generation requires ISSUE_RESEARCHER_REG_CODE sudo permission."""
 
     researcher = User.objects.create_user(
         username="researcher-no-researcher-codes",
@@ -225,7 +225,7 @@ def test_create_registration_codes_researcher_requires_sudo_for_researcher_codes
 @pytest.mark.django_db
 @pytest.mark.unit
 def test_create_registration_codes_researcher_with_permission_can_generate_researcher_codes():
-    """Researcher with CREATE_RESEARCHER_CODES can generate researcher invite codes."""
+    """Researcher with ISSUE_RESEARCHER_REG_CODE can generate researcher invite codes."""
 
     admin = User.objects.create_user(
         username="admin-grants-researcher-codes",
@@ -245,7 +245,7 @@ def test_create_registration_codes_researcher_with_permission_can_generate_resea
     SudoGrantFactory(
         user=researcher,
         granted_by=admin,
-        permissions=[SudoPermission.CREATE_RESEARCHER_CODES.value],
+        permissions=[SudoPermission.ISSUE_RESEARCHER_REG_CODE.value],
     )
 
     created = create_registration_codes(

@@ -102,6 +102,14 @@ describe("Register page", () => {
     expect(secondPayload).not.toHaveProperty("name");
     expect(secondPayload).not.toHaveProperty("username");
     expect(mockCookiesSet).toHaveBeenCalledWith("user_name", "Alex Torres", { expires: 1 });
+
+    // Student sees username confirmation screen instead of immediate redirect
+    expect(await screen.findByText("Account Created")).toBeInTheDocument();
+    expect(screen.getByText("atorres0")).toBeInTheDocument();
+    expect(screen.getByText(/Save your username/i)).toBeInTheDocument();
+
+    // Click Continue to Dashboard navigates to dashboard
+    await user.click(screen.getByRole("button", { name: /Continue to Dashboard/i }));
     expect(mockPush).toHaveBeenCalledWith("/dashboard");
   });
 

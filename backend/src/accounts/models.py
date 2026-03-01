@@ -283,7 +283,8 @@ class SudoPermission(models.TextChoices):
     Values:
         CREATE_TEACHER: Can create teacher accounts
         CREATE_STUDENT: Can create student accounts
-        CREATE_RESEARCHER_CODES: Can generate researcher invite codes
+        ISSUE_RESEARCHER_REG_CODE: Can generate researcher invite codes
+        ISSUE_STUDENT_REG_CODE: Can generate student registration codes for courses
         EDIT_USER: Can edit user accounts (within user role space)
         DELETE_USER: Can delete user accounts (within user role space)
         ISSUE_STUDENT_RESET_CODE: Can issue student reset codes (researcher sudo extension)
@@ -299,7 +300,8 @@ class SudoPermission(models.TextChoices):
 
     CREATE_TEACHER = "CREATE_TEACHER", "Create Teacher"
     CREATE_STUDENT = "CREATE_STUDENT", "Create Student"
-    CREATE_RESEARCHER_CODES = "CREATE_RESEARCHER_CODES", "Create Researcher Codes"
+    ISSUE_RESEARCHER_REG_CODE = "ISSUE_RESEARCHER_REG_CODE", "Issue Researcher Registration Code"
+    ISSUE_STUDENT_REG_CODE = "ISSUE_STUDENT_REG_CODE", "Issue Student Registration Code"
     EDIT_USER = "EDIT_USER", "Edit User"
     DELETE_USER = "DELETE_USER", "Delete User"
     ISSUE_STUDENT_RESET_CODE = "ISSUE_STUDENT_RESET_CODE", "Issue Student Reset Code"

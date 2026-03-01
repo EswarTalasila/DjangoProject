@@ -28,12 +28,12 @@ afterAll(() => {
 });
 
 describe('RegistrationCodeDialog', () => {
-  let onOpenChange: ReturnType<typeof vi.fn>;
+  let onOpenChange: ReturnType<typeof vi.fn<(open: boolean) => void>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     setClipboardMock();
-    onOpenChange = vi.fn();
+    onOpenChange = vi.fn<(open: boolean) => void>();
     mockWriteText.mockResolvedValue(undefined);
   });
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Archive, Eye, MoreVertical, Plus, ShieldOff } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -65,9 +65,15 @@ function formatDate(iso: string): string {
 
 type CodeManagementViewProps = {
   userRole: 'TEACHER' | 'RESEARCHER';
+  researcherPermissions?: string[];
+  isStaff?: boolean;
 };
 
-export default function CodeManagementView({ userRole }: CodeManagementViewProps) {
+export default function CodeManagementView({
+  userRole,
+  researcherPermissions = [],
+  isStaff = false,
+}: CodeManagementViewProps) {
   const [codes, setCodes] = useState<RegistrationCode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -84,10 +90,28 @@ export default function CodeManagementView({ userRole }: CodeManagementViewProps
   const [detailCode, setDetailCode] = useState<RegistrationCode | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-  const allowedCodeTypes: RegistrationCodeType[] =
-    userRole === 'RESEARCHER' ? ['STUDENT', 'TEACHER', 'RESEARCHER'] : ['STUDENT'];
-  const codeTypeFilterOptions: RegistrationCodeType[] =
-    userRole === 'RESEARCHER' ? ['STUDENT', 'TEACHER', 'RESEARCHER'] : ['STUDENT'];
+  const canCreateStudentCodes =
+    userRole === 'RESEARCHER' &&
+    (isStaff || researcherPermissions.includes('ISSUE_STUDENT_REG_CODE'));
+  const canCreateResearcherCodes =
+    userRole === 'RESEARCHER' &&
+    (isStaff || researcherPermissions.includes('ISSUE_RESEARCHER_REG_CODE'));
+
+  const allowedCodeTypes: RegistrationCodeType[] = useMemo(() => {
+    if (userRole !== 'RESEARCHER') return ['STUDENT'];
+    return [
+      'TEACHER',
+      ...(canCreateStudentCodes ? (['STUDENT'] as const) : []),
+      ...(canCreateResearcherCodes ? (['RESEARCHER'] as const) : []),
+    ];
+  }, [canCreateResearcherCodes, canCreateStudentCodes, userRole]);
+  const codeTypeFilterOptions = allowedCodeTypes;
+
+  useEffect(() => {
+    if (codeTypeFilter && !codeTypeFilterOptions.includes(codeTypeFilter)) {
+      setCodeTypeFilter('');
+    }
+  }, [codeTypeFilter, codeTypeFilterOptions]);
 
   const loadCodes = useCallback(async () => {
     setLoadError(null);
@@ -115,6 +139,7 @@ export default function CodeManagementView({ userRole }: CodeManagementViewProps
     count: number;
     usesPerCode: number;
     expiresAt: string;
+    courseId?: number;
   }) {
     setIsActionLoading(true);
     try {
@@ -123,6 +148,7 @@ export default function CodeManagementView({ userRole }: CodeManagementViewProps
         count: values.count,
         usesPerCode: values.usesPerCode,
         expiresAt: values.expiresAt,
+        courseId: values.courseId,
       });
       const plainCodes = response.codes
         .map((c) => c.code)
@@ -180,13 +206,14 @@ export default function CodeManagementView({ userRole }: CodeManagementViewProps
         description="Configure the code type, usage limits, and expiration."
         allowedCodeTypes={allowedCodeTypes}
         initialCodeType={allowedCodeTypes[0]}
-        hideCodeType={allowedCodeTypes.length === 1}
+        lockCodeType={allowedCodeTypes.length === 1}
         onSubmit={async (values) =>
           handleCreateCode({
             codeType: values.codeType,
             count: values.count,
             usesPerCode: values.usesPerCode,
             expiresAt: values.expiresAt,
+            courseId: values.courseId,
           })
         }
       />

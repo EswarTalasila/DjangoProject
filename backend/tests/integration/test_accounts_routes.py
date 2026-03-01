@@ -585,7 +585,7 @@ class TestAccountRoutes:
         SudoGrant.objects.create(
             user=researcher_user,
             granted_by=admin_user,
-            permissions=[SudoPermission.CREATE_STUDENT],
+            permissions=[SudoPermission.ISSUE_STUDENT_REG_CODE],
         )
 
         allowed = api_client.post(
@@ -871,7 +871,7 @@ class TestAccountRoutes:
                 "method": "LOCAL",
                 "code": "RESET-CODE-2",
                 "firstName": "Blocked",
-                "lastName": "Student Reset Request",
+                "lastName": "Blockedrequest",
                 "password": "StartPass123!",
                 "confirmPassword": "StartPass123!",
             },
@@ -1469,7 +1469,7 @@ class TestAccountRoutes:
             {
                 "method": "LOCAL",
                 "code": "CN06-STUDENT",
-                "firstName": "CN06",
+                "firstName": "Cnsix",
                 "lastName": "Student",
                 "password": "StartPass123!",
                 "confirmPassword": "StartPass123!",
@@ -1705,7 +1705,7 @@ class TestAccountRoutes:
             {
                 "method": "LOCAL",
                 "code": "UC07-STUDENT",
-                "firstName": "UC07",
+                "firstName": "Ucseven",
                 "lastName": "Student",
                 "password": "StartPass123!",
                 "confirmPassword": "StartPass123!",
@@ -1743,7 +1743,7 @@ class TestAccountRoutes:
                 "method": "LOCAL",
                 "code": "UC07-T-STU",
                 "firstName": "Teacher",
-                "lastName": "Reset Student",
+                "lastName": "Resetstudent",
                 "password": "StartPass123!",
                 "confirmPassword": "StartPass123!",
             },

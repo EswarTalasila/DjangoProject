@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PasswordStrengthChecklist } from "@/components/ui/password-strength-checklist";
 
 const changePasswordSchema = z
   .object({
@@ -149,6 +150,7 @@ export function ChangePasswordForm({ profile }: Props) {
                     {form.formState.errors.newPassword.message}
                   </p>
                 )}
+                <PasswordStrengthChecklist password={form.watch("newPassword") || ""} />
               </div>
 
               <div className="grid gap-2">
@@ -165,10 +167,6 @@ export function ChangePasswordForm({ profile }: Props) {
                   </p>
                 )}
               </div>
-
-              <p className="text-xs text-slate-500">
-                Password must include uppercase, lowercase, number, and special character.
-              </p>
 
               <Button disabled={isLoading}>
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

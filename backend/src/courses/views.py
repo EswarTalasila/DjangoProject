@@ -20,6 +20,7 @@ Endpoints:
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from core.errors import error_response
@@ -42,12 +43,14 @@ from .services import (
 
 
 @api_view(["GET", "POST"])
-@permission_classes([IsTeacherOrAbove])
+@permission_classes([IsAuthenticated])
 def list_or_create(request):
     """
     List all courses for the user (GET) or create a new course (POST).
 
-    GET: Returns courses the user can access (teachers see own, admins see all).
+    GET: Returns courses the user can access.
+        Students see their enrolled courses. Teachers see their own courses.
+        Researchers and admins see all courses.
     POST: Creates a new course owned by the requesting teacher.
 
     Request Body (POST):

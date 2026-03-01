@@ -58,32 +58,49 @@ class Command(BaseCommand):
             required=True,
             help="Which role account to provision (or 'all').",
         )
+        parser.add_argument(
+            "--force-password",
+            action="store_true",
+            help="Reset known seeded accounts to deterministic password if they already exist.",
+        )
 
     def handle(self, *args, **options):
         if env.is_production:
             raise CommandError("provision_account is blocked in production.")
 
         role = options["role"]
+        force_password = options["force_password"]
         if role == "all":
             for r in VALID_ROLES:
-                self._provision(r)
+                self._provision(r, force_password=force_password)
         else:
-            self._provision(role)
+            self._provision(role, force_password=force_password)
 
-    def _provision(self, role):
+    def _provision(self, role, *, force_password=False):
         creds = CREDENTIALS[role]
         existing = self._find_existing(role, creds)
         if existing:
+            if force_password:
+                existing.set_password(creds["password"])
+                existing.save(update_fields=["password"])
+                self._print_account(
+                    role,
+                    existing,
+                    creds,
+                    tag="already provisioned (password reset)",
+                    success=True,
+                )
+                return
             self._print_account(role, existing, creds, tag="already provisioned")
             return
 
         if role == "researcher":
             user = self._provision_researcher(creds)
         elif role == "teacher":
-            self._ensure_provisioned("researcher")
+            self._ensure_provisioned("researcher", force_password=force_password)
             user = self._provision_teacher(creds)
         elif role == "student":
-            self._ensure_provisioned("teacher")
+            self._ensure_provisioned("teacher", force_password=force_password)
             user = self._provision_student(creds)
         else:
             raise CommandError(f"Unknown role: {role}")
@@ -115,11 +132,11 @@ class Command(BaseCommand):
         else:
             self.stdout.write(output)
 
-    def _ensure_provisioned(self, role):
+    def _ensure_provisioned(self, role, *, force_password=False):
         """Ensure a dependency role exists, provisioning it if needed."""
         creds = CREDENTIALS[role]
         if not self._find_existing(role, creds):
-            self._provision(role)
+            self._provision(role, force_password=force_password)
 
     def _get_admin(self):
         admin = User.objects.filter(is_staff=True).first()

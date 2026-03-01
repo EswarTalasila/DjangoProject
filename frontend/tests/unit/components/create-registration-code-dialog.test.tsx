@@ -2,6 +2,21 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@/lib/course-api', () => ({
+  listCourses: vi.fn().mockResolvedValue([
+    { id: 1, name: 'Intro to CS', studentCount: 10, assignmentIds: [] },
+    { id: 2, name: 'Data Structures', studentCount: 5, assignmentIds: [] },
+  ]),
+}));
+
+type CreateCodeDialogValues = {
+  codeType: 'STUDENT' | 'TEACHER' | 'RESEARCHER';
+  count: number;
+  usesPerCode: number;
+  expiresAt: string;
+  courseId?: number;
+};
+
 async function loadDialog() {
   vi.resetModules();
   const mod = await import('@/components/codes/CreateRegistrationCodeDialog');
@@ -9,13 +24,13 @@ async function loadDialog() {
 }
 
 describe('CreateRegistrationCodeDialog', () => {
-  let onSubmit: ReturnType<typeof vi.fn>;
-  let onOpenChange: ReturnType<typeof vi.fn>;
+  let onSubmit: ReturnType<typeof vi.fn<(values: CreateCodeDialogValues) => Promise<void>>>;
+  let onOpenChange: ReturnType<typeof vi.fn<(open: boolean) => void>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    onSubmit = vi.fn().mockResolvedValue(undefined);
-    onOpenChange = vi.fn();
+    onSubmit = vi.fn<(values: CreateCodeDialogValues) => Promise<void>>().mockResolvedValue(undefined);
+    onOpenChange = vi.fn<(open: boolean) => void>();
   });
 
   it('renders all form fields including count', async () => {
@@ -38,7 +53,7 @@ describe('CreateRegistrationCodeDialog', () => {
     expect(screen.getByLabelText('Expires at')).toBeInTheDocument();
   });
 
-  it('hides code type selector when hideCodeType is true', async () => {
+  it('always shows code type selector even with single type', async () => {
     const Dialog = await loadDialog();
     render(
       <Dialog
@@ -48,16 +63,17 @@ describe('CreateRegistrationCodeDialog', () => {
         description="Desc"
         allowedCodeTypes={['STUDENT']}
         initialCodeType="STUDENT"
-        hideCodeType
+        lockCodeType
         onSubmit={onSubmit}
       />,
     );
 
-    expect(screen.queryByLabelText('Code type')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Code type')).toBeInTheDocument();
+    expect(screen.getByLabelText('Code type')).toBeDisabled();
     expect(screen.getByLabelText('Number of codes')).toBeInTheDocument();
   });
 
-  it('submits with correct payload including count', async () => {
+  it('submits with correct payload including count and courseId', async () => {
     const Dialog = await loadDialog();
     render(
       <Dialog
@@ -67,12 +83,18 @@ describe('CreateRegistrationCodeDialog', () => {
         description="Desc"
         allowedCodeTypes={['STUDENT']}
         initialCodeType="STUDENT"
-        hideCodeType
+        lockCodeType
         onSubmit={onSubmit}
       />,
     );
 
     const user = userEvent.setup();
+
+    // Wait for courses to load and select one
+    await waitFor(() => {
+      expect(screen.getByLabelText('Course')).toBeInTheDocument();
+    });
+    await user.selectOptions(screen.getByLabelText('Course'), '1');
 
     // Change count to 3
     const countInput = screen.getByLabelText('Number of codes');
@@ -94,6 +116,7 @@ describe('CreateRegistrationCodeDialog', () => {
     expect(submitted.codeType).toBe('STUDENT');
     expect(submitted.count).toBe(3);
     expect(submitted.usesPerCode).toBe(5);
+    expect(submitted.courseId).toBe(1);
     expect(submitted.expiresAt).toBeTruthy();
   });
 
@@ -105,9 +128,9 @@ describe('CreateRegistrationCodeDialog', () => {
         onOpenChange={onOpenChange}
         title="Test"
         description="Desc"
-        allowedCodeTypes={['STUDENT']}
-        initialCodeType="STUDENT"
-        hideCodeType
+        allowedCodeTypes={['TEACHER']}
+        initialCodeType="TEACHER"
+        lockCodeType
         onSubmit={onSubmit}
       />,
     );
@@ -133,9 +156,9 @@ describe('CreateRegistrationCodeDialog', () => {
         onOpenChange={onOpenChange}
         title="Test"
         description="Desc"
-        allowedCodeTypes={['STUDENT']}
-        initialCodeType="STUDENT"
-        hideCodeType
+        allowedCodeTypes={['TEACHER']}
+        initialCodeType="TEACHER"
+        lockCodeType
         onSubmit={onSubmit}
       />,
     );
@@ -161,9 +184,9 @@ describe('CreateRegistrationCodeDialog', () => {
         onOpenChange={onOpenChange}
         title="Test"
         description="Desc"
-        allowedCodeTypes={['STUDENT']}
-        initialCodeType="STUDENT"
-        hideCodeType
+        allowedCodeTypes={['TEACHER']}
+        initialCodeType="TEACHER"
+        lockCodeType
         onSubmit={onSubmit}
       />,
     );
@@ -190,8 +213,8 @@ describe('CreateRegistrationCodeDialog', () => {
         onOpenChange={onOpenChange}
         title="Test"
         description="Desc"
-        allowedCodeTypes={['STUDENT']}
-        initialCodeType="STUDENT"
+        allowedCodeTypes={['TEACHER']}
+        initialCodeType="TEACHER"
         onSubmit={onSubmit}
       />,
     );
@@ -231,8 +254,8 @@ describe('CreateRegistrationCodeDialog', () => {
         isLoading={true}
         title="Test"
         description="Desc"
-        allowedCodeTypes={['STUDENT']}
-        initialCodeType="STUDENT"
+        allowedCodeTypes={['TEACHER']}
+        initialCodeType="TEACHER"
         onSubmit={onSubmit}
       />,
     );
@@ -242,5 +265,86 @@ describe('CreateRegistrationCodeDialog', () => {
     expect(screen.getByLabelText('Expires at')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Create code' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+  });
+
+  it('locks code type selector when lockCodeType is true', async () => {
+    const Dialog = await loadDialog();
+    render(
+      <Dialog
+        open={true}
+        onOpenChange={onOpenChange}
+        title="Test"
+        description="Desc"
+        allowedCodeTypes={['TEACHER']}
+        initialCodeType="TEACHER"
+        lockCodeType
+        onSubmit={onSubmit}
+      />,
+    );
+
+    expect(screen.getByLabelText('Code type')).toBeDisabled();
+    expect(screen.getByText('Your permissions only allow this code type.')).toBeInTheDocument();
+  });
+
+  it('shows course picker when STUDENT code type is selected', async () => {
+    const Dialog = await loadDialog();
+    render(
+      <Dialog
+        open={true}
+        onOpenChange={onOpenChange}
+        title="Test"
+        description="Desc"
+        allowedCodeTypes={['STUDENT', 'TEACHER']}
+        initialCodeType="STUDENT"
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Course')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Intro to CS')).toBeInTheDocument();
+    expect(screen.getByText('Data Structures')).toBeInTheDocument();
+  });
+
+  it('hides course picker for non-STUDENT code types', async () => {
+    const Dialog = await loadDialog();
+    render(
+      <Dialog
+        open={true}
+        onOpenChange={onOpenChange}
+        title="Test"
+        description="Desc"
+        allowedCodeTypes={['TEACHER', 'RESEARCHER']}
+        initialCodeType="TEACHER"
+        onSubmit={onSubmit}
+      />,
+    );
+
+    expect(screen.queryByLabelText('Course')).not.toBeInTheDocument();
+  });
+
+  it('validates course selection required for student codes', async () => {
+    const Dialog = await loadDialog();
+    render(
+      <Dialog
+        open={true}
+        onOpenChange={onOpenChange}
+        title="Test"
+        description="Desc"
+        allowedCodeTypes={['STUDENT']}
+        initialCodeType="STUDENT"
+        lockCodeType
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Create code' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Please select a course for student codes.')).toBeInTheDocument();
+    });
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });

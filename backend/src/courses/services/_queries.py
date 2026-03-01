@@ -2,7 +2,7 @@
 Course and student domain queries — read-only helpers and DTOs.
 """
 
-from accounts.models import Role, TeacherProfile, User
+from accounts.models import Role, StudentProfile, TeacherProfile, User
 from assignments.models import Assignment
 from core.dtos import CourseDTO, EnrollmentStudentDTO
 from core.permissions import has_role
@@ -85,11 +85,17 @@ def list_courses_for_user(user: User) -> list[Course]:
     Admins (is_staff) see all courses.
     Researchers see all courses (for data oversight).
     Teachers see only their own courses.
+    Students see only courses they are enrolled in.
     """
     if user.is_staff:
         return list(Course.objects.all())
     if has_role(user, Role.RESEARCHER):
         return list(Course.objects.all())
+    if has_role(user, Role.STUDENT):
+        profile = StudentProfile.objects.filter(user=user).first()
+        if not profile:
+            return []
+        return list(Course.objects.filter(enrollments__student_profile=profile).distinct())
     return list(Course.objects.filter(teacher_profile__user=user))
 
 

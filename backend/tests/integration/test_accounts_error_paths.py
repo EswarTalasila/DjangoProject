@@ -311,7 +311,7 @@ class TestAccountErrorPaths:
                 "password": "weakpass1!",
                 "confirmPassword": "weakpass1!",
                 "firstName": "Weak",
-                "lastName": "Password Student",
+                "lastName": "Passwordstudent",
             },
             format="json",
         )
@@ -632,7 +632,7 @@ class TestAccountErrorPaths:
                 "method": "LOCAL",
                 "code": "LOGIN-EMAIL-CODE",
                 "firstName": "Login",
-                "lastName": "Email Student",
+                "lastName": "Emailstudent",
                 "password": "ValidPass123!",
                 "confirmPassword": "ValidPass123!",
             },

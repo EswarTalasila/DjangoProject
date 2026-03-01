@@ -32,7 +32,7 @@ export function UserAvatarMenu({ name, username, role }: UserAvatarMenuProps) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          className="h-8 w-8 rounded-full bg-[#bad28f] text-[#754d28] font-semibold text-sm flex items-center justify-center hover:ring-2 hover:ring-[#a9c17f] transition-shadow"
+          className="h-8 w-8 rounded-full bg-primary text-primary-foreground font-semibold text-sm flex items-center justify-center hover:ring-2 hover:ring-primary/50 transition-shadow"
           aria-label="User menu"
         >
           {initial}
@@ -54,7 +54,7 @@ export function UserAvatarMenu({ name, username, role }: UserAvatarMenuProps) {
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          className="text-red-600 focus:text-red-600 cursor-pointer"
+          className="text-destructive focus:text-destructive cursor-pointer"
           onClick={() => { logout(); }}
         >
           <LogOut className="h-4 w-4 mr-2" />

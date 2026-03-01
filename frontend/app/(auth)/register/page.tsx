@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, CheckCircle2, ArrowRight, AlertCircle, User, Mail, Lock, GraduationCap, Building2 } from "lucide-react";
+import { PasswordStrengthChecklist } from "@/components/ui/password-strength-checklist";
 
 type RoleType = "STUDENT" | "TEACHER" | "RESEARCHER";
 type RegistrationMethod = "LOCAL" | "OAUTH";
@@ -57,9 +58,8 @@ const passwordSchema = z
 
 const studentRegisterSchema = z
     .object({
-        firstName: z.string().trim().min(1, "First name is required"),
-        lastName: z.string().trim().min(1, "Last name is required"),
-        email: z.string().email("Invalid email address").optional().or(z.literal("")),
+        firstName: z.string().trim().min(1, "First name is required").regex(/^[A-Za-z]+$/, "Letters only"),
+        lastName: z.string().trim().min(1, "Last name is required").regex(/^[A-Za-z]+$/, "Letters only"),
         password: passwordSchema,
         confirmPassword: z.string().min(1, "Confirm password is required"),
     })
@@ -70,8 +70,8 @@ const studentRegisterSchema = z
 
 const nonStudentLocalSchema = z
     .object({
-        firstName: z.string().trim().min(1, "First name is required"),
-        lastName: z.string().trim().min(1, "Last name is required"),
+        firstName: z.string().trim().min(1, "First name is required").regex(/^[A-Za-z]+$/, "Letters only"),
+        lastName: z.string().trim().min(1, "Last name is required").regex(/^[A-Za-z]+$/, "Letters only"),
         email: z.string().email("Invalid email address"),
         password: passwordSchema,
         confirmPassword: z.string().min(1, "Confirm password is required"),
@@ -82,8 +82,8 @@ const nonStudentLocalSchema = z
     });
 
 const oauthNameSchema = z.object({
-    firstName: z.string().trim().min(1, "First name is required"),
-    lastName: z.string().trim().min(1, "Last name is required"),
+    firstName: z.string().trim().min(1, "First name is required").regex(/^[A-Za-z]+$/, "Letters only"),
+    lastName: z.string().trim().min(1, "Last name is required").regex(/^[A-Za-z]+$/, "Letters only"),
 });
 
 type CodeForm = z.infer<typeof codeSchema>;
@@ -102,11 +102,12 @@ function RegisterPageContent() {
     const [registrationMethod, setRegistrationMethod] = useState<RegistrationMethod>("LOCAL");
     const [showOauthForm, setShowOauthForm] = useState(false);
     const [googleAccessToken, setGoogleAccessToken] = useState<string>("");
+    const [createdUsername, setCreatedUsername] = useState<string | null>(null);
 
     const codeForm = useForm<CodeForm>({ resolver: zodResolver(codeSchema) });
     const studentForm = useForm<StudentRegisterForm>({
         resolver: zodResolver(studentRegisterSchema),
-        defaultValues: { firstName: "", lastName: "", email: "", password: "", confirmPassword: "" },
+        defaultValues: { firstName: "", lastName: "", password: "", confirmPassword: "" },
     });
     const nonStudentForm = useForm<NonStudentLocalForm>({
         resolver: zodResolver(nonStudentLocalSchema),
@@ -135,7 +136,7 @@ function RegisterPageContent() {
 
             let hasFieldError = false;
             const validFields = isStudent
-                ? new Set<string>(["firstName", "lastName", "email", "password", "confirmPassword"])
+                ? new Set<string>(["firstName", "lastName", "password", "confirmPassword"])
                 : showOauthForm
                     ? new Set<string>(["firstName", "lastName"])
                     : new Set<string>(["firstName", "lastName", "email", "password", "confirmPassword"]);
@@ -190,7 +191,6 @@ function RegisterPageContent() {
                 lastName: data.lastName.trim(),
                 password: data.password,
                 confirmPassword: data.confirmPassword,
-                ...(data.email ? { email: data.email } : {}),
             };
 
             const res = await api.post("/registration/accounts", payload);
@@ -199,8 +199,7 @@ function RegisterPageContent() {
             const { name } = responseData;
             Cookies.set("user_name", name || "User", { expires: 1 });
 
-            toast.success(`Account created! Your username is: ${responseData.username}`);
-            router.push("/dashboard");
+            setCreatedUsername(responseData.username);
         } catch (error: unknown) {
             handleApiError(error as ApiError, studentForm);
         } finally {
@@ -300,6 +299,42 @@ function RegisterPageContent() {
                 return "Complete Registration";
         }
     };
+
+    if (createdUsername) {
+        return (
+            <>
+                <div className="flex flex-col space-y-2 text-center">
+                    <CheckCircle2 className="mx-auto h-12 w-12 text-green-600" />
+                    <h1 className="text-2xl font-semibold tracking-tight">
+                        Account Created
+                    </h1>
+                    <p className="text-sm text-slate-500">
+                        Your account has been created successfully.
+                    </p>
+                </div>
+
+                <div className="rounded-md border-2 border-blue-200 bg-blue-50 p-6 text-center">
+                    <p className="text-sm font-medium text-blue-900 mb-2">Your username is:</p>
+                    <p className="text-2xl font-bold text-blue-700 font-mono tracking-wide">{createdUsername}</p>
+                </div>
+
+                <div className="rounded-md bg-amber-50 border border-amber-200 p-4">
+                    <p className="text-sm text-amber-900 font-medium flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                        Important: Save your username
+                    </p>
+                    <p className="text-sm text-amber-800 mt-1 ml-6">
+                        You will need this username to log in. Please write it down or take a screenshot.
+                    </p>
+                </div>
+
+                <Button className="w-full" onClick={() => router.push("/dashboard")}>
+                    Continue to Dashboard
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+            </>
+        );
+    }
 
     return (
         <>
@@ -456,29 +491,6 @@ function RegisterPageContent() {
                                     </div>
 
                                     <div className="grid gap-2">
-                                        <Label htmlFor="email">
-                                            Email <span className="text-slate-400">(Optional)</span>
-                                        </Label>
-                                        <Input
-                                            id="email"
-                                            type="email"
-                                            placeholder="jane@example.com"
-                                            disabled={isLoading}
-                                            className={
-                                                studentForm.formState.errors.email
-                                                    ? "border-red-500 focus-visible:ring-red-500"
-                                                    : ""
-                                            }
-                                            {...studentForm.register("email")}
-                                        />
-                                        {studentForm.formState.errors.email && (
-                                            <p className="text-xs text-red-500 mt-1">
-                                                {studentForm.formState.errors.email.message}
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    <div className="grid gap-2">
                                         <Label htmlFor="password">Password</Label>
                                         <Input
                                             id="password"
@@ -496,6 +508,7 @@ function RegisterPageContent() {
                                                 {studentForm.formState.errors.password.message}
                                             </p>
                                         )}
+                                        <PasswordStrengthChecklist password={studentForm.watch("password") || ""} />
                                     </div>
 
                                     <div className="grid gap-2">
@@ -610,6 +623,7 @@ function RegisterPageContent() {
                                                 {nonStudentForm.formState.errors.password.message}
                                             </p>
                                         )}
+                                        <PasswordStrengthChecklist password={nonStudentForm.watch("password") || ""} />
                                     </div>
 
                                     <div className="grid gap-2">

@@ -834,7 +834,19 @@ tasks:
           echo "Usage: task seed:account -- <researcher|teacher|student|all>";
           exit 1;
         fi;
-        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py provision_account --role "$role"'
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py provision_account --role "$role" --force-password'
+
+  seed:accounts:
+    desc: "Alias for seed:account (backwards-compatible plural form)"
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - >
+        sh -c 'role="{{.CLI_ARGS}}";
+        if [ -z "$role" ]; then
+          echo "Usage: task seed:accounts -- <researcher|teacher|student|all>";
+          exit 1;
+        fi;
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py provision_account --role "$role" --force-password'
 
   django:shell:
     desc: Open Django shell

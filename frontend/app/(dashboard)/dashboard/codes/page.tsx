@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getSessionProfile } from '@/lib/auth-session';
+import { getSessionProfile, getSudoCapabilities } from '@/lib/auth-session';
 import CodeManagementView from '@/components/codes/CodeManagementView';
 
 export default async function CodesPage() {
@@ -13,5 +13,19 @@ export default async function CodesPage() {
     redirect('/dashboard');
   }
 
-  return <CodeManagementView userRole={role as 'TEACHER' | 'RESEARCHER'} />;
+  let researcherPermissions: string[] = [];
+  let isStaff = Boolean(profile.isStaff);
+  if (role === 'RESEARCHER') {
+    const sudo = await getSudoCapabilities();
+    researcherPermissions = sudo?.permissions ?? [];
+    isStaff = isStaff || Boolean(sudo?.isStaff);
+  }
+
+  return (
+    <CodeManagementView
+      userRole={role as 'TEACHER' | 'RESEARCHER'}
+      researcherPermissions={researcherPermissions}
+      isStaff={isStaff}
+    />
+  );
 }

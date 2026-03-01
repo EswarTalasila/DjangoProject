@@ -33,15 +33,15 @@ function makeCode(overrides: Partial<RegistrationCode> = {}): RegistrationCode {
 }
 
 describe('CodeDetailDialog', () => {
-  let onRevoke: ReturnType<typeof vi.fn>;
-  let onArchive: ReturnType<typeof vi.fn>;
-  let onOpenChange: ReturnType<typeof vi.fn>;
+  let onRevoke: ReturnType<typeof vi.fn<(code: RegistrationCode) => Promise<void>>>;
+  let onArchive: ReturnType<typeof vi.fn<(code: RegistrationCode) => Promise<void>>>;
+  let onOpenChange: ReturnType<typeof vi.fn<(open: boolean) => void>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    onRevoke = vi.fn().mockResolvedValue(undefined);
-    onArchive = vi.fn().mockResolvedValue(undefined);
-    onOpenChange = vi.fn();
+    onRevoke = vi.fn<(code: RegistrationCode) => Promise<void>>().mockResolvedValue(undefined);
+    onArchive = vi.fn<(code: RegistrationCode) => Promise<void>>().mockResolvedValue(undefined);
+    onOpenChange = vi.fn<(open: boolean) => void>();
   });
 
   it('renders nothing when code is null', async () => {

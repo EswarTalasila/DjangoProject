@@ -71,7 +71,7 @@ class TestDRFThrottleEnforcement:
                 "code": "FAKE-CODE",
                 "password": "TestPass1!",
                 "confirmPassword": "TestPass1!",
-                "firstName": f"Test{i}",
+                "firstName": f"Test{chr(ord('a') + i)}",
                 "lastName": "User",
             },
             limit=AUTH_LIMIT,

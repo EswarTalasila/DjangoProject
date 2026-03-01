@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PasswordStrengthChecklist } from "@/components/ui/password-strength-checklist";
 
 const validateSchema = z.object({
   identifier: z.string().trim().min(1, "Identifier is required"),
@@ -197,6 +198,7 @@ export default function ForgotPasswordPage() {
                         {resetForm.formState.errors.newPassword.message}
                       </p>
                     )}
+                    <PasswordStrengthChecklist password={resetForm.watch("newPassword") || ""} />
                   </div>
 
                   <div className="grid gap-2">
@@ -213,10 +215,6 @@ export default function ForgotPasswordPage() {
                       </p>
                     )}
                   </div>
-
-                  <p className="text-xs text-slate-500">
-                    Password must include uppercase, lowercase, number, and special character.
-                  </p>
 
                   <Button disabled={isLoading}>
                     {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
