@@ -217,3 +217,29 @@ class TestSudoTraceability:
     def test_SUDO_UC_05_E1(self, admin_user):
         """SUDO-UC-05-E1 insufficient permission on delete."""
         permission_tests.test_can_delete_user_student_requester_returns_false(admin_user)
+
+    # --- Integration flow aliases (spec section 8) ---
+
+    def test_SUDO_UC_01_admin_grant_flow(self, api_client, admin_user):
+        """Integration: admin grants sudo to researcher end-to-end."""
+        admin_tests.TestAdminSudo().test_ADMIN_UC_20(api_client, admin_user)
+
+    def test_SUDO_UC_01_researcher_delegate_flow(self, api_client):
+        """Integration: researcher with can_grant_sudo delegates subset."""
+        researcher_tests.TestResearcherSudoDelegation().test_RESEARCHER_UC_21(api_client)
+
+    def test_SUDO_UC_01_escalation_blocked(self, api_client):
+        """Integration: researcher escalation attempt is rejected."""
+        researcher_tests.TestResearcherSudoDelegation().test_RESEARCHER_UC_21_E2(api_client)
+
+    def test_SUDO_UC_02_admin_revoke_flow(self, api_client, admin_user):
+        """Integration: admin revokes any sudo grant."""
+        admin_tests.TestAdminSudo().test_ADMIN_UC_21(api_client, admin_user)
+
+    def test_SUDO_UC_02_researcher_revoke_own(self, api_client):
+        """Integration: researcher revokes grant they created."""
+        researcher_tests.TestResearcherSudoDelegation().test_RESEARCHER_UC_22(api_client)
+
+    def test_SUDO_UC_02_researcher_revoke_other_blocked(self, api_client):
+        """Integration: researcher cannot revoke another's grant."""
+        researcher_tests.TestResearcherSudoDelegation().test_RESEARCHER_UC_22_E1(api_client)
