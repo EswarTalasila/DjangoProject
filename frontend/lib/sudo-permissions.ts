@@ -77,7 +77,7 @@ const GROUP_ORDER: Array<{ key: string; title: string; description: string }> = 
 ];
 
 export const SUDO_CAPABILITY_NOTE =
-  'Teacher registration code issuance is baseline for researchers and is not delegated through sudo permissions.';
+  'You can only delegate a subset of your own permissions.';
 
 export function getSudoPermissionLabel(permission: string): string {
   return PERMISSION_META[permission]?.label ?? permission;
