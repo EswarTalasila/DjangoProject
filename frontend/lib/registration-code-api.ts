@@ -36,6 +36,17 @@ export async function createRegistrationCodes(
   return response.data;
 }
 
+export type JoinCourseResponse = {
+  message: string;
+  courseId: number;
+  alreadyEnrolled: boolean;
+};
+
+export async function joinCourseByCode(code: string): Promise<JoinCourseResponse> {
+  const response = await api.post<JoinCourseResponse>('/enrollments', { code });
+  return response.data;
+}
+
 export async function createStudentRegistrationCode(
   courseId: number,
   options?: { usesPerCode?: number; expiresAt?: string },
