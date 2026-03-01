@@ -1347,7 +1347,7 @@ class TestAuthRegCompletion:
             {"status": "ARCHIVED"},
             format="json",
         )
-        assert response.status_code == 400
+        assert response.status_code == 409
         assert "Only EXHAUSTED, EXPIRED, or REVOKED" in response.json()["detail"]
 
     def test_REG_CN_04(self, api_client, teacher_user):

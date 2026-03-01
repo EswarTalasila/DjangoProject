@@ -47,13 +47,21 @@ const codeSchema = z.object({
     code: z.string().min(1, "Registration code is required").max(64),
 });
 
+const passwordSchema = z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[A-Z]/, "Must include at least one uppercase letter")
+    .regex(/[a-z]/, "Must include at least one lowercase letter")
+    .regex(/[0-9]/, "Must include at least one number")
+    .regex(/[^A-Za-z0-9]/, "Must include at least one special character");
+
 const studentRegisterSchema = z
     .object({
         firstName: z.string().trim().min(1, "First name is required"),
         lastName: z.string().trim().min(1, "Last name is required"),
         email: z.string().email("Invalid email address").optional().or(z.literal("")),
-        password: z.string().min(8, "Password must be at least 8 characters"),
-        confirmPassword: z.string().min(8, "Confirm password is required"),
+        password: passwordSchema,
+        confirmPassword: z.string().min(1, "Confirm password is required"),
     })
     .refine((data) => data.password === data.confirmPassword, {
         message: "Passwords do not match",
@@ -65,8 +73,8 @@ const nonStudentLocalSchema = z
         firstName: z.string().trim().min(1, "First name is required"),
         lastName: z.string().trim().min(1, "Last name is required"),
         email: z.string().email("Invalid email address"),
-        password: z.string().min(8, "Password must be at least 8 characters"),
-        confirmPassword: z.string().min(8, "Confirm password is required"),
+        password: passwordSchema,
+        confirmPassword: z.string().min(1, "Confirm password is required"),
     })
     .refine((data) => data.password === data.confirmPassword, {
         message: "Passwords do not match",
@@ -92,8 +100,6 @@ function RegisterPageContent() {
     const [codeContext, setCodeContext] = useState<CodeValidationResponse | null>(null);
     const [generalError, setGeneralError] = useState<string | null>(null);
     const [registrationMethod, setRegistrationMethod] = useState<RegistrationMethod>("LOCAL");
-    const [registeredUsername, setRegisteredUsername] = useState<string>("");
-    const [showSuccess, setShowSuccess] = useState(false);
     const [showOauthForm, setShowOauthForm] = useState(false);
     const [googleAccessToken, setGoogleAccessToken] = useState<string>("");
 
@@ -190,10 +196,11 @@ function RegisterPageContent() {
             const res = await api.post("/registration/accounts", payload);
             const responseData = res.data as RegisterResponse;
 
-            setRegisteredUsername(responseData.username);
-            setShowSuccess(true);
+            const { name } = responseData;
+            Cookies.set("user_name", name || "User", { expires: 1 });
 
             toast.success(`Account created! Your username is: ${responseData.username}`);
+            router.push("/dashboard");
         } catch (error: unknown) {
             handleApiError(error as ApiError, studentForm);
         } finally {
@@ -268,10 +275,6 @@ function RegisterPageContent() {
         }
     };
 
-    const handleProceedToLogin = () => {
-        router.push("/login");
-    };
-
     const getRoleIcon = () => {
         switch (role) {
             case "STUDENT":
@@ -297,45 +300,6 @@ function RegisterPageContent() {
                 return "Complete Registration";
         }
     };
-
-    if (showSuccess && isStudent) {
-        return (
-            <>
-                <div className="flex flex-col space-y-2 text-center">
-                    <h1 className="text-2xl font-semibold tracking-tight">
-                        Registration Complete!
-                    </h1>
-                    <p className="text-sm text-slate-500">
-                        Your account has been created successfully
-                    </p>
-                </div>
-
-                <div className="grid gap-6">
-                    <div className="rounded-md bg-green-50 p-6 text-center">
-                        <CheckCircle2 className="mx-auto h-12 w-12 text-green-600 mb-4" />
-                        <h3 className="text-lg font-semibold text-green-900 mb-2">
-                            Welcome!
-                        </h3>
-                        <p className="text-green-700 mb-4">
-                            You have been enrolled in <strong>{codeContext?.context?.course_name}</strong>
-                        </p>
-                        <div className="bg-white rounded-lg p-4 border-2 border-green-200">
-                            <p className="text-sm text-slate-600 mb-1">Your Username</p>
-                            <p className="text-2xl font-bold text-slate-900">{registeredUsername}</p>
-                            <p className="text-xs text-slate-500 mt-2">
-                                Save this! You&apos;ll need it to log in.
-                            </p>
-                        </div>
-                    </div>
-
-                    <Button onClick={handleProceedToLogin} className="w-full">
-                        Proceed to Login
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                </div>
-            </>
-        );
-    }
 
     return (
         <>

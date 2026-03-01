@@ -531,6 +531,8 @@ def code_detail(request, code_id: int):
         message = str(exc)
         if message == "Registration code not found.":
             return Response({"detail": message}, status=status.HTTP_404_NOT_FOUND)
+        if message.startswith("Only "):
+            return Response({"detail": message}, status=status.HTTP_409_CONFLICT)
         return Response({"detail": message}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response(_serialize_registration_code(updated), status=status.HTTP_200_OK)
