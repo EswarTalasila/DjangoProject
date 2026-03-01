@@ -1,101 +1,116 @@
 "use client";
 
+import { useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { logout } from "@/lib/logout";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import {
-  LayoutDashboard,
-  BookOpen,
-  FileText,
-  CheckSquare,
-  Settings,
-  LogOut
-} from "lucide-react";
 
-import type { Role, NavItem } from "@/components/layout/sidebarWrapper";
+import type { Role, NavGroup } from "@/components/layout/sidebarWrapper";
 
 type SidebarProps = {
   role: Role;
-  items: NavItem[];
+  groups: NavGroup[];
 };
 
-export function Sidebar({ role, items }: SidebarProps) {
+export function Sidebar({ role, groups }: SidebarProps) {
   const pathname = usePathname();
+  const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isGroupActive = useCallback(
+    (group: NavGroup) =>
+      group.links.some(
+        (link) =>
+          pathname === link.href || pathname.startsWith(`${link.href}/`)
+      ),
+    [pathname]
+  );
+
+  const handleMouseEnter = (label: string) => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    setHoveredGroup(label);
+  };
+
+  const handleMouseLeave = () => {
+    hoverTimeoutRef.current = setTimeout(() => setHoveredGroup(null), 150);
+  };
 
   return (
-    <div className="flex flex-col h-full border-r bg-[#bad28f] text-[#754d28] w-64">
-      {/* Logo Area */}
-      <div className="p-6 h-16 flex items-center border-b border-[#a9c17f]">
-        <h1 className="text-xl font-bold tracking-tight text-[#754d28]">
-          EE Lab <span className="text-[#754d28]">Hub</span>
-        </h1>
-      </div>
-
-      {/* Navigation Links */}
-      <nav className="flex-1 px-4 py-6 space-y-2">
-        {items.map((item, idx) => {
-          if (item.type === "divider") {
-            return <div key={`div-${idx}`} className="my-3 border-t border-[#a9c17f]" />;
-          }
-
-          if (item.type === "header") {
-            return (
-              <div
-                key={`hdr-${idx}`}
-                className="px-2 pt-2 pb-1 text-xs font-semibold uppercase tracking-wider text-[#754d28]/80"
-              >
-                {item.label}
-              </div>
-            );
-          }
-
-          const isActive =
-            pathname === item.href || pathname.startsWith(`${item.href}/`);
-
-          const Icon =
-            item.icon ??
-            (item.href.includes("course")
-              ? BookOpen
-              : item.href.includes("assess")
-              ? FileText
-              : item.href.includes("grade")
-              ? CheckSquare
-              : item.href.includes("setting")
-              ? Settings
-              : LayoutDashboard);
+    <nav
+      className="relative flex flex-col h-full bg-sidebar"
+      style={{ width: 60 }}
+    >
+      <div className="flex flex-col gap-1 py-4">
+        {groups.map((group) => {
+          const active = isGroupActive(group);
+          const isOpen = hoveredGroup === group.label;
+          const Icon = group.icon;
 
           return (
-            <Link key={item.href} href={item.href} passHref>
-              <Button
-                variant="ghost"
+            <div
+              key={group.label}
+              className="relative"
+              onMouseEnter={() => handleMouseEnter(group.label)}
+              onMouseLeave={handleMouseLeave}
+            >
+              {/* Icon tab */}
+              <button
                 className={cn(
-                  "w-full justify-start gap-3 transition-colors",
-                  isActive
-                    ? "bg-[#a9c17f] text-[#754d28]"
-                    : "text-[#754d28] hover:bg-[#a9c17f]"
+                  "flex items-center justify-center w-full h-11",
+                  "text-sidebar-foreground/70 transition-colors duration-150",
+                  active && "text-sidebar-foreground bg-sidebar-accent",
+                  !active && "hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
                 )}
+                aria-label={group.label}
               >
                 <Icon className="h-5 w-5" />
-                {item.label}
-              </Button>
-            </Link>
+              </button>
+
+              {/* Active indicator bar */}
+              {active && (
+                <div className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r bg-sidebar-primary" />
+              )}
+
+              {/* Flyout panel */}
+              <div
+                className={cn(
+                  "absolute left-full top-0 ml-0 min-w-[180px] z-50",
+                  "bg-sidebar border border-sidebar-border rounded-r-lg shadow-lg",
+                  "transition-all duration-200 ease-out origin-left",
+                  isOpen || active
+                    ? "opacity-100 scale-x-100 pointer-events-auto"
+                    : "opacity-0 scale-x-0 pointer-events-none"
+                )}
+              >
+                <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60 border-b border-sidebar-border">
+                  {group.label}
+                </div>
+                <div className="py-1">
+                  {group.links.map((link) => {
+                    const linkActive =
+                      pathname === link.href ||
+                      pathname.startsWith(`${link.href}/`);
+                    return (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        className={cn(
+                          "block px-3 py-2 text-sm transition-colors",
+                          linkActive
+                            ? "text-sidebar-accent-foreground bg-sidebar-accent"
+                            : "text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                        )}
+                      >
+                        {link.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           );
         })}
-      </nav>
-
-      {/* Bottom Actions (Logout) */}
-      <div className="p-4 border-t border-[#a9c17f]">
-        <Button 
-          variant="ghost" 
-          className="w-full justify-start gap-3 text-red-600 hover:bg-[#a9c17f]"
-          onClick={() => { logout(); }}
-        >
-          <LogOut className="h-5 w-5" />
-          Log Out
-        </Button>
       </div>
-    </div>
+    </nav>
   );
 }
