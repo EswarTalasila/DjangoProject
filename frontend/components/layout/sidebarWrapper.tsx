@@ -1,40 +1,20 @@
 import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { getSessionProfile, getSudoCapabilities } from "@/lib/auth-session";
-import {
-  LayoutDashboard,
-  BookOpen,
-  FileText,
-  CheckSquare,
-  KeyRound,
-  Download,
-  Shield,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 
 export type Role = "TEACHER" | "RESEARCHER" | "STUDENT";
 
 export type NavItem =
   | { type: "header"; label: string }
   | { type: "divider" }
-  | { type: "link"; label: string; href: string; icon?: LucideIcon };
+  | { type: "link"; label: string; href: string };
 
 export type NavLink = { label: string; href: string };
 
 export type NavGroup = {
   label: string;
-  icon: LucideIcon;
+  iconName: string;
   links: NavLink[];
-};
-
-const GROUP_ICONS: Record<string, LucideIcon> = {
-  Overview: LayoutDashboard,
-  Courses: BookOpen,
-  Assessments: FileText,
-  "Assignments & Grading": CheckSquare,
-  Registration: KeyRound,
-  Exports: Download,
-  Delegation: Shield,
 };
 
 function groupNavItems(items: NavItem[]): NavGroup[] {
@@ -46,7 +26,7 @@ function groupNavItems(items: NavItem[]): NavGroup[] {
       if (current) groups.push(current);
       current = {
         label: item.label,
-        icon: GROUP_ICONS[item.label] ?? LayoutDashboard,
+        iconName: item.label,
         links: [],
       };
     } else if (item.type === "link" && current) {

@@ -4,8 +4,28 @@ import { useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import {
+  LayoutDashboard,
+  BookOpen,
+  FileText,
+  CheckSquare,
+  KeyRound,
+  Download,
+  Shield,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import type { Role, NavGroup } from "@/components/layout/sidebarWrapper";
+
+const GROUP_ICONS: Record<string, LucideIcon> = {
+  Overview: LayoutDashboard,
+  Courses: BookOpen,
+  Assessments: FileText,
+  "Assignments & Grading": CheckSquare,
+  Registration: KeyRound,
+  Exports: Download,
+  Delegation: Shield,
+};
 
 type SidebarProps = {
   role: Role;
@@ -44,7 +64,7 @@ export function Sidebar({ role, groups }: SidebarProps) {
         {groups.map((group) => {
           const active = isGroupActive(group);
           const isOpen = hoveredGroup === group.label;
-          const Icon = group.icon;
+          const Icon = GROUP_ICONS[group.iconName] ?? LayoutDashboard;
 
           return (
             <div
