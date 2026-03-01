@@ -169,9 +169,9 @@ export default function GrantSudoDialog({
               </p>
             )}
             {permissionGroups.map((group) => (
-              <div key={group.key} className="space-y-2 rounded-md border border-[#ebe9e7] p-3">
+              <div key={group.key} className="space-y-2 rounded-md border border-border p-3">
                 <div>
-                  <p className="text-sm font-medium text-[#61323e]">{group.title}</p>
+                  <p className="text-sm font-medium text-foreground">{group.title}</p>
                   <p className="text-xs text-muted-foreground">{group.description}</p>
                 </div>
                 {group.permissions.map((permission) => (
@@ -190,9 +190,9 @@ export default function GrantSudoDialog({
               </div>
             ))}
             {selectedGrant ? (
-              <div className="space-y-2 rounded-md border border-[#ebe9e7] p-3">
+              <div className="space-y-2 rounded-md border border-border p-3">
                 <div>
-                  <p className="text-sm font-medium text-[#61323e]">Delegation Permissions</p>
+                  <p className="text-sm font-medium text-foreground">Delegation Permissions</p>
                   <p className="text-xs text-muted-foreground">Admin-managed delegation controls.</p>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -222,7 +222,7 @@ export default function GrantSudoDialog({
             Cancel
           </Button>
           <Button
-            className="bg-[#2b6ea4] hover:bg-[#205a86] text-white"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
             onClick={handleSubmit}
             disabled={isLoading || !isValid}
           >

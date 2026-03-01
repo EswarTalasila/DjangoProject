@@ -129,11 +129,11 @@ export default function SudoDelegationView({ currentUserId }: SudoDelegationView
   if (!isLoading && myGrant && !canGrant) {
     return (
       <div className="space-y-6 p-8 max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold tracking-tight text-[#61323e]">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
           Sudo Delegation
         </h1>
-        <div className="rounded-md border border-[#ebe9e7] p-8 text-center">
-          <p className="text-sm text-[#754d28]">
+        <div className="rounded-md border border-border p-8 text-center">
+          <p className="text-sm text-muted-foreground">
             You do not have permission to delegate sudo access.
           </p>
           <p className="mt-2 text-xs text-muted-foreground">{SUDO_CAPABILITY_NOTE}</p>
@@ -164,17 +164,17 @@ export default function SudoDelegationView({ currentUserId }: SudoDelegationView
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-[#61323e]">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
             Sudo Delegation
           </h1>
-          <p className="text-[#754d28] mt-1">
+          <p className="text-muted-foreground mt-1">
             Manage sudo permissions for other researchers.
           </p>
           <p className="text-xs text-muted-foreground mt-1">{SUDO_CAPABILITY_NOTE}</p>
         </div>
         {canGrant && (
           <Button
-            className="bg-[#2b6ea4] hover:bg-[#205a86] text-white"
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
             onClick={() => setIsGrantDialogOpen(true)}
             disabled={isActionLoading}
           >
@@ -185,33 +185,33 @@ export default function SudoDelegationView({ currentUserId }: SudoDelegationView
       </div>
 
       {loadError && <p className="text-sm text-red-600">{loadError}</p>}
-      {isLoading && <p className="text-sm text-[#754d28]">Loading grants...</p>}
+      {isLoading && <p className="text-sm text-muted-foreground">Loading grants...</p>}
 
       {!isLoading && !loadError && grants.length === 0 && (
-        <div className="rounded-md border border-[#ebe9e7] p-8 text-center">
-          <p className="text-sm text-[#754d28]">No sudo grants found.</p>
+        <div className="rounded-md border border-border p-8 text-center">
+          <p className="text-sm text-muted-foreground">No sudo grants found.</p>
         </div>
       )}
 
       {!isLoading && grants.length > 0 && (
-        <div className="rounded-md border border-[#ebe9e7]">
+        <div className="rounded-md border border-border">
           <Table>
             <TableHeader>
-              <TableRow className="bg-[#faf9f8]">
-                <TableHead className="text-[#754d28]">Researcher</TableHead>
-                <TableHead className="text-[#754d28]">Permissions</TableHead>
-                <TableHead className="text-[#754d28]">Can Delegate</TableHead>
-                <TableHead className="text-[#754d28]">Granted</TableHead>
-                <TableHead className="text-[#754d28]">Actions</TableHead>
+              <TableRow className="bg-muted">
+                <TableHead className="text-muted-foreground">Researcher</TableHead>
+                <TableHead className="text-muted-foreground">Permissions</TableHead>
+                <TableHead className="text-muted-foreground">Can Delegate</TableHead>
+                <TableHead className="text-muted-foreground">Granted</TableHead>
+                <TableHead className="text-muted-foreground">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {grants.map((grant) => (
                 <TableRow key={grant.id}>
-                  <TableCell className="text-sm text-[#61323e] font-medium">
+                  <TableCell className="text-sm text-foreground font-medium">
                     {grant.user.name}
                   </TableCell>
-                  <TableCell className="text-sm text-[#754d28]">
+                  <TableCell className="text-sm text-muted-foreground">
                     <div className="flex flex-wrap gap-1">
                       {grant.permissions.map((p) => (
                         <span
@@ -223,10 +223,10 @@ export default function SudoDelegationView({ currentUserId }: SudoDelegationView
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell className="text-sm text-[#754d28]">
+                  <TableCell className="text-sm text-muted-foreground">
                     {grant.canGrantSudo ? 'Yes' : 'No'}
                   </TableCell>
-                  <TableCell className="text-sm text-[#754d28]">
+                  <TableCell className="text-sm text-muted-foreground">
                     {formatDate(grant.grantedAt)}
                   </TableCell>
                   <TableCell>
