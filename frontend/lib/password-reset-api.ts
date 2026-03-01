@@ -90,3 +90,36 @@ export async function getMySudoGrant(): Promise<MySudoGrantResponse> {
   const response = await api.get<MySudoGrantResponse>("/sudo-grants/me");
   return response.data;
 }
+
+export type ResetCodeValidationResponse = {
+  valid: boolean;
+  requestId: number;
+  expiresAt: string;
+};
+
+export type ChangePasswordResponse = {
+  message: string;
+};
+
+export async function validateResetCode(
+  identifier: string,
+  resetCode: string,
+): Promise<ResetCodeValidationResponse> {
+  const response = await api.post<ResetCodeValidationResponse>(
+    "/auth/reset-code-validations",
+    { identifier, resetCode },
+  );
+  return response.data;
+}
+
+export async function changePassword(payload: {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}): Promise<ChangePasswordResponse> {
+  const response = await api.patch<ChangePasswordResponse>(
+    "/auth/password",
+    payload,
+  );
+  return response.data;
+}
