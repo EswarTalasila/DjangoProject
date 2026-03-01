@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -160,11 +160,7 @@ describe('ResetCodeDialog', () => {
     );
 
     const user = userEvent.setup();
-    const closeButtons = screen.getAllByRole('button', { name: 'Close' });
-    const explicitClose = closeButtons.find(
-      (btn) => btn.getAttribute('data-slot') === 'button',
-    )!;
-    await user.click(explicitClose);
+    await user.click(screen.getByRole('button', { name: 'Close dialog' }));
 
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });

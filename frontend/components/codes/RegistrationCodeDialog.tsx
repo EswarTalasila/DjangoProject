@@ -88,7 +88,7 @@ export function RegistrationCodeDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} aria-label="Close dialog">
             Close
           </Button>
           <Button onClick={handleCopy} disabled={codes.length === 0}>
