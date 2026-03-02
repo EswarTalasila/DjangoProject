@@ -12,6 +12,7 @@ import {
   KeyRound,
   Download,
   Shield,
+  Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -24,6 +25,7 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
   "Assignments & Grading": CheckSquare,
   Registration: KeyRound,
   Exports: Download,
+  Staff: Users,
   Delegation: Shield,
 };
 
