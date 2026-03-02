@@ -12,8 +12,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { CreateRegistrationCodeDialog } from '@/components/codes/CreateRegistrationCodeDialog';
 import {
-  createStudentRegistrationCode,
+  createRegistrationCodes,
   listRegistrationCodes,
   type RegistrationCode,
 } from '@/lib/registration-code-api';
@@ -42,8 +43,8 @@ export default function CourseRegistrationTab({ courseId }: CourseRegistrationTa
   const [codes, setCodes] = useState<RegistrationCode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   const loadCodes = useCallback(async () => {
     setLoadError(null);
@@ -65,24 +66,34 @@ export default function CourseRegistrationTab({ courseId }: CourseRegistrationTa
     void loadCodes();
   }, [loadCodes]);
 
-  async function handleGenerate() {
-    setIsGenerating(true);
-    setGeneratedCode(null);
+  async function handleSubmit(values: {
+    codeType: string;
+    count: number;
+    usesPerCode: number;
+    expiresAt: string;
+    courseId?: number;
+  }) {
+    setIsCreating(true);
     try {
-      const code = await createStudentRegistrationCode(courseId);
-      setGeneratedCode(code);
-      toast.success('Registration code generated.');
+      await createRegistrationCodes({
+        codeType: 'STUDENT',
+        count: values.count,
+        usesPerCode: values.usesPerCode,
+        expiresAt: values.expiresAt,
+        courseId,
+      });
+      toast.success(
+        values.count === 1
+          ? 'Registration code generated.'
+          : `${values.count} registration codes generated.`,
+      );
+      setIsDialogOpen(false);
       await loadCodes();
     } catch (error: unknown) {
       toast.error(extractDetail(error, 'Failed to generate registration code.'));
     } finally {
-      setIsGenerating(false);
+      setIsCreating(false);
     }
-  }
-
-  async function handleCopyCode(code: string) {
-    await navigator.clipboard.writeText(code);
-    toast.success('Code copied to clipboard.');
   }
 
   if (isLoading) {
@@ -99,28 +110,23 @@ export default function CourseRegistrationTab({ courseId }: CourseRegistrationTa
         <p className="text-sm text-muted-foreground">
           Generate registration codes for students to join this course.
         </p>
-        <Button onClick={() => void handleGenerate()} disabled={isGenerating}>
-          {isGenerating ? 'Generating...' : 'Generate Code'}
+        <Button onClick={() => setIsDialogOpen(true)}>
+          Generate Code
         </Button>
       </div>
 
-      {generatedCode && (
-        <div className="rounded-sm border border-brand-gold bg-brand-gold/10 p-4">
-          <p className="text-xs font-medium uppercase text-muted-foreground mb-1">New Code</p>
-          <div className="flex items-center gap-3">
-            <p className="font-mono text-lg font-semibold tracking-wide text-foreground">
-              {generatedCode}
-            </p>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void handleCopyCode(generatedCode)}
-            >
-              Copy
-            </Button>
-          </div>
-        </div>
-      )}
+      <CreateRegistrationCodeDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        isLoading={isCreating}
+        title="Generate Student Code"
+        description="Create registration codes for students to join this course."
+        allowedCodeTypes={['STUDENT']}
+        initialCodeType="STUDENT"
+        lockCodeType
+        lockedCourseId={courseId}
+        onSubmit={handleSubmit}
+      />
 
       {codes.length === 0 ? (
         <div className="rounded-sm border border-border bg-card p-8 text-center">

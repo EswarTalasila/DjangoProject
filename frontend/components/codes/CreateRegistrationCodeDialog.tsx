@@ -35,6 +35,7 @@ type CreateRegistrationCodeDialogProps = {
   allowedCodeTypes: RegistrationCodeType[];
   initialCodeType: RegistrationCodeType;
   lockCodeType?: boolean;
+  lockedCourseId?: number;
   onSubmit: (values: FormValues) => Promise<void>;
 };
 
@@ -63,6 +64,7 @@ export function CreateRegistrationCodeDialog({
   allowedCodeTypes,
   initialCodeType,
   lockCodeType = false,
+  lockedCourseId,
   onSubmit,
 }: CreateRegistrationCodeDialogProps) {
   const [codeType, setCodeType] = useState<RegistrationCodeType>(initialCodeType);
@@ -79,16 +81,16 @@ export function CreateRegistrationCodeDialog({
     setCount(1);
     setUsesPerCode(1);
     setExpiresAt(defaultExpiryLocalValue());
-    setCourseId(undefined);
+    setCourseId(lockedCourseId);
     setError(null);
-  }, [open, initialCodeType]);
+  }, [open, initialCodeType, lockedCourseId]);
 
   useEffect(() => {
-    if (!open || codeType !== 'STUDENT') return;
+    if (!open || codeType !== 'STUDENT' || lockedCourseId) return;
     listCourses()
       .then((data) => setCourses(data))
       .catch(() => setCourses([]));
-  }, [open, codeType]);
+  }, [open, codeType, lockedCourseId]);
 
   const typeOptions = useMemo(
     () => allowedCodeTypes.filter((value, index, arr) => arr.indexOf(value) === index),
@@ -105,7 +107,7 @@ export function CreateRegistrationCodeDialog({
       setError('Uses per code must be at least 1.');
       return;
     }
-    if (codeType === 'STUDENT' && !courseId) {
+    if (codeType === 'STUDENT' && !courseId && !lockedCourseId) {
       setError('Please select a course for student codes.');
       return;
     }
@@ -168,7 +170,7 @@ export function CreateRegistrationCodeDialog({
             ) : null}
           </div>
 
-          {codeType === 'STUDENT' ? (
+          {codeType === 'STUDENT' && !lockedCourseId ? (
             <div className="grid gap-2">
               <Label htmlFor="course">Course</Label>
               <select
