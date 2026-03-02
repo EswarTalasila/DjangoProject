@@ -58,16 +58,11 @@ def edit_course(course: Course, name: str) -> Course:
 @transaction.atomic
 def delete_course(course: Course) -> None:
     """
-    Delete a course and all associated students.
+    Delete a course and its enrollments.
 
-    This performs a hard delete of the course, all enrollments, and all
-    student users who were enrolled. Consider implementing soft delete
-    for audit purposes.
+    Enrollment records are cascade-deleted by Django. Student User
+    accounts are intentionally preserved (CRS-CN-05).
     """
-    enrollments = Enrollment.objects.filter(course=course)
-    student_user_ids = list(enrollments.values_list("student_profile__user_id", flat=True))
-    enrollments.delete()
-    User.objects.filter(id__in=student_user_ids).delete()
     course.delete()
 
 
@@ -131,15 +126,21 @@ def create_student_in_course(request_user: User, payload: dict) -> Enrollment:
 @transaction.atomic
 def remove_student_from_course(course: Course, student_user_id: int) -> None:
     """
-    Remove a student from a course and delete their user account.
+    Remove a student from a course by setting enrollment to DROPPED.
 
-    Note: This is a hard delete. The student user is completely removed.
+    The student User account is preserved (CRS-CN-05). Already-DROPPED
+    enrollments are treated as not found (CRS-UC-08-E2).
     """
     student_profile = StudentProfile.objects.filter(user_id=student_user_id).first()
     if not student_profile:
-        raise ValueError("Student profile not found")
-    Enrollment.objects.filter(course=course, student_profile=student_profile).delete()
-    User.objects.filter(id=student_user_id).delete()
+        raise ValueError("Student not found in course")
+    enrollment = Enrollment.objects.filter(
+        course=course, student_profile=student_profile, status=EnrollmentStatus.ACTIVE
+    ).first()
+    if not enrollment:
+        raise ValueError("Student not found in course")
+    enrollment.status = EnrollmentStatus.DROPPED
+    enrollment.save(update_fields=["status"])
 
 
 def _create_submissions_for_student(student_user: User, course: Course) -> None:
