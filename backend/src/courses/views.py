@@ -14,7 +14,7 @@ Course Workflow:
 Endpoints:
     GET/POST /api/v1/courses           - List or create courses
     GET/PATCH/DELETE /api/v1/courses/{id} - Course detail/update/delete
-    GET /api/v1/courses/{id}/students  - List enrolled students
+    GET/POST /api/v1/courses/{id}/students  - List or add students
     DELETE /api/v1/courses/{id}/students/{userId} - Remove student
 """
 
@@ -28,14 +28,16 @@ from core.pagination import paginate
 from core.permissions import IsTeacher, IsTeacherOrAbove
 
 from .models import Course
-from .serializers import CourseInputSerializer
+from .serializers import CourseInputSerializer, StudentNestedInputSerializer
 from .services import (
     can_manage_course,
     can_view_course,
     course_to_dto,
     create_course,
+    create_student_in_course,
     delete_course,
     edit_course,
+    enrollment_to_student_dto,
     list_courses_for_user,
     list_students_in_course,
     remove_student_from_course,
@@ -126,31 +128,41 @@ def detail(request, course_id: int):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-@api_view(["GET"])
+@api_view(["GET", "POST"])
 @permission_classes([IsTeacherOrAbove])
-def list_students(request, course_id: int):
+def list_or_add_students(request, course_id: int):
     """
-    List all students enrolled in a course.
+    List students (GET) or add a student (POST) to a course.
 
-    Returns student user information for each enrollment, used by the
-    teacher dashboard to view and manage class rosters.
-
-    Args:
-        course_id: Database ID of the course (path parameter)
+    GET: Returns paginated roster of active enrollments.
+    POST: Creates a new student and enrolls them (teacher-owner only).
 
     Returns:
-        200: Array of student DTOs with id, name, username
-        403: Forbidden if not authorized to view course
-        404: "Course not found"
-
-    Permission Rules:
-        - Admin (is_staff): Can view any course's students
-        - Researcher: Can view any course's students (data oversight)
-        - Teacher: Can view own course's students only
+        GET 200: Paginated student DTOs
+        POST 201: Created student DTO
+        403: Forbidden
+        404: Course not found
     """
     course = Course.objects.filter(id=course_id).first()
     if not course:
         return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "POST":
+        if not can_manage_course(request.user, course):
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        serializer = StudentNestedInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            enrollment = create_student_in_course(
+                request.user, course_id, serializer.validated_data
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(
+            enrollment_to_student_dto(enrollment).model_dump(),
+            status=status.HTTP_201_CREATED,
+        )
+
     if not can_view_course(request.user, course):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     students = list_students_in_course(course)

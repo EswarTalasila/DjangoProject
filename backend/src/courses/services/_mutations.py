@@ -67,19 +67,14 @@ def delete_course(course: Course) -> None:
 
 
 @transaction.atomic
-def create_student_in_course(request_user: User, payload: dict) -> Enrollment:
+def create_student_in_course(request_user: User, course_id: int, payload: dict) -> Enrollment:
     """
     Create a new student and enroll them in a course.
 
-    This is the main entry point for adding students. It:
-    1. Creates the student user account
-    2. Creates/updates the student profile with consent status
-    3. Creates the enrollment record
-    4. Creates placeholder submissions for all existing course assignments
-
     Args:
         request_user: The teacher adding the student
-        payload: Dict with name, courseId, and optionally consent
+        course_id: ID of the course to enroll into (from URL path)
+        payload: Dict with name, and optionally consent and password
 
     Returns:
         The created Enrollment
@@ -87,9 +82,6 @@ def create_student_in_course(request_user: User, payload: dict) -> Enrollment:
     Raises:
         ValueError: If course not found, profile creation failed, or student already enrolled
     """
-    course_id = payload.get("courseId")
-    if course_id is None:
-        raise ValueError("courseId is required")
     course = Course.objects.filter(id=course_id).first()
     if not course:
         raise ValueError("Course not found")
