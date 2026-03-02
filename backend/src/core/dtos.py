@@ -33,6 +33,7 @@ class EnrollmentStudentDTO(BaseModel):
     role: str
     consent: bool
     courseId: int
+    enrolledAt: datetime | None
 
 
 class CourseDTO(BaseModel):
@@ -46,6 +47,8 @@ class CourseDTO(BaseModel):
     studentCount: int
     assignmentIds: list[int]
     teacherId: int | None
+    teacherName: str | None
+    createdAt: datetime | None
 
 
 # =============================================================================
