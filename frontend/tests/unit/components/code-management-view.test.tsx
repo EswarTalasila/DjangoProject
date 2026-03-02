@@ -130,14 +130,14 @@ describe('CodeManagementView', () => {
     });
 
     const user = userEvent.setup();
-    const statusSelect = screen.getByLabelText('Status');
-    await user.selectOptions(statusSelect, 'ACTIVE');
+    const activeChip = screen.getByRole('button', { name: 'Active' });
+    await user.click(activeChip);
 
     await waitFor(() => {
       expect(mockListRegistrationCodes).toHaveBeenCalledTimes(2);
       expect(mockListRegistrationCodes).toHaveBeenLastCalledWith({
         status: 'ACTIVE',
-        codeType: undefined,
+        codeType: 'STUDENT',
         includeArchived: false,
       });
     });
@@ -273,7 +273,7 @@ describe('CodeManagementView', () => {
     });
   });
 
-  it('researcher without ISSUE_STUDENT_REG_CODE sees fixed teacher code type', async () => {
+  it('researcher without ISSUE_STUDENT_REG_CODE sees only Teacher tab', async () => {
     mockListRegistrationCodes.mockResolvedValueOnce({
       count: 0,
       next: null,
@@ -286,25 +286,16 @@ describe('CodeManagementView', () => {
       <CodeManagementView userRole="RESEARCHER" researcherPermissions={[]} isStaff={false} />,
     );
 
-    const user = userEvent.setup();
     await waitFor(() => {
       expect(screen.getByText('No registration codes found.')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole('button', { name: /Generate Code/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Generate registration code')).toBeInTheDocument();
-    });
-
-    const select = screen.getByLabelText('Code type') as HTMLSelectElement;
-    const options = Array.from(select.options).map((option) => option.value);
-    expect(options).toEqual(['TEACHER']);
-    expect(select).toBeDisabled();
-    expect(screen.getByText('Your permissions only allow this code type.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Teacher' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Student' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Researcher' })).not.toBeInTheDocument();
   });
 
-  it('researcher with ISSUE_STUDENT_REG_CODE can choose student code type', async () => {
+  it('researcher with ISSUE_STUDENT_REG_CODE sees Student and Teacher tabs', async () => {
     mockListRegistrationCodes.mockResolvedValueOnce({
       count: 0,
       next: null,
@@ -321,17 +312,12 @@ describe('CodeManagementView', () => {
       />,
     );
 
-    const user = userEvent.setup();
     await waitFor(() => {
       expect(screen.getByText('No registration codes found.')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole('button', { name: /Generate Code/i }));
-
-    const select = await screen.findByLabelText('Code type');
-    const options = Array.from((select as HTMLSelectElement).options).map((option) => option.value);
-    expect(options).toContain('TEACHER');
-    expect(options).toContain('STUDENT');
-    expect(options).not.toContain('RESEARCHER');
+    expect(screen.getByRole('button', { name: 'Student' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Teacher' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Researcher' })).not.toBeInTheDocument();
   });
 });

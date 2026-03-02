@@ -1,27 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Archive, Eye, MoreVertical, Plus, ShieldOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { CodeDetailDialog } from '@/components/codes/CodeDetailDialog';
+import { CodeTypeTabs } from '@/components/codes/CodeTypeTabs';
+import { CodesTable } from '@/components/codes/CodesTable';
+import { CodesToolbar } from '@/components/codes/CodesToolbar';
 import { CreateRegistrationCodeDialog } from '@/components/codes/CreateRegistrationCodeDialog';
 import { RegistrationCodeDialog } from '@/components/codes/RegistrationCodeDialog';
-import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   createRegistrationCodes,
   listRegistrationCodes,
@@ -37,32 +24,6 @@ function extractDetail(error: unknown, fallback: string): string {
   return (error as ApiError).response?.data?.detail || fallback;
 }
 
-const STATUS_COLORS: Record<RegistrationCodeStatus, string> = {
-  ACTIVE: 'bg-green-100 text-green-800',
-  EXHAUSTED: 'bg-gray-100 text-gray-800',
-  EXPIRED: 'bg-yellow-100 text-yellow-800',
-  REVOKED: 'bg-red-100 text-red-800',
-  ARCHIVED: 'bg-slate-100 text-slate-600',
-};
-
-function StatusBadge({ status }: { status: RegistrationCodeStatus }) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[status]}`}
-    >
-      {status}
-    </span>
-  );
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
 type CodeManagementViewProps = {
   userRole: 'TEACHER' | 'RESEARCHER';
   researcherPermissions?: string[];
@@ -74,13 +35,28 @@ export default function CodeManagementView({
   researcherPermissions = [],
   isStaff = false,
 }: CodeManagementViewProps) {
+  const canCreateStudentCodes =
+    userRole === 'TEACHER' ||
+    (userRole === 'RESEARCHER' &&
+      (isStaff || researcherPermissions.includes('ISSUE_STUDENT_REG_CODE')));
+  const canCreateResearcherCodes =
+    userRole === 'RESEARCHER' &&
+    (isStaff || researcherPermissions.includes('ISSUE_RESEARCHER_REG_CODE'));
+
+  const allowedCodeTypes: RegistrationCodeType[] = useMemo(() => {
+    if (userRole === 'TEACHER') return ['STUDENT'];
+    const types: RegistrationCodeType[] = [];
+    if (canCreateStudentCodes) types.push('STUDENT');
+    types.push('TEACHER');
+    if (canCreateResearcherCodes) types.push('RESEARCHER');
+    return types;
+  }, [userRole, canCreateStudentCodes, canCreateResearcherCodes]);
+
+  const [activeTab, setActiveTab] = useState<RegistrationCodeType>(allowedCodeTypes[0]);
+  const [statusFilter, setStatusFilter] = useState<RegistrationCodeStatus | ''>('');
   const [codes, setCodes] = useState<RegistrationCode[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-
-  const [statusFilter, setStatusFilter] = useState<RegistrationCodeStatus | ''>('');
-  const [codeTypeFilter, setCodeTypeFilter] = useState<RegistrationCodeType | ''>('');
-  const [showArchived, setShowArchived] = useState(false);
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -90,36 +66,15 @@ export default function CodeManagementView({
   const [detailCode, setDetailCode] = useState<RegistrationCode | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-  const canCreateStudentCodes =
-    userRole === 'RESEARCHER' &&
-    (isStaff || researcherPermissions.includes('ISSUE_STUDENT_REG_CODE'));
-  const canCreateResearcherCodes =
-    userRole === 'RESEARCHER' &&
-    (isStaff || researcherPermissions.includes('ISSUE_RESEARCHER_REG_CODE'));
-
-  const allowedCodeTypes: RegistrationCodeType[] = useMemo(() => {
-    if (userRole !== 'RESEARCHER') return ['STUDENT'];
-    return [
-      'TEACHER',
-      ...(canCreateStudentCodes ? (['STUDENT'] as const) : []),
-      ...(canCreateResearcherCodes ? (['RESEARCHER'] as const) : []),
-    ];
-  }, [canCreateResearcherCodes, canCreateStudentCodes, userRole]);
-  const codeTypeFilterOptions = allowedCodeTypes;
-
-  useEffect(() => {
-    if (codeTypeFilter && !codeTypeFilterOptions.includes(codeTypeFilter)) {
-      setCodeTypeFilter('');
-    }
-  }, [codeTypeFilter, codeTypeFilterOptions]);
+  const includeArchived = statusFilter === 'ARCHIVED';
 
   const loadCodes = useCallback(async () => {
     setLoadError(null);
     try {
       const response = await listRegistrationCodes({
         status: statusFilter || undefined,
-        codeType: codeTypeFilter || undefined,
-        includeArchived: showArchived,
+        codeType: activeTab,
+        includeArchived,
       });
       setCodes(response.results);
     } catch {
@@ -127,12 +82,17 @@ export default function CodeManagementView({
     } finally {
       setIsLoading(false);
     }
-  }, [statusFilter, codeTypeFilter, showArchived]);
+  }, [statusFilter, activeTab, includeArchived]);
 
   useEffect(() => {
     setIsLoading(true);
     void loadCodes();
   }, [loadCodes]);
+
+  function handleTabChange(tab: RegistrationCodeType) {
+    setActiveTab(tab);
+    setStatusFilter('');
+  }
 
   async function handleCreateCode(values: {
     codeType: RegistrationCodeType;
@@ -191,22 +151,17 @@ export default function CodeManagementView({
     }
   }
 
-  function handleViewDetail(code: RegistrationCode) {
-    setDetailCode(code);
-    setIsDetailOpen(true);
-  }
-
   return (
-    <div className="space-y-6 p-8 max-w-7xl mx-auto">
+    <div className="space-y-6 p-6 max-w-6xl mx-auto">
       <CreateRegistrationCodeDialog
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
         isLoading={isActionLoading}
         title="Generate registration code"
         description="Configure the code type, usage limits, and expiration."
-        allowedCodeTypes={allowedCodeTypes}
-        initialCodeType={allowedCodeTypes[0]}
-        lockCodeType={allowedCodeTypes.length === 1}
+        allowedCodeTypes={[activeTab]}
+        initialCodeType={activeTab}
+        lockCodeType
         onSubmit={async (values) =>
           handleCreateCode({
             codeType: values.codeType,
@@ -231,168 +186,40 @@ export default function CodeManagementView({
         isActionLoading={isActionLoading}
       />
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-[#61323e]">
-            Registration Codes
-          </h1>
-          <p className="text-[#754d28] mt-1">
-            Manage registration codes and their lifecycle.
-          </p>
-        </div>
-        <Button
-          className="bg-[#2b6ea4] hover:bg-[#205a86] text-white"
-          onClick={() => setIsCreateDialogOpen(true)}
-          disabled={isActionLoading}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Generate Code
-        </Button>
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
+          Registration Codes
+        </h1>
+        <p className="text-muted-foreground mt-1">
+          Manage registration codes and their lifecycle.
+        </p>
       </div>
 
-      <div className="flex items-center gap-4 flex-wrap">
-        <div className="flex items-center gap-2">
-          <label htmlFor="status-filter" className="text-sm font-medium text-[#754d28]">
-            Status
-          </label>
-          <select
-            id="status-filter"
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as RegistrationCodeStatus | '')}
-          >
-            <option value="">All</option>
-            <option value="ACTIVE">Active</option>
-            <option value="EXHAUSTED">Exhausted</option>
-            <option value="EXPIRED">Expired</option>
-            <option value="REVOKED">Revoked</option>
-          </select>
-        </div>
+      <CodeTypeTabs
+        tabs={allowedCodeTypes}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+      />
 
-        {codeTypeFilterOptions.length > 1 && (
-          <div className="flex items-center gap-2">
-            <label htmlFor="type-filter" className="text-sm font-medium text-[#754d28]">
-              Type
-            </label>
-            <select
-              id="type-filter"
-              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-              value={codeTypeFilter}
-              onChange={(e) => setCodeTypeFilter(e.target.value as RegistrationCodeType | '')}
-            >
-              <option value="">All</option>
-              {codeTypeFilterOptions.map((t) => (
-                <option key={t} value={t}>
-                  {t.charAt(0) + t.slice(1).toLowerCase()}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+      <CodesToolbar
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        onGenerateClick={() => setIsCreateDialogOpen(true)}
+        isActionLoading={isActionLoading}
+      />
 
-        <label className="flex items-center gap-2 text-sm text-[#754d28]">
-          <input
-            type="checkbox"
-            checked={showArchived}
-            onChange={(e) => setShowArchived(e.target.checked)}
-            className="rounded border-gray-300"
-          />
-          Show Archived
-        </label>
-      </div>
-
-      {loadError && <p className="text-sm text-red-600">{loadError}</p>}
-      {isLoading && <p className="text-sm text-[#754d28]">Loading codes...</p>}
-
-      {!isLoading && !loadError && codes.length === 0 && (
-        <div className="rounded-md border border-[#ebe9e7] p-8 text-center">
-          <p className="text-sm text-[#754d28]">No registration codes found.</p>
-        </div>
-      )}
-
-      {!isLoading && codes.length > 0 && (
-        <div className="rounded-md border border-[#ebe9e7]">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-[#faf9f8]">
-                <TableHead className="text-[#754d28]">Prefix</TableHead>
-                <TableHead className="text-[#754d28]">Type</TableHead>
-                <TableHead className="text-[#754d28]">Status</TableHead>
-                <TableHead className="text-[#754d28]">Uses</TableHead>
-                <TableHead className="text-[#754d28]">Course</TableHead>
-                <TableHead className="text-[#754d28]">Expires</TableHead>
-                <TableHead className="text-[#754d28]">Created</TableHead>
-                <TableHead className="text-[#754d28]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {codes.map((code) => {
-                const canRevoke = code.status === 'ACTIVE';
-                const canArchive =
-                  code.status === 'EXHAUSTED' ||
-                  code.status === 'EXPIRED' ||
-                  code.status === 'REVOKED';
-                return (
-                  <TableRow key={code.id}>
-                    <TableCell className="font-mono text-sm text-[#61323e]">
-                      {code.codePrefix}
-                    </TableCell>
-                    <TableCell className="text-sm text-[#754d28]">
-                      {code.codeType.charAt(0) + code.codeType.slice(1).toLowerCase()}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={code.status} />
-                    </TableCell>
-                    <TableCell className="text-sm text-[#754d28]">
-                      {code.timesUsed}/{code.maxUses}
-                    </TableCell>
-                    <TableCell className="text-sm text-[#754d28]">
-                      {code.courseName ?? '-'}
-                    </TableCell>
-                    <TableCell className="text-sm text-[#754d28]">
-                      {formatDate(code.expiresAt)}
-                    </TableCell>
-                    <TableCell className="text-sm text-[#754d28]">
-                      {formatDate(code.createdAt)}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            className="h-8 w-8 p-0 text-[#754d28]"
-                            disabled={isActionLoading}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleViewDetail(code)}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            View Details
-                          </DropdownMenuItem>
-                          {canRevoke && (
-                            <DropdownMenuItem onClick={() => void handleRevoke(code)}>
-                              <ShieldOff className="mr-2 h-4 w-4" />
-                              Revoke
-                            </DropdownMenuItem>
-                          )}
-                          {canArchive && (
-                            <DropdownMenuItem onClick={() => void handleArchive(code)}>
-                              <Archive className="mr-2 h-4 w-4" />
-                              Archive
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <CodesTable
+        codes={codes}
+        isLoading={isLoading}
+        loadError={loadError}
+        isActionLoading={isActionLoading}
+        onViewDetail={(code) => {
+          setDetailCode(code);
+          setIsDetailOpen(true);
+        }}
+        onRevoke={(code) => void handleRevoke(code)}
+        onArchive={(code) => void handleArchive(code)}
+      />
     </div>
   );
 }
