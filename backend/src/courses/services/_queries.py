@@ -7,7 +7,7 @@ from assignments.models import Assignment
 from core.dtos import CourseDTO, EnrollmentStudentDTO
 from core.permissions import has_role
 
-from ..models import Course, Enrollment
+from ..models import Course, Enrollment, EnrollmentStatus
 
 
 def _teacher_profile_for(user: User) -> TeacherProfile | None:
@@ -51,7 +51,7 @@ def course_to_dto(course: Course) -> CourseDTO:
     Returns:
         CourseDTO with id, name, students, studentCount, assignmentIds, teacherId
     """
-    enrollments = Enrollment.objects.filter(course=course)
+    enrollments = Enrollment.objects.filter(course=course, status=EnrollmentStatus.ACTIVE)
     students = [enrollment_to_student_dto(e) for e in enrollments]
     assignment_ids = list(Assignment.objects.filter(course=course).values_list("id", flat=True))
     return CourseDTO(
@@ -101,5 +101,5 @@ def list_courses_for_user(user: User) -> list[Course]:
 
 def list_students_in_course(course: Course) -> list[EnrollmentStudentDTO]:
     """Return all students enrolled in a course as DTOs."""
-    enrollments = Enrollment.objects.filter(course=course)
+    enrollments = Enrollment.objects.filter(course=course, status=EnrollmentStatus.ACTIVE)
     return [enrollment_to_student_dto(e) for e in enrollments]
