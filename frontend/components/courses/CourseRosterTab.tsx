@@ -140,7 +140,7 @@ export default function CourseRosterTab({ courseId, canManage }: CourseRosterTab
                   Enrolled
                 </TableHead>
                 {canManage && (
-                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground text-right">
                     Actions
                   </TableHead>
                 )}
@@ -162,7 +162,7 @@ export default function CourseRosterTab({ courseId, canManage }: CourseRosterTab
                     {formatDate(student.enrolledAt)}
                   </TableCell>
                   {canManage && (
-                    <TableCell className="space-x-2">
+                    <TableCell className="space-x-2 text-right">
                       <Button
                         size="sm"
                         variant="outline"
