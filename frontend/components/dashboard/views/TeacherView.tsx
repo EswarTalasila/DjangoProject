@@ -10,9 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { CreateRegistrationCodeDialog } from '@/components/codes/CreateRegistrationCodeDialog';
 import { ResetCodeDialog } from '@/components/codes/ResetCodeDialog';
-import { RegistrationCodeDialog } from '@/components/codes/RegistrationCodeDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -29,7 +27,6 @@ import {
   listStudentsInCourse,
   type CourseStudent,
 } from '@/lib/password-reset-api';
-import { createRegistrationCodes } from '@/lib/registration-code-api';
 
 type ApiError = { response?: { data?: { detail?: string } } };
 
@@ -44,11 +41,6 @@ export default function TeacherView() {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [registrationCodes, setRegistrationCodes] = useState<string[]>([]);
-  const [isCodeDialogOpen, setIsCodeDialogOpen] = useState(false);
-  const [isCreateCodeDialogOpen, setIsCreateCodeDialogOpen] = useState(false);
-  const [selectedCourseIdForCode, setSelectedCourseIdForCode] = useState<number | null>(null);
-
   const [expandedCourseIds, setExpandedCourseIds] = useState<number[]>([]);
   const [studentsByCourse, setStudentsByCourse] = useState<Record<number, CourseStudent[]>>({});
   const [isStudentsLoading, setIsStudentsLoading] = useState<Record<number, boolean>>({});
@@ -96,40 +88,6 @@ export default function TeacherView() {
     }
   }
 
-  function handleOpenGenerateInviteCode(courseId: number) {
-    setSelectedCourseIdForCode(courseId);
-    setIsCreateCodeDialogOpen(true);
-  }
-
-  async function handleGenerateInviteCode(config: {
-    count: number;
-    usesPerCode: number;
-    expiresAt: string;
-  }) {
-    if (!selectedCourseIdForCode) return;
-    setIsLoading(true);
-    try {
-      const response = await createRegistrationCodes({
-        codeType: 'STUDENT',
-        count: config.count,
-        usesPerCode: config.usesPerCode,
-        expiresAt: config.expiresAt,
-        courseId: selectedCourseIdForCode,
-      });
-      const plainCodes = response.codes
-        .map((c) => c.code)
-        .filter((c): c is string => c != null);
-      if (plainCodes.length === 0) throw new Error('Registration code was not returned by the server.');
-      setRegistrationCodes(plainCodes);
-      setIsCreateCodeDialogOpen(false);
-      setIsCodeDialogOpen(true);
-    } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to generate invite code.'));
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
   async function toggleStudents(courseId: number) {
     const isExpanded = expandedCourseIds.includes(courseId);
     if (isExpanded) {
@@ -170,28 +128,6 @@ export default function TeacherView() {
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      <CreateRegistrationCodeDialog
-        open={isCreateCodeDialogOpen}
-        onOpenChange={setIsCreateCodeDialogOpen}
-        isLoading={isLoading}
-        title="Generate student invite code"
-        description="Set usage count and expiration before creating the code."
-        allowedCodeTypes={['STUDENT']}
-        initialCodeType="STUDENT"
-        lockCodeType
-        onSubmit={async (values) =>
-          handleGenerateInviteCode({
-            count: values.count,
-            usesPerCode: values.usesPerCode,
-            expiresAt: values.expiresAt,
-          })
-        }
-      />
-      <RegistrationCodeDialog
-        open={isCodeDialogOpen}
-        onOpenChange={setIsCodeDialogOpen}
-        codes={registrationCodes}
-      />
       <ResetCodeDialog
         open={isResetDialogOpen}
         onOpenChange={setIsResetDialogOpen}
@@ -275,9 +211,6 @@ export default function TeacherView() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleOpenGenerateInviteCode(course.id)}>
-                          Generate Invite Code
-                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => void toggleStudents(course.id)}>
                           {isExpanded ? 'Hide Students' : 'View Students'}
                         </DropdownMenuItem>
