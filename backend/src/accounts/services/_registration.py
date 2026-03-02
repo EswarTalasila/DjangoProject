@@ -438,6 +438,8 @@ def registration_code_scope_queryset(user: User, *, include_related: bool = True
         allowed_types = [RegistrationCodeType.TEACHER]
         if has_sudo_permission(user, SudoPermission.ISSUE_STUDENT_REG_CODE):
             allowed_types.append(RegistrationCodeType.STUDENT)
+        if has_sudo_permission(user, SudoPermission.ISSUE_RESEARCHER_REG_CODE):
+            allowed_types.append(RegistrationCodeType.RESEARCHER)
         return base.filter(created_by=user, code_type__in=allowed_types)
     if request_role == Role.TEACHER:
         return base.filter(created_by=user, code_type=RegistrationCodeType.STUDENT)
