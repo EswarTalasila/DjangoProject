@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus, Search } from 'lucide-react';
+import { Loader2, Plus, Search } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -24,11 +27,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   createCourse,
   listCourses,
   type CourseSummary,
 } from '@/lib/course-api';
+import { joinCourseByCode } from '@/lib/registration-code-api';
 
 type ApiError = { response?: { data?: { detail?: string } } };
 
@@ -46,7 +51,7 @@ function formatDate(iso: string | null): string {
 }
 
 type CoursesListViewProps = {
-  userRole: 'TEACHER' | 'RESEARCHER';
+  userRole: 'TEACHER' | 'RESEARCHER' | 'STUDENT';
 };
 
 export default function CoursesListView({ userRole }: CoursesListViewProps) {
@@ -63,6 +68,22 @@ export default function CoursesListView({ userRole }: CoursesListViewProps) {
 
   const canCreate = userRole === 'TEACHER';
 
+  const joinSchema = z.object({
+    code: z.string().min(1, 'Course code is required').max(64),
+  });
+  type JoinForm = z.infer<typeof joinSchema>;
+
+  const {
+    register: registerJoin,
+    handleSubmit: handleJoinSubmit,
+    formState: { errors: joinErrors, isSubmitting: isJoining },
+    setError: setJoinError,
+    reset: resetJoin,
+  } = useForm<JoinForm>({
+    resolver: zodResolver(joinSchema),
+    defaultValues: { code: '' },
+  });
+
   const loadCourses = useCallback(async () => {
     setLoadError(null);
     try {
@@ -74,6 +95,24 @@ export default function CoursesListView({ userRole }: CoursesListViewProps) {
       setIsLoading(false);
     }
   }, []);
+
+  async function onJoinSubmit(data: JoinForm) {
+    try {
+      const result = await joinCourseByCode(data.code.trim());
+      if (result.alreadyEnrolled) {
+        toast.info('You are already enrolled in this course.');
+      } else {
+        toast.success('Successfully joined the course!');
+      }
+      resetJoin();
+      await loadCourses();
+    } catch (error: unknown) {
+      setJoinError('code', {
+        type: 'manual',
+        message: extractDetail(error, 'Invalid or expired course code.'),
+      });
+    }
+  }
 
   useEffect(() => {
     setIsLoading(true);
@@ -163,7 +202,9 @@ export default function CoursesListView({ userRole }: CoursesListViewProps) {
           <p className="text-muted-foreground mt-1">
             {canCreate
               ? 'Manage your courses and enrolled students.'
-              : 'View courses and enrolled students.'}
+              : userRole === 'STUDENT'
+                ? 'View your enrolled courses or join a new one.'
+                : 'View courses and enrolled students.'}
           </p>
         </div>
         {canCreate && (
@@ -173,6 +214,39 @@ export default function CoursesListView({ userRole }: CoursesListViewProps) {
           </Button>
         )}
       </div>
+
+      {userRole === 'STUDENT' && (
+        <Card className="border-border shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg text-primary">Join a Course</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleJoinSubmit(onJoinSubmit)} className="flex items-end gap-3">
+              <div className="flex-1 space-y-2">
+                <Label htmlFor="join-code">Course Code</Label>
+                <Input
+                  id="join-code"
+                  placeholder="Enter your course code"
+                  className="border-border focus-visible:ring-ring"
+                  disabled={isJoining}
+                  {...registerJoin('code')}
+                />
+                {joinErrors.code ? (
+                  <p className="text-sm text-destructive">{joinErrors.code.message}</p>
+                ) : null}
+              </div>
+              <Button
+                type="submit"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+                disabled={isJoining}
+              >
+                {isJoining ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Join
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -212,12 +286,16 @@ export default function CoursesListView({ userRole }: CoursesListViewProps) {
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Course Name
                 </TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Teacher
-                </TableHead>
-                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Students
-                </TableHead>
+                {userRole !== 'STUDENT' && (
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Teacher
+                  </TableHead>
+                )}
+                {userRole !== 'STUDENT' && (
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Students
+                  </TableHead>
+                )}
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Created
                 </TableHead>
@@ -233,12 +311,16 @@ export default function CoursesListView({ userRole }: CoursesListViewProps) {
                   <TableCell className="font-medium text-sm text-foreground">
                     {course.name}
                   </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {course.teacherName ?? '-'}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {course.studentCount}
-                  </TableCell>
+                  {userRole !== 'STUDENT' && (
+                    <TableCell className="text-sm text-muted-foreground">
+                      {course.teacherName ?? '-'}
+                    </TableCell>
+                  )}
+                  {userRole !== 'STUDENT' && (
+                    <TableCell className="text-sm text-muted-foreground">
+                      {course.studentCount}
+                    </TableCell>
+                  )}
                   <TableCell className="text-sm text-muted-foreground">
                     {formatDate(course.createdAt)}
                   </TableCell>

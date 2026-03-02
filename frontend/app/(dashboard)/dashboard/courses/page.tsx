@@ -9,9 +9,9 @@ export default async function CoursesPage() {
   }
 
   const role = profile.role as string;
-  if (role !== 'TEACHER' && role !== 'RESEARCHER') {
+  if (role !== 'TEACHER' && role !== 'RESEARCHER' && role !== 'STUDENT') {
     redirect('/dashboard');
   }
 
-  return <CoursesListView userRole={role as 'TEACHER' | 'RESEARCHER'} />;
+  return <CoursesListView userRole={role as 'TEACHER' | 'RESEARCHER' | 'STUDENT'} />;
 }
