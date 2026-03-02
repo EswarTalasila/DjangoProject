@@ -14,11 +14,11 @@ import {
 import type { RegistrationCode, RegistrationCodeStatus } from '@/lib/registration-code-api';
 
 const STATUS_COLORS: Record<RegistrationCodeStatus, string> = {
-  ACTIVE: 'bg-green-100 text-green-800',
-  EXHAUSTED: 'bg-gray-100 text-gray-800',
-  EXPIRED: 'bg-yellow-100 text-yellow-800',
-  REVOKED: 'bg-red-100 text-red-800',
-  ARCHIVED: 'bg-slate-100 text-slate-600',
+  ACTIVE: 'bg-status-success-bg text-status-success',
+  EXHAUSTED: 'bg-muted text-muted-foreground',
+  EXPIRED: 'bg-status-warning-bg text-status-warning',
+  REVOKED: 'bg-status-error-bg text-status-error',
+  ARCHIVED: 'bg-muted text-muted-foreground',
 };
 
 function formatDateTime(iso: string): string {
@@ -71,17 +71,17 @@ export function CodeDetailDialog({
         <div className="grid gap-4">
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
             <div>
-              <p className="font-medium text-[#754d28]">Prefix</p>
-              <p className="font-mono text-[#61323e]">{code.codePrefix}</p>
+              <p className="font-medium text-muted-foreground">Prefix</p>
+              <p className="font-mono text-foreground">{code.codePrefix}</p>
             </div>
             <div>
-              <p className="font-medium text-[#754d28]">Type</p>
-              <p className="text-[#61323e]">
+              <p className="font-medium text-muted-foreground">Type</p>
+              <p className="text-foreground">
                 {code.codeType.charAt(0) + code.codeType.slice(1).toLowerCase()}
               </p>
             </div>
             <div>
-              <p className="font-medium text-[#754d28]">Status</p>
+              <p className="font-medium text-muted-foreground">Status</p>
               <span
                 className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[code.status]}`}
               >
@@ -89,43 +89,43 @@ export function CodeDetailDialog({
               </span>
             </div>
             <div>
-              <p className="font-medium text-[#754d28]">Uses</p>
-              <p className="text-[#61323e]">
+              <p className="font-medium text-muted-foreground">Uses</p>
+              <p className="text-foreground">
                 {code.timesUsed}/{code.maxUses} ({code.usesRemaining} remaining)
               </p>
             </div>
             <div>
-              <p className="font-medium text-[#754d28]">Course</p>
-              <p className="text-[#61323e]">{code.courseName ?? '-'}</p>
+              <p className="font-medium text-muted-foreground">Course</p>
+              <p className="text-foreground">{code.courseName ?? '-'}</p>
             </div>
             <div>
-              <p className="font-medium text-[#754d28]">Created By</p>
-              <p className="text-[#61323e]">User #{code.createdByUserId}</p>
+              <p className="font-medium text-muted-foreground">Created By</p>
+              <p className="text-foreground">User #{code.createdByUserId}</p>
             </div>
             <div>
-              <p className="font-medium text-[#754d28]">Created</p>
-              <p className="text-[#61323e]">{formatDateTime(code.createdAt)}</p>
+              <p className="font-medium text-muted-foreground">Created</p>
+              <p className="text-foreground">{formatDateTime(code.createdAt)}</p>
             </div>
             <div>
-              <p className="font-medium text-[#754d28]">Expires</p>
-              <p className="text-[#61323e]">{formatDateTime(code.expiresAt)}</p>
+              <p className="font-medium text-muted-foreground">Expires</p>
+              <p className="text-foreground">{formatDateTime(code.expiresAt)}</p>
             </div>
             {code.archivedAt && (
               <div className="col-span-2">
-                <p className="font-medium text-[#754d28]">Archived</p>
-                <p className="text-[#61323e]">{formatDateTime(code.archivedAt)}</p>
+                <p className="font-medium text-muted-foreground">Archived</p>
+                <p className="text-foreground">{formatDateTime(code.archivedAt)}</p>
               </div>
             )}
           </div>
 
           {metadata && (
             <div>
-              <p className="text-sm font-medium text-[#754d28] mb-1">Metadata</p>
-              <div className="rounded border border-[#ebe9e7] bg-[#faf9f8] p-3">
+              <p className="text-sm font-medium text-muted-foreground mb-1">Metadata</p>
+              <div className="rounded border border-border bg-muted p-3">
                 {Object.entries(metadata).map(([key, value]) => (
                   <div key={key} className="flex gap-2 text-sm">
-                    <span className="font-medium text-[#61323e]">{key}:</span>
-                    <span className="text-[#754d28]">{String(value)}</span>
+                    <span className="font-medium text-foreground">{key}:</span>
+                    <span className="text-muted-foreground">{String(value)}</span>
                   </div>
                 ))}
               </div>
