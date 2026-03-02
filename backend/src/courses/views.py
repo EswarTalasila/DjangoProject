@@ -20,7 +20,6 @@ Endpoints:
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from core.errors import error_response
@@ -35,7 +34,6 @@ from .services import (
     course_to_dto,
     create_course,
     create_student_in_course,
-    delete_course,
     edit_course,
     enrollment_to_student_dto,
     list_courses_for_user,
@@ -45,7 +43,7 @@ from .services import (
 
 
 @api_view(["GET", "POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsTeacherOrAbove])
 def list_or_create(request):
     """
     List all courses for the user (GET) or create a new course (POST).
@@ -124,8 +122,10 @@ def detail(request, course_id: int):
 
     if not can_manage_course(request.user, course):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
-    delete_course(course)
-    return Response(status=status.HTTP_204_NO_CONTENT)
+    return Response(
+        {"detail": "Course deletion requires archival capability (FR-14). Not yet available."},
+        status=status.HTTP_409_CONFLICT,
+    )
 
 
 @api_view(["GET", "POST"])
