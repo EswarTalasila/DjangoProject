@@ -66,11 +66,12 @@ def create_student(
     resolved_password = password or "studentpass"
     payload = {
         "name": name,
-        "courseId": course_id,
         "consent": consent,
         "password": resolved_password,
     }
-    response = teacher_client.post("/api/v1/students/", payload, format="json")
+    response = teacher_client.post(
+        f"/api/v1/courses/{course_id}/students", payload, format="json"
+    )
     assert response.status_code == 201
     return response.json()["id"], response.json()["username"]
 
@@ -137,14 +138,10 @@ class TestExtendedWorkflows:
         assert students_response.status_code == 200
         assert not students_response.json()["results"]
 
-        step("Teacher deletes course")
+        step("Teacher attempts to delete course (409 archival gate)")
         delete_response = teacher_client.delete(f"/api/v1/courses/{course_id}")
-        assert delete_response.status_code == 204
-
-        step("Teacher verifies course missing")
-        missing_response = teacher_client.get(f"/api/v1/courses/{course_id}")
-        assert missing_response.status_code == 404
-        assert b"Course not found" in missing_response.content
+        assert delete_response.status_code == 409
+        assert "archival" in delete_response.json()["detail"].lower()
 
     @pytest.mark.integration
     @pytest.mark.workflow

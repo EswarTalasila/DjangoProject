@@ -6,16 +6,7 @@ import pytest
 
 from accounts.models import Role, TeacherProfile, User, UserRole
 from courses.models import Course, Enrollment
-from courses.services import bulk_create_students, create_student_in_course
-
-
-@pytest.mark.django_db
-@pytest.mark.unit
-def test_create_student_in_course_requires_course_id(teacher_user):
-    """Missing courseId is rejected early in student creation flow."""
-
-    with pytest.raises(ValueError, match="courseId is required"):
-        create_student_in_course(teacher_user, {"name": "Student"})
+from courses.services import create_student_in_course
 
 
 @pytest.mark.django_db
@@ -28,10 +19,10 @@ def test_create_student_in_course_rejects_client_username_override(teacher_user)
     with pytest.raises(ValueError, match="system-managed"):
         create_student_in_course(
             teacher_user,
+            course.id,
             {
                 "name": "Dup Student",
                 "username": "dup-student",
-                "courseId": course.id,
             },
         )
 
@@ -59,39 +50,11 @@ def test_create_student_in_course_raises_when_profile_missing(monkeypatch, teach
     with pytest.raises(ValueError, match="StudentProfile not created"):
         create_student_in_course(
             teacher_user,
+            course.id,
             {
                 "name": "Phantom",
-                "courseId": course.id,
             },
         )
-
-
-@pytest.mark.django_db
-@pytest.mark.unit
-def test_bulk_create_students_counts_only_successes(teacher_user, monkeypatch):
-    """Bulk create continues on exceptions and returns successful count."""
-
-    calls = {"i": 0}
-
-    def fake_create(_request_user, payload):
-        calls["i"] += 1
-        if payload.get("name") == "bad":
-            raise ValueError("bad payload")
-        return object()
-
-    monkeypatch.setattr("courses.services.create_student_in_course", fake_create)
-
-    created = bulk_create_students(
-        teacher_user,
-        [
-            {"name": "ok-1"},
-            {"name": "bad"},
-            {"name": "ok-2"},
-        ],
-    )
-
-    assert calls["i"] == 3
-    assert created == 2
 
 
 @pytest.mark.django_db
@@ -104,9 +67,9 @@ def test_create_student_in_course_creates_profile_and_enrollment(teacher_user):
     course = Course.objects.create(name="Course C", teacher_profile=teacher_user.teacher_profile)
     enrollment = create_student_in_course(
         teacher_user,
+        course.id,
         {
             "name": "New Student",
-            "courseId": course.id,
             "consent": True,
         },
     )
@@ -234,7 +197,7 @@ def test_remove_student_from_course_missing_profile(teacher_user):
         name="Remove Course", teacher_profile=teacher_user.teacher_profile
     )
 
-    with pytest.raises(ValueError, match="Student profile not found"):
+    with pytest.raises(ValueError, match="Student not found in course"):
         remove_student_from_course(course, 999999)
 
 
@@ -257,9 +220,9 @@ def test_create_student_in_course_avoids_non_student_identifier_collisions(teach
 
     enrollment = create_student_in_course(
         teacher_user,
+        course.id,
         {
             "name": "Non Student",
-            "courseId": course.id,
         },
     )
     assert enrollment.student_profile.user.username != other_teacher.username
@@ -321,9 +284,9 @@ def test_create_submissions_for_student_with_assignments(teacher_user):
 
     enrollment = create_student_in_course(
         teacher_user,
+        course.id,
         {
             "name": "Sub Student",
-            "courseId": course.id,
             "consent": True,
         },
     )
