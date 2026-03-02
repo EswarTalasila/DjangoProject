@@ -49,7 +49,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
 
     { type: "divider" },
     { type: "header", label: "Assessments" },
-    { type: "link", label: "Assessment List", href: "/dashboard/teacher/assessments" },
+    { type: "link", label: "Assessments", href: "/dashboard/assessments" },
 
     { type: "divider" },
     { type: "header", label: "Assignments & Grading" },
@@ -63,7 +63,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
 
     { type: "divider" },
     { type: "header", label: "Assessments" },
-    { type: "link", label: "Assessment Data", href: "/dashboard/research/assessments" },
+    { type: "link", label: "Assessments", href: "/dashboard/assessments" },
 
     { type: "divider" },
     { type: "header", label: "Courses" },
