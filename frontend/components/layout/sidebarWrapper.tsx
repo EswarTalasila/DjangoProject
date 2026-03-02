@@ -47,12 +47,9 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "link", label: "My Courses", href: "/dashboard/courses" },
     { type: "link", label: "Registration Codes", href: "/dashboard/codes" },
 
-    //TODO: Further implementation of teacher side is required. They need a way to view students and add students to their course
-
     { type: "divider" },
     { type: "header", label: "Assessments" },
     { type: "link", label: "Assessment List", href: "/dashboard/teacher/assessments" },
-    { type: "link", label: "Self Assessment", href: "/dashboard/teacher/self" },
 
     { type: "divider" },
     { type: "header", label: "Assignments & Grading" },
