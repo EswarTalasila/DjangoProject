@@ -4,7 +4,7 @@ Course and student domain mutations — create, edit, and delete operations.
 
 import logging
 
-from django.db import IntegrityError, transaction
+from django.db import transaction
 
 from accounts.models import Role, StudentProfile, User
 from accounts.services import create_user_from_payload, generate_managed_username
@@ -126,30 +126,6 @@ def create_student_in_course(request_user: User, payload: dict) -> Enrollment:
 
     _create_submissions_for_student(student_user, course)
     return enrollment
-
-
-@transaction.atomic
-def bulk_create_students(request_user: User, payloads: list[dict]) -> int:
-    """
-    Create multiple students in bulk. Errors are silently ignored.
-
-    Delegates to create_student_in_course via the package namespace so that
-    test monkeypatches on courses.services.create_student_in_course are honored.
-
-    Returns:
-        The number of students successfully created
-    """
-    import courses.services as _svc  # late import to avoid circular dependency
-
-    created = 0
-    for payload in payloads:
-        try:
-            _svc.create_student_in_course(request_user, payload)
-            created += 1
-        except (ValueError, IntegrityError):
-            logger.exception("Bulk create student failed for payload.")
-            continue
-    return created
 
 
 @transaction.atomic
