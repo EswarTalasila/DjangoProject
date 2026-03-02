@@ -22,11 +22,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { createCourse, listCourses, type CourseSummary } from '@/lib/course-api';
 import { cn } from '@/lib/utils';
-import {
-  issuePasswordResetCode,
-  listStudentsInCourse,
-  type CourseStudent,
-} from '@/lib/password-reset-api';
+import { listStudentsInCourse, type CourseStudent } from '@/lib/course-api';
+import { issuePasswordResetCode } from '@/lib/password-reset-api';
 
 type ApiError = { response?: { data?: { detail?: string } } };
 

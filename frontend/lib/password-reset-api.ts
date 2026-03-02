@@ -19,15 +19,6 @@ export type PasswordResetCompleteResponse = {
   message: string;
 };
 
-export type CourseStudent = {
-  id: number;
-  name: string;
-  username: string;
-  role: "STUDENT";
-  consent: boolean;
-  courseId: number;
-};
-
 export type StaffUser = {
   id: number;
   name: string;
@@ -64,17 +55,6 @@ export async function completePasswordReset(payload: {
     payload,
   );
   return response.data;
-}
-
-export async function listStudentsInCourse(
-  courseId: number,
-): Promise<CourseStudent[]> {
-  const response = await api.get<Paginated<CourseStudent> | CourseStudent[]>(
-    `/courses/${courseId}/students`,
-  );
-  const data = response.data;
-  if (Array.isArray(data)) return data;
-  return data.results ?? [];
 }
 
 export async function listStaffUsers(): Promise<StaffUser[]> {
