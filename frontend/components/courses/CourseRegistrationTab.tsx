@@ -13,6 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { CreateRegistrationCodeDialog } from '@/components/codes/CreateRegistrationCodeDialog';
+import { RegistrationCodeDialog } from '@/components/codes/RegistrationCodeDialog';
 import {
   createRegistrationCodes,
   listRegistrationCodes,
@@ -45,6 +46,8 @@ export default function CourseRegistrationTab({ courseId }: CourseRegistrationTa
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [createdCodes, setCreatedCodes] = useState<string[]>([]);
+  const [isCodeDialogOpen, setIsCodeDialogOpen] = useState(false);
 
   const loadCodes = useCallback(async () => {
     setLoadError(null);
@@ -75,19 +78,20 @@ export default function CourseRegistrationTab({ courseId }: CourseRegistrationTa
   }) {
     setIsCreating(true);
     try {
-      await createRegistrationCodes({
+      const response = await createRegistrationCodes({
         codeType: 'STUDENT',
         count: values.count,
         usesPerCode: values.usesPerCode,
         expiresAt: values.expiresAt,
         courseId,
       });
-      toast.success(
-        values.count === 1
-          ? 'Registration code generated.'
-          : `${values.count} registration codes generated.`,
-      );
+      const plainCodes = response.codes
+        .map((c) => c.code)
+        .filter((c): c is string => c != null);
+      if (plainCodes.length === 0) throw new Error('No codes returned by the server.');
+      setCreatedCodes(plainCodes);
       setIsDialogOpen(false);
+      setIsCodeDialogOpen(true);
       await loadCodes();
     } catch (error: unknown) {
       toast.error(extractDetail(error, 'Failed to generate registration code.'));
@@ -114,6 +118,12 @@ export default function CourseRegistrationTab({ courseId }: CourseRegistrationTa
           Generate Code
         </Button>
       </div>
+
+      <RegistrationCodeDialog
+        open={isCodeDialogOpen}
+        onOpenChange={setIsCodeDialogOpen}
+        codes={createdCodes}
+      />
 
       <CreateRegistrationCodeDialog
         open={isDialogOpen}
