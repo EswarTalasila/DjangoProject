@@ -24,6 +24,8 @@ from rest_framework.response import Response
 
 from core.errors import error_response
 from core.pagination import paginate
+from rest_framework.permissions import IsAuthenticated
+
 from core.permissions import IsTeacher, IsTeacherOrAbove
 
 from .models import Course
@@ -43,7 +45,7 @@ from .services import (
 
 
 @api_view(["GET", "POST"])
-@permission_classes([IsTeacherOrAbove])
+@permission_classes([IsAuthenticated])
 def list_or_create(request):
     """
     List all courses for the user (GET) or create a new course (POST).
@@ -78,7 +80,7 @@ def list_or_create(request):
 
 
 @api_view(["GET", "PATCH", "DELETE"])
-@permission_classes([IsTeacherOrAbove])
+@permission_classes([IsAuthenticated])
 def detail(request, course_id: int):
     """
     Get, update, or delete a specific course.

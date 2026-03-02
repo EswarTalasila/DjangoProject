@@ -28,12 +28,20 @@ def can_view_course(request_user: User, course: Course) -> bool:
 
     Admins (is_staff) can view all courses.
     Researchers can view all courses (for data oversight).
+    Students can view courses they are actively enrolled in.
     Teachers can only view their own courses.
     """
     if request_user.is_staff:
         return True
     if has_role(request_user, Role.RESEARCHER):
         return True
+    if has_role(request_user, Role.STUDENT):
+        profile = StudentProfile.objects.filter(user=request_user).first()
+        if not profile:
+            return False
+        return Enrollment.objects.filter(
+            course=course, student_profile=profile, status=EnrollmentStatus.ACTIVE
+        ).exists()
     owner = _course_owner(course)
     return owner is not None and owner.id == request_user.id
 
@@ -94,7 +102,12 @@ def list_courses_for_user(user: User) -> list[Course]:
         profile = StudentProfile.objects.filter(user=user).first()
         if not profile:
             return []
-        return list(Course.objects.filter(enrollments__student_profile=profile).distinct())
+        return list(
+            Course.objects.filter(
+                enrollments__student_profile=profile,
+                enrollments__status=EnrollmentStatus.ACTIVE,
+            ).distinct()
+        )
     return list(Course.objects.filter(teacher_profile__user=user))
 
 

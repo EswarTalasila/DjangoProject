@@ -45,6 +45,37 @@ class TestCourseRoutes:
         assert len(results) == 1
         assert results[0]["name"] == "My Course"
 
+    def test_CRS_UC_02_STUDENT(self, api_client, student_user, teacher_user):
+        """Student sees only their actively enrolled courses."""
+        course = Course.objects.create(name="Enrolled", teacher_profile=teacher_user.teacher_profile)
+        other = Course.objects.create(name="Not Enrolled", teacher_profile=teacher_user.teacher_profile)
+        Enrollment.objects.create(
+            course=course, student_profile=student_user.student_profile, status=EnrollmentStatus.ACTIVE
+        )
+        api_client.force_authenticate(user=student_user)
+        response = api_client.get("/api/v1/courses/")
+        assert response.status_code == 200
+        results = response.json()["results"]
+        assert len(results) == 1
+        assert results[0]["name"] == "Enrolled"
+
+    def test_CRS_UC_02_STUDENT_E1(self, api_client, student_user, teacher_user):
+        """Student does not see courses with DROPPED enrollment."""
+        course = Course.objects.create(name="Dropped", teacher_profile=teacher_user.teacher_profile)
+        Enrollment.objects.create(
+            course=course, student_profile=student_user.student_profile, status=EnrollmentStatus.DROPPED
+        )
+        api_client.force_authenticate(user=student_user)
+        response = api_client.get("/api/v1/courses/")
+        assert response.status_code == 200
+        assert len(response.json()["results"]) == 0
+
+    def test_CRS_UC_01_E2(self, api_client, student_user):
+        """Student cannot create a course; returns 403."""
+        api_client.force_authenticate(user=student_user)
+        response = api_client.post("/api/v1/courses/", {"name": "Nope"}, format="json")
+        assert response.status_code == 403
+
     def test_CRS_UC_02_RESEARCHER(self, api_client, researcher_user, teacher_user):
         """Researcher sees all courses."""
         Course.objects.create(name="Course A", teacher_profile=teacher_user.teacher_profile)
@@ -71,6 +102,24 @@ class TestCourseRoutes:
         api_client.force_authenticate(user=teacher_user)
         response = api_client.get("/api/v1/courses/999999")
         assert response.status_code == 404
+
+    def test_CRS_UC_03_STUDENT(self, api_client, student_user, teacher_user):
+        """Enrolled student can view course detail."""
+        course = Course.objects.create(name="Visible", teacher_profile=teacher_user.teacher_profile)
+        Enrollment.objects.create(
+            course=course, student_profile=student_user.student_profile, status=EnrollmentStatus.ACTIVE
+        )
+        api_client.force_authenticate(user=student_user)
+        response = api_client.get(f"/api/v1/courses/{course.id}")
+        assert response.status_code == 200
+        assert response.json()["name"] == "Visible"
+
+    def test_CRS_UC_03_STUDENT_E1(self, api_client, student_user, teacher_user):
+        """Student not enrolled in course is denied."""
+        course = Course.objects.create(name="Hidden", teacher_profile=teacher_user.teacher_profile)
+        api_client.force_authenticate(user=student_user)
+        response = api_client.get(f"/api/v1/courses/{course.id}")
+        assert response.status_code == 403
 
     # ── CRS-UC-04: Update Course ──
 
