@@ -27,6 +27,13 @@ export type StaffUser = {
   role: "TEACHER" | "RESEARCHER" | "STUDENT";
 };
 
+export type StudentUser = {
+  id: number;
+  name: string;
+  username: string;
+  courses: { id: number; name: string }[];
+};
+
 export type MySudoGrantResponse = {
   hasSudo: boolean;
   canGrantSudo: boolean;
@@ -61,6 +68,23 @@ export async function listStaffUsers(): Promise<StaffUser[]> {
   const response = await api.get<Paginated<StaffUser> | StaffUser[]>(
     "/users/staff",
   );
+  const data = response.data;
+  if (Array.isArray(data)) return data;
+  return data.results ?? [];
+}
+
+export async function listStudents(params?: {
+  q?: string;
+  courseId?: number;
+}): Promise<StudentUser[]> {
+  const query = new URLSearchParams();
+  if (params?.q) query.set("q", params.q);
+  if (params?.courseId) query.set("courseId", String(params.courseId));
+  const qs = query.toString();
+  const url = qs ? `/users/students?${qs}` : "/users/students";
+  const response = await api.get<
+    { count: number; results: StudentUser[] } | StudentUser[]
+  >(url);
   const data = response.data;
   if (Array.isArray(data)) return data;
   return data.results ?? [];
