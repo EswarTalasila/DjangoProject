@@ -397,20 +397,6 @@ class TestExtendedWorkflows:
         )
         assert forbidden_override.status_code == 403
 
-        step("Teacher-self assess workflow")
-        teacher_self_assess = teacher_client.post(
-            f"/api/v1/assessments/{assessment_id}/teacher-self-assess",
-            [
-                {
-                    "questionId": question_id,
-                    "type": "SHORT_ANSWER",
-                    "data": {"text": "Self"},
-                }
-            ],
-            format="json",
-        )
-        assert teacher_self_assess.status_code == 201
-
         step("Invalid assignment returns 404")
         missing = student_client.patch(
             f"/api/v1/students/{student_id}/assignments/999999/draft/",

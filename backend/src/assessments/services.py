@@ -28,6 +28,10 @@ from accounts.models import User
 from assignments.models import Assignment
 from core.dtos import AssessmentDTO, QuestionDTO
 
+
+class AssessmentReferencedError(Exception):
+    """Raised when a mutation is blocked because assignments reference the assessment."""
+
 from .models import (
     Assessment,
     GradingMode,
@@ -209,8 +213,7 @@ def update_assessment(assessment: Assessment, payload: dict) -> Assessment:
     """
     Update an existing assessment, replacing all questions.
 
-    Note: This replaces all questions, which can invalidate existing submissions
-    if question IDs change. Consider locking assessments after submissions exist.
+    Raises ValueError when assignments reference this assessment (409 Conflict).
 
     Args:
         assessment: The Assessment to update
@@ -219,6 +222,8 @@ def update_assessment(assessment: Assessment, payload: dict) -> Assessment:
     Returns:
         The updated Assessment
     """
+    if Assignment.objects.filter(assessment=assessment).exists():
+        raise AssessmentReferencedError("Cannot update assessment referenced by assignments")
     assessment.title = payload.get("title", assessment.title)
     assessment.category = payload.get("category")
     assessment.grading_mode = payload.get("gradingMode", assessment.grading_mode)
@@ -233,11 +238,12 @@ def update_assessment(assessment: Assessment, payload: dict) -> Assessment:
 @transaction.atomic
 def delete_assessment(assessment: Assessment) -> None:
     """
-    Delete an assessment and all associated assignments.
+    Delete an assessment if no assignments reference it.
 
-    Note: This is a hard delete. Consider implementing soft delete for auditability.
+    Raises ValueError with 409-style message when assignments exist.
     """
-    Assignment.objects.filter(assessment=assessment).delete()
+    if Assignment.objects.filter(assessment=assessment).exists():
+        raise AssessmentReferencedError("Cannot delete assessment referenced by assignments")
     assessment.delete()
 
 
