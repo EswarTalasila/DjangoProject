@@ -14,9 +14,16 @@ export default async function StaffPage() {
 
   const sudo = await getSudoCapabilities();
   const permissions = sudo?.permissions ?? [];
+  const isAdmin = Boolean(sudo?.isStaff);
   const canResetStudents =
-    Boolean(sudo?.isStaff) ||
-    permissions.includes('ISSUE_STUDENT_RESET_CODE');
+    isAdmin || permissions.includes('ISSUE_STUDENT_RESET_CODE');
+  const canResetResearchers =
+    isAdmin || permissions.includes('ISSUE_RESEARCHER_RESET_CODE');
 
-  return <StaffManagementView canResetStudents={canResetStudents} />;
+  return (
+    <StaffManagementView
+      canResetStudents={canResetStudents}
+      canResetResearchers={canResetResearchers}
+    />
+  );
 }

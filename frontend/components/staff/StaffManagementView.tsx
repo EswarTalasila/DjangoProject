@@ -16,7 +16,7 @@ import {
 } from '@/lib/password-reset-api';
 import { listCourses, type CourseSummary } from '@/lib/course-api';
 
-type Tab = 'teachers' | 'students';
+type Tab = 'teachers' | 'students' | 'researchers';
 type ApiError = { response?: { data?: { detail?: string } } };
 
 function extractDetail(error: unknown, fallback: string): string {
@@ -25,9 +25,10 @@ function extractDetail(error: unknown, fallback: string): string {
 
 type StaffManagementViewProps = {
   canResetStudents: boolean;
+  canResetResearchers: boolean;
 };
 
-export default function StaffManagementView({ canResetStudents }: StaffManagementViewProps) {
+export default function StaffManagementView({ canResetStudents, canResetResearchers }: StaffManagementViewProps) {
   const [activeTab, setActiveTab] = useState<Tab>('teachers');
   const [search, setSearch] = useState('');
   const [courseFilter, setCourseFilter] = useState<number | null>(null);
@@ -36,6 +37,7 @@ export default function StaffManagementView({ canResetStudents }: StaffManagemen
   const [isActionLoading, setIsActionLoading] = useState(false);
 
   const [teachers, setTeachers] = useState<StaffUser[]>([]);
+  const [researchers, setResearchers] = useState<StaffUser[]>([]);
   const [students, setStudents] = useState<StudentUser[]>([]);
   const [courses, setCourses] = useState<CourseSummary[]>([]);
 
@@ -54,6 +56,9 @@ export default function StaffManagementView({ canResetStudents }: StaffManagemen
           listCourses(),
         ]);
         setTeachers(staffData.filter((u) => u.role === 'TEACHER'));
+        if (canResetResearchers) {
+          setResearchers(staffData.filter((u) => u.role === 'RESEARCHER'));
+        }
         setCourses(courseData);
         if (canResetStudents) {
           const studentData = await listStudents();
@@ -97,6 +102,17 @@ export default function StaffManagementView({ canResetStudents }: StaffManagemen
     );
   }, [teachers, search]);
 
+  const filteredResearchers = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return researchers;
+    return researchers.filter(
+      (r) =>
+        r.name.toLowerCase().includes(needle) ||
+        r.username.toLowerCase().includes(needle) ||
+        (r.email || '').toLowerCase().includes(needle),
+    );
+  }, [researchers, search]);
+
   const filteredStudents = useMemo(() => {
     const needle = search.trim().toLowerCase();
     if (!needle) return students;
@@ -125,6 +141,7 @@ export default function StaffManagementView({ canResetStudents }: StaffManagemen
   const tabs: { key: Tab; label: string }[] = [
     { key: 'teachers', label: 'Teachers' },
     ...(canResetStudents ? [{ key: 'students' as Tab, label: 'Students' }] : []),
+    ...(canResetResearchers ? [{ key: 'researchers' as Tab, label: 'Researchers' }] : []),
   ];
 
   return (
@@ -171,7 +188,7 @@ export default function StaffManagementView({ canResetStudents }: StaffManagemen
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder={activeTab === 'teachers' ? 'Search teachers...' : 'Search students...'}
+            placeholder={`Search ${activeTab}...`}
             className="pl-8 border-border focus-visible:ring-ring"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -223,6 +240,39 @@ export default function StaffManagementView({ canResetStudents }: StaffManagemen
                   <td className="px-4 py-3 text-sm text-foreground font-mono">@{teacher.username}</td>
                   <td className="px-4 py-3">
                     <Button size="sm" variant="outline" disabled={isActionLoading} onClick={() => void handleIssueReset(teacher.id, teacher.name)}>
+                      Issue Reset
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Researchers Table */}
+      {activeTab === 'researchers' && !isLoading && (
+        <div className="rounded-sm border border-border overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-muted border-b border-border">
+              <tr>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Email</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Username</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredResearchers.length === 0 && (
+                <tr><td colSpan={4} className="px-4 py-6 text-center text-sm text-muted-foreground">No researchers found.</td></tr>
+              )}
+              {filteredResearchers.map((researcher) => (
+                <tr key={researcher.id} className="even:bg-muted/50 hover:bg-accent transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-foreground">{researcher.name}</td>
+                  <td className="px-4 py-3 text-sm text-muted-foreground">{researcher.email || '-'}</td>
+                  <td className="px-4 py-3 text-sm text-foreground font-mono">@{researcher.username}</td>
+                  <td className="px-4 py-3">
+                    <Button size="sm" variant="outline" disabled={isActionLoading} onClick={() => void handleIssueReset(researcher.id, researcher.name)}>
                       Issue Reset
                     </Button>
                   </td>
