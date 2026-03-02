@@ -22,6 +22,7 @@ Question types:
 
 from collections.abc import Iterable
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 
 from accounts.models import User
@@ -89,30 +90,33 @@ def question_to_dto(question: Question) -> QuestionDTO:
     select_all = None
     min_value = None
     max_value = None
-    if question.kind == QuestionKind.MULTIPLE_CHOICE:
-        choices = [
-            {"prompt": choice.choice_text, "score": choice.points}
-            for choice in question.mcq_choices.all()
-        ]
-        select_all = question.multiple_choice.select_all
-        data = {"choices": choices, "selectAll": select_all, "correctAnswers": []}
-    elif question.kind == QuestionKind.SHORT_ANSWER:
-        data = {
-            "caseSensitive": question.short_answer.case_sensitive,
-            "trim": question.short_answer.trim,
-        }
-    elif question.kind == QuestionKind.NUMBER_SCALE:
-        min_value = question.number_scale.min
-        max_value = question.number_scale.max
-        data = {
-            "min": min_value,
-            "max": max_value,
-            "target": question.number_scale.target,
-        }
-    elif question.kind == QuestionKind.MOOD_METER:
-        data = {
-            "labels": [label.label for label in question.mood_meter_labels.all()],
-        }
+    try:
+        if question.kind == QuestionKind.MULTIPLE_CHOICE:
+            choices = [
+                {"prompt": choice.choice_text, "score": choice.points}
+                for choice in question.mcq_choices.all()
+            ]
+            select_all = question.multiple_choice.select_all
+            data = {"choices": choices, "selectAll": select_all, "correctAnswers": []}
+        elif question.kind == QuestionKind.SHORT_ANSWER:
+            data = {
+                "caseSensitive": question.short_answer.case_sensitive,
+                "trim": question.short_answer.trim,
+            }
+        elif question.kind == QuestionKind.NUMBER_SCALE:
+            min_value = question.number_scale.min
+            max_value = question.number_scale.max
+            data = {
+                "min": min_value,
+                "max": max_value,
+                "target": question.number_scale.target,
+            }
+        elif question.kind == QuestionKind.MOOD_METER:
+            data = {
+                "labels": [label.label for label in question.mood_meter_labels.all()],
+            }
+    except ObjectDoesNotExist:
+        pass
 
     return QuestionDTO(
         questionId=question.id,
