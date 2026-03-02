@@ -82,7 +82,7 @@ export const getSudoCapabilities = cache(async (): Promise<SudoCapabilities | nu
     response = await fetch(`${resolveApiBaseUrl()}/sudo-grants/me`, {
       method: "GET",
       headers: { Authorization: `Bearer ${accessToken}` },
-      next: { revalidate: 30 },
+      cache: 'no-store',
     });
   } catch {
     return EMPTY_SUDO_CAPABILITIES;
