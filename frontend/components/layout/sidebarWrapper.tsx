@@ -69,6 +69,10 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "link", label: "Assessment Data", href: "/dashboard/research/assessments" },
 
     { type: "divider" },
+    { type: "header", label: "Courses" },
+    { type: "link", label: "All Courses", href: "/dashboard/courses" },
+
+    { type: "divider" },
     { type: "header", label: "Exports" },
     { type: "link", label: "Download Exports", href: "/dashboard/research/exports" },
 
