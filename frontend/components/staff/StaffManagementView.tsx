@@ -23,7 +23,11 @@ function extractDetail(error: unknown, fallback: string): string {
   return (error as ApiError).response?.data?.detail || fallback;
 }
 
-export default function StaffManagementView() {
+type StaffManagementViewProps = {
+  canResetStudents: boolean;
+};
+
+export default function StaffManagementView({ canResetStudents }: StaffManagementViewProps) {
   const [activeTab, setActiveTab] = useState<Tab>('teachers');
   const [search, setSearch] = useState('');
   const [courseFilter, setCourseFilter] = useState<number | null>(null);
@@ -45,14 +49,16 @@ export default function StaffManagementView() {
       setIsLoading(true);
       setLoadError(null);
       try {
-        const [staffData, studentData, courseData] = await Promise.all([
+        const [staffData, courseData] = await Promise.all([
           listStaffUsers(),
-          listStudents(),
           listCourses(),
         ]);
         setTeachers(staffData.filter((u) => u.role === 'TEACHER'));
-        setStudents(studentData);
         setCourses(courseData);
+        if (canResetStudents) {
+          const studentData = await listStudents();
+          setStudents(studentData);
+        }
       } catch {
         setLoadError('Failed to load staff data.');
       } finally {
@@ -63,7 +69,7 @@ export default function StaffManagementView() {
   }, []);
 
   useEffect(() => {
-    if (activeTab !== 'students') return;
+    if (activeTab !== 'students' || !canResetStudents) return;
     async function reload() {
       setIsLoading(true);
       try {
@@ -78,7 +84,7 @@ export default function StaffManagementView() {
       }
     }
     void reload();
-  }, [courseFilter, activeTab]);
+  }, [courseFilter, activeTab, canResetStudents]);
 
   const filteredTeachers = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -118,7 +124,7 @@ export default function StaffManagementView() {
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'teachers', label: 'Teachers' },
-    { key: 'students', label: 'Students' },
+    ...(canResetStudents ? [{ key: 'students' as Tab, label: 'Students' }] : []),
   ];
 
   return (
@@ -133,7 +139,7 @@ export default function StaffManagementView() {
 
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Staff Management
+          User Management
         </h1>
         <p className="text-muted-foreground mt-1">
           Manage accounts and issue password reset codes.

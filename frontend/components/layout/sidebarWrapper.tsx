@@ -73,8 +73,8 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "link", label: "All Courses", href: "/dashboard/courses" },
 
     { type: "divider" },
-    { type: "header", label: "Staff" },
-    { type: "link", label: "Manage Staff", href: "/dashboard/staff" },
+    { type: "header", label: "Users" },
+    { type: "link", label: "User Management", href: "/dashboard/staff" },
 
     { type: "divider" },
     { type: "header", label: "Exports" },

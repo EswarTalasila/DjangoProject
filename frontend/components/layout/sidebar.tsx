@@ -25,7 +25,7 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
   "Assignments & Grading": CheckSquare,
   Registration: KeyRound,
   Exports: Download,
-  Staff: Users,
+  Users: Users,
   Delegation: Shield,
 };
 

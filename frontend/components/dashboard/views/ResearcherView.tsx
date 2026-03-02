@@ -14,7 +14,7 @@ export default function ResearcherView() {
 
       <div className="rounded-sm border border-border bg-muted/30 px-6 py-12 text-center">
         <p className="text-sm text-muted-foreground">
-          Dashboard content has not been decided yet. Use the sidebar to navigate to Staff, Courses, or Registration Codes.
+          Dashboard content has not been decided yet. Use the sidebar to navigate to User Management, Courses, or Registration Codes.
         </p>
       </div>
     </div>
