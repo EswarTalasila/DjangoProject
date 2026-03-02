@@ -32,7 +32,7 @@ const TAB_LABELS: Record<Tab, string> = {
 
 type CourseDetailViewProps = {
   courseId: number;
-  userRole: 'TEACHER' | 'RESEARCHER';
+  userRole: 'TEACHER' | 'RESEARCHER' | 'STUDENT';
   userId: number;
 };
 
@@ -41,12 +41,21 @@ export default function CourseDetailView({
   userRole,
 }: CourseDetailViewProps) {
   const canManage = userRole === 'TEACHER';
+
+  // Teachers see all tabs, students see assignments only, researchers see roster only
+  const visibleTabs: Tab[] = canManage
+    ? [...TABS]
+    : userRole === 'STUDENT'
+      ? ['assignments']
+      : ['roster'];
+
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
 
   const rawTab = searchParams.get('tab');
-  const activeTab: Tab = TABS.includes(rawTab as Tab) ? (rawTab as Tab) : 'roster';
+  const activeTab: Tab =
+    rawTab && visibleTabs.includes(rawTab as Tab) ? (rawTab as Tab) : visibleTabs[0];
 
   function setTab(tab: Tab) {
     const params = new URLSearchParams(searchParams.toString());
@@ -132,9 +141,6 @@ export default function CourseDetailView({
       </div>
     );
   }
-
-  // Teachers see all tabs, researchers see roster only
-  const visibleTabs: Tab[] = canManage ? [...TABS] : ['roster'];
 
   return (
     <div className="space-y-6 p-6 max-w-6xl mx-auto">
@@ -233,7 +239,7 @@ export default function CourseDetailView({
       {activeTab === 'registration' && canManage && (
         <CourseRegistrationTab courseId={courseId} />
       )}
-      {activeTab === 'assignments' && canManage && (
+      {activeTab === 'assignments' && (
         <CourseAssignmentsTab courseId={courseId} />
       )}
       {activeTab === 'gradebook' && canManage && (
