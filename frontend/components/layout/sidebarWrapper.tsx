@@ -91,6 +91,10 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "link", label: "Dashboard", href: "/dashboard" },
 
     { type: "divider" },
+    { type: "header", label: "Courses" },
+    { type: "link", label: "My Courses", href: "/dashboard/courses" },
+
+    { type: "divider" },
     { type: "header", label: "Assessments" },
     { type: "link", label: "Mood Meter", href: "/dashboard/mood-meter" },
     { type: "link", label: "My Assignments", href: "/dashboard/assignments" },
