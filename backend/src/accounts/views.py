@@ -29,6 +29,7 @@ Endpoints:
     PATCH /api/v1/users/{id}            - Update user (teacher/admin, sudoed researcher)
     DELETE /api/v1/users/{id}           - Delete user (teacher/admin, sudoed researcher)
     GET /api/v1/users/staff             - List staff (researcher/admin)
+    GET /api/v1/users/students          - List students (researcher/admin)
     GET /api/v1/sudo-grants             - List sudo grants (own grants for researcher, all for admin)
     POST /api/v1/sudo-grants            - Grant sudo permissions
     DELETE /api/v1/sudo-grants/{id}     - Revoke sudo grant
@@ -50,6 +51,9 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from django.db.models import Exists, OuterRef, Prefetch, Q
+
+from core.errors import error_response
 from core.pagination import paginate
 from core.permissions import (
     IsResearcherOrAdmin,
@@ -57,6 +61,8 @@ from core.permissions import (
     primary_role,
 )
 from core.throttles import AnonAuthThrottle, AnonBurstThrottle
+
+from courses.models import Enrollment, EnrollmentStatus
 
 from .models import (
     OAuthAccount,
@@ -80,6 +86,7 @@ from .serializers import (
     RegistrationOAuthSerializer,
     StudentInviteRegisterSerializer,
     StudentJoinCourseSerializer,
+    StudentListSerializer,
     UserInputSerializer,
     UserOutputSerializer,
 )
@@ -1035,6 +1042,82 @@ def list_staff(request):
         .order_by("id")
     )
     return paginate(users, request, transform_fn=lambda u: UserOutputSerializer(u).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsResearcherOrAdmin])
+def list_students(request):
+    """
+    List student users with their active course enrollments.
+
+    Supports search filtering via ``q`` (name/username icontains) and
+    course filtering via ``courseId`` (numeric course ID).
+
+    Returns:
+        200: Paginated list of students with active enrollments.
+        400: If courseId is present but non-numeric.
+    """
+    # Validate courseId early — must be a positive integer if provided
+    course_id_param = request.query_params.get("courseId")
+    if course_id_param is not None:
+        try:
+            course_id = int(course_id_param)
+            if course_id < 1:
+                raise ValueError
+        except (ValueError, TypeError):
+            return error_response("courseId must be a positive integer", status_code=400)
+    else:
+        course_id = None
+
+    # Active enrollments subquery — only include students who have at least one
+    active_enrollment_exists = Enrollment.objects.filter(
+        student_profile__user=OuterRef("pk"),
+        status=EnrollmentStatus.ACTIVE,
+    )
+
+    # Base queryset: STUDENT-role users with at least one ACTIVE enrollment
+    users = (
+        User.objects.filter(roles__role=Role.STUDENT)
+        .filter(Exists(active_enrollment_exists))
+        .prefetch_related(
+            Prefetch(
+                "student_profile__enrollments",
+                queryset=Enrollment.objects.filter(
+                    status=EnrollmentStatus.ACTIVE,
+                ).select_related("course"),
+                to_attr="active_enrollments",
+            ),
+        )
+        .distinct()
+        .order_by("id")
+    )
+
+    # Search filter: name or username icontains
+    search = request.query_params.get("q", "").strip()
+    if search:
+        users = users.filter(Q(name__icontains=search) | Q(username__icontains=search))
+
+    # Course filter
+    if course_id is not None:
+        users = users.filter(
+            student_profile__enrollments__course_id=course_id,
+            student_profile__enrollments__status=EnrollmentStatus.ACTIVE,
+        )
+
+    def transform(user):
+        enrollments = getattr(user.student_profile, "active_enrollments", [])
+        return StudentListSerializer(
+            {
+                "id": user.id,
+                "name": user.name,
+                "username": user.username,
+                "courses": [
+                    {"id": e.course.id, "name": e.course.name} for e in enrollments
+                ],
+            }
+        ).data
+
+    return paginate(users, request, transform_fn=transform)
 
 
 @api_view(["GET"])

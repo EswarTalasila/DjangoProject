@@ -129,6 +129,15 @@ class UserOutputSerializer(serializers.ModelSerializer):
         return roles[0].role if roles else Role.STUDENT
 
 
+class StudentListSerializer(serializers.Serializer):
+    """Formats student data with active course enrollments for list responses."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    username = serializers.CharField()
+    courses = serializers.ListField(child=serializers.DictField())
+
+
 class RegistrationCodeValidateInputSerializer(serializers.Serializer):
     """Payload for validating an invite code before registration."""
 
