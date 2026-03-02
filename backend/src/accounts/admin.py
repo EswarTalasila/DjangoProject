@@ -32,16 +32,16 @@ SUDO_CAPABILITY_NOTE = (
     "through sudo permissions."
 )
 PERMISSION_LABELS = {
-    SudoPermission.CREATE_TEACHER.value: "Create Teacher Accounts",
-    SudoPermission.CREATE_STUDENT.value: "Create Student Accounts",
-    SudoPermission.ISSUE_RESEARCHER_REG_CODE.value: "Issue Researcher Registration Codes",
-    SudoPermission.ISSUE_STUDENT_REG_CODE.value: "Issue Student Registration Codes",
-    SudoPermission.EDIT_USER.value: "Edit User Accounts",
-    SudoPermission.DELETE_USER.value: "Delete User Accounts",
-    SudoPermission.ISSUE_STUDENT_RESET_CODE.value: "Issue Student Password Reset Codes",
-    SudoPermission.ISSUE_RESEARCHER_RESET_CODE.value: "Issue Researcher Password Reset Codes",
-    SudoPermission.VIEW_IDENTIFIABLE_VIZ.value: "View Identifiable Visualization Data",
-    SudoPermission.EXPORT_IDENTIFIABLE.value: "Export Identifiable Data",
+    SudoPermission.CREATE_TEACHER.value: "Create teachers",
+    SudoPermission.CREATE_STUDENT.value: "Create students",
+    SudoPermission.ISSUE_RESEARCHER_REG_CODE.value: "Issue researcher reg codes",
+    SudoPermission.ISSUE_STUDENT_REG_CODE.value: "Issue student reg codes",
+    SudoPermission.EDIT_USER.value: "Edit users",
+    SudoPermission.DELETE_USER.value: "Delete users",
+    SudoPermission.ISSUE_STUDENT_RESET_CODE.value: "Issue student reset codes",
+    SudoPermission.ISSUE_RESEARCHER_RESET_CODE.value: "Issue researcher reset codes",
+    SudoPermission.VIEW_IDENTIFIABLE_VIZ.value: "View identifiable viz",
+    SudoPermission.EXPORT_IDENTIFIABLE.value: "Export identifiable data",
 }
 PERMISSION_GROUPS = (
     (
@@ -82,12 +82,19 @@ def _perm_field_name(value):
     return f"perm_{value}"
 
 
+def _rows(values: tuple[str, ...]) -> tuple[tuple[str, ...], ...]:
+    """Render two boolean fields per row for denser admin forms."""
+    rows: list[tuple[str, ...]] = []
+    for index in range(0, len(values), 2):
+        rows.append(tuple(_perm_field_name(v) for v in values[index : index + 2]))
+    return tuple(rows)
+
+
 def _build_permission_fieldsets():
     """Build one Django admin fieldset per permission category."""
     fieldsets = []
     for group_name, permission_values in PERMISSION_GROUPS:
-        fields = tuple(_perm_field_name(v) for v in permission_values)
-        fieldsets.append((group_name, {"fields": fields}))
+        fieldsets.append((group_name, {"fields": _rows(permission_values)}))
     fieldsets.append((
         "Delegation Powers",
         {
@@ -228,7 +235,7 @@ class SudoGrantAdminForm(forms.ModelForm):
     perm_DELETE_USER = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.DELETE_USER.value], required=False)
     perm_VIEW_IDENTIFIABLE_VIZ = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.VIEW_IDENTIFIABLE_VIZ.value], required=False)
     perm_EXPORT_IDENTIFIABLE = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.EXPORT_IDENTIFIABLE.value], required=False)
-    perm_can_grant_sudo = forms.BooleanField(label="Grant Sudo Delegation", required=False)
+    perm_can_grant_sudo = forms.BooleanField(label="Grant sudo delegation", required=False)
 
     class Meta:
         model = SudoGrant

@@ -118,7 +118,7 @@ class TestAccountErrorPaths:
         assert account.email == "new-email@example.com"
 
     def test_create_user_rejects_taken_email(self, api_client):
-        """Create-user returns 400 when email is already in use."""
+        """Create-user returns 409 when email is already in use."""
 
         admin = User.objects.create_user(
             username="admin-create-email",
@@ -145,7 +145,7 @@ class TestAccountErrorPaths:
             },
             format="json",
         )
-        assert response.status_code == 400
+        assert response.status_code == 409
         assert response.data["detail"] == "Email already taken"
 
     def test_create_user_requires_email_for_non_student(self, api_client):
@@ -224,7 +224,7 @@ class TestAccountErrorPaths:
         assert "immutable" in str(response.data)
 
     def test_edit_user_rejects_taken_email(self, api_client):
-        """Edit-user rejects duplicate email collisions."""
+        """Edit-user rejects duplicate email collisions with 409."""
 
         admin = User.objects.create_user(
             username="admin-edit-email",
@@ -249,7 +249,7 @@ class TestAccountErrorPaths:
             format="json",
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 409
         assert response.data["detail"] == "Email already taken"
 
     def test_code_detail_patch_not_found(self, api_client):

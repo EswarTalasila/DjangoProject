@@ -15,6 +15,7 @@ from accounts.models import (
     RegistrationCodeType,
     ResearcherProfile,
     Role,
+    StudentProfile,
     SudoGrant,
     SudoPermission,
     TeacherProfile,
@@ -22,7 +23,7 @@ from accounts.models import (
     UserRole,
 )
 from accounts.services import registration_code_hash, registration_code_prefix
-from courses.models import Course, Enrollment
+from courses.models import Course, Enrollment, EnrollmentStatus
 
 
 @pytest.mark.django_db
@@ -1826,13 +1827,9 @@ class TestListStudents:
     @staticmethod
     def _enroll_student(student_user, teacher_user, course_name="Test Course", status_val=None):
         """Create a course and enroll the student with the given status (default ACTIVE)."""
-        from courses.models import Course, Enrollment, EnrollmentStatus
-
         tp = TeacherProfile.objects.get(user=teacher_user)
         course = Course.objects.create(name=course_name, teacher_profile=tp)
-        from accounts.models import StudentProfile
-
-        sp = StudentProfile.objects.get(user=student_user)
+        sp = student_user.student_profile
         enrollment_status = status_val if status_val is not None else EnrollmentStatus.ACTIVE
         Enrollment.objects.create(course=course, student_profile=sp, status=enrollment_status)
         return course
@@ -1889,9 +1886,6 @@ class TestListStudents:
         self, api_client, researcher_user, teacher_user, student_user, admin_user
     ):
         """courseId param returns only students enrolled in that course."""
-        from courses.models import Course, Enrollment, EnrollmentStatus
-        from accounts.models import StudentProfile
-
         course_a = self._enroll_student(
             student_user, teacher_user, course_name="Filter Course A"
         )
@@ -1906,7 +1900,7 @@ class TestListStudents:
         StudentProfile.objects.create(user=other_student, created_by=admin_user, consent=False)
         tp = TeacherProfile.objects.get(user=teacher_user)
         course_b = Course.objects.create(name="Filter Course B", teacher_profile=tp)
-        sp_other = StudentProfile.objects.get(user=other_student)
+        sp_other = other_student.student_profile
         Enrollment.objects.create(
             course=course_b, student_profile=sp_other, status=EnrollmentStatus.ACTIVE
         )
@@ -1947,9 +1941,6 @@ class TestListStudents:
         self, api_client, researcher_user, teacher_user, admin_user
     ):
         """Students with ONLY DROPPED enrollments do not appear in results."""
-        from courses.models import Course, Enrollment, EnrollmentStatus
-        from accounts.models import StudentProfile
-
         # Create a student with ONLY a DROPPED enrollment
         dropped_student = User.objects.create_user(
             username="dropped-only-student",
@@ -1962,7 +1953,7 @@ class TestListStudents:
         )
         tp = TeacherProfile.objects.get(user=teacher_user)
         course = Course.objects.create(name="Dropped Course", teacher_profile=tp)
-        sp = StudentProfile.objects.get(user=dropped_student)
+        sp = dropped_student.student_profile
         Enrollment.objects.create(
             course=course, student_profile=sp, status=EnrollmentStatus.DROPPED
         )

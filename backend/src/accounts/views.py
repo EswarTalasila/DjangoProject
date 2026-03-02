@@ -927,7 +927,7 @@ def create_user(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
     if payload.get("email") and identifier_in_use(payload.get("email")):
-        return Response({"detail": "Email already taken"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": "Email already taken"}, status=status.HTTP_409_CONFLICT)
     create_payload = dict(payload)
     create_payload["username"] = generate_managed_username(name=payload["name"])
     try:
@@ -984,7 +984,7 @@ def _edit_user(request, user_id: int):
         incoming_email = payload.get("email")
         normalized_email = normalize_username_identifier(incoming_email) if incoming_email else None
         if normalized_email and identifier_in_use(normalized_email, exclude_user_id=user_id):
-            return Response({"detail": "Email already taken"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Email already taken"}, status=status.HTTP_409_CONFLICT)
         next_email = normalized_email
         user.email = normalized_email
 
