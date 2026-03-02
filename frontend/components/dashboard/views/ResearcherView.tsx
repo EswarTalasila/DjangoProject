@@ -4,20 +4,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { CreateRegistrationCodeDialog } from '@/components/codes/CreateRegistrationCodeDialog';
-import { RegistrationCodeDialog } from '@/components/codes/RegistrationCodeDialog';
 import { ResetCodeDialog } from '@/components/codes/ResetCodeDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { listCourses } from '@/lib/course-api';
 import {
-  getMySudoGrant,
   issuePasswordResetCode,
   listStaffUsers,
-  type MySudoGrantResponse,
   type StaffUser,
 } from '@/lib/password-reset-api';
-import { createRegistrationCodes } from '@/lib/registration-code-api';
 
 type ApiError = { response?: { data?: { detail?: string } } };
 
@@ -33,15 +28,11 @@ export default function ResearcherView() {
   const [teachers, setTeachers] = useState<StaffUser[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [courseCount, setCourseCount] = useState(0);
-  const [sudoGrant, setSudoGrant] = useState<MySudoGrantResponse | null>(null);
 
   const [resetCode, setResetCode] = useState<string | null>(null);
   const [resetTargetName, setResetTargetName] = useState<string | null>(null);
   const [resetExpiresAt, setResetExpiresAt] = useState<string | null>(null);
   const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
-  const [registrationCodes, setRegistrationCodes] = useState<string[]>([]);
-  const [isRegistrationCodeDialogOpen, setIsRegistrationCodeDialogOpen] = useState(false);
-  const [isCreateCodeDialogOpen, setIsCreateCodeDialogOpen] = useState(false);
 
   const filteredTeachers = useMemo(() => {
     const needle = search.trim().toLowerCase();
@@ -58,14 +49,12 @@ export default function ResearcherView() {
     async function load() {
       setLoadError(null);
       try {
-        const [staff, courses, myGrant] = await Promise.all([
+        const [staff, courses] = await Promise.all([
           listStaffUsers(),
           listCourses(),
-          getMySudoGrant(),
         ]);
         setTeachers(staff.filter((user) => user.role === 'TEACHER'));
         setCourseCount(courses.length);
-        setSudoGrant(myGrant);
       } catch {
         setLoadError('Failed to load researcher dashboard data.');
       } finally {
@@ -91,69 +80,8 @@ export default function ResearcherView() {
     }
   }
 
-  async function handleGenerateInviteCode(config: {
-    codeType: 'TEACHER' | 'RESEARCHER';
-    count: number;
-    usesPerCode: number;
-    expiresAt: string;
-  }) {
-    setIsActionLoading(true);
-    try {
-      const response = await createRegistrationCodes({
-        codeType: config.codeType,
-        count: config.count,
-        usesPerCode: config.usesPerCode,
-        expiresAt: config.expiresAt,
-      });
-      const plainCodes = response.codes
-        .map((c) => c.code)
-        .filter((c): c is string => c != null);
-      if (plainCodes.length === 0) throw new Error('Registration code was not returned by the server.');
-      setRegistrationCodes(plainCodes);
-      setIsCreateCodeDialogOpen(false);
-      setIsRegistrationCodeDialogOpen(true);
-    } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to generate invite code.'));
-    } finally {
-      setIsActionLoading(false);
-    }
-  }
-
-  const canCreateResearcherCodes = Boolean(
-    sudoGrant?.isStaff || sudoGrant?.permissions.includes('ISSUE_RESEARCHER_REG_CODE'),
-  );
-  const allowedCodeTypes: Array<'TEACHER' | 'RESEARCHER'> = canCreateResearcherCodes
-    ? ['TEACHER', 'RESEARCHER']
-    : ['TEACHER'];
-
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      <CreateRegistrationCodeDialog
-        open={isCreateCodeDialogOpen}
-        onOpenChange={setIsCreateCodeDialogOpen}
-        isLoading={isActionLoading}
-        title="Generate invite code"
-        description={
-          canCreateResearcherCodes
-            ? 'Set usage amount and expiration for teacher or researcher invite codes.'
-            : 'Set usage amount and expiration for teacher invite codes.'
-        }
-        allowedCodeTypes={allowedCodeTypes}
-        initialCodeType="TEACHER"
-        onSubmit={async (values) =>
-          handleGenerateInviteCode({
-            codeType: values.codeType as 'TEACHER' | 'RESEARCHER',
-            count: values.count,
-            usesPerCode: values.usesPerCode,
-            expiresAt: values.expiresAt,
-          })
-        }
-      />
-      <RegistrationCodeDialog
-        open={isRegistrationCodeDialogOpen}
-        onOpenChange={setIsRegistrationCodeDialogOpen}
-        codes={registrationCodes}
-      />
       <ResetCodeDialog
         open={isResetDialogOpen}
         onOpenChange={setIsResetDialogOpen}
@@ -166,16 +94,6 @@ export default function ResearcherView() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Researcher Dashboard</h1>
           <p className="text-muted-foreground mt-1">Issue password reset codes for teacher accounts.</p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Button
-            className="bg-primary hover:bg-primary/90 text-primary-foreground"
-            disabled={isActionLoading}
-            onClick={() => setIsCreateCodeDialogOpen(true)}
-          >
-            Generate Invite Code
-          </Button>
         </div>
       </div>
 
