@@ -41,7 +41,7 @@ from .services import (
     get_by_student,
     get_by_student_and_assignment,
     get_submission,
-    list_mine,
+    list_me,
     override_score,
     submission_to_compact_dto,
     submission_to_dto,
@@ -445,30 +445,12 @@ def save_draft(request, student_id: int, assignment_id: int):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def list_mine_view(request):
+def list_me_view(request):
     """
-    List submissions for a user with optional status filter (SUB-UC-08).
-
-    Self-only unless caller is ADMIN or RESEARCHER.
+    List submissions for the authenticated caller (SUB-UC-08).
     """
-    user_id = request.query_params.get("userId")
-    if user_id is None:
-        return Response(
-            {"detail": "userId query parameter is required"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    try:
-        user_id_int = int(user_id)
-    except (ValueError, TypeError):
-        return Response({"detail": "Invalid userId"}, status=status.HTTP_400_BAD_REQUEST)
-    if (
-        request.user.id != user_id_int
-        and not request.user.is_staff
-        and not has_role(request.user, Role.RESEARCHER)
-    ):
-        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     status_filter = request.query_params.get("status")
-    results = list_mine(user_id_int, status_filter)
+    results = list_me(request.user.id, status_filter)
     return paginate(results, request)
 
 

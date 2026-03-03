@@ -371,9 +371,9 @@ class TestExtendedWorkflows:
         submission_id = submit_response.json()["id"]
 
         step("Student lists own submissions")
-        list_mine = student_client.get(f"/api/v1/submissions/mine?userId={student_id}")
-        assert list_mine.status_code == 200
-        assert any(item["id"] == submission_id for item in list_mine.json()["results"])
+        list_me = student_client.get("/api/v1/submissions/me")
+        assert list_me.status_code == 200
+        assert any(item["id"] == submission_id for item in list_me.json()["results"])
 
         step("Teacher reviews submissions")
         review_response = teacher_client.get(f"/api/v1/assignments/{assignment_id}/submissions")

@@ -301,24 +301,21 @@
 ### SUB-UC-08 — List My Submissions
 
 **Roles:** ADMIN, RESEARCHER, TEACHER, STUDENT
-**Endpoint:** `GET /api/v1/submissions/mine`
+**Endpoint:** `GET /api/v1/submissions/me`
 
 **Main Flow:**
-1. Caller provides `userId` query parameter.
-2. System validates caller identity matches `userId` (self-only) or caller has ADMIN/RESEARCHER role.
-3. System queries student submissions for the user.
+1. System resolves caller identity from the authenticated session.
+2. System queries submissions tied to the caller identity.
 4. Optional `status` query filter (`NOT_STARTED`, `IN_PROGRESS`, `SUBMITTED`, `GRADED`).
-5. Returns paginated submission compact DTO list ordered by `submitted_at`.
+5. Returns paginated submission compact DTO list ordered by `submitted_at` descending (undated drafts last).
 
 **Errors:**
-- `SUB-UC-08-E1`: Missing `userId` query parameter.
-- `SUB-UC-08-E2`: Forbidden — requesting another user's submissions without ADMIN/RESEARCHER role.
+- No domain-specific errors beyond standard authentication/authorization handling.
 
 **Tests (representative):**
 - `test_SUB_UC_08_STUDENT`
-- `test_SUB_UC_08_TEACHER`
-- `test_SUB_UC_08_E1`
-- `test_SUB_UC_08_E2`
+- `test_SUB_UC_08_ADMIN`
+- `test_SUB_UC_08_status_filter`
 
 ---
 
@@ -330,7 +327,7 @@
 - `IN_PROGRESS`: student has saved a draft via SUB-UC-01.
 - `SUBMITTED`: student has finalized answers via SUB-UC-02; auto-grading may have run.
 - `GRADED`: all answers scored (auto or manual) via SUB-UC-02 auto-grade or SUB-UC-03 manual grade.
-- Gap: no state machine enforcement in current code — transitions can skip states (see alignment note #6).
+- State transitions are enforced by service-layer validation.
 - Applies to: SUB-UC-01, SUB-UC-02, SUB-UC-03.
 
 ### SUB-CN-02 — Student Submission Access Control
@@ -351,8 +348,7 @@
 
 ### SUB-CN-04 — Mood Meter On-Demand Submissions
 - ~~`MOOD_METER` assessments skip submission pre-creation~~ (removed; MOOD_METER no longer supported).
-- Each mood meter submit creates a new submission (allows multiple check-ins over time).
-- Mood meter submissions are auto-graded immediately (status → `GRADED`, `maxPoints=0`).
+- No mood meter submission behavior is part of the active FR-08 contract.
 - Applies to: SUB-UC-02.
 
 ### SUB-CN-05 — Score Calculation
@@ -360,7 +356,7 @@
 - For manual grading (SUB-UC-03), scores are applied positionally: `scores[i]` maps to `answers[i]` in order.
 - `HYBRID` mode: manual scores apply only to `SHORT_ANSWER` answers; auto-scored answers (`MULTIPLE_CHOICE`, `NUMBER_SCALE`) preserve their auto-calculated scores.
 - If the score array has more entries than answers, the extra entry is added as bonus to the total.
-- No validation that total score ≤ sum of question `max_points` (see alignment note #12).
+- Per-answer score overrides are validated so score cannot exceed each question's `max_points`.
 - Applies to: SUB-UC-02, SUB-UC-03.
 
 ### SUB-CN-06 — Archived Assignment Blocks Submissions
@@ -415,7 +411,7 @@
 | POST | `/api/v1/assignments/{assignment_id}/submissions` | IsAuthenticated + student role + enrollment gate | SUB-UC-02 |
 | GET | `/api/v1/assignments/{assignment_id}/submissions` | IsAuthenticated + assignment visibility gate | SUB-UC-06 |
 | GET | `/api/v1/submissions/{submission_id}` | IsAuthenticated + submission access gate | SUB-UC-04 |
-| GET | `/api/v1/submissions/mine` | IsAuthenticated + self/admin/researcher gate | SUB-UC-08 |
+| GET | `/api/v1/submissions/me` | IsAuthenticated + self scope | SUB-UC-08 |
 | PATCH | `/api/v1/submissions/{submission_id}/override-score` | IsAuthenticated + grading access gate | SUB-UC-03 |
 | GET | `/api/v1/students/{student_id}/submissions` | IsAuthenticated + self/ownership gate | SUB-UC-07 |
 | GET | `/api/v1/students/{student_id}/assignments/{assignment_id}/submission` | IsAuthenticated + self/ownership gate | SUB-UC-05 |
@@ -451,7 +447,6 @@ Expected statuses by UC:
 - Auto-grading logic per answer type (`_auto_score_mcq`, `_auto_score_number_scale`).
 - Score calculation (total, hybrid mode, bonus).
 - Answer replacement semantics (delete + re-create).
-- Mood meter multiple submission creation.
 - DTO conversion for all answer types.
 
 ### Backend Integration
@@ -469,7 +464,6 @@ Expected statuses by UC:
   - `ST-SUB-CN-01` (status lifecycle transitions)
   - `ST-SUB-CN-02` (student own-submission access only)
   - `ST-SUB-CN-03` (auto-grading on submit)
-  - `ST-SUB-CN-04` (mood meter multiple submissions)
   - `ST-SUB-CN-06` (archived assignment blocks submissions)
   - `ST-SUB-CN-07` (frozen drafts on archive)
   - `ST-SUB-CN-08` (teacher assignment ownership for grading)
@@ -515,21 +509,8 @@ Expected statuses by UC:
 
 ## 11) Current Implementation Alignment Notes
 
-This draft defines the target FR-08 contract. Current code has known deltas that must be resolved before FR-08 can be marked COMPLETE:
+Current implementation is aligned with the FR-08 target contract for submission lifecycle, archive gates, ownership checks, and compact paginated list behavior.
 
-1. Add hard student-only gate on submit endpoint; current `_create_for_assignment` validates STUDENT and blocks TEACHER but non-student/non-teacher roles (RESEARCHER, ADMIN) fall through to `create_submission` unchecked. Target: reject all non-STUDENT callers before reaching service layer (SUB-UC-02).
-2. Add assignment archive check on draft-save endpoint; current code does not check assignment status before allowing draft saves (SUB-CN-07).
-3. Add assignment archive check on submit endpoint; current code does not check assignment status before allowing new submissions (SUB-CN-06).
-4. Add RESEARCHER access to all read endpoints; current `get_by_assignment_id` and `get_by_student_id` views do not explicitly allow RESEARCHER access (SUB-UC-06, SUB-UC-07).
-5. Add self-only validation on `/submissions/mine` endpoint; current code accepts any `userId` parameter without verifying caller identity or role (SUB-UC-08, SUB-CN-02).
-6. Fix `save_draft` to not set `submitted_at` for draft saves; current code sets `submitted_at=now()` even for `IN_PROGRESS` status. Target: `submitted_at` should only be set when status reaches `SUBMITTED` (SUB-UC-01).
-7. Add state machine validation on status transitions; current code allows arbitrary transitions (e.g., `GRADED → IN_PROGRESS`). Target: enforce `NOT_STARTED → IN_PROGRESS → SUBMITTED → GRADED` progression (SUB-CN-01).
-8. Fix `override_score` HYBRID mode positional array; current design requires teachers to know which array positions correspond to `SHORT_ANSWER` answers. Consider adding answer-keyed scoring in a future iteration (SUB-UC-03).
-9. Remove or unwire legacy `GET /api/v1/teachers/{teacher_id}/submissions` endpoint; read path exists but corresponding write path was never wired (SUB-CN-11).
-10. Remove or rationalize `PATCH /api/v1/submissions/` (generic edit) endpoint; functionality is covered by SUB-UC-01 and SUB-UC-02 via their dedicated routes.
-11. Add teacher assignment ownership check on `get_by_student_id`; current code uses `teacher_owns_student` helper which checks course enrollment rather than assignment-level ownership (SUB-CN-08).
-12. Fix `NUMBER_SCALE` answer data key inconsistency: serializer documentation shows `value` but service code reads `val`. Canonical key per model field is `val` (SUB-CN-09).
-13. Add score validation: ensure individual answer scores ≤ question `max_points` and validate bonus mechanism is intentional, not accidental (SUB-CN-05).
-14. Add missing FR-08 traceability tests for constraints and error paths.
-15. Preserve paginated listing behavior on submission list endpoints during FR-08 changes.
-
+Open improvements (non-blocking):
+1. `SUB-UC-03`: HYBRID manual grading remains positional in override payloads; answer-keyed patch payloads would improve teacher UX.
+2. Dedicated frontend list/report pages for SUB-UC-06/07/08 can continue as iterative UI work.

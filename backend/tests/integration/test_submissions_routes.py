@@ -827,36 +827,22 @@ class TestListStudentSubmissions:
 
 
 @pytest.mark.django_db
-class TestListMine:
-    """SUB-UC-08: GET /submissions/mine"""
+class TestListMe:
+    """SUB-UC-08: GET /submissions/me"""
 
     def test_SUB_UC_08_STUDENT(self, api_client, teacher_user, student_user, admin_user):
         """Student can list own submissions."""
         assignment, _, _ = _make_course_assignment(teacher_user, student_user, admin_user)
         _make_submission(assignment, student_user, SubmissionStatus.SUBMITTED)
         api_client.force_authenticate(user=student_user)
-        r = api_client.get(f"/api/v1/submissions/mine?userId={student_user.id}")
+        r = api_client.get("/api/v1/submissions/me")
         assert r.status_code == 200
         assert len(r.json()["results"]) >= 1
 
-    def test_SUB_UC_08_E1_missing_userId(self, api_client, student_user):
-        """Missing userId returns 400."""
-        api_client.force_authenticate(user=student_user)
-        r = api_client.get("/api/v1/submissions/mine")
-        assert r.status_code == 400
-
-    def test_SUB_UC_08_E2_self_only(self, api_client, teacher_user, student_user, admin_user):
-        """Non-admin/researcher cannot query another user's submissions."""
-        api_client.force_authenticate(user=student_user)
-        r = api_client.get(f"/api/v1/submissions/mine?userId={teacher_user.id}")
-        assert r.status_code == 403
-
-    def test_SUB_UC_08_admin_can_query_others(
-        self, api_client, teacher_user, student_user, admin_user
-    ):
-        """Admin can query any user's submissions."""
+    def test_SUB_UC_08_ADMIN(self, api_client, admin_user):
+        """Admin can list own submissions at /me."""
         api_client.force_authenticate(user=admin_user)
-        r = api_client.get(f"/api/v1/submissions/mine?userId={student_user.id}")
+        r = api_client.get("/api/v1/submissions/me")
         assert r.status_code == 200
 
     def test_SUB_UC_08_status_filter(self, api_client, teacher_user, student_user, admin_user):
@@ -864,9 +850,7 @@ class TestListMine:
         assignment, _, _ = _make_course_assignment(teacher_user, student_user, admin_user)
         _make_submission(assignment, student_user, SubmissionStatus.SUBMITTED)
         api_client.force_authenticate(user=student_user)
-        r = api_client.get(
-            f"/api/v1/submissions/mine?userId={student_user.id}&status=NOT_STARTED"
-        )
+        r = api_client.get("/api/v1/submissions/me?status=NOT_STARTED")
         assert r.status_code == 200
         assert len(r.json()["results"]) == 0
 

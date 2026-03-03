@@ -219,7 +219,7 @@ def get_by_student_and_assignment(student_id: int, assignment_id: int) -> Submis
     return submission
 
 
-def list_mine(user_id: int, status: str | None) -> list[dict]:
+def list_me(user_id: int, status: str | None) -> list[dict]:
     """
     List all submissions for a user, whether as student or teacher.
 
@@ -240,7 +240,8 @@ def list_mine(user_id: int, status: str | None) -> list[dict]:
     items = list(submissions.values())
     if status:
         items = [sub for sub in items if sub.status == status]
-    items.sort(key=lambda s: (s.submitted_at is None, s.submitted_at), reverse=True)
+    # Sort newest submissions first, with undated drafts last.
+    items.sort(key=lambda s: (s.submitted_at is not None, s.submitted_at), reverse=True)
     return [submission_to_compact_dto(sub).model_dump() for sub in items]
 
 

@@ -77,12 +77,12 @@ export async function getSubmission(submissionId: number): Promise<SubmissionDTO
 }
 
 export async function listMySubmissions(
-  userId: number,
   status?: SubmissionStatus,
 ): Promise<{ results: SubmissionCompactDTO[] }> {
-  const params = new URLSearchParams({ userId: String(userId) });
+  const params = new URLSearchParams();
   if (status) params.set('status', status);
-  const { data } = await api.get(`/submissions/mine?${params}`);
+  const qs = params.toString();
+  const { data } = await api.get(`/submissions/me${qs ? `?${qs}` : ''}`);
   return data;
 }
 
