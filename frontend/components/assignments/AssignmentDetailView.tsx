@@ -24,11 +24,12 @@ import {
   archiveAssignment,
   deleteAssignment,
   getAssignment,
+  getAssignmentTemplate,
   updateAssignment,
   type Assignment,
   type AssignmentUpdateInput,
 } from '@/lib/assignment-api';
-import { getAssessment, type Assessment, type Question } from '@/lib/assessment-api';
+import type { Assessment, Question } from '@/lib/assessment-api';
 import { listCourses } from '@/lib/course-api';
 import {
   getStudentSubmission,
@@ -357,13 +358,13 @@ export default function AssignmentDetailView({
     try {
       const item = await getAssignment(assignmentId);
       const [template, courses] = await Promise.all([
-        getAssessment(item.assessmentId).catch(() => null),
+        getAssignmentTemplate(item.id),
         listCourses().catch(() => []),
       ]);
 
       setAssignment(item);
       setAssessmentTemplate(template);
-      setTitleInput(item.title || template?.title || `Assignment #${item.id}`);
+      setTitleInput(item.title || template?.title || 'Untitled Assignment');
       setOpenAtInput(toLocalInputValue(item.openAt));
       setDueAtInput(toLocalInputValue(item.dueAt));
 
@@ -692,10 +693,10 @@ export default function AssignmentDetailView({
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-foreground">
-                {assignment.title || `Assignment #${assignment.id}`}
+                {assignment.title || 'Untitled Assignment'}
               </h1>
               <p className="text-muted-foreground mt-1">
-                {assessmentTemplate?.title ?? `Assessment #${assignment.assessmentId}`} • {courseName}
+                {(assessmentTemplate?.title ?? assignment.assessmentTitle ?? 'Template unavailable')} • {courseName}
               </p>
             </div>
             <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded text-xs font-medium shrink-0">
@@ -706,7 +707,9 @@ export default function AssignmentDetailView({
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <div className="space-y-1">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Template</p>
-              <p className="text-sm text-foreground">{assessmentTemplate?.title ?? '-'}</p>
+              <p className="text-sm text-foreground">
+                {assessmentTemplate?.title ?? assignment.assessmentTitle ?? '-'}
+              </p>
             </div>
             <div className="space-y-1">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Course</p>

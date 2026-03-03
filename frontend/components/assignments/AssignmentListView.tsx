@@ -26,15 +26,9 @@ import {
   listAssignmentsForUser,
   type Assignment,
 } from '@/lib/assignment-api';
-import { listAssessments } from '@/lib/assessment-api';
 import { listCourses, type CourseSummary } from '@/lib/course-api';
 
 type Role = 'TEACHER' | 'RESEARCHER' | 'ADMIN';
-
-type AssessmentLite = {
-  id: number;
-  title: string;
-};
 
 type AssignmentListViewProps = {
   role: Role;
@@ -54,7 +48,6 @@ export default function AssignmentListView({ role, userId, canCreate }: Assignme
 
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [courses, setCourses] = useState<CourseSummary[]>([]);
-  const [assessmentMap, setAssessmentMap] = useState<Map<number, AssessmentLite>>(new Map());
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -63,9 +56,8 @@ export default function AssignmentListView({ role, userId, canCreate }: Assignme
   const loadData = useCallback(async () => {
     setLoadError(null);
     try {
-      const [courseData, assessments] = await Promise.all([listCourses(), listAssessments()]);
+      const courseData = await listCourses();
       setCourses(courseData);
-      setAssessmentMap(new Map(assessments.map((a) => [a.id, { id: a.id, title: a.title }])));
 
       if (role === 'TEACHER') {
         const items = await listAssignmentsForUser(userId);
@@ -115,7 +107,7 @@ export default function AssignmentListView({ role, userId, canCreate }: Assignme
     if (!needle) return assignments;
     return assignments.filter((assignment) => {
       const assignmentTitle = assignment.title.toLowerCase();
-      const assessmentTitle = assessmentMap.get(assignment.assessmentId)?.title?.toLowerCase() ?? '';
+      const assessmentTitle = assignment.assessmentTitle?.toLowerCase() ?? '';
       const courseName =
         courses.find((course) => course.id === assignment.courseId)?.name.toLowerCase() ?? '';
       return (
@@ -125,7 +117,7 @@ export default function AssignmentListView({ role, userId, canCreate }: Assignme
         assignment.status.toLowerCase().includes(needle)
       );
     });
-  }, [assignments, assessmentMap, courses, searchQuery]);
+  }, [assignments, courses, searchQuery]);
 
   return (
     <div className="space-y-6 p-6 max-w-6xl mx-auto">
@@ -213,9 +205,7 @@ export default function AssignmentListView({ role, userId, canCreate }: Assignme
             </TableHeader>
             <TableBody>
               {filtered.map((assignment) => {
-                const assessmentTitle =
-                  assessmentMap.get(assignment.assessmentId)?.title ??
-                  `Assessment #${assignment.assessmentId}`;
+                const assessmentTitle = assignment.assessmentTitle ?? 'Template unavailable';
                 const courseName =
                   courses.find((course) => course.id === assignment.courseId)?.name ?? '-';
 

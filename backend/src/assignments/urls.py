@@ -1,4 +1,4 @@
-"""Assignment URL routes - /api/assignments/*"""
+"""Assignment URL routes - /api/v1/assignments/*"""
 
 from django.urls import path
 
@@ -9,6 +9,16 @@ from . import views
 urlpatterns = [
     path("", views.create, name="assignments-create"),
     path("<int:assignment_id>", views.detail, name="assignments-detail"),
+    path(
+        "<int:assignment_id>/template",
+        views.template,
+        name="assignments-template",
+    ),
+    path(
+        "<int:assignment_id>/archive",
+        views.archive,
+        name="assignments-archive",
+    ),
     path(
         "<int:assignment_id>/submissions",
         submission_views.assignment_submissions,

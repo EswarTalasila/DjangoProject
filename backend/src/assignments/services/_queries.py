@@ -19,6 +19,7 @@ def assignment_to_dto(assignment: Assignment) -> AssignmentDTO:
         id=assignment.id,
         title=(assignment.title or assignment.assessment.title),
         assessmentId=assignment.assessment_id,
+        assessmentTitle=assignment.assessment.title,
         audienceType=assignment.audience_type,
         courseId=assignment.course_id,
         targetTeacherId=assignment.teacher_id,

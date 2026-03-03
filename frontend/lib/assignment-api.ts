@@ -1,4 +1,5 @@
 import api from '@/lib/api';
+import type { Assessment } from '@/lib/assessment-api';
 
 export type AudienceType = 'COURSE' | 'TEACHER';
 export type AssignmentStatus = 'ACTIVE' | 'ARCHIVED';
@@ -7,6 +8,7 @@ export type Assignment = {
   id: number;
   title: string;
   assessmentId: number;
+  assessmentTitle: string | null;
   audienceType: AudienceType;
   courseId: number | null;
   targetTeacherId: number | null;
@@ -44,6 +46,11 @@ export async function createAssignment(payload: AssignmentCreateInput): Promise<
 
 export async function getAssignment(assignmentId: number): Promise<Assignment> {
   const response = await api.get<Assignment>(`/assignments/${assignmentId}`);
+  return response.data;
+}
+
+export async function getAssignmentTemplate(assignmentId: number): Promise<Assessment> {
+  const response = await api.get<Assessment>(`/assignments/${assignmentId}/template`);
   return response.data;
 }
 

@@ -18,7 +18,6 @@ import {
   listAssignmentsForUser,
   type Assignment,
 } from '@/lib/assignment-api';
-import { listAssessments } from '@/lib/assessment-api';
 
 type ApiError = { response?: { data?: { detail?: string } } };
 
@@ -46,9 +45,6 @@ export default function CourseAssignmentsTab({
 }: CourseAssignmentsTabProps) {
   const router = useRouter();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [assessmentTitleById, setAssessmentTitleById] = useState<Map<number, string>>(
-    new Map(),
-  );
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -57,18 +53,13 @@ export default function CourseAssignmentsTab({
   const loadAssignments = useCallback(async () => {
     setLoadError(null);
     try {
-      const [items, assessments] = await Promise.all([
+      const items =
         userRole === 'STUDENT'
-          ? listAssignmentsForUser(userId).then((all) =>
+          ? await listAssignmentsForUser(userId).then((all) =>
               all.filter((assignment) => assignment.courseId === courseId),
             )
-          : listAssignmentsByCourse(courseId),
-        listAssessments().catch(() => []),
-      ]);
+          : await listAssignmentsByCourse(courseId);
       setAssignments(items);
-      setAssessmentTitleById(
-        new Map(assessments.map((assessment) => [assessment.id, assessment.title])),
-      );
     } catch (error: unknown) {
       setLoadError(
         extractDetail(error, 'Failed to load assignments for this course.'),
@@ -156,8 +147,7 @@ export default function CourseAssignmentsTab({
                     {assignment.title}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {assessmentTitleById.get(assignment.assessmentId) ??
-                      `Assessment #${assignment.assessmentId}`}
+                    {assignment.assessmentTitle ?? 'Template unavailable'}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {assignment.status}

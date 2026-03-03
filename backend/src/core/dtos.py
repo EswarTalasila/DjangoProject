@@ -159,6 +159,7 @@ class AssignmentDTO(BaseModel):
     id: int
     title: str
     assessmentId: int
+    assessmentTitle: str | None = None
     audienceType: str
     courseId: int | None
     targetTeacherId: int | None

@@ -400,6 +400,7 @@ class TestGetDetail:
         assert resp.status_code == 200
         assert resp.json()["id"] == assignment.id
         assert resp.json()["status"] == "ACTIVE"
+        assert resp.json()["assessmentTitle"] == assessment.title
 
     def test_ASGN_UC_04_TEACHER(self, api_client, teacher_user, admin_user):
         """Teacher can view assignment for their own course."""
@@ -446,6 +447,43 @@ class TestGetDetail:
 
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.get(f"/api/v1/assignments/{assignment.id}")
+        assert resp.status_code == 403
+
+    def test_ASGN_UC_04_TEMPLATE_STUDENT_ENROLLED(
+        self, api_client, teacher_user, student_user, admin_user
+    ):
+        """Enrolled student can fetch assignment template questions."""
+        assessment = _make_assessment(admin_user)
+        Question.objects.create(
+            assessment=assessment,
+            question_type=QuestionKind.SHORT_ANSWER,
+            kind=QuestionKind.SHORT_ANSWER,
+            prompt="Explain your process",
+            max_points=5.0,
+            auto_gradable=False,
+            graded=False,
+        )
+        course = _make_course(teacher_user)
+        _enroll(course, student_user)
+        assignment = _make_assignment(assessment, course, teacher_user)
+
+        api_client.force_authenticate(user=student_user)
+        resp = api_client.get(f"/api/v1/assignments/{assignment.id}/template")
+        assert resp.status_code == 200
+        assert resp.json()["id"] == assessment.id
+        assert len(resp.json()["questions"]) == 1
+        assert resp.json()["questions"][0]["prompt"] == "Explain your process"
+
+    def test_ASGN_UC_04_TEMPLATE_E2_student_not_enrolled(
+        self, api_client, teacher_user, student_user, admin_user
+    ):
+        """Unenrolled student cannot fetch assignment template (403)."""
+        assessment = _make_assessment(admin_user)
+        course = _make_course(teacher_user)
+        assignment = _make_assignment(assessment, course, teacher_user)
+
+        api_client.force_authenticate(user=student_user)
+        resp = api_client.get(f"/api/v1/assignments/{assignment.id}/template")
         assert resp.status_code == 403
 
 
