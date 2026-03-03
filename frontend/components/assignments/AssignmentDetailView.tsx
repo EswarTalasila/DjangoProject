@@ -250,6 +250,7 @@ function StudentQuestionPreview({
   if (question.type === 'NUMBER_SCALE') {
     const min = data?.min ?? question.min ?? 1;
     const max = data?.max ?? question.max ?? 10;
+    const hasSelected = answer.numericResponse !== null;
     return (
       <div className="space-y-2">
         <input
@@ -258,10 +259,12 @@ function StudentQuestionPreview({
           max={max}
           value={answer.numericResponse ?? min}
           onChange={(event) => onNumberChange(Number(event.target.value))}
-          className="w-full"
+          className={`w-full ${!hasSelected ? 'opacity-40' : ''}`}
         />
         <p className="text-xs text-muted-foreground">
-          Student selects a value between {min} and {max}. Current: {answer.numericResponse ?? min}
+          {hasSelected
+            ? `Selected: ${answer.numericResponse} (range ${min}–${max})`
+            : `Drag the slider to select a value between ${min} and ${max}`}
         </p>
       </div>
     );
@@ -347,6 +350,7 @@ export default function AssignmentDetailView({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [draftStatus, setDraftStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isDirtyRef = useRef(false);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -514,8 +518,16 @@ export default function AssignmentDetailView({
   const submissionLocked = submission?.status === 'SUBMITTED' || submission?.status === 'GRADED';
   const submissionStatus: SubmissionStatus = submission?.status ?? 'NOT_STARTED';
 
+  const assignmentArchived = assignment?.status === 'ARCHIVED';
+  const assignmentNotOpen = useMemo(() => {
+    if (!assignment?.openAt) return false;
+    return new Date(assignment.openAt) > new Date();
+  }, [assignment?.openAt]);
+  const studentBlocked = assignmentArchived || assignmentNotOpen;
+
   function updateStudentAnswer(question: Question, updater: (curr: StudentAttemptAnswer) => StudentAttemptAnswer) {
-    if (submissionLocked) return;
+    if (submissionLocked || studentBlocked) return;
+    isDirtyRef.current = true;
     setStudentAnswers((prev) => {
       const current = prev[question.questionId] ?? defaultStudentAnswer(question);
       return {
@@ -527,9 +539,9 @@ export default function AssignmentDetailView({
 
   // Debounced draft save — fires 1s after last answer change (student only)
   useEffect(() => {
-    if (viewerRole !== 'STUDENT' || submissionLocked || flatQuestions.length === 0) return;
-    // Skip if still loading initial data
-    if (isLoading) return;
+    if (viewerRole !== 'STUDENT' || submissionLocked || studentBlocked || flatQuestions.length === 0) return;
+    // Skip if still loading initial data or user hasn't interacted yet
+    if (isLoading || !isDirtyRef.current) return;
 
     if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
 
@@ -551,7 +563,7 @@ export default function AssignmentDetailView({
     return () => {
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
     };
-  }, [assignmentId, flatQuestions, isLoading, studentAnswers, submissionLocked, viewerId, viewerRole]);
+  }, [assignmentId, flatQuestions, isLoading, studentAnswers, studentBlocked, submissionLocked, viewerId, viewerRole]);
 
   // Ensure no delayed draft save can fire once submission is locked/submitting.
   useEffect(() => {
@@ -563,7 +575,7 @@ export default function AssignmentDetailView({
   }, [isSubmitting, submissionLocked]);
 
   async function handleRealSubmit() {
-    if (submissionLocked || flatQuestions.length === 0) return;
+    if (submissionLocked || studentBlocked || flatQuestions.length === 0) return;
     if (draftTimerRef.current) {
       clearTimeout(draftTimerRef.current);
       draftTimerRef.current = null;
@@ -874,6 +886,16 @@ export default function AssignmentDetailView({
           <p className="text-sm text-muted-foreground">No questions in this assignment template.</p>
         ) : previewMode === 'student' ? (
           <div className="rounded-sm border border-border bg-card overflow-hidden">
+            {viewerRole === 'STUDENT' && assignmentArchived && (
+              <div className="border-b border-border bg-status-error-bg px-5 py-2">
+                <p className="text-sm text-foreground font-medium">This assignment has been archived. You can review your answers but cannot save or submit changes.</p>
+              </div>
+            )}
+            {viewerRole === 'STUDENT' && !assignmentArchived && assignmentNotOpen && (
+              <div className="border-b border-border bg-status-warning-bg px-5 py-2">
+                <p className="text-sm text-foreground font-medium">This assignment opens at {formatDate(assignment?.openAt ?? null)}. You can preview questions but cannot save or submit until then.</p>
+              </div>
+            )}
             <div className="border-b border-border px-5 py-3 flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-foreground">
@@ -1040,7 +1062,7 @@ export default function AssignmentDetailView({
                             <AlertDialogTrigger asChild>
                               <Button
                                 type="button"
-                                disabled={submissionLocked || isSubmitting}
+                                disabled={submissionLocked || studentBlocked || isSubmitting}
                               >
                                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                 Submit
@@ -1071,7 +1093,6 @@ export default function AssignmentDetailView({
                         ) : (
                           <Button
                             type="button"
-                            disabled={clampedStudentQuestionIndex < flatQuestions.length - 1}
                             onClick={() => {
                               setStudentFlowStage('submitted');
                               setStudentSubmittedAt(new Date());
