@@ -43,6 +43,7 @@ from .services import (
     get_submission,
     list_mine,
     override_score,
+    submission_to_compact_dto,
     submission_to_dto,
 )
 
@@ -250,7 +251,7 @@ def assignment_submissions(request, assignment_id: int):
     ):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
-    return paginate(submissions, request, transform_fn=lambda s: submission_to_dto(s).model_dump())
+    return paginate(submissions, request, transform_fn=lambda s: submission_to_compact_dto(s).model_dump())
 
 
 @api_view(["GET"])
@@ -311,7 +312,7 @@ def get_by_assignment_id(request, assignment_id: int):
     ):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
-    return paginate(submissions, request, transform_fn=lambda s: submission_to_dto(s).model_dump())
+    return paginate(submissions, request, transform_fn=lambda s: submission_to_compact_dto(s).model_dump())
 
 
 @api_view(["GET"])
@@ -334,18 +335,24 @@ def get_by_student_id(request, student_id: int):
         if request.user.id != student_id:
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     elif role == Role.TEACHER:
-        # Teacher can view if any of the student's submissions are for
-        # assignments in courses the teacher owns.
-        has_overlap = Submission.objects.filter(
-            student_id=student_id,
-            assignment__course__teacher_profile__user_id=request.user.id,
-        ).exists()
-        if not has_overlap:
+        # Teacher can only see submissions for assignments they own (SUB-CN-08).
+        owned_submissions = list(
+            Submission.objects.filter(
+                student_id=student_id,
+                assignment__course__teacher_profile__user_id=request.user.id,
+            )
+        )
+        if not owned_submissions:
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        return paginate(
+            owned_submissions,
+            request,
+            transform_fn=lambda s: submission_to_compact_dto(s).model_dump(),
+        )
     else:
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_student(student_id)
-    return paginate(submissions, request, transform_fn=lambda s: submission_to_dto(s).model_dump())
+    return paginate(submissions, request, transform_fn=lambda s: submission_to_compact_dto(s).model_dump())
 
 
 @api_view(["GET"])

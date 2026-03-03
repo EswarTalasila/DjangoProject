@@ -18,17 +18,17 @@
   - save draft (partial answers, `IN_PROGRESS`)
   - submit final answers (`SUBMITTED` → auto-grade if applicable → `GRADED`)
   - manual grading by teacher/admin (`GRADED`)
-- 4 answer types matching assessment question types: `MULTIPLE_CHOICE`, `SHORT_ANSWER`, `NUMBER_SCALE`, `MOOD_METER`.
+- 3 answer types matching assessment question types: `MULTIPLE_CHOICE`, `SHORT_ANSWER`, `NUMBER_SCALE`.
 - Auto-grading on submit for non-MANUAL grading modes:
   - `MULTIPLE_CHOICE`: sum `McqChoice.points` for selected indices.
   - `NUMBER_SCALE`: exact-match against `target` for full `max_points`.
-  - `SHORT_ANSWER` / `MOOD_METER`: skip (not auto-gradable).
+  - `SHORT_ANSWER`: skip (not auto-gradable).
 - Manual grading: positional score array with per-grading-mode answer targeting.
 - Read access matrix:
   - ADMIN/RESEARCHER: all submissions globally.
   - TEACHER: submissions for own assignments only (assignment ownership gate).
   - STUDENT: own submissions only.
-- Mood meter on-demand submission creation (multiple check-ins per assignment).
+- ~~Mood meter on-demand submission creation~~ (removed; MOOD_METER question type no longer supported).
 - Assignment archive enforcement: block new submissions and freeze drafts (enforces `ASGN-CN-09` from FR-07).
 
 ### Out of Scope
@@ -126,12 +126,11 @@
 4. System checks assignment status is `ACTIVE` (not `ARCHIVED`; enforces `SUB-CN-06`).
 5. System validates caller is enrolled in the assignment's course.
 6. System finds existing pre-created submission for this student + assignment.
-7. For `MOOD_METER` assessments: system creates a new submission instead of upserting (allows multiple check-ins per `SUB-CN-04`).
-8. System replaces all existing answers with the submitted answers (full replacement per `SUB-CN-10`).
+7. System replaces all existing answers with the submitted answers (full replacement per `SUB-CN-10`).
 9. System sets submission status to `SUBMITTED` and `submitted_at` to current timestamp.
 10. System resolves the assessment linked to the assignment.
 11. If grading mode is not `MANUAL`: system runs auto-grading (`SUB-CN-03`).
-    - `AUTO` / `MOOD_METER`: status → `GRADED`, score calculated.
+    - `AUTO`: status → `GRADED`, score calculated.
     - `HYBRID`: status remains `SUBMITTED`, auto-gradable answers scored, awaits manual grading for `SHORT_ANSWER` answers.
 12. Returns submission DTO with status and score.
 
@@ -165,7 +164,6 @@
    - ADMIN: bypasses ownership check.
 5. System resolves the assessment linked to the submission's assignment.
 6. System applies scores based on grading mode:
-   - `MOOD_METER`: skip answer scoring, set submission status to `GRADED`.
    - `HYBRID`: apply scores only to `SHORT_ANSWER` answers; preserve existing auto-scores for `MULTIPLE_CHOICE` and `NUMBER_SCALE`.
    - `MANUAL` / other: apply scores to all answers in positional order.
 7. If score array has more entries than answers, the extra entry is added as bonus to total.
@@ -346,14 +344,13 @@
   - `MULTIPLE_CHOICE`: sum `McqChoice.points` for selected choice indices via `_auto_score_mcq()`.
   - `NUMBER_SCALE`: if `answer.val == question.target`, award `max_points`; else 0, via `_auto_score_number_scale()`.
   - `SHORT_ANSWER`: skip (not auto-gradable).
-  - `MOOD_METER`: skip (not auto-gradable).
-- `AUTO` / `MOOD_METER` grading mode: status → `GRADED`, `submitted_at` set.
+- `AUTO` grading mode: status → `GRADED`, `submitted_at` set.
 - `HYBRID` grading mode: status remains `SUBMITTED`, auto-gradable answers scored, awaits manual scoring of `SHORT_ANSWER` answers via SUB-UC-03.
 - Auto-grading executes synchronously within the submission request transaction.
 - Applies to: SUB-UC-02.
 
 ### SUB-CN-04 — Mood Meter On-Demand Submissions
-- `MOOD_METER` assessments skip submission pre-creation at assignment time (`ASGN-CN-05`).
+- ~~`MOOD_METER` assessments skip submission pre-creation~~ (removed; MOOD_METER no longer supported).
 - Each mood meter submit creates a new submission (allows multiple check-ins over time).
 - Mood meter submissions are auto-graded immediately (status → `GRADED`, `maxPoints=0`).
 - Applies to: SUB-UC-02.
@@ -383,7 +380,7 @@
 - Applies to: SUB-UC-03, SUB-UC-04, SUB-UC-05, SUB-UC-06, SUB-UC-07.
 
 ### SUB-CN-09 — Answer Type Enumeration
-- Supported answer types: `MULTIPLE_CHOICE`, `SHORT_ANSWER`, `NUMBER_SCALE`, `MOOD_METER`.
+- Supported answer types: `MULTIPLE_CHOICE`, `SHORT_ANSWER`, `NUMBER_SCALE`.
 - Each answer type uses a OneToOne extension model matching the corresponding question type from FR-06:
   - `MultipleChoiceAnswer` → `MultipleChoiceSelected` entries (0-based choice indices).
   - `ShortAnswerAnswer` → `text` field (student's text response).

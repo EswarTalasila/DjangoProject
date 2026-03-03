@@ -240,6 +240,7 @@ def list_mine(user_id: int, status: str | None) -> list[dict]:
     items = list(submissions.values())
     if status:
         items = [sub for sub in items if sub.status == status]
+    items.sort(key=lambda s: (s.submitted_at is None, s.submitted_at), reverse=True)
     return [submission_to_compact_dto(sub).model_dump() for sub in items]
 
 
@@ -331,12 +332,26 @@ def override_score(submission_id: int, scores: list) -> Submission:
     answers = list(submission.answers.all())
     total = 0.0
 
+    # Build a lookup for max_points per question so we can validate scores.
+    question_ids = [a.question_id for a in answers]
+    max_pts_map = dict(
+        Question.objects.filter(id__in=question_ids).values_list("id", "max_points")
+    )
+
+    def _validate_score(answer, score_val):
+        cap = max_pts_map.get(answer.question_id)
+        if cap is not None and score_val > cap:
+            raise ValueError(
+                f"Score {score_val} exceeds max points ({cap}) for question {answer.question_id}"
+            )
+
     # HYBRID mode: only manually score SHORT_ANSWER questions
     # Other question types (MCQ, NUMBER_SCALE) keep their auto-calculated scores
     if assessment.grading_mode == GradingMode.HYBRID:
         score_index = 0
         for answer in answers:
             if answer.answer_type == AnswerType.SHORT_ANSWER and score_index < len(scores):
+                _validate_score(answer, scores[score_index])
                 answer.score = scores[score_index]
                 score_index += 1
             total += answer.score or 0.0
@@ -347,6 +362,7 @@ def override_score(submission_id: int, scores: list) -> Submission:
         # MANUAL and other modes: apply scores to answers in order
         for idx, answer in enumerate(answers):
             if idx < len(scores):
+                _validate_score(answer, scores[idx])
                 answer.score = scores[idx]
             total += answer.score or 0.0
         # Extra scores beyond answer count are added as bonus
