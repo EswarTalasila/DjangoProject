@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { getSessionProfile, getSudoCapabilities } from "@/lib/auth-session";
 
-export type Role = "TEACHER" | "RESEARCHER" | "STUDENT";
+export type Role = "ADMIN" | "TEACHER" | "RESEARCHER" | "STUDENT";
 
 export type NavItem =
   | { type: "header"; label: string }
@@ -38,6 +38,29 @@ function groupNavItems(items: NavItem[]): NavGroup[] {
 }
 
 const NAV_BY_ROLE: Record<Role, NavItem[]> = {
+  ADMIN: [
+    { type: "header", label: "Overview" },
+    { type: "link", label: "Dashboard", href: "/dashboard" },
+
+    { type: "divider" },
+    { type: "header", label: "Assessments" },
+    { type: "link", label: "Assessments", href: "/dashboard/assessments" },
+    { type: "link", label: "Assignments", href: "/dashboard/assignments" },
+    { type: "link", label: "Rubrics", href: "/dashboard/rubrics" },
+
+    { type: "divider" },
+    { type: "header", label: "Courses" },
+    { type: "link", label: "All Courses", href: "/dashboard/courses" },
+
+    { type: "divider" },
+    { type: "header", label: "Users" },
+    { type: "link", label: "User Management", href: "/dashboard/staff" },
+
+    { type: "divider" },
+    { type: "header", label: "Registration" },
+    { type: "link", label: "Registration Codes", href: "/dashboard/codes" },
+  ],
+
   TEACHER: [
     { type: "header", label: "Overview" },
     { type: "link", label: "Dashboard", href: "/dashboard" },
@@ -50,11 +73,13 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "divider" },
     { type: "header", label: "Assessments" },
     { type: "link", label: "Assessments", href: "/dashboard/assessments" },
+    { type: "link", label: "Rubrics", href: "/dashboard/rubrics" },
 
     { type: "divider" },
     { type: "header", label: "Assignments & Grading" },
-    { type: "link", label: "Create Assignment", href: "/dashboard/teacher/assignments/create" },
-    { type: "link", label: "Gradebook", href: "/dashboard/teacher/gradebook" },
+    { type: "link", label: "Assignments", href: "/dashboard/assignments" },
+    { type: "link", label: "Create Assignment", href: "/dashboard/assignments/new" },
+    { type: "link", label: "Gradebook", href: "/dashboard/courses" },
   ],
 
   RESEARCHER: [
@@ -64,6 +89,8 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "divider" },
     { type: "header", label: "Assessments" },
     { type: "link", label: "Assessments", href: "/dashboard/assessments" },
+    { type: "link", label: "Assignments", href: "/dashboard/assignments" },
+    { type: "link", label: "Rubrics", href: "/dashboard/rubrics" },
 
     { type: "divider" },
     { type: "header", label: "Courses" },
@@ -101,7 +128,7 @@ export async function SidebarWrapper() {
   if (!profile) {
     redirect("/login");
   }
-  const userRole = profile.role as Role;
+  const userRole = (profile.isStaff ? "ADMIN" : profile.role) as Role;
 
   let items = [...(NAV_BY_ROLE[userRole] ?? NAV_BY_ROLE.STUDENT)];
 
