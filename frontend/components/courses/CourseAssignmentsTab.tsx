@@ -20,6 +20,12 @@ import {
 } from '@/lib/assignment-api';
 import { listAssessments } from '@/lib/assessment-api';
 
+type ApiError = { response?: { data?: { detail?: string } } };
+
+function extractDetail(error: unknown, fallback: string): string {
+  return (error as ApiError).response?.data?.detail || fallback;
+}
+
 type CourseAssignmentsTabProps = {
   courseId: number;
   userRole: 'TEACHER' | 'RESEARCHER' | 'STUDENT';
@@ -63,8 +69,10 @@ export default function CourseAssignmentsTab({
       setAssessmentTitleById(
         new Map(assessments.map((assessment) => [assessment.id, assessment.title])),
       );
-    } catch {
-      setLoadError('Failed to load assignments for this course.');
+    } catch (error: unknown) {
+      setLoadError(
+        extractDetail(error, 'Failed to load assignments for this course.'),
+      );
     } finally {
       setIsLoading(false);
     }
