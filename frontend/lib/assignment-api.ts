@@ -35,7 +35,7 @@ type Paginated<T> = {
 };
 
 export async function createAssignment(payload: AssignmentCreateInput): Promise<Assignment> {
-  const response = await api.post<Assignment>('/assignments', payload);
+  const response = await api.post<Assignment>('/assignments/', payload);
   return response.data;
 }
 
