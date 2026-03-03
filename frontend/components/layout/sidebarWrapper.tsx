@@ -57,6 +57,10 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "link", label: "User Management", href: "/dashboard/staff" },
 
     { type: "divider" },
+    { type: "header", label: "Analytics" },
+    { type: "link", label: "Visualizations", href: "/dashboard/visualizations" },
+
+    { type: "divider" },
     { type: "header", label: "Registration" },
     { type: "link", label: "Registration Codes", href: "/dashboard/codes" },
   ],
@@ -80,6 +84,10 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "link", label: "Assignments", href: "/dashboard/assignments" },
     { type: "link", label: "Create Assignment", href: "/dashboard/assignments/new" },
     { type: "link", label: "Gradebook", href: "/dashboard/courses" },
+
+    { type: "divider" },
+    { type: "header", label: "Analytics" },
+    { type: "link", label: "Visualizations", href: "/dashboard/visualizations" },
   ],
 
   RESEARCHER: [
@@ -99,6 +107,10 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "divider" },
     { type: "header", label: "Users" },
     { type: "link", label: "User Management", href: "/dashboard/staff" },
+
+    { type: "divider" },
+    { type: "header", label: "Analytics" },
+    { type: "link", label: "Visualizations", href: "/dashboard/visualizations" },
 
     { type: "divider" },
     { type: "header", label: "Exports" },
