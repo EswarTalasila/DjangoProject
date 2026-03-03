@@ -574,62 +574,99 @@ export default function AssignmentDetailView({
         {!assessmentTemplate || assessmentTemplate.questions.length === 0 ? (
           <p className="text-sm text-muted-foreground">No questions in this assignment template.</p>
         ) : previewMode === 'student' ? (
-          <div className="space-y-4">
-            <div className="rounded-sm border border-border bg-muted/10 px-4 py-3 flex items-center justify-between gap-3">
-              <p className="text-sm font-medium text-foreground">
-                Question {clampedStudentQuestionIndex + 1} of {flatQuestions.length}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Page {clampedStudentQuestionIndex + 1} / {flatQuestions.length}
+          <div className="rounded-sm border border-border bg-card overflow-hidden">
+            <div className="border-b border-border px-5 py-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Student Attempt Preview
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Question {clampedStudentQuestionIndex + 1} of {flatQuestions.length}
+                </p>
+              </div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Page {clampedStudentQuestionIndex + 1}/{flatQuestions.length}
               </p>
             </div>
 
-            {activeStudentQuestion && (
-              <div className="rounded-sm border border-border bg-muted/10 p-4 space-y-3">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
-                    Q{clampedStudentQuestionIndex + 1}. {activeStudentQuestion.prompt}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatQuestionKind(activeStudentQuestion.type)} •{' '}
-                    {formatPoints(activeStudentQuestion.maxPoints)} pts
-                  </p>
-                </div>
-                <StudentQuestionPreview question={activeStudentQuestion} />
-              </div>
-            )}
+            <div className="grid min-h-[620px] lg:grid-cols-[minmax(0,1fr)_280px]">
+              <section className="min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-border">
+                {activeStudentQuestion && (
+                  <>
+                    <div className="px-5 py-4 border-b border-border bg-muted/10">
+                      <p className="text-sm font-semibold text-foreground">
+                        Q{clampedStudentQuestionIndex + 1}. {activeStudentQuestion.prompt}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatQuestionKind(activeStudentQuestion.type)} •{' '}
+                        {formatPoints(activeStudentQuestion.maxPoints)} pts
+                      </p>
+                    </div>
 
-            <div className="flex items-center justify-between gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  setStudentQuestionIndex((prev) => Math.max(0, prev - 1))
-                }
-                disabled={clampedStudentQuestionIndex === 0}
-              >
-                Previous
-              </Button>
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    setStudentQuestionIndex((prev) =>
-                      Math.min(flatQuestions.length - 1, prev + 1),
-                    )
-                  }
-                  disabled={clampedStudentQuestionIndex >= flatQuestions.length - 1}
-                >
-                  Next
-                </Button>
-                <Button
-                  type="button"
-                  disabled={clampedStudentQuestionIndex < flatQuestions.length - 1}
-                >
-                  Submit (Preview)
-                </Button>
-              </div>
+                    <div className="min-h-0 flex-1 overflow-y-auto p-5">
+                      <div className="max-w-3xl">
+                        <StudentQuestionPreview question={activeStudentQuestion} />
+                      </div>
+                    </div>
+
+                    <div className="border-t border-border px-5 py-3 flex items-center justify-between gap-3 bg-card">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          setStudentQuestionIndex((prev) => Math.max(0, prev - 1))
+                        }
+                        disabled={clampedStudentQuestionIndex === 0}
+                      >
+                        Previous
+                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() =>
+                            setStudentQuestionIndex((prev) =>
+                              Math.min(flatQuestions.length - 1, prev + 1),
+                            )
+                          }
+                          disabled={clampedStudentQuestionIndex >= flatQuestions.length - 1}
+                        >
+                          Next
+                        </Button>
+                        <Button
+                          type="button"
+                          disabled={clampedStudentQuestionIndex < flatQuestions.length - 1}
+                        >
+                          Submit (Preview)
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </section>
+
+              <aside className="p-4 bg-muted/20 hidden lg:block">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                  Question Navigator
+                </p>
+                <div className="grid grid-cols-4 gap-2">
+                  {flatQuestions.map((_, idx) => {
+                    const isActive = idx === clampedStudentQuestionIndex;
+                    return (
+                      <Button
+                        key={`student-preview-nav-${idx}`}
+                        type="button"
+                        size="sm"
+                        variant={isActive ? 'default' : 'outline'}
+                        className="h-8 px-0"
+                        onClick={() => setStudentQuestionIndex(idx)}
+                      >
+                        Q{idx + 1}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </aside>
             </div>
           </div>
         ) : (
