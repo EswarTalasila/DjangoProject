@@ -211,25 +211,3 @@ class SubmissionCompactDTO(BaseModel):
     status: str
 
 
-# =============================================================================
-# Visualization DTOs
-# =============================================================================
-
-
-class VisualizationSubmissionDTO(BaseModel):
-    """Submission data for visualization dashboards with context."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    assignmentId: int
-    studentId: int | None
-    teacherId: int | None
-    submittedAt: datetime | None
-    score: float | None
-    status: str
-    answers: list[AnswerDTO]
-    courseId: int | None
-    courseName: str | None
-    assessmentTitle: str | None
-    assessmentCategory: str | None

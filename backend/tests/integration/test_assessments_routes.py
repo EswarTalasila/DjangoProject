@@ -6,7 +6,7 @@ Test IDs follow ASMT-UC-## convention from FR-06-Assessments.md spec.
 import pytest
 from django.utils import timezone
 
-from assessments.models import Assessment, GradingMode
+from assessments.models import Assessment, GradingMode, ScoringPolicy
 from assignments.models import Assignment
 from courses.models import Course
 
@@ -29,13 +29,14 @@ VALID_MCQ_PAYLOAD = {
 
 VALID_SHORT_ANSWER_PAYLOAD = {
     "title": "SA Assessment",
-    "gradingMode": "MANUAL",
+    "gradingMode": "HYBRID",
     "questions": [
         {
             "type": "SHORT_ANSWER",
             "prompt": "Explain",
             "maxPoints": 10,
             "data": {"trim": True, "caseSensitive": False},
+            "gradingStrategy": "AUTO",
         }
     ],
 }
@@ -74,6 +75,7 @@ class TestASMT_UC_01:
         data = resp.json()
         assert data["title"] == "Assessment A"
         assert data["gradingMode"] == "AUTO"
+        assert data["scoringPolicy"] == "STANDARD"
         assert len(data["questions"]) == 1
 
     def test_ASMT_UC_01_RESEARCHER(self, api_client, researcher_user):
@@ -98,19 +100,39 @@ class TestASMT_UC_01:
         resp = api_client.post("/api/v1/assessments/", VALID_MCQ_PAYLOAD, format="json")
         assert resp.status_code == 403
 
-    def test_ASMT_UC_01_MOOD_METER(self, api_client, admin_user):
-        """Mood meter auto-configures single question."""
+    def test_ASMT_UC_01_E4_invalid_grading_mode(self, api_client, admin_user):
+        """Unsupported grading mode is rejected with 400."""
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
             "/api/v1/assessments/",
-            {"title": "Mood Check", "gradingMode": "MOOD_METER", "questions": []},
+            {"title": "Bad Mode", "gradingMode": "INVALID_MODE", "questions": []},
             format="json",
         )
+        assert resp.status_code == 400
+
+    def test_ASMT_UC_01_completion_scoring_policy(self, api_client, admin_user):
+        """Assessment can be created with COMPLETION scoring policy."""
+        api_client.force_authenticate(user=admin_user)
+        payload = {
+            "title": "Participation Check",
+            "gradingMode": "HYBRID",
+            "scoringPolicy": "COMPLETION",
+            "questions": [
+                {
+                    "type": "SHORT_ANSWER",
+                    "prompt": "Any reflection",
+                    "maxPoints": 1,
+                    "data": {"trim": True, "caseSensitive": False},
+                    "gradingStrategy": "AUTO",
+                }
+            ],
+        }
+        resp = api_client.post("/api/v1/assessments/", payload, format="json")
         assert resp.status_code == 201
         data = resp.json()
-        assert data["gradingMode"] == "MOOD_METER"
-        assert len(data["questions"]) == 1
-        assert data["questions"][0]["prompt"] == "How are you feeling today?"
+        assert data["scoringPolicy"] == "COMPLETION"
+        created = Assessment.objects.get(id=data["id"])
+        assert created.scoring_policy == ScoringPolicy.COMPLETION
 
 
 # ===========================================================================
