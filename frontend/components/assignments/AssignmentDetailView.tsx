@@ -45,6 +45,7 @@ type StudentAttemptAnswer = {
   textResponse: string;
   numericResponse: number | null;
 };
+type StudentFlowStage = 'attempt' | 'submitted';
 
 function extractDetail(error: unknown, fallback: string): string {
   return (error as ApiError).response?.data?.detail || fallback;
@@ -117,6 +118,37 @@ function isQuestionAnswered(question: Question, answer: StudentAttemptAnswer): b
     return answer.numericResponse !== null;
   }
   return false;
+}
+
+function estimateAutoPoints(question: Question, answer: StudentAttemptAnswer): number | null {
+  if (question.type === 'MULTIPLE_CHOICE') {
+    const choices = question.data?.choices ?? [];
+    return answer.selectedChoiceIndexes.reduce((sum, idx) => sum + (choices[idx]?.score ?? 0), 0);
+  }
+  if (question.type === 'NUMBER_SCALE') {
+    const target = question.data?.target;
+    if (target == null || answer.numericResponse == null) return null;
+    return answer.numericResponse === target ? question.maxPoints : 0;
+  }
+  return null;
+}
+
+function renderStudentResponse(question: Question, answer: StudentAttemptAnswer): string {
+  if (question.type === 'MULTIPLE_CHOICE') {
+    const choices = question.data?.choices ?? [];
+    if (answer.selectedChoiceIndexes.length === 0) return 'No option selected';
+    const labels = answer.selectedChoiceIndexes
+      .map((idx) => choices[idx]?.prompt || `Choice ${idx + 1}`)
+      .filter(Boolean);
+    return labels.join(', ');
+  }
+  if (question.type === 'SHORT_ANSWER') {
+    return answer.textResponse.trim() || 'No response';
+  }
+  if (question.type === 'NUMBER_SCALE') {
+    return answer.numericResponse == null ? 'No value selected' : String(answer.numericResponse);
+  }
+  return 'No response';
 }
 
 function TeacherQuestionDetails({ question }: { question: Question }) {
@@ -252,6 +284,8 @@ export default function AssignmentDetailView({
   const [previewMode, setPreviewMode] = useState<PreviewMode>(
     viewerRole === 'STUDENT' ? 'student' : 'teacher',
   );
+  const [studentFlowStage, setStudentFlowStage] = useState<StudentFlowStage>('attempt');
+  const [studentSubmittedAt, setStudentSubmittedAt] = useState<Date | null>(null);
   const [studentQuestionIndex, setStudentQuestionIndex] = useState(0);
   const [studentAnswers, setStudentAnswers] = useState<Record<number, StudentAttemptAnswer>>(
     {},
@@ -365,8 +399,19 @@ export default function AssignmentDetailView({
     return answered;
   }, [flatQuestions, studentAnswers]);
 
+  const answeredCount = answeredQuestionIds.size;
+  const autoPointsEarned = useMemo(() => {
+    return flatQuestions.reduce((sum, question) => {
+      const answer = studentAnswers[question.questionId] ?? defaultStudentAnswer(question);
+      const points = estimateAutoPoints(question, answer);
+      return sum + (points ?? 0);
+    }, 0);
+  }, [flatQuestions, studentAnswers]);
+
   useEffect(() => {
     setStudentQuestionIndex(0);
+    setStudentFlowStage('attempt');
+    setStudentSubmittedAt(null);
   }, [assessmentTemplate?.id, previewMode]);
 
   useEffect(() => {
@@ -391,6 +436,11 @@ export default function AssignmentDetailView({
         [question.questionId]: updater(current),
       };
     });
+  }
+
+  function handleSubmitStudentPreview() {
+    setStudentFlowStage('submitted');
+    setStudentSubmittedAt(new Date());
   }
 
   async function handleUpdateAssignment() {
@@ -683,20 +733,66 @@ export default function AssignmentDetailView({
             <div className="border-b border-border px-5 py-3 flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-foreground">
-                  Student Attempt Preview
+                  {studentFlowStage === 'submitted' ? 'Submission Preview' : 'Student Attempt Preview'}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   Question {clampedStudentQuestionIndex + 1} of {flatQuestions.length}
                 </p>
               </div>
               <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                Page {clampedStudentQuestionIndex + 1}/{flatQuestions.length}
+                {studentFlowStage === 'submitted'
+                  ? `Submitted ${studentSubmittedAt ? studentSubmittedAt.toLocaleTimeString() : ''}`
+                  : `Page ${clampedStudentQuestionIndex + 1}/${flatQuestions.length}`}
               </p>
             </div>
 
             <div className="grid min-h-[620px] lg:grid-cols-[minmax(0,1fr)_280px]">
               <section className="min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-border">
-                {activeStudentQuestion && (
+                {studentFlowStage === 'submitted' ? (
+                  <div className="min-h-0 flex-1 overflow-y-auto p-5 space-y-4">
+                    <div className="rounded-sm border border-border bg-muted/10 p-4 grid gap-3 sm:grid-cols-3">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Answered</p>
+                        <p className="text-lg font-semibold text-foreground">
+                          {answeredCount}/{flatQuestions.length}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Auto Points (Preview)</p>
+                        <p className="text-lg font-semibold text-foreground">
+                          {formatPoints(autoPointsEarned)}/{formatPoints(totalPoints)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Status</p>
+                        <p className="text-lg font-semibold text-foreground">Submitted (Simulated)</p>
+                      </div>
+                    </div>
+
+                    {flatQuestions.map((question, idx) => {
+                      const answer = studentAnswers[question.questionId] ?? defaultStudentAnswer(question);
+                      const auto = estimateAutoPoints(question, answer);
+                      return (
+                        <div key={`submitted-${question.questionId}`} className="rounded-sm border border-border bg-card p-4 space-y-2">
+                          <p className="text-sm font-semibold text-foreground">
+                            Q{idx + 1}. {question.prompt}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatQuestionKind(question.type)} • {formatPoints(question.maxPoints)} pts
+                          </p>
+                          <p className="text-sm text-foreground">
+                            <span className="font-medium">Response:</span> {renderStudentResponse(question, answer)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {auto == null
+                              ? 'Manual grading required'
+                              : `Auto points preview: ${formatPoints(auto)} / ${formatPoints(question.maxPoints)}`}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : activeStudentQuestion ? (
                   <>
                     <div className="px-5 py-4 border-b border-border bg-muted/10">
                       <p className="text-sm font-semibold text-foreground">
@@ -779,18 +875,19 @@ export default function AssignmentDetailView({
                         <Button
                           type="button"
                           disabled={clampedStudentQuestionIndex < flatQuestions.length - 1}
+                          onClick={handleSubmitStudentPreview}
                         >
                           Submit (Preview)
                         </Button>
                       </div>
                     </div>
                   </>
-                )}
+                ) : null}
               </section>
 
               <aside className="p-4 bg-muted/20 hidden lg:block">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-                  Question Navigator
+                  {studentFlowStage === 'submitted' ? 'Submission Map' : 'Question Navigator'}
                 </p>
                 <div className="grid grid-cols-4 gap-2">
                   {flatQuestions.map((question, idx) => {
@@ -810,6 +907,16 @@ export default function AssignmentDetailView({
                     );
                   })}
                 </div>
+                {studentFlowStage === 'submitted' && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full mt-3"
+                    onClick={() => setStudentFlowStage('attempt')}
+                  >
+                    Return To Attempt
+                  </Button>
+                )}
               </aside>
             </div>
           </div>
