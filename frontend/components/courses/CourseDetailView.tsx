@@ -39,6 +39,7 @@ type CourseDetailViewProps = {
 export default function CourseDetailView({
   courseId,
   userRole,
+  userId,
 }: CourseDetailViewProps) {
   const canManage = userRole === 'TEACHER';
 
@@ -240,7 +241,11 @@ export default function CourseDetailView({
         <CourseRegistrationTab courseId={courseId} />
       )}
       {activeTab === 'assignments' && (
-        <CourseAssignmentsTab courseId={courseId} />
+        <CourseAssignmentsTab
+          courseId={courseId}
+          userRole={userRole}
+          userId={userId}
+        />
       )}
       {activeTab === 'gradebook' && canManage && (
         <CourseGradebookTab courseId={courseId} />

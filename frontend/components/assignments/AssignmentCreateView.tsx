@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -39,6 +39,7 @@ function toIsoOrNull(value: string): string | null {
 
 export default function AssignmentCreateView() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [courses, setCourses] = useState<CourseSummary[]>([]);
@@ -62,7 +63,13 @@ export default function AssignmentCreateView() {
         setAssessments(assessmentData);
         setCourses(courseData);
         setAssessmentId(String(assessmentData[0]?.id ?? ''));
-        setCourseId(String(courseData[0]?.id ?? ''));
+        const preferredCourseId = searchParams.get('courseId');
+        const hasPreferred =
+          preferredCourseId != null &&
+          courseData.some((course) => String(course.id) === preferredCourseId);
+        setCourseId(
+          hasPreferred ? preferredCourseId : String(courseData[0]?.id ?? ''),
+        );
 
         const now = new Date();
         const plusWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -79,7 +86,7 @@ export default function AssignmentCreateView() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [searchParams]);
 
   const canSubmit = useMemo(() => {
     return Boolean(assessmentId && courseId && openAt);
