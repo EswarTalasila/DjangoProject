@@ -79,6 +79,18 @@ class QuestionDTO(BaseModel):
     selectAll: bool | None = None
     min: int | None = None
     max: int | None = None
+    groupId: int | None = None
+    rubricId: int | None = None
+    gradingStrategy: str = "AUTO"
+
+
+class QuestionGroupDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    rubricId: int | None = None
+    orderIndex: int = 0
 
 
 class AssessmentDTO(BaseModel):
@@ -90,9 +102,48 @@ class AssessmentDTO(BaseModel):
     title: str
     category: str | None
     gradingMode: str
+    scoringPolicy: str = "STANDARD"
     questions: list[QuestionDTO]
-    rubricId: int | None
-    rubricAssessmentIds: list[int]
+    questionGroups: list[QuestionGroupDTO] = []
+
+
+# =============================================================================
+# Rubric DTOs
+# =============================================================================
+
+
+class RubricLevelDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    label: str
+    points: float
+    description: str
+    orderIndex: int
+
+
+class RubricCriterionDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    description: str
+    orderIndex: int
+    weight: float
+    levels: list[RubricLevelDTO]
+
+
+class RubricDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    description: str
+    status: str
+    createdBy: int
+    createdAt: datetime
+    updatedAt: datetime
+    criteria: list[RubricCriterionDTO]
 
 
 # =============================================================================
@@ -106,12 +157,14 @@ class AssignmentDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    title: str
     assessmentId: int
     audienceType: str
     courseId: int | None
     targetTeacherId: int | None
     openAt: datetime | None
     dueAt: datetime | None
+    status: str = "ACTIVE"
 
 
 # =============================================================================

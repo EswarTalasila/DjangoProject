@@ -43,6 +43,7 @@ export default function AssignmentCreateView() {
 
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [courses, setCourses] = useState<CourseSummary[]>([]);
+  const [title, setTitle] = useState('');
   const [assessmentId, setAssessmentId] = useState('');
   const [courseId, setCourseId] = useState('');
   const [openAt, setOpenAt] = useState('');
@@ -62,7 +63,9 @@ export default function AssignmentCreateView() {
 
         setAssessments(assessmentData);
         setCourses(courseData);
-        setAssessmentId(String(assessmentData[0]?.id ?? ''));
+        const firstAssessment = assessmentData[0];
+        setAssessmentId(String(firstAssessment?.id ?? ''));
+        setTitle(firstAssessment?.title ?? '');
         const preferredCourseId = searchParams.get('courseId');
         const hasPreferred =
           preferredCourseId != null &&
@@ -89,8 +92,16 @@ export default function AssignmentCreateView() {
   }, [searchParams]);
 
   const canSubmit = useMemo(() => {
-    return Boolean(assessmentId && courseId && openAt);
-  }, [assessmentId, courseId, openAt]);
+    return Boolean(title.trim() && assessmentId && courseId && openAt);
+  }, [title, assessmentId, courseId, openAt]);
+
+  function handleAssessmentChange(nextAssessmentId: string) {
+    setAssessmentId(nextAssessmentId);
+    const selected = assessments.find((assessment) => String(assessment.id) === nextAssessmentId);
+    if (selected) {
+      setTitle(selected.title);
+    }
+  }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -110,6 +121,7 @@ export default function AssignmentCreateView() {
     setIsSubmitting(true);
     try {
       const created = await createAssignment({
+        title: title.trim(),
         assessmentId: Number(assessmentId),
         audienceType: 'COURSE',
         courseId: Number(courseId),
@@ -150,8 +162,18 @@ export default function AssignmentCreateView() {
 
       <form onSubmit={handleSubmit} className="rounded-sm border border-border bg-card p-6 space-y-4">
         <div className="space-y-2">
+          <Label htmlFor="assignment-title">Assignment Title</Label>
+          <Input
+            id="assignment-title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="e.g. Week 3 Check-In"
+          />
+        </div>
+
+        <div className="space-y-2">
           <Label htmlFor="assessment-id">Assessment</Label>
-          <Select value={assessmentId} onValueChange={setAssessmentId}>
+          <Select value={assessmentId} onValueChange={handleAssessmentChange}>
             <SelectTrigger id="assessment-id">
               <SelectValue placeholder="Select assessment" />
             </SelectTrigger>

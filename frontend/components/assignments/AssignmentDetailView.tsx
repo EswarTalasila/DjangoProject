@@ -26,8 +26,9 @@ import {
   getAssignment,
   updateAssignment,
   type Assignment,
+  type AssignmentUpdateInput,
 } from '@/lib/assignment-api';
-import { listAssessments } from '@/lib/assessment-api';
+import { getAssessment, type Assessment, type Question } from '@/lib/assessment-api';
 import { listCourses } from '@/lib/course-api';
 
 type ApiError = { response?: { data?: { detail?: string }; status?: number } };
@@ -36,6 +37,8 @@ type AssignmentDetailViewProps = {
   assignmentId: number;
   canMutate: boolean;
 };
+
+type PreviewMode = 'teacher' | 'student';
 
 function extractDetail(error: unknown, fallback: string): string {
   return (error as ApiError).response?.data?.detail || fallback;
@@ -63,14 +66,122 @@ function formatDate(value: string | null): string {
   return date.toLocaleString();
 }
 
+function formatQuestionKind(kind: Question['type']): string {
+  switch (kind) {
+    case 'MULTIPLE_CHOICE':
+      return 'Multiple Choice';
+    case 'SHORT_ANSWER':
+      return 'Short Answer';
+    case 'NUMBER_SCALE':
+      return 'Number Scale';
+    default:
+      return kind;
+  }
+}
+
+function formatPoints(value: number): string {
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function TeacherQuestionDetails({ question }: { question: Question }) {
+  const data = question.data;
+
+  if (question.type === 'MULTIPLE_CHOICE' && data?.choices?.length) {
+    return (
+      <div className="space-y-1">
+        <p className="text-xs text-muted-foreground">
+          {data.selectAll ? 'Select all that apply' : 'Single correct option'}
+        </p>
+        <ol className="list-decimal list-inside space-y-1">
+          {data.choices.map((choice, idx) => (
+            <li key={`${choice.prompt}-${idx}`} className="text-sm text-foreground">
+              {choice.prompt || '(empty choice)'}{' '}
+              <span className="text-muted-foreground">• {formatPoints(choice.score)} pts</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+    );
+  }
+
+  if (question.type === 'SHORT_ANSWER') {
+    return (
+      <div className="text-xs text-muted-foreground space-y-1">
+        <p>Trim whitespace: {data?.trim === false ? 'Off' : 'On'}</p>
+        <p>Case sensitive: {data?.caseSensitive ? 'On' : 'Off'}</p>
+      </div>
+    );
+  }
+
+  if (question.type === 'NUMBER_SCALE') {
+    const min = data?.min ?? question.min;
+    const max = data?.max ?? question.max;
+    return (
+      <p className="text-xs text-muted-foreground">
+        Range: {min ?? '?'} to {max ?? '?'}
+      </p>
+    );
+  }
+
+  return null;
+}
+
+function StudentQuestionPreview({ question }: { question: Question }) {
+  const data = question.data;
+
+  if (question.type === 'MULTIPLE_CHOICE') {
+    return (
+      <div className="space-y-2">
+        {(data?.choices ?? []).map((choice, idx) => (
+          <label
+            key={`${choice.prompt}-${idx}`}
+            className="flex items-center gap-2 rounded border border-border bg-muted/20 px-3 py-2 text-sm"
+          >
+            <input type="radio" disabled />
+            <span>{choice.prompt || '(empty choice)'}</span>
+          </label>
+        ))}
+      </div>
+    );
+  }
+
+  if (question.type === 'SHORT_ANSWER') {
+    return (
+      <textarea
+        className="w-full min-h-24 rounded border border-border bg-muted/20 px-3 py-2 text-sm text-muted-foreground"
+        placeholder="Student response appears here..."
+        disabled
+      />
+    );
+  }
+
+  if (question.type === 'NUMBER_SCALE') {
+    const min = data?.min ?? question.min ?? 1;
+    const max = data?.max ?? question.max ?? 10;
+    return (
+      <div className="space-y-2">
+        <input type="range" min={min} max={max} disabled className="w-full" />
+        <p className="text-xs text-muted-foreground">
+          Student selects a value between {min} and {max}.
+        </p>
+      </div>
+    );
+  }
+
+  return <p className="text-sm text-muted-foreground">Preview unavailable for this question type.</p>;
+}
+
 export default function AssignmentDetailView({ assignmentId, canMutate }: AssignmentDetailViewProps) {
   const router = useRouter();
 
   const [assignment, setAssignment] = useState<Assignment | null>(null);
-  const [assessmentTitle, setAssessmentTitle] = useState<string>('');
+  const [assessmentTemplate, setAssessmentTemplate] = useState<Assessment | null>(null);
   const [courseName, setCourseName] = useState<string>('');
+  const [titleInput, setTitleInput] = useState('');
   const [openAtInput, setOpenAtInput] = useState('');
   const [dueAtInput, setDueAtInput] = useState('');
+  const [previewMode, setPreviewMode] = useState<PreviewMode>(canMutate ? 'teacher' : 'student');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -80,18 +191,19 @@ export default function AssignmentDetailView({ assignmentId, canMutate }: Assign
   const load = useCallback(async () => {
     setLoadError(null);
     try {
-      const [item, assessments, courses] = await Promise.all([
-        getAssignment(assignmentId),
-        listAssessments().catch(() => []),
+      const item = await getAssignment(assignmentId);
+      const [template, courses] = await Promise.all([
+        getAssessment(item.assessmentId).catch(() => null),
         listCourses().catch(() => []),
       ]);
+
       setAssignment(item);
+      setAssessmentTemplate(template);
+      setTitleInput(item.title || template?.title || `Assignment #${item.id}`);
       setOpenAtInput(toLocalInputValue(item.openAt));
       setDueAtInput(toLocalInputValue(item.dueAt));
 
-      const aTitle = assessments.find((a) => a.id === item.assessmentId)?.title;
       const cName = courses.find((c) => c.id === item.courseId)?.name;
-      setAssessmentTitle(aTitle ?? `Assessment #${item.assessmentId}`);
       setCourseName(cName ?? (item.courseId ? `Course #${item.courseId}` : '-'));
     } catch {
       setLoadError('Failed to load assignment.');
@@ -105,12 +217,62 @@ export default function AssignmentDetailView({ assignmentId, canMutate }: Assign
     void load();
   }, [load]);
 
-  const canEditSchedule = useMemo(() => {
+  const canEditAssignment = useMemo(() => {
     return canMutate && assignment?.status === 'ACTIVE';
   }, [assignment?.status, canMutate]);
 
-  async function handleUpdateSchedule() {
+  const groupedQuestionBuckets = useMemo(() => {
+    if (!assessmentTemplate) {
+      return [] as Array<{
+        key: string;
+        title: string;
+        questions: Question[];
+      }>;
+    }
+
+    const byGroupId = new Map<number, Question[]>();
+    const ungrouped: Question[] = [];
+
+    for (const question of assessmentTemplate.questions) {
+      if (question.groupId != null) {
+        const arr = byGroupId.get(question.groupId) ?? [];
+        arr.push(question);
+        byGroupId.set(question.groupId, arr);
+      } else {
+        ungrouped.push(question);
+      }
+    }
+
+    const buckets: Array<{ key: string; title: string; questions: Question[] }> = [];
+
+    for (const group of [...assessmentTemplate.questionGroups].sort((a, b) => a.orderIndex - b.orderIndex)) {
+      buckets.push({
+        key: `group-${group.id}`,
+        title: group.name,
+        questions: byGroupId.get(group.id) ?? [],
+      });
+    }
+
+    if (ungrouped.length > 0 || buckets.length === 0) {
+      buckets.push({ key: 'ungrouped', title: 'Ungrouped', questions: ungrouped });
+    }
+
+    return buckets;
+  }, [assessmentTemplate]);
+
+  const totalPoints = useMemo(() => {
+    if (!assessmentTemplate) return 0;
+    return assessmentTemplate.questions.reduce((sum, q) => sum + q.maxPoints, 0);
+  }, [assessmentTemplate]);
+
+  async function handleUpdateAssignment() {
     if (!assignment) return;
+
+    const trimmedTitle = titleInput.trim();
+    if (!trimmedTitle) {
+      toast.error('Assignment title cannot be empty.');
+      return;
+    }
 
     const openIso = toIsoOrNull(openAtInput);
     const dueIso = toIsoOrNull(dueAtInput);
@@ -124,16 +286,20 @@ export default function AssignmentDetailView({ assignmentId, canMutate }: Assign
       return;
     }
 
+    const payload: AssignmentUpdateInput = {
+      title: trimmedTitle,
+      openAt: openIso,
+      dueAt: dueIso,
+    };
+
     setIsUpdating(true);
     try {
-      const updated = await updateAssignment(assignment.id, {
-        openAt: openIso,
-        dueAt: dueIso,
-      });
+      const updated = await updateAssignment(assignment.id, payload);
       setAssignment(updated);
+      setTitleInput(updated.title || trimmedTitle);
       setOpenAtInput(toLocalInputValue(updated.openAt));
       setDueAtInput(toLocalInputValue(updated.dueAt));
-      toast.success('Assignment schedule updated.');
+      toast.success('Assignment updated.');
     } catch (error: unknown) {
       toast.error(extractDetail(error, 'Failed to update assignment.'));
     } finally {
@@ -195,7 +361,7 @@ export default function AssignmentDetailView({ assignmentId, canMutate }: Assign
   }
 
   return (
-    <div className="space-y-6 p-6 max-w-5xl mx-auto">
+    <div className="space-y-6 p-6 max-w-6xl mx-auto">
       <Link
         href="/dashboard/assignments"
         className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
@@ -206,25 +372,57 @@ export default function AssignmentDetailView({ assignmentId, canMutate }: Assign
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Assignment #{assignment.id}</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            {assignment.title || `Assignment #${assignment.id}`}
+          </h1>
           <p className="text-muted-foreground mt-1">
-            {assessmentTitle} • {courseName}
+            {assessmentTemplate?.title ?? `Assessment #${assignment.assessmentId}`} • {courseName}
           </p>
         </div>
-        <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded text-xs font-medium">
-          {assignment.status}
-        </span>
+        <div className="flex items-center gap-2">
+          {canMutate && (
+            <div className="rounded border border-border p-1 flex items-center gap-1 bg-card">
+              <Button
+                type="button"
+                size="sm"
+                variant={previewMode === 'teacher' ? 'default' : 'ghost'}
+                onClick={() => setPreviewMode('teacher')}
+              >
+                Teacher View
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={previewMode === 'student' ? 'default' : 'ghost'}
+                onClick={() => setPreviewMode('student')}
+              >
+                Student View
+              </Button>
+            </div>
+          )}
+          <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded text-xs font-medium">
+            {assignment.status}
+          </span>
+        </div>
       </div>
 
       <div className="rounded-sm border border-border bg-card p-6 space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Assessment</p>
-            <p className="text-sm text-foreground">{assessmentTitle}</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Template</p>
+            <p className="text-sm text-foreground">{assessmentTemplate?.title ?? '-'}</p>
           </div>
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Course</p>
             <p className="text-sm text-foreground">{courseName}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Questions</p>
+            <p className="text-sm text-foreground">{assessmentTemplate?.questions.length ?? 0}</p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Points</p>
+            <p className="text-sm text-foreground">{formatPoints(totalPoints)}</p>
           </div>
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Open At</p>
@@ -241,6 +439,16 @@ export default function AssignmentDetailView({ assignmentId, canMutate }: Assign
         <div className="rounded-sm border border-border bg-card p-6 space-y-4">
           <h2 className="text-lg font-semibold text-foreground">Manage Assignment</h2>
 
+          <div className="space-y-2">
+            <Label htmlFor="assignment-title">Assignment Title</Label>
+            <Input
+              id="assignment-title"
+              value={titleInput}
+              onChange={(event) => setTitleInput(event.target.value)}
+              disabled={!canEditAssignment || isUpdating}
+            />
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="open-at">Open At</Label>
@@ -249,7 +457,7 @@ export default function AssignmentDetailView({ assignmentId, canMutate }: Assign
                 type="datetime-local"
                 value={openAtInput}
                 onChange={(event) => setOpenAtInput(event.target.value)}
-                disabled={!canEditSchedule || isUpdating}
+                disabled={!canEditAssignment || isUpdating}
               />
             </div>
             <div className="space-y-2">
@@ -259,15 +467,15 @@ export default function AssignmentDetailView({ assignmentId, canMutate }: Assign
                 type="datetime-local"
                 value={dueAtInput}
                 onChange={(event) => setDueAtInput(event.target.value)}
-                disabled={!canEditSchedule || isUpdating}
+                disabled={!canEditAssignment || isUpdating}
               />
             </div>
           </div>
 
           <div className="flex items-center gap-3 flex-wrap">
-            <Button onClick={() => void handleUpdateSchedule()} disabled={!canEditSchedule || isUpdating}>
+            <Button onClick={() => void handleUpdateAssignment()} disabled={!canEditAssignment || isUpdating}>
               {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save Schedule
+              Save Changes
             </Button>
 
             <AlertDialog>
@@ -331,6 +539,62 @@ export default function AssignmentDetailView({ assignmentId, canMutate }: Assign
           </div>
         </div>
       )}
+
+      <div className="rounded-sm border border-border bg-card p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground">Assignment Content</h2>
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">
+            {previewMode === 'teacher' ? 'Teacher template view' : 'Student preview'}
+          </span>
+        </div>
+
+        {!assessmentTemplate || assessmentTemplate.questions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No questions in this assignment template.</p>
+        ) : (
+          <div className="space-y-4">
+            {groupedQuestionBuckets.map((bucket) => (
+              <div key={bucket.key} className="rounded-sm border border-border p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">
+                    {bucket.title}
+                  </h3>
+                  <span className="text-xs text-muted-foreground">
+                    {bucket.questions.length} question(s)
+                  </span>
+                </div>
+
+                {bucket.questions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No questions in this group.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {bucket.questions.map((question, index) => (
+                      <div key={question.questionId} className="rounded-sm border border-border bg-muted/10 p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">
+                              Q{index + 1}. {question.prompt}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatQuestionKind(question.type)} • {formatPoints(question.maxPoints)} pts
+                              {previewMode === 'teacher' ? ` • Grading: ${question.gradingStrategy}` : ''}
+                            </p>
+                          </div>
+                        </div>
+
+                        {previewMode === 'teacher' ? (
+                          <TeacherQuestionDetails question={question} />
+                        ) : (
+                          <StudentQuestionPreview question={question} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -8,21 +8,23 @@ from django.utils import timezone
 from accounts.models import Role, User
 from core.dtos import AssignmentDTO
 from core.permissions import primary_role
-from courses.models import Enrollment
+from courses.models import Course, Enrollment
 
-from ..models import Assignment
+from ..models import Assignment, AssignmentStatus
 
 
 def assignment_to_dto(assignment: Assignment) -> AssignmentDTO:
     """Convert an Assignment to a DTO for API responses."""
     return AssignmentDTO(
         id=assignment.id,
+        title=(assignment.title or assignment.assessment.title),
         assessmentId=assignment.assessment_id,
         audienceType=assignment.audience_type,
         courseId=assignment.course_id,
         targetTeacherId=assignment.teacher_id,
         openAt=assignment.open_at,
         dueAt=assignment.due_at,
+        status=assignment.status,
     )
 
 
@@ -32,7 +34,7 @@ def get_assignment(assignment_id: int) -> Assignment | None:
 
 
 def list_by_course(course_id: int) -> list[Assignment]:
-    """List all assignments for a course."""
+    """List all assignments for a course (both ACTIVE and ARCHIVED)."""
     return list(Assignment.objects.filter(course_id=course_id))
 
 
@@ -40,11 +42,8 @@ def list_for_user(user: User) -> list[Assignment]:
     """
     List assignments accessible to a user based on their role.
 
-    Students see assignments for courses they're enrolled in.
-    Teachers see assignments targeted at them (self-assessments).
-
-    Only returns assignments that are currently open (open_at <= now)
-    and not past due (due_at is null or due_at >= now).
+    Students see ACTIVE assignments from enrolled courses within the time window.
+    Teachers see assignments they created.
     """
     role = primary_role(user)
     now = timezone.now()
@@ -52,14 +51,17 @@ def list_for_user(user: User) -> list[Assignment]:
         enrollments = Enrollment.objects.filter(student_profile__user=user)
         course_ids = [enrollment.course_id for enrollment in enrollments]
         return list(
-            Assignment.objects.filter(course_id__in=course_ids, open_at__lte=now)
+            Assignment.objects.filter(
+                course_id__in=course_ids,
+                open_at__lte=now,
+                status=AssignmentStatus.ACTIVE,
+            )
             .filter(Q(due_at__isnull=True) | Q(due_at__gte=now))
             .order_by("open_at")
         )
     if role == Role.TEACHER:
         return list(
-            Assignment.objects.filter(teacher_id=user.id, open_at__lte=now)
-            .filter(Q(due_at__isnull=True) | Q(due_at__gte=now))
-            .order_by("open_at")
+            Assignment.objects.filter(created_by=user).order_by("open_at")
         )
+    # ADMIN/RESEARCHER viewing own assignments — return empty (they use cross-user endpoint)
     return []

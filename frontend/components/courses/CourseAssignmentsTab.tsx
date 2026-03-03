@@ -119,7 +119,10 @@ export default function CourseAssignmentsTab({
             <TableHeader>
               <TableRow className="bg-muted border-b border-border">
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Assessment
+                  Assignment
+                </TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Template
                 </TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Status
@@ -142,6 +145,9 @@ export default function CourseAssignmentsTab({
                   }
                 >
                   <TableCell className="font-medium text-sm text-foreground">
+                    {assignment.title}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
                     {assessmentTitleById.get(assignment.assessmentId) ??
                       `Assessment #${assignment.assessmentId}`}
                   </TableCell>

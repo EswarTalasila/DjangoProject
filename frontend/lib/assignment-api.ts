@@ -5,6 +5,7 @@ export type AssignmentStatus = 'ACTIVE' | 'ARCHIVED';
 
 export type Assignment = {
   id: number;
+  title: string;
   assessmentId: number;
   audienceType: AudienceType;
   courseId: number | null;
@@ -15,6 +16,7 @@ export type Assignment = {
 };
 
 export type AssignmentCreateInput = {
+  title?: string;
   assessmentId: number;
   audienceType: 'COURSE';
   courseId: number;
@@ -23,6 +25,7 @@ export type AssignmentCreateInput = {
 };
 
 export type AssignmentUpdateInput = {
+  title?: string;
   openAt?: string;
   dueAt?: string | null;
 };

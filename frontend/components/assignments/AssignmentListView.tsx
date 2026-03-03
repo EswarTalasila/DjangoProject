@@ -114,10 +114,12 @@ export default function AssignmentListView({ role, userId, canCreate }: Assignme
     const needle = searchQuery.trim().toLowerCase();
     if (!needle) return assignments;
     return assignments.filter((assignment) => {
+      const assignmentTitle = assignment.title.toLowerCase();
       const assessmentTitle = assessmentMap.get(assignment.assessmentId)?.title?.toLowerCase() ?? '';
       const courseName =
         courses.find((course) => course.id === assignment.courseId)?.name.toLowerCase() ?? '';
       return (
+        assignmentTitle.includes(needle) ||
         assessmentTitle.includes(needle) ||
         courseName.includes(needle) ||
         assignment.status.toLowerCase().includes(needle)
@@ -190,7 +192,10 @@ export default function AssignmentListView({ role, userId, canCreate }: Assignme
             <TableHeader>
               <TableRow className="bg-muted border-b border-border">
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Assessment
+                  Assignment
+                </TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Template
                 </TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Course
@@ -209,7 +214,8 @@ export default function AssignmentListView({ role, userId, canCreate }: Assignme
             <TableBody>
               {filtered.map((assignment) => {
                 const assessmentTitle =
-                  assessmentMap.get(assignment.assessmentId)?.title ?? `Assessment #${assignment.assessmentId}`;
+                  assessmentMap.get(assignment.assessmentId)?.title ??
+                  `Assessment #${assignment.assessmentId}`;
                 const courseName =
                   courses.find((course) => course.id === assignment.courseId)?.name ?? '-';
 
@@ -219,7 +225,10 @@ export default function AssignmentListView({ role, userId, canCreate }: Assignme
                     className="even:bg-muted/50 hover:bg-accent transition-colors cursor-pointer"
                     onClick={() => router.push(`/dashboard/assignments/${assignment.id}`)}
                   >
-                    <TableCell className="font-medium text-sm text-foreground">{assessmentTitle}</TableCell>
+                    <TableCell className="font-medium text-sm text-foreground">
+                      {assignment.title}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{assessmentTitle}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{courseName}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{assignment.status}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{formatDate(assignment.openAt)}</TableCell>
