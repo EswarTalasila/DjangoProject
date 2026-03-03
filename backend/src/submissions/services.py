@@ -8,9 +8,7 @@ This module provides business logic for managing submissions including:
 - Converting submissions to DTOs for API responses
 
 Submission lifecycle:
-1. IN_PROGRESS - Student has started but not submitted
-2. SUBMITTED - Student has submitted, awaiting grading
-3. GRADED - Submission has been scored (auto or manual)
+    NOT_STARTED -> IN_PROGRESS -> SUBMITTED -> GRADED
 """
 
 from collections.abc import Iterable
@@ -18,14 +16,13 @@ from collections.abc import Iterable
 from django.db import transaction
 from django.utils import timezone
 
-from assessments.models import Assessment, GradingMode, Question
-from assignments.models import Assignment, AudienceType
+from assessments.models import Assessment, GradingMode, Question, ScoringPolicy
+from assignments.models import Assignment
 from core.dtos import AnswerDTO, SubmissionCompactDTO, SubmissionDTO
 
 from .models import (
     Answer,
     AnswerType,
-    MoodMeterAnswer,
     MultipleChoiceAnswer,
     MultipleChoiceSelected,
     NumberScaleAnswer,
@@ -33,6 +30,14 @@ from .models import (
     Submission,
     SubmissionStatus,
 )
+
+# Valid forward transitions in the submission state machine (SUB-CN-01).
+_VALID_TRANSITIONS: dict[str, set[str]] = {
+    SubmissionStatus.NOT_STARTED: {SubmissionStatus.IN_PROGRESS, SubmissionStatus.SUBMITTED},
+    SubmissionStatus.IN_PROGRESS: {SubmissionStatus.IN_PROGRESS, SubmissionStatus.SUBMITTED},
+    SubmissionStatus.SUBMITTED: {SubmissionStatus.GRADED},
+    SubmissionStatus.GRADED: set(),
+}
 
 
 def submission_to_dto(submission: Submission) -> SubmissionDTO:
@@ -89,7 +94,6 @@ def answer_to_dto(answer: Answer) -> AnswerDTO:
     - MULTIPLE_CHOICE: {"selected": [int indices]}
     - SHORT_ANSWER: {"text": str}
     - NUMBER_SCALE: {"val": int}
-    - MOOD_METER: {"row": int, "col": int}
 
     Args:
         answer: The Answer model instance
@@ -105,8 +109,6 @@ def answer_to_dto(answer: Answer) -> AnswerDTO:
         data = {"text": answer.short_answer.text}
     elif answer.answer_type == AnswerType.NUMBER_SCALE:
         data = {"val": answer.number_scale.val}
-    elif answer.answer_type == AnswerType.MOOD_METER:
-        data = {"row": answer.mood_meter.row, "col": answer.mood_meter.col}
     else:
         data = {}
     return AnswerDTO(
@@ -118,26 +120,14 @@ def answer_to_dto(answer: Answer) -> AnswerDTO:
 
 
 @transaction.atomic
-def create_submission(assignment_id: int, payload: dict, status: str) -> Submission:
+def create_submission(assignment_id: int, payload: dict, target_status: str) -> Submission:
     """
-    Create a new submission for an assignment.
+    Create or update a submission for an assignment.
 
-    Handles the complexity of submission creation:
-    - For non-MOOD_METER assessments, updates existing submission if one exists
-    - For MOOD_METER assessments, always creates a new submission (allows multiple)
-    - Auto-scores if the assessment grading mode is AUTO or MOOD_METER
-    - Sets submitted_at timestamp if status is not IN_PROGRESS
+    If a submission already exists for this student+assignment, delegates to
+    edit_submission. Otherwise creates a new Submission.
 
-    Args:
-        assignment_id: The assignment being submitted to
-        payload: Dict with studentId/teacherId, answers, and optional submittedAt
-        status: The submission status (IN_PROGRESS, SUBMITTED, etc.)
-
-    Returns:
-        The created or updated Submission
-
-    Raises:
-        ValueError: If assignment or assessment not found
+    State machine enforced (SUB-CN-01). submitted_at only set at SUBMITTED+.
     """
     assignment = Assignment.objects.filter(id=assignment_id).first()
     if not assignment:
@@ -149,78 +139,30 @@ def create_submission(assignment_id: int, payload: dict, status: str) -> Submiss
     student_id = payload.get("studentId")
     teacher_id = payload.get("teacherId")
 
-    # MOOD_METER assessments allow multiple submissions (e.g., daily check-ins)
-    # Other assessments update the existing submission if one exists
-    if assessment.grading_mode != GradingMode.MOOD_METER:
-        existing = _find_existing_submission(assignment_id, student_id, teacher_id)
-        if existing:
-            payload_with_status = dict(payload)
-            payload_with_status["status"] = status
-            return edit_submission(payload_with_status)
+    existing = _find_existing_submission(assignment_id, student_id, teacher_id)
+    if existing:
+        payload_with_status = dict(payload)
+        payload_with_status["status"] = target_status
+        return edit_submission(payload_with_status)
 
-    submitted_at = payload.get("submittedAt")
-    if not submitted_at and status != SubmissionStatus.IN_PROGRESS:
-        submitted_at = timezone.now()
+    # Only set submitted_at for SUBMITTED or beyond
+    submitted_at = None
+    if target_status in (SubmissionStatus.SUBMITTED, SubmissionStatus.GRADED):
+        submitted_at = payload.get("submittedAt") or timezone.now()
 
     submission = Submission.objects.create(
         assignment=assignment,
         student_id=student_id,
         teacher_id=teacher_id,
         submitted_at=submitted_at,
-        status=status,
+        status=target_status,
     )
     _replace_answers(submission, payload.get("answers") or [])
-    if status != SubmissionStatus.IN_PROGRESS and assessment.grading_mode != GradingMode.MANUAL:
+    if target_status != SubmissionStatus.IN_PROGRESS and (
+        assessment.scoring_policy == ScoringPolicy.COMPLETION
+        or assessment.grading_mode != GradingMode.MANUAL
+    ):
         _auto_score_submission(submission, assessment)
-    submission.save()
-    return submission
-
-
-@transaction.atomic
-def submit_teacher_self_assessment(
-    creator_user_id: int,
-    assessment_id: int,
-    answers: list,
-) -> Submission:
-    """
-    Create a self-assessment submission for a teacher.
-
-    Teachers can submit assessments about themselves (e.g., self-reflection).
-    This creates a special assignment with TEACHER audience type and immediately
-    creates the submission.
-
-    Args:
-        creator_user_id: The teacher's user ID
-        assessment_id: The assessment template to use
-        answers: List of answer payloads
-
-    Returns:
-        The created Submission
-
-    Raises:
-        ValueError: If assessment not found
-    """
-    assessment = Assessment.objects.filter(id=assessment_id).first()
-    if not assessment:
-        raise ValueError("Assessment not found")
-
-    assignment = Assignment.objects.create(
-        assessment_id=assessment_id,
-        audience_type=AudienceType.TEACHER,
-        course_id=None,
-        teacher_id=creator_user_id,
-        created_by_id=creator_user_id,
-        open_at=timezone.now(),
-        due_at=None,
-    )
-
-    submission = Submission.objects.create(
-        assignment=assignment,
-        teacher_id=creator_user_id,
-        submitted_at=timezone.now(),
-        status=SubmissionStatus.SUBMITTED,
-    )
-    _replace_answers(submission, answers)
     submission.save()
     return submission
 
@@ -252,11 +194,6 @@ def get_by_assignment(assignment_id: int) -> list[Submission]:
 def get_by_student(student_id: int) -> list[Submission]:
     """Get all submissions by a student across all assignments."""
     return list(Submission.objects.filter(student_id=student_id))
-
-
-def get_by_teacher(teacher_id: int) -> list[Submission]:
-    """Get all submissions by a teacher (self-assessments)."""
-    return list(Submission.objects.filter(teacher_id=teacher_id))
 
 
 def get_by_student_and_assignment(student_id: int, assignment_id: int) -> Submission:
@@ -314,14 +251,8 @@ def edit_submission(payload: dict) -> Submission:
     Finds the submission by assignment and student/teacher ID, replaces all
     answers with the new ones, and re-runs auto-scoring if applicable.
 
-    Args:
-        payload: Dict with assignmentId, studentId/teacherId, answers, and optionally score/status
-
-    Returns:
-        The updated Submission
-
-    Raises:
-        ValueError: If submission not found
+    State machine enforced: only forward transitions allowed (SUB-CN-01).
+    submitted_at only set when transitioning to SUBMITTED or beyond.
     """
     assignment_id = payload.get("assignmentId")
     student_id = payload.get("studentId")
@@ -332,17 +263,26 @@ def edit_submission(payload: dict) -> Submission:
     if not submission:
         raise ValueError("Submission not found")
 
-    submission.submitted_at = timezone.now()
+    new_status = payload.get("status") or submission.status
+    _validate_transition(submission.status, new_status)
+
+    submission.status = new_status
     submission.score = payload.get("score")
-    status = payload.get("status") or submission.status
-    submission.status = status
+
+    # Only set submitted_at when reaching SUBMITTED or beyond
+    if new_status in (SubmissionStatus.SUBMITTED, SubmissionStatus.GRADED) and not submission.submitted_at:
+        submission.submitted_at = timezone.now()
+
     _replace_answers(submission, payload.get("answers") or [])
 
     assessment = Assessment.objects.filter(id=submission.assignment.assessment_id).first()
     if (
         assessment
-        and status != SubmissionStatus.IN_PROGRESS
-        and assessment.grading_mode != GradingMode.MANUAL
+        and new_status != SubmissionStatus.IN_PROGRESS
+        and (
+            assessment.scoring_policy == ScoringPolicy.COMPLETION
+            or assessment.grading_mode != GradingMode.MANUAL
+        )
     ):
         _auto_score_submission(submission, assessment)
 
@@ -356,7 +296,6 @@ def override_score(submission_id: int, scores: list) -> Submission:
     Manually override scores for a submission (teacher grading).
 
     Handles three grading modes differently:
-    - MOOD_METER: Just marks as graded (no actual scores)
     - HYBRID: Only scores SHORT_ANSWER questions manually, others keep auto-scores
     - MANUAL/other: Applies scores to all answers in order
 
@@ -384,17 +323,13 @@ def override_score(submission_id: int, scores: list) -> Submission:
     assessment = Assessment.objects.filter(id=submission.assignment.assessment_id).first()
     if not assessment:
         raise ValueError("Assessment not found")
+    if assessment.scoring_policy == ScoringPolicy.COMPLETION:
+        raise ValueError(
+            "Completion-scored assessments always award full credit and cannot be manually overridden"
+        )
 
     answers = list(submission.answers.all())
     total = 0.0
-
-    # MOOD_METER assessments have no numeric scoring - just mark as graded
-    if assessment.grading_mode == GradingMode.MOOD_METER:
-        submission.status = SubmissionStatus.GRADED
-        if submission.submitted_at is None:
-            submission.submitted_at = timezone.now()
-        submission.save()
-        return submission
 
     # HYBRID mode: only manually score SHORT_ANSWER questions
     # Other question types (MCQ, NUMBER_SCALE) keep their auto-calculated scores
@@ -427,6 +362,15 @@ def override_score(submission_id: int, scores: list) -> Submission:
     return submission
 
 
+def _validate_transition(current: str, target: str) -> None:
+    """Enforce the submission state machine (SUB-CN-01)."""
+    allowed = _VALID_TRANSITIONS.get(current, set())
+    if target not in allowed and target != current:
+        raise ValueError(
+            f"Invalid status transition: {current} -> {target}"
+        )
+
+
 def _find_existing_submission(
     assignment_id: int, student_id: int | None, teacher_id: int | None
 ) -> Submission | None:
@@ -453,7 +397,6 @@ def _create_answer(submission: Submission, payload: dict) -> Answer:
     - MULTIPLE_CHOICE -> MultipleChoiceAnswer with MultipleChoiceSelected records
     - SHORT_ANSWER -> ShortAnswerAnswer with text
     - NUMBER_SCALE -> NumberScaleAnswer with numeric value
-    - MOOD_METER -> MoodMeterAnswer with row/col grid position
     """
     question_id = payload.get("questionId")
     if question_id is None:
@@ -481,10 +424,6 @@ def _create_answer(submission: Submission, payload: dict) -> Answer:
         ShortAnswerAnswer.objects.create(answer=answer, text=data.get("text", ""))
     elif answer_type == AnswerType.NUMBER_SCALE:
         NumberScaleAnswer.objects.create(answer=answer, val=data.get("val"))
-    elif answer_type == AnswerType.MOOD_METER:
-        MoodMeterAnswer.objects.create(
-            answer=answer, row=data.get("row", 0), col=data.get("col", 0)
-        )
     return answer
 
 
@@ -496,8 +435,15 @@ def _auto_score_submission(submission: Submission, assessment: Assessment) -> No
     Currently supports auto-scoring for MULTIPLE_CHOICE and NUMBER_SCALE.
     SHORT_ANSWER requires manual grading.
 
-    For AUTO and MOOD_METER grading modes, also marks the submission as GRADED.
+    For AUTO grading mode, also marks the submission as GRADED.
     """
+    if assessment.scoring_policy == ScoringPolicy.COMPLETION:
+        submission.score = 100.0
+        submission.status = SubmissionStatus.GRADED
+        if submission.submitted_at is None:
+            submission.submitted_at = timezone.now()
+        return
+
     total = 0.0
     for answer in submission.answers.all():
         question = answer.question
@@ -508,7 +454,7 @@ def _auto_score_submission(submission: Submission, assessment: Assessment) -> No
         elif answer.answer_type == AnswerType.NUMBER_SCALE:
             total += _auto_score_number_scale(answer, question)
     submission.score = total
-    if assessment.grading_mode in (GradingMode.AUTO, GradingMode.MOOD_METER):
+    if assessment.grading_mode == GradingMode.AUTO:
         submission.status = SubmissionStatus.GRADED
         if submission.submitted_at is None:
             submission.submitted_at = timezone.now()
