@@ -6,8 +6,9 @@ from django.utils import timezone
 from accounts.models import SudoGrant, SudoPermission
 from assessments.models import GradingMode
 from courses.models import EnrollmentStatus
-from submissions.models import SubmissionStatus
+from submissions.models import AnswerType, NumberScaleAnswer, SubmissionStatus
 from tests.factories import (
+    AnswerFactory,
     AssessmentFactory,
     AssignmentFactory,
     CourseFactory,
@@ -520,6 +521,73 @@ class TestVizMoodMeter:
         api_client.force_authenticate(user=student_user)
         resp = api_client.get(MOOD_URL.format(assignment.id))
         assert resp.status_code == 403
+
+    def test_VIZ_UC_04_quadrant_aggregation(self, api_client, teacher_user, admin_user):
+        """Mood meter quadrants are derived from DB-backed row/col values."""
+        from assessments.models import NumberScaleQuestion, QuestionKind
+
+        course = CourseFactory(teacher_profile=teacher_user.teacher_profile)
+        assessment = AssessmentFactory(
+            grading_mode=GradingMode.MOOD_METER,
+            created_by_admin=admin_user,
+        )
+        assignment = AssignmentFactory(
+            assessment=assessment,
+            course=course,
+            created_by=teacher_user,
+        )
+
+        row_q = QuestionFactory(
+            assessment=assessment,
+            question_type=QuestionKind.NUMBER_SCALE,
+            kind=QuestionKind.NUMBER_SCALE,
+        )
+        col_q = QuestionFactory(
+            assessment=assessment,
+            question_type=QuestionKind.NUMBER_SCALE,
+            kind=QuestionKind.NUMBER_SCALE,
+        )
+        NumberScaleQuestion.objects.create(question=row_q, min=1, max=5, target=3)
+        NumberScaleQuestion.objects.create(question=col_q, min=1, max=5, target=3)
+
+        # Submission 1: High Energy / Positive (4,4)
+        sp1 = StudentProfileFactory(created_by=admin_user)
+        EnrollmentFactory(course=course, student_profile=sp1, status=EnrollmentStatus.ACTIVE)
+        sub1 = SubmissionFactory(
+            assignment=assignment,
+            student=sp1.user,
+            status=SubmissionStatus.GRADED,
+            submitted_at=timezone.now(),
+        )
+        a1r = AnswerFactory(submission=sub1, question=row_q, answer_type=AnswerType.NUMBER_SCALE)
+        a1c = AnswerFactory(submission=sub1, question=col_q, answer_type=AnswerType.NUMBER_SCALE)
+        NumberScaleAnswer.objects.create(answer=a1r, val=4)
+        NumberScaleAnswer.objects.create(answer=a1c, val=4)
+
+        # Submission 2: Low Energy / Negative (2,1)
+        sp2 = StudentProfileFactory(created_by=admin_user)
+        EnrollmentFactory(course=course, student_profile=sp2, status=EnrollmentStatus.ACTIVE)
+        sub2 = SubmissionFactory(
+            assignment=assignment,
+            student=sp2.user,
+            status=SubmissionStatus.GRADED,
+            submitted_at=timezone.now(),
+        )
+        a2r = AnswerFactory(submission=sub2, question=row_q, answer_type=AnswerType.NUMBER_SCALE)
+        a2c = AnswerFactory(submission=sub2, question=col_q, answer_type=AnswerType.NUMBER_SCALE)
+        NumberScaleAnswer.objects.create(answer=a2r, val=2)
+        NumberScaleAnswer.objects.create(answer=a2c, val=1)
+
+        api_client.force_authenticate(user=teacher_user)
+        resp = api_client.get(MOOD_URL.format(assignment.id))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["totalResponses"] == 2
+        by_label = {item["label"]: item["count"] for item in data["quadrants"]}
+        assert by_label["High Energy / Positive"] == 1
+        assert by_label["Low Energy / Negative"] == 1
+        assert by_label["High Energy / Negative"] == 0
+        assert by_label["Low Energy / Positive"] == 0
 
 
 # ===========================================================================
