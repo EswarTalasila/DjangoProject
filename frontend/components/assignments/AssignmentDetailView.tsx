@@ -40,6 +40,11 @@ type AssignmentDetailViewProps = {
 };
 
 type PreviewMode = 'teacher' | 'student';
+type StudentAttemptAnswer = {
+  selectedChoiceIndexes: number[];
+  textResponse: string;
+  numericResponse: number | null;
+};
 
 function extractDetail(error: unknown, fallback: string): string {
   return (error as ApiError).response?.data?.detail || fallback;
@@ -85,6 +90,35 @@ function formatPoints(value: number): string {
   return value.toFixed(2).replace(/\.?0+$/, '');
 }
 
+function defaultStudentAnswer(question: Question): StudentAttemptAnswer {
+  if (question.type === 'NUMBER_SCALE') {
+    const min = question.data?.min ?? question.min ?? 1;
+    return {
+      selectedChoiceIndexes: [],
+      textResponse: '',
+      numericResponse: min,
+    };
+  }
+  return {
+    selectedChoiceIndexes: [],
+    textResponse: '',
+    numericResponse: null,
+  };
+}
+
+function isQuestionAnswered(question: Question, answer: StudentAttemptAnswer): boolean {
+  if (question.type === 'MULTIPLE_CHOICE') {
+    return answer.selectedChoiceIndexes.length > 0;
+  }
+  if (question.type === 'SHORT_ANSWER') {
+    return answer.textResponse.trim().length > 0;
+  }
+  if (question.type === 'NUMBER_SCALE') {
+    return answer.numericResponse !== null;
+  }
+  return false;
+}
+
 function TeacherQuestionDetails({ question }: { question: Question }) {
   const data = question.data;
 
@@ -128,18 +162,39 @@ function TeacherQuestionDetails({ question }: { question: Question }) {
   return null;
 }
 
-function StudentQuestionPreview({ question }: { question: Question }) {
+function StudentQuestionPreview({
+  question,
+  answer,
+  onSelectChoice,
+  onTextChange,
+  onNumberChange,
+}: {
+  question: Question;
+  answer: StudentAttemptAnswer;
+  onSelectChoice: (choiceIndex: number, checked: boolean) => void;
+  onTextChange: (nextValue: string) => void;
+  onNumberChange: (nextValue: number) => void;
+}) {
   const data = question.data;
 
   if (question.type === 'MULTIPLE_CHOICE') {
+    const isSelectAll = Boolean(data?.selectAll);
     return (
       <div className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          {isSelectAll ? 'Select all that apply.' : 'Select one option.'}
+        </p>
         {(data?.choices ?? []).map((choice, idx) => (
           <label
             key={`${choice.prompt}-${idx}`}
             className="flex items-center gap-2 rounded border border-border bg-muted/20 px-3 py-2 text-sm"
           >
-            <input type="radio" disabled />
+            <input
+              type={isSelectAll ? 'checkbox' : 'radio'}
+              name={`student-preview-q-${question.questionId}`}
+              checked={answer.selectedChoiceIndexes.includes(idx)}
+              onChange={(event) => onSelectChoice(idx, event.target.checked)}
+            />
             <span>{choice.prompt || '(empty choice)'}</span>
           </label>
         ))}
@@ -152,7 +207,8 @@ function StudentQuestionPreview({ question }: { question: Question }) {
       <textarea
         className="w-full min-h-24 rounded border border-border bg-muted/20 px-3 py-2 text-sm text-muted-foreground"
         placeholder="Student response appears here..."
-        disabled
+        value={answer.textResponse}
+        onChange={(event) => onTextChange(event.target.value)}
       />
     );
   }
@@ -162,9 +218,16 @@ function StudentQuestionPreview({ question }: { question: Question }) {
     const max = data?.max ?? question.max ?? 10;
     return (
       <div className="space-y-2">
-        <input type="range" min={min} max={max} disabled className="w-full" />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          value={answer.numericResponse ?? min}
+          onChange={(event) => onNumberChange(Number(event.target.value))}
+          className="w-full"
+        />
         <p className="text-xs text-muted-foreground">
-          Student selects a value between {min} and {max}.
+          Student selects a value between {min} and {max}. Current: {answer.numericResponse ?? min}
         </p>
       </div>
     );
@@ -190,6 +253,9 @@ export default function AssignmentDetailView({
     viewerRole === 'STUDENT' ? 'student' : 'teacher',
   );
   const [studentQuestionIndex, setStudentQuestionIndex] = useState(0);
+  const [studentAnswers, setStudentAnswers] = useState<Record<number, StudentAttemptAnswer>>(
+    {},
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -283,10 +349,49 @@ export default function AssignmentDetailView({
   }, [flatQuestions.length, studentQuestionIndex]);
 
   const activeStudentQuestion = flatQuestions[clampedStudentQuestionIndex] ?? null;
+  const activeStudentAnswer = useMemo(() => {
+    if (!activeStudentQuestion) return null;
+    return studentAnswers[activeStudentQuestion.questionId] ?? defaultStudentAnswer(activeStudentQuestion);
+  }, [activeStudentQuestion, studentAnswers]);
+
+  const answeredQuestionIds = useMemo(() => {
+    const answered = new Set<number>();
+    for (const question of flatQuestions) {
+      const answer = studentAnswers[question.questionId] ?? defaultStudentAnswer(question);
+      if (isQuestionAnswered(question, answer)) {
+        answered.add(question.questionId);
+      }
+    }
+    return answered;
+  }, [flatQuestions, studentAnswers]);
 
   useEffect(() => {
     setStudentQuestionIndex(0);
   }, [assessmentTemplate?.id, previewMode]);
+
+  useEffect(() => {
+    if (flatQuestions.length === 0) {
+      setStudentAnswers({});
+      return;
+    }
+    setStudentAnswers((prev) => {
+      const next: Record<number, StudentAttemptAnswer> = {};
+      for (const question of flatQuestions) {
+        next[question.questionId] = prev[question.questionId] ?? defaultStudentAnswer(question);
+      }
+      return next;
+    });
+  }, [flatQuestions]);
+
+  function updateStudentAnswer(question: Question, updater: (curr: StudentAttemptAnswer) => StudentAttemptAnswer) {
+    setStudentAnswers((prev) => {
+      const current = prev[question.questionId] ?? defaultStudentAnswer(question);
+      return {
+        ...prev,
+        [question.questionId]: updater(current),
+      };
+    });
+  }
 
   async function handleUpdateAssignment() {
     if (!assignment) return;
@@ -605,7 +710,45 @@ export default function AssignmentDetailView({
 
                     <div className="min-h-0 flex-1 overflow-y-auto p-5">
                       <div className="max-w-3xl">
-                        <StudentQuestionPreview question={activeStudentQuestion} />
+                        {activeStudentAnswer && (
+                          <StudentQuestionPreview
+                            question={activeStudentQuestion}
+                            answer={activeStudentAnswer}
+                            onSelectChoice={(choiceIndex, checked) => {
+                              updateStudentAnswer(activeStudentQuestion, (curr) => {
+                                const isSelectAll = Boolean(activeStudentQuestion.data?.selectAll);
+                                if (!isSelectAll) {
+                                  return {
+                                    ...curr,
+                                    selectedChoiceIndexes: checked ? [choiceIndex] : [],
+                                  };
+                                }
+                                const existing = new Set(curr.selectedChoiceIndexes);
+                                if (checked) {
+                                  existing.add(choiceIndex);
+                                } else {
+                                  existing.delete(choiceIndex);
+                                }
+                                return {
+                                  ...curr,
+                                  selectedChoiceIndexes: [...existing].sort((a, b) => a - b),
+                                };
+                              });
+                            }}
+                            onTextChange={(nextValue) => {
+                              updateStudentAnswer(activeStudentQuestion, (curr) => ({
+                                ...curr,
+                                textResponse: nextValue,
+                              }));
+                            }}
+                            onNumberChange={(nextValue) => {
+                              updateStudentAnswer(activeStudentQuestion, (curr) => ({
+                                ...curr,
+                                numericResponse: nextValue,
+                              }));
+                            }}
+                          />
+                        )}
                       </div>
                     </div>
 
@@ -650,18 +793,19 @@ export default function AssignmentDetailView({
                   Question Navigator
                 </p>
                 <div className="grid grid-cols-4 gap-2">
-                  {flatQuestions.map((_, idx) => {
+                  {flatQuestions.map((question, idx) => {
                     const isActive = idx === clampedStudentQuestionIndex;
+                    const isAnswered = answeredQuestionIds.has(question.questionId);
                     return (
                       <Button
                         key={`student-preview-nav-${idx}`}
                         type="button"
                         size="sm"
                         variant={isActive ? 'default' : 'outline'}
-                        className="h-8 px-0"
+                        className={`h-8 px-0 ${!isActive && isAnswered ? 'border-emerald-500/60 text-emerald-700 dark:text-emerald-300' : ''}`}
                         onClick={() => setStudentQuestionIndex(idx)}
                       >
-                        Q{idx + 1}
+                        Q{idx + 1}{isAnswered ? ' •' : ''}
                       </Button>
                     );
                   })}
@@ -700,11 +844,7 @@ export default function AssignmentDetailView({
                           </div>
                         </div>
 
-                        {previewMode === 'teacher' ? (
-                          <TeacherQuestionDetails question={question} />
-                        ) : (
-                          <StudentQuestionPreview question={question} />
-                        )}
+                        <TeacherQuestionDetails question={question} />
                       </div>
                     ))}
                   </div>
