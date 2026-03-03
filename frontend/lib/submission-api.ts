@@ -7,7 +7,7 @@ export type SubmissionStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED' | 'GR
 export type AnswerPayload = {
   questionId: number;
   type: 'MULTIPLE_CHOICE' | 'SHORT_ANSWER' | 'NUMBER_SCALE';
-  data: { selected?: number[]; text?: string; val?: number };
+  data: { selected?: number[]; text?: string; val?: number | null };
   score?: number | null;
 };
 
@@ -37,7 +37,7 @@ export async function getStudentSubmission(
   assignmentId: number,
 ): Promise<SubmissionDTO> {
   const { data } = await api.get(
-    `/api/v1/students/${studentId}/assignments/${assignmentId}/submission/`,
+    `/students/${studentId}/assignments/${assignmentId}/submission/`,
   );
   return data;
 }
@@ -48,7 +48,7 @@ export async function saveDraft(
   answers: AnswerPayload[],
 ): Promise<SubmissionDTO> {
   const { data } = await api.patch(
-    `/api/v1/students/${studentId}/assignments/${assignmentId}/draft/`,
+    `/students/${studentId}/assignments/${assignmentId}/draft/`,
     { answers },
   );
   return data;
@@ -60,7 +60,7 @@ export async function submitFinal(
   answers: AnswerPayload[],
 ): Promise<SubmissionDTO> {
   const { data } = await api.post(
-    `/api/v1/assignments/${assignmentId}/submissions`,
+    `/assignments/${assignmentId}/submissions`,
     {
       assignmentId,
       studentId,
@@ -72,7 +72,7 @@ export async function submitFinal(
 }
 
 export async function getSubmission(submissionId: number): Promise<SubmissionDTO> {
-  const { data } = await api.get(`/api/v1/submissions/${submissionId}`);
+  const { data } = await api.get(`/submissions/${submissionId}`);
   return data;
 }
 
@@ -82,13 +82,13 @@ export async function listMySubmissions(
 ): Promise<{ results: SubmissionCompactDTO[] }> {
   const params = new URLSearchParams({ userId: String(userId) });
   if (status) params.set('status', status);
-  const { data } = await api.get(`/api/v1/submissions/mine?${params}`);
+  const { data } = await api.get(`/submissions/mine?${params}`);
   return data;
 }
 
 export async function listAssignmentSubmissions(
   assignmentId: number,
 ): Promise<{ results: SubmissionDTO[] }> {
-  const { data } = await api.get(`/api/v1/assignments/${assignmentId}/submissions`);
+  const { data } = await api.get(`/assignments/${assignmentId}/submissions`);
   return data;
 }

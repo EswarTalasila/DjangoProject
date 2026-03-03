@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2 } from 'lucide-react';
@@ -30,6 +30,14 @@ import {
 } from '@/lib/assignment-api';
 import { getAssessment, type Assessment, type Question } from '@/lib/assessment-api';
 import { listCourses } from '@/lib/course-api';
+import {
+  getStudentSubmission,
+  saveDraft,
+  submitFinal,
+  type AnswerPayload,
+  type SubmissionDTO,
+  type SubmissionStatus,
+} from '@/lib/submission-api';
 
 type ApiError = { response?: { data?: { detail?: string }; status?: number } };
 
@@ -37,6 +45,7 @@ type AssignmentDetailViewProps = {
   assignmentId: number;
   canMutate: boolean;
   viewerRole: 'TEACHER' | 'RESEARCHER' | 'ADMIN' | 'STUDENT';
+  viewerId: number;
 };
 
 type PreviewMode = 'teacher' | 'student';
@@ -92,14 +101,6 @@ function formatPoints(value: number): string {
 }
 
 function defaultStudentAnswer(question: Question): StudentAttemptAnswer {
-  if (question.type === 'NUMBER_SCALE') {
-    const min = question.data?.min ?? question.min ?? 1;
-    return {
-      selectedChoiceIndexes: [],
-      textResponse: '',
-      numericResponse: min,
-    };
-  }
   return {
     selectedChoiceIndexes: [],
     textResponse: '',
@@ -268,10 +269,61 @@ function StudentQuestionPreview({
   return <p className="text-sm text-muted-foreground">Preview unavailable for this question type.</p>;
 }
 
+function toAnswerPayloads(
+  questions: Question[],
+  answers: Record<number, StudentAttemptAnswer>,
+): AnswerPayload[] {
+  return questions.map((q) => {
+    const a = answers[q.questionId] ?? defaultStudentAnswer(q);
+    if (q.type === 'MULTIPLE_CHOICE') {
+      return { questionId: q.questionId, type: 'MULTIPLE_CHOICE', data: { selected: a.selectedChoiceIndexes } };
+    }
+    if (q.type === 'SHORT_ANSWER') {
+      return { questionId: q.questionId, type: 'SHORT_ANSWER', data: { text: a.textResponse } };
+    }
+    return { questionId: q.questionId, type: 'NUMBER_SCALE', data: { val: a.numericResponse } };
+  });
+}
+
+function hydateStudentAnswers(
+  questions: Question[],
+  submission: SubmissionDTO,
+): Record<number, StudentAttemptAnswer> {
+  const result: Record<number, StudentAttemptAnswer> = {};
+  for (const q of questions) {
+    const backendAnswer = submission.answers.find((a) => a.questionId === q.questionId);
+    if (backendAnswer) {
+      result[q.questionId] = {
+        selectedChoiceIndexes: backendAnswer.data?.selected ?? [],
+        textResponse: backendAnswer.data?.text ?? '',
+        numericResponse: backendAnswer.data?.val ?? null,
+      };
+    } else {
+      result[q.questionId] = defaultStudentAnswer(q);
+    }
+  }
+  return result;
+}
+
+const STATUS_LABELS: Record<SubmissionStatus, string> = {
+  NOT_STARTED: 'Not Started',
+  IN_PROGRESS: 'In Progress',
+  SUBMITTED: 'Submitted',
+  GRADED: 'Graded',
+};
+
+const STATUS_COLORS: Record<SubmissionStatus, string> = {
+  NOT_STARTED: 'bg-muted text-muted-foreground',
+  IN_PROGRESS: 'bg-status-warning-bg text-foreground',
+  SUBMITTED: 'bg-status-success-bg text-foreground',
+  GRADED: 'bg-brand-sky text-foreground',
+};
+
 export default function AssignmentDetailView({
   assignmentId,
   canMutate,
   viewerRole,
+  viewerId,
 }: AssignmentDetailViewProps) {
   const router = useRouter();
 
@@ -290,6 +342,10 @@ export default function AssignmentDetailView({
   const [studentAnswers, setStudentAnswers] = useState<Record<number, StudentAttemptAnswer>>(
     {},
   );
+  const [submission, setSubmission] = useState<SubmissionDTO | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [draftStatus, setDraftStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -313,12 +369,33 @@ export default function AssignmentDetailView({
 
       const cName = courses.find((c) => c.id === item.courseId)?.name;
       setCourseName(cName ?? (item.courseId ? `Course #${item.courseId}` : '-'));
-    } catch {
-      setLoadError('Failed to load assignment.');
+
+      if (viewerRole === 'STUDENT' && template) {
+        try {
+          const sub = await getStudentSubmission(viewerId, assignmentId);
+          setSubmission(sub);
+          setStudentAnswers(hydateStudentAnswers(template.questions, sub));
+          if (sub.status === 'SUBMITTED' || sub.status === 'GRADED') {
+            setStudentFlowStage('submitted');
+            setStudentSubmittedAt(sub.submittedAt ? new Date(sub.submittedAt) : null);
+          }
+        } catch (error: unknown) {
+          const statusCode = (error as ApiError).response?.status;
+          const detail = (error as ApiError).response?.data?.detail;
+          const missingSubmission =
+            statusCode === 404 && (detail?.toLowerCase().includes('submission') ?? true);
+          if (!missingSubmission) {
+            throw error;
+          }
+          // No existing submission — student starts fresh
+        }
+      }
+    } catch (error: unknown) {
+      setLoadError(extractDetail(error, 'Failed to load assignment.'));
     } finally {
       setIsLoading(false);
     }
-  }, [assignmentId]);
+  }, [assignmentId, viewerRole, viewerId]);
 
   useEffect(() => {
     setIsLoading(true);
@@ -410,25 +487,34 @@ export default function AssignmentDetailView({
 
   useEffect(() => {
     setStudentQuestionIndex(0);
-    setStudentFlowStage('attempt');
-    setStudentSubmittedAt(null);
-  }, [assessmentTemplate?.id, previewMode]);
+    // Only reset flow stage if not loaded from backend
+    if (!submission || (submission.status !== 'SUBMITTED' && submission.status !== 'GRADED')) {
+      setStudentFlowStage('attempt');
+      setStudentSubmittedAt(null);
+    }
+  }, [assessmentTemplate?.id, previewMode, submission]);
 
   useEffect(() => {
     if (flatQuestions.length === 0) {
       setStudentAnswers({});
       return;
     }
+    // Preserve existing answers (hydrated from backend or user-entered)
     setStudentAnswers((prev) => {
+      if (Object.keys(prev).length > 0) return prev;
       const next: Record<number, StudentAttemptAnswer> = {};
       for (const question of flatQuestions) {
-        next[question.questionId] = prev[question.questionId] ?? defaultStudentAnswer(question);
+        next[question.questionId] = defaultStudentAnswer(question);
       }
       return next;
     });
   }, [flatQuestions]);
 
+  const submissionLocked = submission?.status === 'SUBMITTED' || submission?.status === 'GRADED';
+  const submissionStatus: SubmissionStatus = submission?.status ?? 'NOT_STARTED';
+
   function updateStudentAnswer(question: Question, updater: (curr: StudentAttemptAnswer) => StudentAttemptAnswer) {
+    if (submissionLocked) return;
     setStudentAnswers((prev) => {
       const current = prev[question.questionId] ?? defaultStudentAnswer(question);
       return {
@@ -438,9 +524,62 @@ export default function AssignmentDetailView({
     });
   }
 
-  function handleSubmitStudentPreview() {
-    setStudentFlowStage('submitted');
-    setStudentSubmittedAt(new Date());
+  // Debounced draft save — fires 1s after last answer change (student only)
+  useEffect(() => {
+    if (viewerRole !== 'STUDENT' || submissionLocked || flatQuestions.length === 0) return;
+    // Skip if still loading initial data
+    if (isLoading) return;
+
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+
+    draftTimerRef.current = setTimeout(() => {
+      draftTimerRef.current = null;
+      const payloads = toAnswerPayloads(flatQuestions, studentAnswers);
+      setDraftStatus('saving');
+      saveDraft(viewerId, assignmentId, payloads)
+        .then((saved) => {
+          setSubmission(saved);
+          setDraftStatus('saved');
+          setTimeout(() => setDraftStatus('idle'), 2000);
+        })
+        .catch(() => {
+          setDraftStatus('error');
+        });
+    }, 1000);
+
+    return () => {
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+    };
+  }, [assignmentId, flatQuestions, isLoading, studentAnswers, submissionLocked, viewerId, viewerRole]);
+
+  // Ensure no delayed draft save can fire once submission is locked/submitting.
+  useEffect(() => {
+    if (!submissionLocked && !isSubmitting) return;
+    if (draftTimerRef.current) {
+      clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = null;
+    }
+  }, [isSubmitting, submissionLocked]);
+
+  async function handleRealSubmit() {
+    if (submissionLocked || flatQuestions.length === 0) return;
+    if (draftTimerRef.current) {
+      clearTimeout(draftTimerRef.current);
+      draftTimerRef.current = null;
+    }
+    setIsSubmitting(true);
+    try {
+      const payloads = toAnswerPayloads(flatQuestions, studentAnswers);
+      const result = await submitFinal(assignmentId, viewerId, payloads);
+      setSubmission(result);
+      setStudentFlowStage('submitted');
+      setStudentSubmittedAt(result.submittedAt ? new Date(result.submittedAt) : new Date());
+      toast.success('Submission sent successfully.');
+    } catch (error: unknown) {
+      toast.error(extractDetail(error, 'Failed to submit. Please try again.'));
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   async function handleUpdateAssignment() {
@@ -735,17 +874,30 @@ export default function AssignmentDetailView({
             <div className="border-b border-border px-5 py-3 flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-foreground">
-                  {studentFlowStage === 'submitted' ? 'Submission Preview' : 'Student Attempt Preview'}
+                  {studentFlowStage === 'submitted' ? 'Submission Review' : 'Assignment'}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Question {clampedStudentQuestionIndex + 1} of {flatQuestions.length}
+                  {studentFlowStage === 'submitted'
+                    ? `${answeredCount}/${flatQuestions.length} answered`
+                    : `Question ${clampedStudentQuestionIndex + 1} of ${flatQuestions.length}`}
                 </p>
               </div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                {studentFlowStage === 'submitted'
-                  ? `Submitted ${studentSubmittedAt ? studentSubmittedAt.toLocaleTimeString() : ''}`
-                  : `Page ${clampedStudentQuestionIndex + 1}/${flatQuestions.length}`}
-              </p>
+              <div className="flex items-center gap-2">
+                {viewerRole === 'STUDENT' && draftStatus === 'saving' && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Saving...
+                  </span>
+                )}
+                {viewerRole === 'STUDENT' && draftStatus === 'saved' && (
+                  <span className="text-xs text-muted-foreground">Draft saved</span>
+                )}
+                {viewerRole === 'STUDENT' && draftStatus === 'error' && (
+                  <span className="text-xs text-destructive">Save failed</span>
+                )}
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[submissionStatus]}`}>
+                  {STATUS_LABELS[submissionStatus]}
+                </span>
+              </div>
             </div>
 
             <div className="grid min-h-[620px] lg:grid-cols-[minmax(0,1fr)_280px]">
@@ -760,14 +912,20 @@ export default function AssignmentDetailView({
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Auto Points (Preview)</p>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                          {submission?.status === 'GRADED' ? 'Score' : 'Auto Points (Est.)'}
+                        </p>
                         <p className="text-lg font-semibold text-foreground">
-                          {formatPoints(autoPointsEarned)}/{formatPoints(totalPoints)}
+                          {submission?.score != null
+                            ? `${formatPoints(submission.score)}/${formatPoints(totalPoints)}`
+                            : `${formatPoints(autoPointsEarned)}/${formatPoints(totalPoints)}`}
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Status</p>
-                        <p className="text-lg font-semibold text-foreground">Submitted (Simulated)</p>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Submitted</p>
+                        <p className="text-sm font-semibold text-foreground">
+                          {studentSubmittedAt ? studentSubmittedAt.toLocaleString() : '-'}
+                        </p>
                       </div>
                     </div>
 
@@ -874,13 +1032,51 @@ export default function AssignmentDetailView({
                         >
                           Next
                         </Button>
-                        <Button
-                          type="button"
-                          disabled={clampedStudentQuestionIndex < flatQuestions.length - 1}
-                          onClick={handleSubmitStudentPreview}
-                        >
-                          Submit (Preview)
-                        </Button>
+                        {viewerRole === 'STUDENT' ? (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                type="button"
+                                disabled={submissionLocked || isSubmitting}
+                              >
+                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Submit
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Submit Assignment</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Once submitted, you cannot change your answers.
+                                  You have answered {answeredCount} of {flatQuestions.length} questions.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={(event) => {
+                                    event.preventDefault();
+                                    void handleRealSubmit();
+                                  }}
+                                  disabled={isSubmitting}
+                                >
+                                  Confirm Submit
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        ) : (
+                          <Button
+                            type="button"
+                            disabled={clampedStudentQuestionIndex < flatQuestions.length - 1}
+                            onClick={() => {
+                              setStudentFlowStage('submitted');
+                              setStudentSubmittedAt(new Date());
+                            }}
+                          >
+                            Submit (Preview)
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </>
@@ -909,7 +1105,7 @@ export default function AssignmentDetailView({
                     );
                   })}
                 </div>
-                {studentFlowStage === 'submitted' && (
+                {studentFlowStage === 'submitted' && !submissionLocked && (
                   <Button
                     type="button"
                     variant="outline"
