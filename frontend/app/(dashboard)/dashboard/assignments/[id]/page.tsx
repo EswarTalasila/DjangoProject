@@ -13,7 +13,7 @@ export default async function AssignmentDetailPage({
   }
 
   const role = profile.isStaff ? 'ADMIN' : (profile.role as string);
-  if (role !== 'TEACHER' && role !== 'RESEARCHER' && role !== 'ADMIN') {
+  if (role !== 'TEACHER' && role !== 'RESEARCHER' && role !== 'ADMIN' && role !== 'STUDENT') {
     redirect('/dashboard');
   }
 
@@ -25,5 +25,11 @@ export default async function AssignmentDetailPage({
 
   const canMutate = role === 'TEACHER';
 
-  return <AssignmentDetailView assignmentId={assignmentId} canMutate={canMutate} />;
+  return (
+    <AssignmentDetailView
+      assignmentId={assignmentId}
+      canMutate={canMutate}
+      viewerRole={role as 'TEACHER' | 'RESEARCHER' | 'ADMIN' | 'STUDENT'}
+    />
+  );
 }

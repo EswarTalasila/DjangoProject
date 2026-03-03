@@ -36,6 +36,7 @@ type ApiError = { response?: { data?: { detail?: string }; status?: number } };
 type AssignmentDetailViewProps = {
   assignmentId: number;
   canMutate: boolean;
+  viewerRole: 'TEACHER' | 'RESEARCHER' | 'ADMIN' | 'STUDENT';
 };
 
 type PreviewMode = 'teacher' | 'student';
@@ -172,7 +173,11 @@ function StudentQuestionPreview({ question }: { question: Question }) {
   return <p className="text-sm text-muted-foreground">Preview unavailable for this question type.</p>;
 }
 
-export default function AssignmentDetailView({ assignmentId, canMutate }: AssignmentDetailViewProps) {
+export default function AssignmentDetailView({
+  assignmentId,
+  canMutate,
+  viewerRole,
+}: AssignmentDetailViewProps) {
   const router = useRouter();
 
   const [assignment, setAssignment] = useState<Assignment | null>(null);
@@ -181,7 +186,10 @@ export default function AssignmentDetailView({ assignmentId, canMutate }: Assign
   const [titleInput, setTitleInput] = useState('');
   const [openAtInput, setOpenAtInput] = useState('');
   const [dueAtInput, setDueAtInput] = useState('');
-  const [previewMode, setPreviewMode] = useState<PreviewMode>(canMutate ? 'teacher' : 'student');
+  const [previewMode, setPreviewMode] = useState<PreviewMode>(
+    viewerRole === 'STUDENT' ? 'student' : 'teacher',
+  );
+  const [studentQuestionIndex, setStudentQuestionIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -264,6 +272,21 @@ export default function AssignmentDetailView({ assignmentId, canMutate }: Assign
     if (!assessmentTemplate) return 0;
     return assessmentTemplate.questions.reduce((sum, q) => sum + q.maxPoints, 0);
   }, [assessmentTemplate]);
+
+  const flatQuestions = useMemo(() => {
+    return assessmentTemplate?.questions ?? [];
+  }, [assessmentTemplate]);
+
+  const clampedStudentQuestionIndex = useMemo(() => {
+    if (flatQuestions.length === 0) return 0;
+    return Math.max(0, Math.min(studentQuestionIndex, flatQuestions.length - 1));
+  }, [flatQuestions.length, studentQuestionIndex]);
+
+  const activeStudentQuestion = flatQuestions[clampedStudentQuestionIndex] ?? null;
+
+  useEffect(() => {
+    setStudentQuestionIndex(0);
+  }, [assessmentTemplate?.id, previewMode]);
 
   async function handleUpdateAssignment() {
     if (!assignment) return;
@@ -386,7 +409,7 @@ export default function AssignmentDetailView({ assignmentId, canMutate }: Assign
                 type="button"
                 size="sm"
                 variant={previewMode === 'teacher' ? 'default' : 'ghost'}
-                onClick={() => setPreviewMode('teacher')}
+                  onClick={() => setPreviewMode('teacher')}
               >
                 Teacher View
               </Button>
@@ -394,7 +417,7 @@ export default function AssignmentDetailView({ assignmentId, canMutate }: Assign
                 type="button"
                 size="sm"
                 variant={previewMode === 'student' ? 'default' : 'ghost'}
-                onClick={() => setPreviewMode('student')}
+                  onClick={() => setPreviewMode('student')}
               >
                 Student View
               </Button>
@@ -550,6 +573,65 @@ export default function AssignmentDetailView({ assignmentId, canMutate }: Assign
 
         {!assessmentTemplate || assessmentTemplate.questions.length === 0 ? (
           <p className="text-sm text-muted-foreground">No questions in this assignment template.</p>
+        ) : previewMode === 'student' ? (
+          <div className="space-y-4">
+            <div className="rounded-sm border border-border bg-muted/10 px-4 py-3 flex items-center justify-between gap-3">
+              <p className="text-sm font-medium text-foreground">
+                Question {clampedStudentQuestionIndex + 1} of {flatQuestions.length}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Page {clampedStudentQuestionIndex + 1} / {flatQuestions.length}
+              </p>
+            </div>
+
+            {activeStudentQuestion && (
+              <div className="rounded-sm border border-border bg-muted/10 p-4 space-y-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    Q{clampedStudentQuestionIndex + 1}. {activeStudentQuestion.prompt}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatQuestionKind(activeStudentQuestion.type)} •{' '}
+                    {formatPoints(activeStudentQuestion.maxPoints)} pts
+                  </p>
+                </div>
+                <StudentQuestionPreview question={activeStudentQuestion} />
+              </div>
+            )}
+
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  setStudentQuestionIndex((prev) => Math.max(0, prev - 1))
+                }
+                disabled={clampedStudentQuestionIndex === 0}
+              >
+                Previous
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    setStudentQuestionIndex((prev) =>
+                      Math.min(flatQuestions.length - 1, prev + 1),
+                    )
+                  }
+                  disabled={clampedStudentQuestionIndex >= flatQuestions.length - 1}
+                >
+                  Next
+                </Button>
+                <Button
+                  type="button"
+                  disabled={clampedStudentQuestionIndex < flatQuestions.length - 1}
+                >
+                  Submit (Preview)
+                </Button>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="space-y-4">
             {groupedQuestionBuckets.map((bucket) => (
