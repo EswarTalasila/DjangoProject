@@ -85,7 +85,7 @@ def enrollment_to_student_dto(enrollment: Enrollment) -> EnrollmentStudentDTO:
     )
 
 
-def list_courses_for_user(user: User) -> list[Course]:
+def list_courses_for_user(user: User, include_archived: bool = False) -> list[Course]:
     """
     List courses accessible to a user.
 
@@ -93,22 +93,31 @@ def list_courses_for_user(user: User) -> list[Course]:
     Researchers see all courses (for data oversight).
     Teachers see only their own courses.
     Students see only courses they are enrolled in.
+
+    ARCH-CN-06: By default only ACTIVE courses are returned.
+    Pass include_archived=True to include ARCHIVED courses.
     """
+    from ..models import CourseStatus
+
+    base_qs = Course.objects.all()
+    if not include_archived:
+        base_qs = base_qs.filter(status=CourseStatus.ACTIVE)
+
     if user.is_staff:
-        return list(Course.objects.all())
+        return list(base_qs)
     if has_role(user, Role.RESEARCHER):
-        return list(Course.objects.all())
+        return list(base_qs)
     if has_role(user, Role.STUDENT):
         profile = StudentProfile.objects.filter(user=user).first()
         if not profile:
             return []
         return list(
-            Course.objects.filter(
+            base_qs.filter(
                 enrollments__student_profile=profile,
                 enrollments__status=EnrollmentStatus.ACTIVE,
             ).distinct()
         )
-    return list(Course.objects.filter(teacher_profile__user=user))
+    return list(base_qs.filter(teacher_profile__user=user))
 
 
 def list_students_in_course(course: Course) -> list[EnrollmentStudentDTO]:

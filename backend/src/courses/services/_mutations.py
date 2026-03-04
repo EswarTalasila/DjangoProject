@@ -5,12 +5,14 @@ Course and student domain mutations — create, edit, and delete operations.
 import logging
 
 from django.db import transaction
+from django.utils import timezone
 
 from accounts.models import Role, StudentProfile, User
 from accounts.services import create_user_from_payload, generate_managed_username
-from assessments.models import Assessment, GradingMode, QuestionKind
-from assignments.models import Assignment
+from assessments.models import Assessment, QuestionKind
+from assignments.models import Assignment, AssignmentStatus
 from core.helpers import answer_type_from_question
+from core.lifecycle import ConflictError
 from submissions.models import (
     Answer,
     MultipleChoiceAnswer,
@@ -86,6 +88,11 @@ def create_student_in_course(request_user: User, course_id: int, payload: dict) 
     if not course:
         raise ValueError("Course not found")
 
+    # ARCH-CN: Cannot enroll students in an archived course
+    from ..models import CourseStatus
+    if course.status == CourseStatus.ARCHIVED:
+        raise ConflictError("Cannot add students to an archived course.")
+
     raw_username = str(payload.get("username", "")).strip()
     if raw_username:
         raise ValueError("username is system-managed and must not be provided")
@@ -141,14 +148,12 @@ def _create_submissions_for_student(student_user: User, course: Course) -> None:
 
     When a student is enrolled, they need submission records for assignments
     that were already created. This creates NOT_STARTED submissions with
-    empty answers for each non-MOOD_METER assignment in the course.
+    empty answers for each assignment in the course.
     """
     assignments = Assignment.objects.filter(course=course)
     for assignment in assignments:
         assessment = Assessment.objects.filter(id=assignment.assessment_id).first()
         if not assessment:
-            continue
-        if assessment.grading_mode == GradingMode.MOOD_METER:
             continue
         if Submission.objects.filter(student=student_user, assignment=assignment).exists():
             continue
@@ -162,8 +167,6 @@ def _create_submissions_for_student(student_user: User, course: Course) -> None:
         )
 
         for question in assessment.questions.all():
-            if question.kind == QuestionKind.MOOD_METER:
-                continue
             answer = Answer.objects.create(
                 submission=submission,
                 question=question,
@@ -177,3 +180,54 @@ def _create_submissions_for_student(student_user: User, course: Course) -> None:
                 ShortAnswerAnswer.objects.create(answer=answer, text="")
             elif question.kind == QuestionKind.NUMBER_SCALE:
                 NumberScaleAnswer.objects.create(answer=answer, val=None)
+
+
+@transaction.atomic
+def archive_course(request_user: User, course: Course) -> Course:
+    """ARCH-UC-03: Archive a course and cascade-archive its ACTIVE assignments."""
+    from ..models import CourseStatus
+    if course.status == CourseStatus.ARCHIVED:
+        raise ConflictError("Course is already archived.")
+    # ARCH-CN-13: cascade-archive all ACTIVE assignments in same transaction
+    active_assignments = Assignment.objects.filter(
+        course=course, status=AssignmentStatus.ACTIVE
+    )
+    for asgn in active_assignments:
+        asgn.status = AssignmentStatus.ARCHIVED
+        asgn.archived_at = timezone.now()
+        asgn.archived_by = request_user
+        asgn.save(update_fields=["status", "archived_at", "archived_by"])
+    course.status = CourseStatus.ARCHIVED
+    course.archived_at = timezone.now()
+    course.archived_by = request_user
+    course.save(update_fields=["status", "archived_at", "archived_by"])
+    return course
+
+
+@transaction.atomic
+def restore_course(request_user: User, course: Course) -> Course:
+    """ARCH-UC-04: Restore an archived course. Does NOT cascade-restore assignments (ARCH-CN-14)."""
+    from ..models import CourseStatus
+    if course.status != CourseStatus.ARCHIVED:
+        raise ConflictError("Course is not archived.")
+    course.status = CourseStatus.ACTIVE
+    course.archived_at = None
+    course.archived_by = None
+    course.restored_at = timezone.now()
+    course.restored_by = request_user
+    course.save(update_fields=["status", "archived_at", "archived_by", "restored_at", "restored_by"])
+    return course
+
+
+@transaction.atomic
+def purge_course(course: Course) -> None:
+    """ARCH-UC-06: Hard-delete an archived course. Admin-only."""
+    from ..models import CourseStatus
+    if course.status != CourseStatus.ARCHIVED:
+        raise ConflictError("Only archived courses can be purged.")
+    has_active = Assignment.objects.filter(
+        course=course, status=AssignmentStatus.ACTIVE
+    ).exists()
+    if has_active:
+        raise ConflictError("Cannot purge: course has active assignments.")
+    course.delete()

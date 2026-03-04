@@ -23,7 +23,20 @@ Note:
 
 from django.db import models
 
-from accounts.models import StudentProfile, TeacherProfile
+from accounts.models import StudentProfile, TeacherProfile, User
+
+
+class CourseStatus(models.TextChoices):
+    """
+    Enumeration of course lifecycle states.
+
+    Values:
+        ACTIVE: Course is live and usable
+        ARCHIVED: Course has been archived (soft-deleted)
+    """
+
+    ACTIVE = "ACTIVE", "Active"
+    ARCHIVED = "ARCHIVED", "Archived"
 
 
 class EnrollmentStatus(models.TextChoices):
@@ -79,6 +92,29 @@ class Course(models.Model):
         related_name="courses",
     )
 
+    # Lifecycle status for archival support
+    status = models.CharField(
+        max_length=16,
+        choices=CourseStatus.choices,
+        default=CourseStatus.ACTIVE,
+    )
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="archived_courses",
+    )
+    restored_at = models.DateTimeField(null=True, blank=True)
+    restored_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="restored_courses",
+    )
+
     class Meta:
         """Database table configuration for Course."""
 
@@ -86,6 +122,7 @@ class Course(models.Model):
         indexes = [
             models.Index(fields=["name"], name="idx_course_name"),
             models.Index(fields=["teacher_profile"], name="idx_course_teacher"),
+            models.Index(fields=["status"], name="idx_course_status"),
         ]
 
     def __str__(self):

@@ -3,6 +3,7 @@ Assignment domain mutations — create, update, delete, and archive operations.
 """
 
 from django.db import transaction
+from django.utils import timezone
 
 from assessments.models import Assessment, AssessmentStatus, QuestionKind
 from core.helpers import answer_type_from_question
@@ -76,6 +77,11 @@ def create_assignment(creator_user, payload: dict) -> Assignment:
             raise ValueError("Course not found")
         if not can_manage_course(creator_user, course):
             raise ForbiddenError("You do not own this course.")
+        # ARCH-CN: Cannot create assignment for an archived course
+        if course and hasattr(course, 'status'):
+            from courses.models import CourseStatus
+            if course.status == CourseStatus.ARCHIVED:
+                raise ConflictError("Cannot create assignment for an archived course.")
 
     assignment = Assignment.objects.create(
         created_by=creator_user,
@@ -161,25 +167,74 @@ def delete_assignment(assignment: Assignment, caller_user=None) -> None:
     assignment.delete()
 
 
-def archive_assignment(assignment: Assignment, caller_user) -> Assignment:
+@transaction.atomic
+def archive_assignment(request_user, assignment: Assignment) -> Assignment:
     """
     Archive an assignment (set status to ARCHIVED).
 
     Raises:
-        ForbiddenError: Caller is not the assignment creator (403)
+        PermissionError: Caller is not the assignment creator or admin (403)
         ConflictError: Assignment is already archived (409)
     """
-    # ASGN-CN-01: Creator ownership
-    if assignment.created_by_id != caller_user.id:
-        raise ForbiddenError("Only the assignment creator can archive it.")
+    # ARCH-UC-01: Creator or admin can archive
+    if not request_user.is_staff and assignment.created_by_id != request_user.id:
+        raise PermissionError("Only the assignment creator or an admin can archive it.")
 
     # ASGN-UC-07-E3: Already archived
     if assignment.status == AssignmentStatus.ARCHIVED:
         raise ConflictError("Assignment is already archived.")
 
     assignment.status = AssignmentStatus.ARCHIVED
-    assignment.save()
+    assignment.archived_at = timezone.now()
+    assignment.archived_by = request_user
+    assignment.save(update_fields=["status", "archived_at", "archived_by"])
     return assignment
+
+
+@transaction.atomic
+def restore_assignment(request_user, assignment: Assignment) -> Assignment:
+    """
+    Restore an archived assignment back to ACTIVE.
+
+    ARCH-CN-14: Cannot restore if parent course or assessment is archived.
+
+    Raises:
+        PermissionError: Caller is not the assignment creator or admin (403)
+        ConflictError: Assignment is not archived, or parent is archived (409)
+    """
+    if not request_user.is_staff and assignment.created_by_id != request_user.id:
+        raise PermissionError("Only the assignment creator or an admin can restore it.")
+    if assignment.status != AssignmentStatus.ARCHIVED:
+        raise ConflictError("Assignment is not archived.")
+    # ARCH-CN-14: check parent course
+    if assignment.course_id:
+        from courses.models import CourseStatus
+        course = assignment.course
+        if course and course.status == CourseStatus.ARCHIVED:
+            raise ConflictError("Cannot restore assignment while its course is archived.")
+    # ARCH-CN-14: check parent assessment
+    if assignment.assessment.status == AssessmentStatus.ARCHIVED:
+        raise ConflictError("Cannot restore assignment while its source assessment is archived.")
+    assignment.status = AssignmentStatus.ACTIVE
+    assignment.archived_at = None
+    assignment.archived_by = None
+    assignment.restored_at = timezone.now()
+    assignment.restored_by = request_user
+    assignment.save(update_fields=["status", "archived_at", "archived_by", "restored_at", "restored_by"])
+    return assignment
+
+
+@transaction.atomic
+def purge_assignment(assignment: Assignment) -> None:
+    """Hard-delete an archived assignment. Admin-only, called from view."""
+    if assignment.status != AssignmentStatus.ARCHIVED:
+        raise ConflictError("Only archived assignments can be purged.")
+    has_progressed = Submission.objects.filter(
+        assignment=assignment
+    ).exclude(status=SubmissionStatus.NOT_STARTED).exists()
+    if has_progressed:
+        raise ConflictError("Cannot purge: assignment has progressed submissions.")
+    assignment.delete()
 
 
 @transaction.atomic

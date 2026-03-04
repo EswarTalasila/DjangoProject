@@ -19,7 +19,9 @@ from rest_framework.response import Response
 
 from accounts.models import Role, User
 from assessments.services import assessment_to_dto as assessment_template_to_dto
+from core.audit import complete_audit, get_client_ip, log_audit
 from core.errors import error_response
+from core.models import AuditAction, AuditOutcome
 from core.pagination import paginate
 from core.permissions import IsTeacher, IsTeacherOrAbove, has_role, primary_role
 from courses.models import Enrollment
@@ -36,6 +38,8 @@ from .services import (
     get_assignment,
     list_by_course,
     list_for_user,
+    purge_assignment,
+    restore_assignment,
     update_assignment,
 )
 
@@ -113,7 +117,26 @@ def detail(request, assignment_id: int):
             return error_response(exc)
         return Response(assignment_to_dto(assignment).model_dump(), status=status.HTTP_200_OK)
 
-    # DELETE
+    # DELETE with ?purge=true — admin-only hard delete of archived assignment
+    if request.query_params.get("purge", "").lower() == "true":
+        if not request.user.is_staff:
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        audit_id = log_audit(
+            actor=request.user,
+            action=AuditAction.PURGE,
+            target_resource_type="Assignment",
+            target_resource_id=assignment.id,
+            ip_address=get_client_ip(request),
+        )
+        try:
+            purge_assignment(assignment)
+        except ConflictError as exc:
+            complete_audit(audit_id, AuditOutcome.FAILURE)
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        complete_audit(audit_id, AuditOutcome.SUCCESS)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # Regular DELETE
     if not has_role(request.user, Role.TEACHER):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     try:
@@ -143,7 +166,8 @@ def list_course(request, course_id: int):
             return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
         if not can_view_course(request.user, course):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
-    assignments = list_by_course(course_id)
+    include_archived = request.query_params.get("includeArchived", "").lower() == "true"
+    assignments = list_by_course(course_id, include_archived=include_archived)
     return paginate(assignments, request, transform_fn=lambda a: assignment_to_dto(a).model_dump())
 
 
@@ -171,26 +195,54 @@ def list_user(request, user_id: int):
 
 
 @api_view(["POST"])
-@permission_classes([IsTeacher])
+@permission_classes([IsAuthenticated])
 def archive(request, assignment_id: int):
-    """
-    Archive an assignment.
-
-    Returns:
-        200: Updated assignment DTO with status=ARCHIVED
-        403: Forbidden (not creator)
-        404: Assignment not found
-        409: Already archived
-    """
+    """Archive an assignment (ARCH-UC-01). Creator or admin."""
     assignment = get_assignment(assignment_id)
     if not assignment:
         return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.ARCHIVE,
+        target_resource_type="Assignment",
+        target_resource_id=assignment.id,
+        ip_address=get_client_ip(request),
+    )
     try:
-        assignment = archive_assignment(assignment, request.user)
-    except ForbiddenError as exc:
+        assignment = archive_assignment(request.user, assignment)
+    except PermissionError as exc:
+        complete_audit(audit_id, AuditOutcome.DENIED)
         return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
     except ConflictError as exc:
+        complete_audit(audit_id, AuditOutcome.FAILURE)
         return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+    complete_audit(audit_id, AuditOutcome.SUCCESS)
+    return Response(assignment_to_dto(assignment).model_dump(), status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def restore(request, assignment_id: int):
+    """Restore an archived assignment (ARCH-UC-04). Creator or admin."""
+    assignment = get_assignment(assignment_id)
+    if not assignment:
+        return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.RESTORE,
+        target_resource_type="Assignment",
+        target_resource_id=assignment.id,
+        ip_address=get_client_ip(request),
+    )
+    try:
+        assignment = restore_assignment(request.user, assignment)
+    except PermissionError as exc:
+        complete_audit(audit_id, AuditOutcome.DENIED)
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    except ConflictError as exc:
+        complete_audit(audit_id, AuditOutcome.FAILURE)
+        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+    complete_audit(audit_id, AuditOutcome.SUCCESS)
     return Response(assignment_to_dto(assignment).model_dump(), status=status.HTTP_200_OK)
 
 

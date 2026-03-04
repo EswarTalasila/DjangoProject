@@ -115,6 +115,22 @@ class Assignment(models.Model):
         choices=AssignmentStatus.choices,
         default=AssignmentStatus.ACTIVE,
     )
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="archived_assignments",
+    )
+    restored_at = models.DateTimeField(null=True, blank=True)
+    restored_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="restored_assignments",
+    )
 
     # For TEACHER type: the teacher completing self-assessment
     teacher = models.ForeignKey(
@@ -130,6 +146,9 @@ class Assignment(models.Model):
         """Database table configuration for Assignment."""
 
         db_table = "assignments"
+        indexes = [
+            models.Index(fields=["status"], name="idx_assignment_status"),
+        ]
 
     def __str__(self):
         """Return a readable string representation."""

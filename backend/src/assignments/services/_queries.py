@@ -34,9 +34,12 @@ def get_assignment(assignment_id: int) -> Assignment | None:
     return Assignment.objects.filter(id=assignment_id).first()
 
 
-def list_by_course(course_id: int) -> list[Assignment]:
-    """List all assignments for a course (both ACTIVE and ARCHIVED)."""
-    return list(Assignment.objects.filter(course_id=course_id))
+def list_by_course(course_id: int, include_archived: bool = False) -> list[Assignment]:
+    """List assignments for a course. ARCH-CN-06: default ACTIVE-only."""
+    qs = Assignment.objects.filter(course_id=course_id)
+    if not include_archived:
+        qs = qs.filter(status=AssignmentStatus.ACTIVE)
+    return list(qs)
 
 
 def list_for_user(user: User) -> list[Assignment]:

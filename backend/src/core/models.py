@@ -11,6 +11,9 @@ class AuditAction(models.TextChoices):
     USER_DELETE = "USER_DELETE"
     PASSWORD_RESET = "PASSWORD_RESET"
     SCORE_OVERRIDE = "SCORE_OVERRIDE"
+    ARCHIVE = "ARCHIVE"
+    RESTORE = "RESTORE"
+    PURGE = "PURGE"
 
 
 class AuditOutcome(models.TextChoices):

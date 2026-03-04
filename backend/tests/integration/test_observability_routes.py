@@ -595,7 +595,7 @@ class TestAuditCoverage:
     """Verify all 6 sensitive action types are covered."""
 
     def test_OBS_CN_08_all_sensitive_actions_covered(self):
-        """AuditAction enum contains all 6 required sensitive action types."""
+        """AuditAction enum contains all required sensitive action types."""
         required = {
             "SUDO_GRANT",
             "SUDO_REVOKE",
@@ -603,6 +603,9 @@ class TestAuditCoverage:
             "USER_DELETE",
             "PASSWORD_RESET",
             "SCORE_OVERRIDE",
+            "ARCHIVE",
+            "RESTORE",
+            "PURGE",
         }
         actual = {choice[0] for choice in AuditAction.choices}
         assert required == actual

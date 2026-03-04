@@ -141,7 +141,7 @@ class TestExtendedWorkflows:
         step("Teacher attempts to delete course (409 archival gate)")
         delete_response = teacher_client.delete(f"/api/v1/courses/{course_id}")
         assert delete_response.status_code == 409
-        assert "archival" in delete_response.json()["detail"].lower()
+        assert "archive" in delete_response.json()["detail"].lower()
 
     @pytest.mark.integration
     @pytest.mark.workflow

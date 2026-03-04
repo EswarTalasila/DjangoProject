@@ -152,7 +152,7 @@ class TestCourseRoutes:
         api_client.force_authenticate(user=teacher_user)
         response = api_client.delete(f"/api/v1/courses/{course.id}")
         assert response.status_code == 409
-        assert "archival" in response.json()["detail"].lower()
+        assert "archive" in response.json()["detail"].lower()
         assert Course.objects.filter(id=course.id).exists()
 
     # ── CRS-UC-06: List Students ──

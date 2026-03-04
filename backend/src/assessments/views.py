@@ -6,11 +6,9 @@ courses. Researchers and admins can create/modify assessments; teachers
 can view and assign them to their courses.
 
 Question Types Supported:
-    - TEXT: Free-text response
     - MULTIPLE_CHOICE: Select from options
-    - SCALE: Numeric rating (1-5, etc.)
-    - LIKERT: Agreement scale
-    - MOOD_METER: Emotional state grid
+    - SHORT_ANSWER: Free-text response
+    - NUMBER_SCALE: Numeric rating
 
 Endpoints:
     GET/POST /api/v1/assessments           - List or create assessments
@@ -21,7 +19,10 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
+from core.audit import complete_audit, get_client_ip, log_audit
 from core.errors import error_response
+from core.lifecycle import ConflictError
+from core.models import AuditAction, AuditOutcome
 from core.pagination import paginate
 from core.permissions import IsResearcherOrAdmin, IsTeacherOrAbove
 
@@ -29,10 +30,13 @@ from .models import Assessment
 from .serializers import AssessmentSerializer
 from .services import (
     AssessmentReferencedError,
+    archive_assessment,
     assessment_to_dto,
     create_assessment,
     delete_assessment,
     list_assessments,
+    purge_assessment,
+    restore_assessment,
     update_assessment,
 )
 
@@ -67,10 +71,14 @@ def list_or_create(request):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         serializer = AssessmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        assessment = create_assessment(request.user, serializer.validated_data)
+        try:
+            assessment = create_assessment(request.user, serializer.validated_data)
+        except ValueError as exc:
+            return error_response(exc)
         return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_201_CREATED)
 
-    assessments = list_assessments()
+    include_archived = request.query_params.get("includeArchived", "").lower() == "true"
+    assessments = list_assessments(include_archived=include_archived)
     return paginate(assessments, request, transform_fn=lambda a: assessment_to_dto(a).model_dump())
 
 
@@ -117,8 +125,74 @@ def detail(request, assessment_id: int):
 
     if not IsResearcherOrAdmin().has_permission(request, None):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+    # DELETE with ?purge=true — admin-only hard delete of archived assessment
+    if request.query_params.get("purge", "").lower() == "true":
+        if not request.user.is_staff:
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        audit_id = log_audit(
+            actor=request.user,
+            action=AuditAction.PURGE,
+            target_resource_type="Assessment",
+            target_resource_id=assessment.id,
+            ip_address=get_client_ip(request),
+        )
+        try:
+            purge_assessment(assessment)
+        except ConflictError as exc:
+            complete_audit(audit_id, AuditOutcome.FAILURE)
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        complete_audit(audit_id, AuditOutcome.SUCCESS)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     try:
         delete_assessment(assessment)
     except AssessmentReferencedError as exc:
         return error_response(exc, status_code=status.HTTP_409_CONFLICT)
     return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["POST"])
+@permission_classes([IsResearcherOrAdmin])
+def archive(request, assessment_id: int):
+    """Archive an assessment (ARCH-UC-01). Researcher/admin only."""
+    assessment = Assessment.objects.filter(id=assessment_id).first()
+    if not assessment:
+        return Response({"detail": "Assessment not found"}, status=status.HTTP_404_NOT_FOUND)
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.ARCHIVE,
+        target_resource_type="Assessment",
+        target_resource_id=assessment.id,
+        ip_address=get_client_ip(request),
+    )
+    try:
+        assessment = archive_assessment(request.user, assessment)
+    except ConflictError as exc:
+        complete_audit(audit_id, AuditOutcome.FAILURE)
+        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+    complete_audit(audit_id, AuditOutcome.SUCCESS)
+    return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsResearcherOrAdmin])
+def restore(request, assessment_id: int):
+    """Restore an archived assessment (ARCH-UC-04). Researcher/admin only."""
+    assessment = Assessment.objects.filter(id=assessment_id).first()
+    if not assessment:
+        return Response({"detail": "Assessment not found"}, status=status.HTTP_404_NOT_FOUND)
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.RESTORE,
+        target_resource_type="Assessment",
+        target_resource_id=assessment.id,
+        ip_address=get_client_ip(request),
+    )
+    try:
+        assessment = restore_assessment(request.user, assessment)
+    except ConflictError as exc:
+        complete_audit(audit_id, AuditOutcome.FAILURE)
+        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+    complete_audit(audit_id, AuditOutcome.SUCCESS)
+    return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_200_OK)

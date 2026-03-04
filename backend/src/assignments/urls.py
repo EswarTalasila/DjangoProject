@@ -20,6 +20,11 @@ urlpatterns = [
         name="assignments-archive",
     ),
     path(
+        "<int:assignment_id>/restore",
+        views.restore,
+        name="assignments-restore",
+    ),
+    path(
         "<int:assignment_id>/submissions",
         submission_views.assignment_submissions,
         name="assignments-submissions",

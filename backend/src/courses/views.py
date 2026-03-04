@@ -22,7 +22,10 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
+from core.audit import complete_audit, get_client_ip, log_audit
 from core.errors import error_response
+from core.lifecycle import ConflictError
+from core.models import AuditAction, AuditOutcome
 from core.pagination import paginate
 from rest_framework.permissions import IsAuthenticated
 
@@ -31,6 +34,7 @@ from core.permissions import IsTeacher, IsTeacherOrAbove
 from .models import Course
 from .serializers import CourseInputSerializer, StudentNestedInputSerializer
 from .services import (
+    archive_course,
     can_manage_course,
     can_view_course,
     course_to_dto,
@@ -40,7 +44,9 @@ from .services import (
     enrollment_to_student_dto,
     list_courses_for_user,
     list_students_in_course,
+    purge_course,
     remove_student_from_course,
+    restore_course,
 )
 
 
@@ -75,7 +81,8 @@ def list_or_create(request):
         course_data = course_to_dto(course).model_dump()
         return Response(course_data, status=status.HTTP_201_CREATED)
 
-    courses = list_courses_for_user(request.user)
+    include_archived = request.query_params.get("includeArchived", "").lower() == "true"
+    courses = list_courses_for_user(request.user, include_archived=include_archived)
     return paginate(courses, request, transform_fn=lambda c: course_to_dto(c).model_dump())
 
 
@@ -122,10 +129,28 @@ def detail(request, course_id: int):
         course = edit_course(course, serializer.validated_data["name"])
         return Response(course_to_dto(course).model_dump(), status=status.HTTP_200_OK)
 
-    if not can_manage_course(request.user, course):
-        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+    # DELETE with ?purge=true — admin-only hard delete of archived course
+    if request.query_params.get("purge", "").lower() == "true":
+        if not request.user.is_staff:
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        audit_id = log_audit(
+            actor=request.user,
+            action=AuditAction.PURGE,
+            target_resource_type="Course",
+            target_resource_id=course.id,
+            ip_address=get_client_ip(request),
+        )
+        try:
+            purge_course(course)
+        except ConflictError as exc:
+            complete_audit(audit_id, AuditOutcome.FAILURE)
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        complete_audit(audit_id, AuditOutcome.SUCCESS)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    # Regular DELETE not supported — use archive instead
     return Response(
-        {"detail": "Course deletion requires archival capability (FR-14). Not yet available."},
+        {"detail": "Use POST /archive to archive, or DELETE ?purge=true to hard-delete."},
         status=status.HTTP_409_CONFLICT,
     )
 
@@ -203,3 +228,53 @@ def remove_student(request, course_id: int, student_user_id: int):
     except ValueError as exc:
         return error_response(exc)
     return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def archive(request, course_id: int):
+    """Archive a course (ARCH-UC-03). Course owner or admin."""
+    course = Course.objects.filter(id=course_id).first()
+    if not course:
+        return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
+    if not can_manage_course(request.user, course) and not request.user.is_staff:
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.ARCHIVE,
+        target_resource_type="Course",
+        target_resource_id=course.id,
+        ip_address=get_client_ip(request),
+    )
+    try:
+        course = archive_course(request.user, course)
+    except ConflictError as exc:
+        complete_audit(audit_id, AuditOutcome.FAILURE)
+        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+    complete_audit(audit_id, AuditOutcome.SUCCESS)
+    return Response(course_to_dto(course).model_dump(), status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def restore(request, course_id: int):
+    """Restore an archived course (ARCH-UC-04). Course owner or admin."""
+    course = Course.objects.filter(id=course_id).first()
+    if not course:
+        return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
+    if not can_manage_course(request.user, course) and not request.user.is_staff:
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.RESTORE,
+        target_resource_type="Course",
+        target_resource_id=course.id,
+        ip_address=get_client_ip(request),
+    )
+    try:
+        course = restore_course(request.user, course)
+    except ConflictError as exc:
+        complete_audit(audit_id, AuditOutcome.FAILURE)
+        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+    complete_audit(audit_id, AuditOutcome.SUCCESS)
+    return Response(course_to_dto(course).model_dump(), status=status.HTTP_200_OK)

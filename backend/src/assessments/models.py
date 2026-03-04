@@ -56,9 +56,28 @@ class Assessment(models.Model):
         choices=AssessmentStatus.choices,
         default=AssessmentStatus.ACTIVE,
     )
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="archived_assessments",
+    )
+    restored_at = models.DateTimeField(null=True, blank=True)
+    restored_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="restored_assessments",
+    )
 
     class Meta:
         db_table = "assessments"
+        indexes = [
+            models.Index(fields=["status"], name="idx_assessment_status"),
+        ]
 
     def __str__(self):
         return self.title

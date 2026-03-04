@@ -488,13 +488,17 @@ ARCH errors are lifecycle and permission conflicts, not infrastructure failures.
 
 ## 11) Current Implementation Alignment Notes
 
-1. **No cross-domain lifecycle spec exists today.** Archive semantics are currently scattered in FR-05/06/07/08 language and endpoint-specific logic.
-2. **Unsafe hard-delete behavior exists in CRS paths.** Existing delete flows remove records destructively where archive should be preferred.
-3. **Assessment archive endpoint not standardized.** FR-06 defines archive lifecycle but implementation routing/policy remains incomplete.
-4. **Assignment archive behavior needs strict SUB gating.** FR-07 and FR-08 require blocking draft/save/submit on archived assignments, but enforcement is not centralized.
-5. **List filters are inconsistent across domains.** `includeArchived` and `status` query behavior must be standardized.
-6. **Purge policy is undefined in code.** No shared eligibility evaluator for retention/dependency checks exists yet.
-7. **Audit integration is partial.** FR-11 defines audit model/action patterns; ARCH lifecycle actions need explicit wiring.
-8. **No shared lifecycle utilities.** Transition validation, conflict responses, and status constants should be consolidated in reusable service helpers.
-9. **Migration plan needed.** Add status and archival metadata fields where missing and backfill existing rows as `ACTIVE`.
-10. **Test coverage gap.** ARCH UC/CN tests do not yet exist as a dedicated suite; currently only domain-local behavior is partially tested.
+> Updated 2026-03-04 after FR-14 end-to-end implementation.
+
+1. **Shared lifecycle utilities implemented.** `core/lifecycle.py` provides `LifecycleStatus`, `ConflictError`, `archive_entity()`, and `restore_entity()` helpers. `AuditAction` enum extended with `ARCHIVE`, `RESTORE`, `PURGE`.
+2. **Course lifecycle fully implemented.** `CourseStatus` enum added to Course model with `status`, `archived_at/by`, `restored_at/by` fields. Migration `0002_course_lifecycle_fields` applied. Services: `archive_course`, `restore_course`, `purge_course`. Views at `POST /courses/{id}/archive`, `POST /courses/{id}/restore`, `DELETE /courses/{id}?purge=true`.
+3. **Assessment lifecycle fully implemented.** Archival metadata fields (`archived_at/by`, `restored_at/by`) added via migration `0007`. Services: `archive_assessment`, `restore_assessment`, `purge_assessment`. Views at `POST /assessments/{id}/archive`, `POST /assessments/{id}/restore`, `DELETE /assessments/{id}?purge=true`.
+4. **Assignment lifecycle fully implemented.** Archival metadata fields added via migration `0005`. Services: `restore_assignment`, `purge_assignment` added (archive already existed). Views at `POST /assignments/{id}/restore`, `DELETE /assignments/{id}?purge=true`.
+5. **ARCH-CN-13 cascade policy implemented.** Course archive atomically cascade-archives all ACTIVE assignments in the same transaction.
+6. **ARCH-CN-14 restore preconditions implemented.** Assignment restore blocked if parent course or assessment is archived.
+7. **ARCH-CN-06 default ACTIVE-only filtering implemented.** All three list endpoints (`courses`, `assessments`, `assignments/courses/{id}`) default to ACTIVE-only with `includeArchived=true` opt-in.
+8. **ARCH-CN-05 cross-domain guards implemented.** Archived course blocks enrollment add (`create_student_in_course`) and assignment creation (`create_assignment`).
+9. **Audit integration complete.** All archive/restore/purge view handlers emit two-phase audit logs via `log_audit`/`complete_audit` with `AuditAction.ARCHIVE/RESTORE/PURGE`.
+10. **41 FR-traceable integration tests pass.** `tests/integration/test_lifecycle_archival.py` covers ARCH-UC-01 through UC-07, ARCH-CN-03/05/07/13/14.
+11. **Remaining gap: SUB write gating (ARCH-CN-04).** Submission save/submit endpoints already guard archived assignments via existing status checks, but no dedicated ARCH-CN-04 integration test exists yet.
+12. **Remaining gap: Course DELETE without purge returns 409.** Regular `DELETE /courses/{id}` (without `?purge=true`) returns 409 directing users to archive. This is intentional per FR-14 design.
