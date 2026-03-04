@@ -30,6 +30,13 @@ export type SubmissionCompactDTO = {
   status: SubmissionStatus;
 };
 
+export type Paginated<T> = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+};
+
 // -- API calls --
 
 export async function getStudentSubmission(
@@ -78,7 +85,7 @@ export async function getSubmission(submissionId: number): Promise<SubmissionDTO
 
 export async function listMySubmissions(
   status?: SubmissionStatus,
-): Promise<{ results: SubmissionCompactDTO[] }> {
+): Promise<Paginated<SubmissionCompactDTO> | SubmissionCompactDTO[]> {
   const params = new URLSearchParams();
   if (status) params.set('status', status);
   const qs = params.toString();
@@ -88,7 +95,22 @@ export async function listMySubmissions(
 
 export async function listAssignmentSubmissions(
   assignmentId: number,
-): Promise<{ results: SubmissionDTO[] }> {
+): Promise<Paginated<SubmissionCompactDTO> | SubmissionCompactDTO[]> {
   const { data } = await api.get(`/assignments/${assignmentId}/submissions`);
+  return data;
+}
+
+export async function listStudentSubmissions(
+  studentId: number,
+): Promise<Paginated<SubmissionCompactDTO> | SubmissionCompactDTO[]> {
+  const { data } = await api.get(`/students/${studentId}/submissions/`);
+  return data;
+}
+
+export async function overrideSubmissionScore(
+  submissionId: number,
+  scores: number[],
+): Promise<SubmissionDTO> {
+  const { data } = await api.patch(`/submissions/${submissionId}/override-score`, scores);
   return data;
 }
