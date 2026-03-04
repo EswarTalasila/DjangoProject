@@ -28,7 +28,9 @@ from rest_framework.response import Response
 
 from accounts.models import Role
 from assignments.models import Assignment, AssignmentStatus
+from core.audit import complete_audit, get_client_ip, log_audit
 from core.errors import error_response
+from core.models import AuditAction, AuditOutcome
 from core.pagination import paginate
 from core.permissions import has_role, primary_role
 from courses.models import Enrollment
@@ -489,8 +491,24 @@ def override_score_view(request, submission_id: int):
         return error_response("Submission not found", status.HTTP_404_NOT_FOUND)
     if role == Role.TEACHER and not _teacher_owns_assignment(request.user, submission.assignment):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+    old_scores = list(
+        submission.answers.order_by("id").values_list("score", flat=True)
+    )
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.SCORE_OVERRIDE,
+        target_resource_type="Submission",
+        target_resource_id=submission_id,
+        old_value={"scores": old_scores},
+        new_value={"scores": request.data},
+        ip_address=get_client_ip(request),
+    )
+
     try:
         submission = override_score(submission_id, request.data)
     except ValueError as exc:
+        complete_audit(audit_id, AuditOutcome.FAILURE)
         return error_response(exc)
+    complete_audit(audit_id, AuditOutcome.SUCCESS)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)

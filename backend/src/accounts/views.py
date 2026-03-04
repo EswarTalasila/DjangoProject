@@ -53,7 +53,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from django.db.models import Exists, OuterRef, Prefetch, Q
 
+from core.audit import complete_audit, get_client_ip, log_audit
 from core.errors import error_response
+from core.models import AuditAction, AuditOutcome
 from core.pagination import paginate
 from core.permissions import (
     IsResearcherOrAdmin,
@@ -804,6 +806,17 @@ def issue_password_reset_code_view(request):
     serializer = PasswordResetCodeIssueSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     target_user_id = serializer.validated_data["targetUserId"]
+    target_user = User.objects.filter(id=target_user_id).first()
+    ip = get_client_ip(request)
+
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.PASSWORD_RESET,
+        target_user=target_user,
+        old_value={"password": "changed"},
+        new_value={"password": "changed"},
+        ip_address=ip,
+    )
 
     try:
         reset_request, reset_code = issue_password_reset_code(
@@ -811,14 +824,17 @@ def issue_password_reset_code_view(request):
             target_user_id=target_user_id,
         )
     except ValueError as exc:
+        complete_audit(audit_id, AuditOutcome.FAILURE)
         detail = str(exc)
         status_code: int = status.HTTP_404_NOT_FOUND
         if "not found" not in detail.lower():
             status_code = status.HTTP_400_BAD_REQUEST
         return Response({"detail": detail}, status=status_code)
     except PermissionError as exc:
+        complete_audit(audit_id, AuditOutcome.DENIED)
         return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
 
+    complete_audit(audit_id, AuditOutcome.SUCCESS)
     return Response(
         {
             "requestId": reset_request.id,
@@ -994,12 +1010,30 @@ def _edit_user(request, user_id: int):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # Audit ROLE_CHANGE only when role is actually changing
+    old_role = primary_role(user)
+    role_changing = payload.get("role") and str(payload["role"]) != str(old_role)
+    audit_id = None
+    if role_changing:
+        audit_id = log_audit(
+            actor=request.user,
+            action=AuditAction.ROLE_CHANGE,
+            target_user=user,
+            old_value={"role": str(old_role)},
+            new_value={"role": str(payload["role"])},
+            ip_address=get_client_ip(request),
+        )
+
     if payload.get("password"):
         user.set_password(payload["password"])
     user.save()
     if payload.get("role"):
         set_single_role(user, payload["role"])
         ensure_profiles_for_role(user, payload["role"], creator=request.user)
+
+    if audit_id is not None:
+        complete_audit(audit_id, AuditOutcome.SUCCESS)
+
     user.refresh_from_db()
     return Response(UserOutputSerializer(user).data, status=status.HTTP_200_OK)
 
@@ -1011,7 +1045,15 @@ def _delete_user(request, user_id: int):
         return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     if not can_delete_user(request.user, user):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.USER_DELETE,
+        target_user=user,
+        old_value={"username": user.username, "role": str(primary_role(user))},
+        ip_address=get_client_ip(request),
+    )
     user.delete()
+    complete_audit(audit_id, AuditOutcome.SUCCESS)
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -1234,6 +1276,14 @@ def _grant_sudo(request):
     if not grantee:
         return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.SUDO_GRANT,
+        target_user=grantee,
+        new_value={"permissions": permissions, "can_grant_sudo": can_grant_sudo_flag},
+        ip_address=get_client_ip(request),
+    )
+
     try:
         grant = grant_sudo_to_researcher(
             granter=request.user,
@@ -1241,12 +1291,15 @@ def _grant_sudo(request):
             permissions=permissions,
             can_grant_sudo=can_grant_sudo_flag,
         )
+        complete_audit(audit_id, AuditOutcome.SUCCESS)
         return Response(
             {"message": "Sudo granted", "grant_id": grant.id}, status=status.HTTP_201_CREATED
         )
     except ValueError as e:
+        complete_audit(audit_id, AuditOutcome.FAILURE)
         return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except PermissionError as e:
+        complete_audit(audit_id, AuditOutcome.DENIED)
         return Response({"detail": str(e)}, status=status.HTTP_403_FORBIDDEN)
 
 
@@ -1271,10 +1324,23 @@ def revoke_sudo(request, grant_id: int):
         - Admin (is_staff): Can revoke any grant
         - Researcher: Can revoke grants they created
     """
+    grant = SudoGrant.objects.filter(id=grant_id).select_related("user").first()
+    target_user = grant.user if grant else None
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.SUDO_REVOKE,
+        target_user=target_user,
+        old_value={"grant_id": grant_id},
+        ip_address=get_client_ip(request),
+    )
+
     try:
         revoke_sudo_grant(revoker=request.user, grant_id=grant_id)
+        complete_audit(audit_id, AuditOutcome.SUCCESS)
         return Response(status=status.HTTP_204_NO_CONTENT)
     except ValueError as e:
+        complete_audit(audit_id, AuditOutcome.FAILURE)
         return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
     except PermissionError as e:
+        complete_audit(audit_id, AuditOutcome.DENIED)
         return Response({"detail": str(e)}, status=status.HTTP_403_FORBIDDEN)

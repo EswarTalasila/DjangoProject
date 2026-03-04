@@ -7,7 +7,10 @@ import os
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.django import DjangoInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.instrumentation.psycopg import PsycopgInstrumentor
+from opentelemetry.propagate import set_global_textmap
+from opentelemetry.propagators.textmap import W3CTraceContextTextMapPropagator
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor
@@ -31,6 +34,8 @@ def configure_tracing() -> None:
     provider = TracerProvider(resource=resource)
     trace.set_tracer_provider(provider)
 
+    set_global_textmap(W3CTraceContextTextMapPropagator())
+
     endpoint = env.otel_exporter_otlp_endpoint
     headers = _parse_headers(os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", ""))
     if endpoint:
@@ -43,6 +48,7 @@ def configure_tracing() -> None:
 
     DjangoInstrumentor().instrument()
     PsycopgInstrumentor().instrument()
+    LoggingInstrumentor().instrument()
     _CONFIGURED = True
 
 
