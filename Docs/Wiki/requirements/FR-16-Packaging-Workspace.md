@@ -283,12 +283,19 @@ Expected statuses:
 
 ## 11) Current Implementation Alignment Notes
 
-Current platform state has direct CSV export endpoints (FR-10) but no package workspace layer.
+Current implementation has a functional PKG backend baseline with workspace CRUD, node management, validation, build, and download flows.
 
-Required implementation deltas:
-1. Add PKG domain models (`PackageWorkspace`, `PackageNode`, `PackageBuildJob`, `PackageArtifact`, `PackageAuditLog`).
-2. Add PKG APIs for workspace tree CRUD, validate, build, and download.
-3. Add build worker pipeline with manifest/checksum generation.
-4. Add snapshot-aware data resolver integration with FR-14 archival snapshots.
-5. Add full integration test suite for role/scope/permission and build lifecycle.
-6. Add frontend workspace builder UI (deferred phase).
+Implemented alignment:
+1. **PKG domain models implemented.** `PackageWorkspace`, `PackageNode`, `PackageBuildJob`, `PackageArtifact`, and `PackageAuditLog` exist with initial migration.
+2. **API surface implemented.** Workspace create/get/update, node add/update/delete, validate, build, job status, and artifact download endpoints are wired under `/api/v1/packages/`.
+3. **Validation engine implemented.** Tree structure checks, per-node binding checks, role/scope checks, deterministic path checks, and core cap checks are enforced.
+4. **Build pipeline implemented.** Build materializes node-bound CSVs via export services and injects `MANIFEST.json` + `CHECKSUMS.txt` into a `.zip` artifact.
+5. **Role/scope control implemented.** Teacher scope is course ownership constrained; researcher identifiable exports require `EXPORT_IDENTIFIABLE`.
+6. **Integration coverage implemented.** FR-traceable integration tests for PKG UC/CN scenarios are present and passing.
+
+Known deferreds / follow-ups:
+1. **Async execution deferred.** Build currently runs synchronously in request flow; queue/worker execution remains future work.
+2. **Snapshot store integration deferred.** Snapshot validation currently uses a placeholder check and does not yet bind to FR-14 snapshot persistence.
+3. **Full row/byte caps deferred.** File-count cap is enforced; row/byte cap enforcement needs deeper preflight estimation integration.
+4. **Artifact GC deferred.** Expired artifacts are blocked at download time but not yet garbage-collected from disk.
+5. **Frontend workspace UI deferred.** Backend is available; PKG UX builder remains a separate frontend phase.
