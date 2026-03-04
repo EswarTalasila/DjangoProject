@@ -234,6 +234,11 @@ def purge_assignment(assignment: Assignment) -> None:
     ).exclude(status=SubmissionStatus.NOT_STARTED).exists()
     if has_progressed:
         raise ConflictError("Cannot purge: assignment has progressed submissions.")
+    # Clean up submission images and blobs before cascade delete (FR-15 IMG-CN-12).
+    from submissions.image_services import cleanup_images_for_submission
+
+    for sub in assignment.submissions.all():
+        cleanup_images_for_submission(sub.id)
     assignment.delete()
 
 

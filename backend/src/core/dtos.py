@@ -211,3 +211,17 @@ class SubmissionCompactDTO(BaseModel):
     status: str
 
 
+class SubmissionImageDTO(BaseModel):
+    """Image metadata for submission image responses (FR-15)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    originalFilename: str
+    mimeType: str
+    sizeBytes: int
+    uploadedByUserId: int | None
+    status: str
+    createdAt: datetime
+
+

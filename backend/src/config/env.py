@@ -96,6 +96,18 @@ class EnvSettings(BaseSettings):
         description="Local trace file path (development/testing only)",
     )
 
+    # Image upload settings (FR-15)
+    img_allow_unscanned_uploads: bool = Field(
+        default=False,
+        validation_alias="IMG_ALLOW_UNSCANNED_UPLOADS",
+        description="Allow uploads without scanner in production (auto-promote to READY).",
+    )
+    media_root: str = Field(
+        default="",
+        validation_alias="MEDIA_ROOT",
+        description="Filesystem path for media storage. Defaults to BASE_DIR/media.",
+    )
+
     @property
     def is_development(self) -> bool:
         return self.environment == "development"

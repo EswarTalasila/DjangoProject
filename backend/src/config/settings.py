@@ -138,6 +138,14 @@ STORAGES = {
     },
 }
 
+# Media files (user uploads — FR-15 Image Upload)
+MEDIA_ROOT = Path(env.media_root) if env.media_root else BASE_DIR / "media"
+
+# Image upload constants (FR-15)
+IMG_ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+IMG_MAX_FILE_SIZE_BYTES = 10_485_760  # 10 MB
+IMG_MAX_IMAGES_PER_SUBMISSION = 10
+
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 

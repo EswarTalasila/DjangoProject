@@ -14,6 +14,9 @@ class AuditAction(models.TextChoices):
     ARCHIVE = "ARCHIVE"
     RESTORE = "RESTORE"
     PURGE = "PURGE"
+    IMAGE_UPLOAD = "IMAGE_UPLOAD"
+    IMAGE_PROXY_UPLOAD = "IMAGE_PROXY_UPLOAD"
+    IMAGE_DELETE = "IMAGE_DELETE"
 
 
 class AuditOutcome(models.TextChoices):

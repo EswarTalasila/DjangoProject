@@ -606,6 +606,9 @@ class TestAuditCoverage:
             "ARCHIVE",
             "RESTORE",
             "PURGE",
+            "IMAGE_UPLOAD",
+            "IMAGE_PROXY_UPLOAD",
+            "IMAGE_DELETE",
         }
         actual = {choice[0] for choice in AuditAction.choices}
         assert required == actual

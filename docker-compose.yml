@@ -133,6 +133,7 @@ services:
       - ./.pre-commit-config.yaml:/app/.pre-commit-config.yaml:ro
       - ./Deployment:/app/Deployment:ro
       - ./backend/Dockerfile:/app/Dockerfile:ro
+      - ./backend/media:/app/media:cached
     ports:
       - "8000:8000"
     depends_on:

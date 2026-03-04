@@ -530,13 +530,16 @@ Audit payload minimum:
 
 ## 11) Current Implementation Alignment Notes
 
-1. **No image upload infrastructure exists today.** Submissions are text-only; no SubmissionImage model, storage backend, or upload endpoint.
-2. **Nginx X-Accel-Redirect not configured.** Current Nginx config does not include internal media location blocks; must be added.
-3. **No storage abstraction layer.** Backend has no file storage service interface; local/S3 backend switching does not exist.
-4. **EXIF stripping requires library.** Python `Pillow` library needed for EXIF removal; not currently in requirements.
-5. **Scan hook is a no-op.** No virus scanner integration exists; hook interface must be created with environment-aware auto-promote behavior.
-6. **SUB status field may need audit.** Post-submit lock depends on SUB submission status values; verify `SUBMITTED` and `GRADED` states exist and are queryable.
-7. **Purge cascade not wired.** FR-14 purge workflow does not yet handle child image cleanup; must be extended.
-8. **Migration needed.** New `SubmissionImage` table, storage key unique index, and composite indexes must be created.
-9. **Docker volume mount needed.** Development environment requires MEDIA_ROOT volume for persistent image storage across container restarts.
-10. **Test coverage gap.** No IMG-domain tests exist; full UC/CN test suite must be created.
+Current implementation is aligned with the FR-15 target contract for image upload, retrieval, deletion, and auditability.
+
+Implemented alignment:
+1. **SubmissionImage model and lifecycle states exist.** `PENDING_SCAN`, `READY`, `REJECTED`, and `DELETED` are implemented with metadata, indexing, and integrity constraints.
+2. **Upload/retrieve/delete/list endpoints are implemented.** Student self-upload, teacher proxy upload, visibility-gated retrieval, and soft-delete are available under SUB routes.
+3. **Validation pipeline is implemented.** MIME allowlist + magic-byte checks, file size limits, per-submission count limits, duplicate detection, and post-submit lock are enforced.
+4. **EXIF stripping is implemented.** Uploads are normalized via Pillow prior to storage and hashing.
+5. **Storage abstraction is implemented.** Local storage backend abstraction exists with idempotent delete behavior; serving uses protected `X-Accel-Redirect`.
+6. **Scan hook behavior is implemented.** Non-production (or explicit override) auto-promotes to `READY`; production-safe pending behavior is supported.
+7. **Audit events are implemented.** `IMAGE_UPLOAD`, `IMAGE_PROXY_UPLOAD`, and `IMAGE_DELETE` actions are emitted with two-phase audit completion.
+8. **Purge cascade is wired.** FR-14 assignment purge flow cleans up submission image metadata and blobs.
+9. **Infrastructure wiring is in place.** `MEDIA_ROOT` settings, env toggles, Docker media mount, and Nginx internal media location are configured.
+10. **IMG integration coverage exists.** FR-traceable IMG UC/CN integration tests are present and passing in the backend suite.
