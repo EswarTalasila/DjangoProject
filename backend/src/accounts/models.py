@@ -289,6 +289,7 @@ class SudoPermission(models.TextChoices):
         DELETE_USER: Can delete user accounts (within user role space)
         ISSUE_STUDENT_RESET_CODE: Can issue student reset codes (researcher sudo extension)
         ISSUE_RESEARCHER_RESET_CODE: Can issue researcher reset codes (researcher sudo extension)
+        VIEW_SUBMISSIONS: Can read submissions endpoints (FR-08)
         VIEW_IDENTIFIABLE_VIZ: Can view identifiable fields in visualization data (FR-09)
         EXPORT_IDENTIFIABLE: Can export identifiable fields in CSV exports (FR-10)
 
@@ -306,6 +307,7 @@ class SudoPermission(models.TextChoices):
     DELETE_USER = "DELETE_USER", "Delete User"
     ISSUE_STUDENT_RESET_CODE = "ISSUE_STUDENT_RESET_CODE", "Issue Student Reset Code"
     ISSUE_RESEARCHER_RESET_CODE = "ISSUE_RESEARCHER_RESET_CODE", "Issue Researcher Reset Code"
+    VIEW_SUBMISSIONS = "VIEW_SUBMISSIONS", "View Submissions"
     VIEW_IDENTIFIABLE_VIZ = "VIEW_IDENTIFIABLE_VIZ", "View Identifiable Visualizations"
     EXPORT_IDENTIFIABLE = "EXPORT_IDENTIFIABLE", "Export Identifiable Data"
 

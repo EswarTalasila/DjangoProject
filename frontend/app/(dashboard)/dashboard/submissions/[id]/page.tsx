@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 
 import SubmissionDetailView from '@/components/submissions/SubmissionDetailView';
-import { getSessionProfile } from '@/lib/auth-session';
+import { getSessionProfile, getSudoCapabilities } from '@/lib/auth-session';
 
 export default async function SubmissionDetailPage({
   params,
@@ -16,6 +16,13 @@ export default async function SubmissionDetailPage({
   const role = profile.isStaff ? 'ADMIN' : (profile.role as string);
   if (role !== 'TEACHER' && role !== 'RESEARCHER' && role !== 'ADMIN' && role !== 'STUDENT') {
     redirect('/dashboard');
+  }
+  if (role === 'RESEARCHER') {
+    const sudo = await getSudoCapabilities();
+    const canViewSubmissions = sudo?.permissions?.includes('VIEW_SUBMISSIONS') === true;
+    if (!canViewSubmissions) {
+      redirect('/dashboard');
+    }
   }
 
   const { id } = await params;

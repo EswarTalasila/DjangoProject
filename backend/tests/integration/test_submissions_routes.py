@@ -161,6 +161,20 @@ def _add_answer(submission, question, *, answer_type="SHORT_ANSWER", text="hi"):
     return answer
 
 
+def _grant_researcher_submission_access(researcher_user, admin_user):
+    """Grant explicit researcher sudo permission for submissions read access."""
+    from accounts.models import SudoGrant, SudoPermission
+
+    SudoGrant.objects.update_or_create(
+        user=researcher_user,
+        defaults={
+            "granted_by": admin_user,
+            "permissions": [SudoPermission.VIEW_SUBMISSIONS],
+            "can_grant_sudo": False,
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # SUB-UC-01 — Save Draft
 # ---------------------------------------------------------------------------
@@ -600,12 +614,23 @@ class TestGetSubmissionDetail:
     def test_SUB_UC_04_RESEARCHER(
         self, api_client, teacher_user, student_user, admin_user, researcher_user
     ):
-        """Researcher can view any submission."""
+        """Researcher with VIEW_SUBMISSIONS can view any submission."""
+        assignment, _, _ = _make_course_assignment(teacher_user, student_user, admin_user)
+        sub = _make_submission(assignment, student_user, SubmissionStatus.SUBMITTED)
+        _grant_researcher_submission_access(researcher_user, admin_user)
+        api_client.force_authenticate(user=researcher_user)
+        r = api_client.get(f"/api/v1/submissions/{sub.id}")
+        assert r.status_code == 200
+
+    def test_SUB_UC_04_E4_researcher_without_permission(
+        self, api_client, teacher_user, student_user, admin_user, researcher_user
+    ):
+        """Researcher without VIEW_SUBMISSIONS is denied."""
         assignment, _, _ = _make_course_assignment(teacher_user, student_user, admin_user)
         sub = _make_submission(assignment, student_user, SubmissionStatus.SUBMITTED)
         api_client.force_authenticate(user=researcher_user)
         r = api_client.get(f"/api/v1/submissions/{sub.id}")
-        assert r.status_code == 200
+        assert r.status_code == 403
 
     def test_SUB_UC_04_E2_student_cannot_view_others(
         self, api_client, teacher_user, student_user, admin_user
@@ -680,6 +705,31 @@ class TestGetStudentAssignmentSubmission:
         )
         assert r.status_code == 200
 
+    def test_SUB_UC_05_RESEARCHER(
+        self, api_client, teacher_user, student_user, admin_user, researcher_user
+    ):
+        """Researcher with VIEW_SUBMISSIONS can view student assignment submission."""
+        assignment, _, _ = _make_course_assignment(teacher_user, student_user, admin_user)
+        _make_submission(assignment, student_user)
+        _grant_researcher_submission_access(researcher_user, admin_user)
+        api_client.force_authenticate(user=researcher_user)
+        r = api_client.get(
+            f"/api/v1/students/{student_user.id}/assignments/{assignment.id}/submission/"
+        )
+        assert r.status_code == 200
+
+    def test_SUB_UC_05_E5_researcher_without_permission(
+        self, api_client, teacher_user, student_user, admin_user, researcher_user
+    ):
+        """Researcher without VIEW_SUBMISSIONS is denied."""
+        assignment, _, _ = _make_course_assignment(teacher_user, student_user, admin_user)
+        _make_submission(assignment, student_user)
+        api_client.force_authenticate(user=researcher_user)
+        r = api_client.get(
+            f"/api/v1/students/{student_user.id}/assignments/{assignment.id}/submission/"
+        )
+        assert r.status_code == 403
+
     def test_SUB_UC_05_E3_student_cannot_view_other(
         self, api_client, teacher_user, student_user, admin_user
     ):
@@ -728,12 +778,23 @@ class TestListByAssignment:
     def test_SUB_UC_06_RESEARCHER(
         self, api_client, teacher_user, student_user, admin_user, researcher_user
     ):
-        """Researcher can list any assignment's submissions."""
+        """Researcher with VIEW_SUBMISSIONS can list assignment submissions."""
+        assignment, _, _ = _make_course_assignment(teacher_user, student_user, admin_user)
+        _make_submission(assignment, student_user)
+        _grant_researcher_submission_access(researcher_user, admin_user)
+        api_client.force_authenticate(user=researcher_user)
+        r = api_client.get(f"/api/v1/assignments/{assignment.id}/submissions")
+        assert r.status_code == 200
+
+    def test_SUB_UC_06_E4_researcher_without_permission(
+        self, api_client, teacher_user, student_user, admin_user, researcher_user
+    ):
+        """Researcher without VIEW_SUBMISSIONS is denied."""
         assignment, _, _ = _make_course_assignment(teacher_user, student_user, admin_user)
         _make_submission(assignment, student_user)
         api_client.force_authenticate(user=researcher_user)
         r = api_client.get(f"/api/v1/assignments/{assignment.id}/submissions")
-        assert r.status_code == 200
+        assert r.status_code == 403
 
     def test_SUB_UC_06_E2_student_cannot_list(
         self, api_client, teacher_user, student_user, admin_user
@@ -813,12 +874,23 @@ class TestListStudentSubmissions:
     def test_SUB_UC_07_RESEARCHER(
         self, api_client, teacher_user, student_user, admin_user, researcher_user
     ):
-        """Researcher can list any student's submissions."""
+        """Researcher with VIEW_SUBMISSIONS can list student submissions."""
+        assignment, _, _ = _make_course_assignment(teacher_user, student_user, admin_user)
+        _make_submission(assignment, student_user)
+        _grant_researcher_submission_access(researcher_user, admin_user)
+        api_client.force_authenticate(user=researcher_user)
+        r = api_client.get(f"/api/v1/students/{student_user.id}/submissions/")
+        assert r.status_code == 200
+
+    def test_SUB_UC_07_E3_researcher_without_permission(
+        self, api_client, teacher_user, student_user, admin_user, researcher_user
+    ):
+        """Researcher without VIEW_SUBMISSIONS is denied."""
         assignment, _, _ = _make_course_assignment(teacher_user, student_user, admin_user)
         _make_submission(assignment, student_user)
         api_client.force_authenticate(user=researcher_user)
         r = api_client.get(f"/api/v1/students/{student_user.id}/submissions/")
-        assert r.status_code == 200
+        assert r.status_code == 403
 
 
 # ---------------------------------------------------------------------------
@@ -853,6 +925,23 @@ class TestListMe:
         r = api_client.get("/api/v1/submissions/me?status=NOT_STARTED")
         assert r.status_code == 200
         assert len(r.json()["results"]) == 0
+
+    def test_SUB_UC_08_E2_researcher_without_permission(
+        self, api_client, researcher_user
+    ):
+        """Researcher without VIEW_SUBMISSIONS cannot access /me submissions list."""
+        api_client.force_authenticate(user=researcher_user)
+        r = api_client.get("/api/v1/submissions/me")
+        assert r.status_code == 403
+
+    def test_SUB_UC_08_RESEARCHER_with_permission(
+        self, api_client, researcher_user, admin_user
+    ):
+        """Researcher with VIEW_SUBMISSIONS can access /me submissions list."""
+        _grant_researcher_submission_access(researcher_user, admin_user)
+        api_client.force_authenticate(user=researcher_user)
+        r = api_client.get("/api/v1/submissions/me")
+        assert r.status_code == 200
 
 
 # ---------------------------------------------------------------------------

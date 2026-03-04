@@ -162,6 +162,15 @@ export async function SidebarWrapper() {
   if (userRole === "RESEARCHER") {
     const sudo = await getSudoCapabilities();
     const canGrantSudo = sudo?.canGrantSudo === true;
+    const canViewSubmissions = sudo?.permissions?.includes("VIEW_SUBMISSIONS") === true;
+
+    if (!canViewSubmissions) {
+      items = items.filter(
+        (item) =>
+          !(item.type === "link" && item.href === "/dashboard/submissions")
+      );
+    }
+
     if (!canGrantSudo) {
       items = items.filter(
         (item) =>

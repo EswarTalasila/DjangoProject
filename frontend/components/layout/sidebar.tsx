@@ -13,6 +13,7 @@ import {
   Download,
   Shield,
   Users,
+  TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -24,6 +25,7 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
   Assessments: FileText,
   "Assignments & Grading": CheckSquare,
   Registration: KeyRound,
+  Analytics: TrendingUp,
   Exports: Download,
   Users: Users,
   Delegation: Shield,

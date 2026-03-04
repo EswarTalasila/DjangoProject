@@ -40,6 +40,7 @@ PERMISSION_LABELS = {
     SudoPermission.DELETE_USER.value: "Delete users",
     SudoPermission.ISSUE_STUDENT_RESET_CODE.value: "Issue student reset codes",
     SudoPermission.ISSUE_RESEARCHER_RESET_CODE.value: "Issue researcher reset codes",
+    SudoPermission.VIEW_SUBMISSIONS.value: "View submissions",
     SudoPermission.VIEW_IDENTIFIABLE_VIZ.value: "View identifiable viz",
     SudoPermission.EXPORT_IDENTIFIABLE.value: "Export identifiable data",
 }
@@ -70,6 +71,7 @@ PERMISSION_GROUPS = (
     (
         "Data Access Permissions",
         (
+            SudoPermission.VIEW_SUBMISSIONS.value,
             SudoPermission.VIEW_IDENTIFIABLE_VIZ.value,
             SudoPermission.EXPORT_IDENTIFIABLE.value,
         ),
@@ -233,6 +235,7 @@ class SudoGrantAdminForm(forms.ModelForm):
     perm_CREATE_STUDENT = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.CREATE_STUDENT.value], required=False)
     perm_EDIT_USER = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.EDIT_USER.value], required=False)
     perm_DELETE_USER = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.DELETE_USER.value], required=False)
+    perm_VIEW_SUBMISSIONS = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.VIEW_SUBMISSIONS.value], required=False)
     perm_VIEW_IDENTIFIABLE_VIZ = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.VIEW_IDENTIFIABLE_VIZ.value], required=False)
     perm_EXPORT_IDENTIFIABLE = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.EXPORT_IDENTIFIABLE.value], required=False)
     perm_can_grant_sudo = forms.BooleanField(label="Grant sudo delegation", required=False)

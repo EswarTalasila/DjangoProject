@@ -43,6 +43,10 @@ const PERMISSION_META: Record<string, PermissionMeta> = {
     label: 'Issue Researcher Password Reset Codes',
     group: 'password_reset',
   },
+  VIEW_SUBMISSIONS: {
+    label: 'View Submissions',
+    group: 'data_access',
+  },
   VIEW_IDENTIFIABLE_VIZ: {
     label: 'View Identifiable Visualization Data',
     group: 'data_access',

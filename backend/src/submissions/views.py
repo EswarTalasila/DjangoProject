@@ -26,13 +26,13 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from accounts.models import Role
+from accounts.models import Role, SudoPermission
 from assignments.models import Assignment, AssignmentStatus
 from core.audit import complete_audit, get_client_ip, log_audit
 from core.errors import error_response
 from core.models import AuditAction, AuditOutcome
 from core.pagination import paginate
-from core.permissions import has_role, primary_role
+from core.permissions import has_role, has_sudo_permission, primary_role
 from courses.models import Enrollment
 
 from .models import Submission, SubmissionStatus
@@ -134,12 +134,22 @@ def _can_access_submission(user, submission) -> bool:
     if user.is_staff:
         return True
     if has_role(user, Role.RESEARCHER):
-        return True
+        return has_sudo_permission(user, SudoPermission.VIEW_SUBMISSIONS)
     if role == Role.STUDENT:
         return bool(submission.student_id == user.id)
     if role == Role.TEACHER:
         return _teacher_owns_assignment(user, submission.assignment)
     return False
+
+
+def _researcher_can_view_submissions(user) -> bool:
+    """
+    Researchers are default-deny for submissions and require explicit sudo.
+    """
+    role = primary_role(user)
+    if user.is_staff or role != Role.RESEARCHER:
+        return True
+    return has_sudo_permission(user, SudoPermission.VIEW_SUBMISSIONS)
 
 
 def _create_for_assignment(request, assignment_id: int, assignment: Assignment):
@@ -241,6 +251,8 @@ def assignment_submissions(request, assignment_id: int):
     assignment = _assignment_for(assignment_id)
     if not assignment:
         return error_response("Assignment not found", status.HTTP_404_NOT_FOUND)
+    if not _researcher_can_view_submissions(request.user):
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     role = primary_role(request.user)
     if role == Role.STUDENT:
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
@@ -302,6 +314,8 @@ def get_by_assignment_id(request, assignment_id: int):
     assignment = _assignment_for(assignment_id)
     if not assignment:
         return error_response("Assignment not found", status.HTTP_404_NOT_FOUND)
+    if not _researcher_can_view_submissions(request.user):
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     role = primary_role(request.user)
     if role == Role.STUDENT:
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
@@ -332,6 +346,8 @@ def get_by_student_id(request, student_id: int):
     if request.user.is_staff:
         pass
     elif has_role(request.user, Role.RESEARCHER):
+        if not has_sudo_permission(request.user, SudoPermission.VIEW_SUBMISSIONS):
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         pass
     elif role == Role.STUDENT:
         if request.user.id != student_id:
@@ -385,7 +401,8 @@ def get_student_submission(request, student_id: int, assignment_id: int):
     if request.user.is_staff:
         pass
     elif has_role(request.user, Role.RESEARCHER):
-        pass  # Researchers can view any submission
+        if not has_sudo_permission(request.user, SudoPermission.VIEW_SUBMISSIONS):
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     elif role == Role.STUDENT:
         if request.user.id != student_id:
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
@@ -451,6 +468,8 @@ def list_me_view(request):
     """
     List submissions for the authenticated caller (SUB-UC-08).
     """
+    if not _researcher_can_view_submissions(request.user):
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     status_filter = request.query_params.get("status")
     results = list_me(request.user.id, status_filter)
     return paginate(results, request)
