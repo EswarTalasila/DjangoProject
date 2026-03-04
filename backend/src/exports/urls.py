@@ -1,9 +1,9 @@
-"""Export URL routes - /api/export/*"""
-
 from django.urls import path
 
 from . import views
 
 urlpatterns = [
-    path("", views.export_stub, name="export-stub"),
+    path("courses/<int:course_id>/roster", views.course_roster, name="export-roster"),
+    path("courses/<int:course_id>/submissions", views.course_submissions, name="export-course-submissions"),
+    path("submissions", views.cross_course_submissions, name="export-cross-course-submissions"),
 ]

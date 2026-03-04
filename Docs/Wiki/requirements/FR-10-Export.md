@@ -501,15 +501,15 @@ Expected statuses by UC:
 
 ## 11) Current Implementation Alignment Notes
 
-This spec defines the target FR-10 contract. Current code has a 501 stub that must be replaced:
+Backend implementation is complete as of 2026-03-03. All items below are resolved unless marked deferred.
 
-1. **Replace endpoint architecture.** Current: single `POST /api/v1/export/` returning 501. Target: 3 GET endpoints streaming CSV. Requires new views, services, URL routes, and audit model.
-2. **Remove stub code.** Delete: `exports/views.py::export_stub`, `exports/urls.py` current route. Update `config/urls.py` URL mount from `api/v1/export/` to `api/v1/exports/`.
-3. **Add streaming CSV service layer.** New services must generate CSV rows using `StreamingHttpResponse` + `csv.writer` + `QuerySet.iterator(chunk_size=2000)`. Reuse `answer_to_dto` from submissions services for answer serialization.
-4. **Add `EXPORT_IDENTIFIABLE` to SudoPermission enum.** New enum value in `accounts/models.py`. FR-03 spec SUDO-CN-09 already updated to include this permission.
-5. **Add `ExportAuditLog` model.** New model in `exports/models.py` with fields: `user`, `export_type`, `scope_course`, `filters`, `identifiable`, `row_count`, `created_at`. Requires migration.
-6. **Add teacher course ownership gate.** Course-scoped endpoints must verify `course.teacher_profile == user.teacher_profile` for TEACHER callers.
-7. **Add anonymization column transform.** Column-set selection based on caller role + sudo status. Omit identifiable columns from CSV header and data rows when anonymized.
-8. **Add row cap + filter enforcement.** Count query before streaming. 422 for oversized exports. 400 for missing required cross-course filters.
-9. **Add tests.** Target: full coverage for all 3 UCs, all error paths, all constraints, anonymization, ownership gates, audit logging, streaming behavior.
-10. **Update frontend.** Add export buttons/links to teacher dashboard and researcher views. Filter UI for date range, category. Deferred until frontend implementation phase.
+1. **Endpoint architecture — DONE.** `POST /api/v1/export/` stub removed. Three GET endpoints implemented: `exports/views.py` (`course_roster`, `course_submissions`, `cross_course_submissions`). URL mount updated to `api/v1/exports/` in `config/urls.py`.
+2. **Stub code removed — DONE.** `export_stub` view and old URL route deleted.
+3. **Streaming CSV service layer — DONE.** `exports/services.py` implements `export_roster`, `export_course_submissions`, `export_cross_course_submissions` using `StreamingHttpResponse` + `csv.writer` + `QuerySet.iterator(chunk_size=2000)`. Answer serialization uses a local `_serialize_answers` function that mirrors `answer_to_dto` semantics with JSON output and `questionPrompt` omission for anonymized mode.
+4. **`EXPORT_IDENTIFIABLE` sudo enum — DONE.** Already existed in `accounts/models.py::SudoPermission`. No change needed.
+5. **`ExportAuditLog` model — DONE.** `exports/models.py` with migration `0001_export_audit_log`. Fields: `user`, `export_type`, `scope_course`, `filters`, `identifiable`, `row_count`, `created_at`. Table: `export_audit_logs`.
+6. **Teacher course ownership gate — DONE.** `_check_course_access` in `exports/views.py`. TEACHER must own; RESEARCHER/ADMIN bypass.
+7. **Anonymization column transform — DONE.** `resolve_anonymization` in `exports/services.py`. Column sets selected at CSV generation layer. Omission (not nulling) of identifiable columns for anonymized exports.
+8. **Row cap + filter enforcement — DONE.** Count query before streaming in views. 422 for oversized (10k course-scoped, 5k cross-course). 400 for missing required `startDate`/`endDate` on cross-course.
+9. **Tests — DONE.** `tests/integration/test_exports_routes.py` — 39 tests covering all 3 UCs, error paths (E1–E6), CN-01 anonymization, CN-02 ownership, CN-05 streaming headers, CN-06 audit logs, CN-07 UTF-8 BOM, CN-08 consent column, `includeAnswers` identifiable vs. anonymized.
+10. **Frontend — DEFERRED.** Export buttons, filter UI, and download UX deferred to frontend implementation phase per project direction.

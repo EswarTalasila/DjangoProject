@@ -46,7 +46,7 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path("api/v1/students/", include("courses.urls_students")),
     path("api/v1/teachers/", include("accounts.urls_teachers")),
     path("api/v1/visualizations/", include("visualizations.urls")),
-    path("api/v1/export/", include("exports.urls")),
+    path("api/v1/exports/", include("exports.urls")),
 ]
 
 if settings.DEBUG or getattr(settings, "ENVIRONMENT", "development") in ("development", "testing"):
