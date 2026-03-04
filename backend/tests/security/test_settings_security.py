@@ -66,13 +66,13 @@ class TestCookieSecurity:
 
     def test_csrf_cookie_secure_in_production(self):
         """CSRF_COOKIE_SECURE must be True in testing and production (False only in development)."""
-        # env.csrf_cookie_secure returns True for testing and production
-        assert settings.CSRF_COOKIE_SECURE is True
+        expected = settings.ENVIRONMENT in ("testing", "production")
+        assert settings.CSRF_COOKIE_SECURE is expected
 
     def test_session_cookie_secure_in_production(self):
         """SESSION_COOKIE_SECURE must be True in testing and production (False only in development)."""
-        # env.session_cookie_secure returns True for testing and production
-        assert settings.SESSION_COOKIE_SECURE is True
+        expected = settings.ENVIRONMENT in ("testing", "production")
+        assert settings.SESSION_COOKIE_SECURE is expected
 
 
 @pytest.mark.security
