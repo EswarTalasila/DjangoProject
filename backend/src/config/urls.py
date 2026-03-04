@@ -49,7 +49,7 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path("api/v1/exports/", include("exports.urls")),
 ]
 
-if settings.DEBUG or getattr(settings, "ENVIRONMENT", "development") in ("development", "testing"):
+if settings.ENVIRONMENT != "production":  # ENV-UC-05, ENV-CN-07
     urlpatterns += [
         # OpenAPI schema and documentation
         path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

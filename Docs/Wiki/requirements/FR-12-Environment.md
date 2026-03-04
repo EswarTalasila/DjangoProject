@@ -585,13 +585,17 @@ Use v5 naming from `Requirements-Index.md` and `Testing-Index.md`:
 
 ## 11) Current Implementation Alignment Notes
 
-This spec defines the target FR-12 contract. Current codebase has partial implementation that must be completed:
+All FR-12 items are implemented. Final state as of 2026-03-03:
 
-1. **Add `Environment` enum and `ENVIRONMENT` field.** Current: no `ENVIRONMENT` variable in `config/env.py`; profile behavior is inferred from `DEBUG` flag. Target: add `Environment` enum (`DEVELOPMENT`, `TESTING`, `PRODUCTION`) and `ENVIRONMENT` field to `EnvSettings` with `development` default.
-2. **Add production startup validation.** Current: no startup validation — app starts with any configuration. Target: add `@model_validator` to `EnvSettings` that checks for weak secrets, debug mode, unsafe DB defaults, and missing OAuth values when `ENVIRONMENT=production`. Aggregate all violations in one pass.
-3. **Update `ensure_admin` with profile-aware validation.** Current: `ensure_admin` management command uses hardcoded fallbacks with no environment check. Target: read `env.environment`, reject default/placeholder credentials in production, enforce password policy (12+ chars, denylist).
-4. **Add production guard to `seed_e2e`.** Current: `seed_e2e` runs against any database with no environment check. Target: refuse to run when `env.environment == Environment.PRODUCTION`.
-5. **Gate API docs by profile.** Current: Swagger/ReDoc/schema endpoints always registered in `config/urls.py`. Target: register only when `env.environment != Environment.PRODUCTION`.
-6. **Retain existing profile-aware tracing.** `effective_otel_enabled` and `_validate_otel_export_policy` in `env.py` are already implemented and correct. No changes needed.
-7. **Retain existing diagnostics.** `env_report` diagnostic command and `profile_guard.py` startup orchestration are already implemented. No changes needed.
-8. **Clean up `.env.template`.** Deprecate legacy keys per section 6.2; align template with canonical environment variable contract.
+1. **`ENVIRONMENT` field in `config/env.py`.** DONE. `Literal["development", "testing", "production"]` with default `"development"`. Profile convenience properties (`is_development`, `is_testing`, `is_production`) derive from this single field (ENV-CN-01).
+2. **Production startup validation (aggregated).** DONE. `@model_validator` `validate_runtime_contract` collects all violations in one pass (ENV-CN-02) and raises a single consolidated error. Checks: debug override, secret key, admin bootstrap, allowed hosts, CORS, database URL, OAuth, OTel export policy.
+3. **`ensure_admin` profile-aware validation.** DONE. Reads `env.is_production`; rejects default/placeholder emails, enforces 12+ char password with denylist, validates email format, calls Django `validate_password` (ENV-CN-04, ENV-CN-05, ENV-CN-09).
+4. **`seed_e2e` production guard.** DONE. `CommandError("seed_e2e is blocked in production.")` when `env.is_production` (ENV-CN-07).
+5. **API docs gated by profile.** DONE. `config/urls.py` registers Swagger/ReDoc/schema only when `settings.ENVIRONMENT != "production"` (ENV-UC-05, ENV-CN-07).
+6. **Profile-aware tracing.** DONE. `effective_otel_enabled` and `_validate_otel_export_policy` enforce ENV-CN-11 defaults (testing=on, dev=configurable, prod=opt-in).
+7. **Diagnostics.** DONE. `env_report` management command (`core/management/commands/env_report.py`) and `profile_guard.py` (`scripts/runtime/profile_guard.py`) operational.
+8. **`.env.template` cleanup.** DONE. Template aligned with section 6.2 contract; legacy keys (`GOOGLE_OAUTH_*`, `JWT_*`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`) removed.
+
+### Deferred / Out of FR-12 Scope
+- **ENV-CN-12 Taskfile/Compose passthrough**: `docker-compose.yml` and `Taskfile.yml` already set `ENVIRONMENT` explicitly. FR-13 INFRA owns further deployment template changes.
+- **System tests (ST-ENV-*)**: Black-box system tests require a running Docker stack and are deferred to E2E test infrastructure (FR-13).

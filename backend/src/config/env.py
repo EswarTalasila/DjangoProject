@@ -20,6 +20,8 @@ class EnvSettings(BaseSettings):
         env_ignore_empty=True,
         # Extra fields are ignored (allows unrelated env vars)
         extra="ignore",
+        # Allow both field names and validation aliases in constructors
+        populate_by_name=True,
     )
 
     # Runtime profile signal
@@ -167,18 +169,34 @@ class EnvSettings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_runtime_contract(self) -> "EnvSettings":
-        """Fail fast for unsafe production configuration."""
+        """Fail fast for unsafe production configuration (ENV-UC-02, ENV-CN-02).
+
+        Aggregates all violations in one pass per ENV-CN-02 before raising.
+        """
         if not self.is_production:
             return self
 
-        self._validate_debug_override()
-        self._validate_secret_key()
-        self._validate_admin_bootstrap()
-        self._validate_allowed_hosts()
-        self._validate_cors()
-        self._validate_database_url()
-        self._validate_oauth()
-        self._validate_otel_export_policy()
+        violations: list[str] = []
+        for validator in [
+            self._validate_debug_override,
+            self._validate_secret_key,
+            self._validate_admin_bootstrap,
+            self._validate_allowed_hosts,
+            self._validate_cors,
+            self._validate_database_url,
+            self._validate_oauth,
+            self._validate_otel_export_policy,
+        ]:
+            try:
+                validator()
+            except ValueError as exc:
+                violations.append(str(exc))
+
+        if violations:
+            report = "; ".join(violations)
+            raise ValueError(
+                f"Production startup blocked — {len(violations)} violation(s): {report}"
+            )
         return self
 
     def _validate_secret_key(self) -> None:
