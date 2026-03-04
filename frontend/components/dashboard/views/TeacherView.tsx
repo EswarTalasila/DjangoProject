@@ -18,6 +18,7 @@ export default function TeacherView() {
   }, []);
 
   const totalStudents = courses.reduce((sum, c) => sum + c.studentCount, 0);
+  const totalAssignments = courses.reduce((sum, c) => sum + c.assignmentIds.length, 0);
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -30,7 +31,7 @@ export default function TeacherView() {
         {[
           { label: 'Students', value: isLoading ? '\u2014' : totalStudents },
           { label: 'Active Courses', value: isLoading ? '\u2014' : courses.length },
-          { label: 'Pending Grades', value: '\u2014' },
+          { label: 'Assignments', value: isLoading ? '\u2014' : totalAssignments },
         ].map((stat) => (
           <div key={stat.label} className="flex items-baseline gap-2 px-6 first:pl-0 last:pr-0">
             <span className="text-2xl font-bold text-foreground">{stat.value}</span>
@@ -57,6 +58,44 @@ export default function TeacherView() {
               <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-sm border border-border bg-card p-5">
+          <h3 className="text-sm font-semibold text-foreground">Assignments</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Create, schedule, and manage assignment lifecycle.
+          </p>
+          <div className="mt-4">
+            <Button asChild size="sm" variant="outline">
+              <Link href="/dashboard/assignments">Open Assignments</Link>
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-sm border border-border bg-card p-5">
+          <h3 className="text-sm font-semibold text-foreground">Submissions</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Review student submission progress and grading state.
+          </p>
+          <div className="mt-4">
+            <Button asChild size="sm" variant="outline">
+              <Link href="/dashboard/submissions">Open Submissions</Link>
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-sm border border-border bg-card p-5">
+          <h3 className="text-sm font-semibold text-foreground">Visualizations</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            See grade and completion summaries by course and assignment.
+          </p>
+          <div className="mt-4">
+            <Button asChild size="sm" variant="outline">
+              <Link href="/dashboard/visualizations">Open Analytics</Link>
+            </Button>
+          </div>
         </div>
       </div>
     </div>
