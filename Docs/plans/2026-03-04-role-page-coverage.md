@@ -87,7 +87,7 @@ Consolidate all dashboard pages by role across implemented FRs, then run one des
 - Visual consistency across list/detail screens (spacing, header density, card/table hierarchy).
 - Consistent status chips and timestamp formatting across FR-07/08/09 pages.
 - Better cross-linking between assignment detail and submissions review surfaces.
-- Package workspace page currently functional placeholder state and needs final UX pass.
+- Package workspace console is now functional; still needs final drag/drop tree UX and visual polish.
 
 ## Build/Verification Snapshot
 - Frontend build: clean (`next build`)
