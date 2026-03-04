@@ -103,8 +103,8 @@ describe('Sidebar navigation configuration', () => {
     expect(links.find((l) => l.href === '/dashboard/courses')).toBeUndefined();
     expect(links.find((l) => l.href === '/dashboard/assignments')).toBeUndefined();
     expect(links.find((l) => l.href === '/dashboard/submissions')).toBeUndefined();
-    expect(links.find((l) => l.href === '/dashboard/exports')).toBeUndefined();
-    expect(links.find((l) => l.href === '/dashboard/packages')).toBeUndefined();
+    expect(links.find((l) => l.href === '/dashboard/exports')).toBeDefined();
+    expect(links.find((l) => l.href === '/dashboard/packages')).toBeDefined();
   });
 
   it('STUDENT nav does NOT include Registration Codes', async () => {
@@ -219,7 +219,7 @@ describe('Sidebar navigation configuration', () => {
     expect(sudoLink).toBeUndefined();
   });
 
-  it('RESEARCHER nav shows submissions and exports only with explicit sudo permissions', async () => {
+  it('RESEARCHER nav shows submissions only with VIEW_SUBMISSIONS permission', async () => {
     vi.resetModules();
 
     let capturedGroups: NavGroup[] = [];
@@ -234,7 +234,7 @@ describe('Sidebar navigation configuration', () => {
       getSudoCapabilities: vi.fn().mockResolvedValue({
         hasSudo: true,
         canGrantSudo: false,
-        permissions: ['VIEW_SUBMISSIONS', 'EXPORT_IDENTIFIABLE'],
+        permissions: ['VIEW_SUBMISSIONS'],
         isStaff: false,
       }),
     }));

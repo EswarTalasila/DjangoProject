@@ -10,16 +10,20 @@ export default async function ExportsPage() {
   }
 
   const role = profile.isStaff ? 'ADMIN' : (profile.role as string);
-  if (!['TEACHER', 'ADMIN'].includes(role)) {
-    if (role !== 'RESEARCHER') {
-      redirect('/dashboard');
-    }
-    const sudo = await getSudoCapabilities();
-    const canExport = sudo?.permissions?.includes('EXPORT_IDENTIFIABLE') === true;
-    if (!canExport) {
-      redirect('/dashboard');
-    }
+  if (!['TEACHER', 'RESEARCHER', 'ADMIN'].includes(role)) {
+    redirect('/dashboard');
   }
 
-  return <ExportsHubView role={role as 'TEACHER' | 'RESEARCHER' | 'ADMIN'} />;
+  const sudo = role === 'RESEARCHER' ? await getSudoCapabilities() : null;
+  const canExportIdentifiable =
+    role === 'RESEARCHER'
+      ? sudo?.permissions?.includes('EXPORT_IDENTIFIABLE') === true
+      : true;
+
+  return (
+    <ExportsHubView
+      role={role as 'TEACHER' | 'RESEARCHER' | 'ADMIN'}
+      canExportIdentifiable={canExportIdentifiable}
+    />
+  );
 }

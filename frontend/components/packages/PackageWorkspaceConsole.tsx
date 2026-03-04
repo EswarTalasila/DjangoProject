@@ -44,6 +44,7 @@ import {
 
 type PackageWorkspaceConsoleProps = {
   role: 'TEACHER' | 'RESEARCHER' | 'ADMIN';
+  canExportIdentifiable: boolean;
 };
 
 const DATASET_BINDINGS: Array<{ value: DatasetBinding; label: string }> = [
@@ -97,7 +98,10 @@ function parseFilters(raw: string): Record<string, unknown> | null {
   return parsed as Record<string, unknown>;
 }
 
-export default function PackageWorkspaceConsole({ role }: PackageWorkspaceConsoleProps) {
+export default function PackageWorkspaceConsole({
+  role,
+  canExportIdentifiable,
+}: PackageWorkspaceConsoleProps) {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [coursesLoaded, setCoursesLoaded] = useState(false);
 
@@ -628,6 +632,7 @@ export default function PackageWorkspaceConsole({ role }: PackageWorkspaceConsol
                   <label className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Checkbox
                       checked={addNodeForm.identifiable}
+                      disabled={!canExportIdentifiable}
                       onCheckedChange={(checked) =>
                         setAddNodeForm((prev) => ({ ...prev, identifiable: checked === true }))
                       }
@@ -802,6 +807,7 @@ export default function PackageWorkspaceConsole({ role }: PackageWorkspaceConsol
                     <label className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Checkbox
                         checked={editNodeForm.identifiable}
+                        disabled={!canExportIdentifiable}
                         onCheckedChange={(checked) =>
                           setEditNodeForm((prev) => ({ ...prev, identifiable: checked === true }))
                         }
@@ -917,6 +923,14 @@ export default function PackageWorkspaceConsole({ role }: PackageWorkspaceConsol
                 {buildResult.artifactId && (
                   <p className="text-muted-foreground mt-1">Artifact ID: {buildResult.artifactId}</p>
                 )}
+              </div>
+            )}
+
+            {!canExportIdentifiable && role === 'RESEARCHER' && (
+              <div className="rounded-sm border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                Identifiable package nodes are disabled for your account. Request the
+                <span className="font-mono"> EXPORT_IDENTIFIABLE </span>
+                sudo permission to enable that option.
               </div>
             )}
           </section>

@@ -25,6 +25,7 @@ import {
 
 type ExportsHubViewProps = {
   role: 'TEACHER' | 'RESEARCHER' | 'ADMIN';
+  canExportIdentifiable: boolean;
 };
 
 function triggerBrowserDownload(blob: Blob, filename: string) {
@@ -38,7 +39,7 @@ function triggerBrowserDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-export default function ExportsHubView({ role }: ExportsHubViewProps) {
+export default function ExportsHubView({ role, canExportIdentifiable }: ExportsHubViewProps) {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [loadingCourses, setLoadingCourses] = useState(true);
 
@@ -212,6 +213,7 @@ export default function ExportsHubView({ role }: ExportsHubViewProps) {
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <Checkbox
                 checked={rosterIdentifiable}
+                disabled={!canExportIdentifiable}
                 onCheckedChange={(checked) => setRosterIdentifiable(checked === true)}
               />
               Include identifiable fields
@@ -287,6 +289,7 @@ export default function ExportsHubView({ role }: ExportsHubViewProps) {
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <Checkbox
                 checked={submissionsIdentifiable}
+                disabled={!canExportIdentifiable}
                 onCheckedChange={(checked) => setSubmissionsIdentifiable(checked === true)}
               />
               Include identifiable fields
@@ -360,6 +363,7 @@ export default function ExportsHubView({ role }: ExportsHubViewProps) {
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Checkbox
                   checked={crossIdentifiable}
+                  disabled={!canExportIdentifiable}
                   onCheckedChange={(checked) => setCrossIdentifiable(checked === true)}
                 />
                 Include identifiable fields
@@ -374,6 +378,14 @@ export default function ExportsHubView({ role }: ExportsHubViewProps) {
             {downloadingCrossSubs ? 'Exporting...' : 'Download Cross-Course CSV'}
           </Button>
         </section>
+      )}
+
+      {!canExportIdentifiable && role === 'RESEARCHER' && (
+        <div className="rounded-sm border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+          Identifiable exports are disabled for your account. Request the
+          <span className="font-mono"> EXPORT_IDENTIFIABLE </span>
+          sudo permission to enable those options.
+        </div>
       )}
     </div>
   );

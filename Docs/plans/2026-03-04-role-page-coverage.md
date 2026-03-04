@@ -68,15 +68,16 @@ Consolidate all dashboard pages by role across implemented FRs, then run one des
   - `/dashboard/codes` (registration workflows)
   - `/dashboard/visualizations/*` (anonymized by default)
   - `/dashboard/assessments`, `/dashboard/rubrics`
+  - `/dashboard/exports`, `/dashboard/packages` (anonymized outputs by default)
 - Elevated pages (sudo-gated):
   - `/dashboard/submissions`, `/dashboard/submissions/[id]` requires `VIEW_SUBMISSIONS`
-  - `/dashboard/exports`, `/dashboard/packages` require `EXPORT_IDENTIFIABLE`
+  - Identifiable export/package output requires `EXPORT_IDENTIFIABLE`
 - Blocked by default:
   - `/dashboard/courses`, `/dashboard/courses/[id]`
   - `/dashboard/assignments`, `/dashboard/assignments/[id]`
 - Sidebar behavior:
   - Submissions link hidden unless `VIEW_SUBMISSIONS`
-  - Exports + Package links hidden unless `EXPORT_IDENTIFIABLE`
+  - Exports + Package links visible by default; identifiable toggles disabled unless `EXPORT_IDENTIFIABLE`
 - Status: Covered with explicit submissions gate
 
 ### ADMIN

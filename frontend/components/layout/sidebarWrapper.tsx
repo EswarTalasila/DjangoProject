@@ -163,7 +163,6 @@ export async function SidebarWrapper() {
     const sudo = await getSudoCapabilities();
     const canGrantSudo = sudo?.canGrantSudo === true;
     const canViewSubmissions = sudo?.permissions?.includes("VIEW_SUBMISSIONS") === true;
-    const canExportData = sudo?.permissions?.includes("EXPORT_IDENTIFIABLE") === true;
 
     if (!canViewSubmissions) {
       items = items.filter(
@@ -172,14 +171,12 @@ export async function SidebarWrapper() {
       );
     }
 
-    if (canExportData) {
-      items.push(
-        { type: "divider" },
-        { type: "header", label: "Exports" },
-        { type: "link", label: "Download Exports", href: "/dashboard/exports" },
-        { type: "link", label: "Package Workspaces", href: "/dashboard/packages" },
-      );
-    }
+    items.push(
+      { type: "divider" },
+      { type: "header", label: "Exports" },
+      { type: "link", label: "Download Exports", href: "/dashboard/exports" },
+      { type: "link", label: "Package Workspaces", href: "/dashboard/packages" },
+    );
 
     if (!canGrantSudo) {
       items = items.filter(
