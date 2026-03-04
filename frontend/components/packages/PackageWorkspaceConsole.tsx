@@ -552,12 +552,15 @@ export default function PackageWorkspaceConsole({
           </div>
           <div className="space-y-1">
             <Label>Scope Course (optional)</Label>
-            <Select value={createScopeCourseId} onValueChange={setCreateScopeCourseId}>
+            <Select
+              value={createScopeCourseId || '__NONE__'}
+              onValueChange={(value) => setCreateScopeCourseId(value === '__NONE__' ? '' : value)}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Unscoped" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Unscoped</SelectItem>
+                <SelectItem value="__NONE__">Unscoped</SelectItem>
                 {courses.map((course) => (
                   <SelectItem key={course.id} value={String(course.id)}>
                     {course.name}
