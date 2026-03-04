@@ -52,16 +52,19 @@ export default function ResearcherView() {
         </div>
 
         <div className="rounded-sm border border-border bg-card p-6 md:col-span-2">
-          <h2 className="text-lg font-semibold text-foreground">Analytics</h2>
+          <h2 className="text-lg font-semibold text-foreground">Analytics & Archive</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            View anonymized visualization summaries for courses and assignments.
+            View anonymized visualizations, download exports, and build archive package layouts.
           </p>
-          <div className="mt-4">
+          <div className="mt-4 flex gap-2 flex-wrap">
             <Button asChild variant="outline">
               <Link href="/dashboard/visualizations">
                 Open Visualizations
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/dashboard/archive-manager">Open Archive Manager</Link>
             </Button>
           </div>
         </div>

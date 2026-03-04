@@ -63,6 +63,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
 
     { type: "divider" },
     { type: "header", label: "Exports" },
+    { type: "link", label: "Archive Manager", href: "/dashboard/archive-manager" },
     { type: "link", label: "Download Exports", href: "/dashboard/exports" },
     { type: "link", label: "Package Workspaces", href: "/dashboard/packages" },
 
@@ -98,6 +99,7 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
 
     { type: "divider" },
     { type: "header", label: "Exports" },
+    { type: "link", label: "Archive Manager", href: "/dashboard/archive-manager" },
     { type: "link", label: "Download Exports", href: "/dashboard/exports" },
     { type: "link", label: "Package Workspaces", href: "/dashboard/packages" },
   ],
@@ -174,6 +176,7 @@ export async function SidebarWrapper() {
     items.push(
       { type: "divider" },
       { type: "header", label: "Exports" },
+      { type: "link", label: "Archive Manager", href: "/dashboard/archive-manager" },
       { type: "link", label: "Download Exports", href: "/dashboard/exports" },
       { type: "link", label: "Package Workspaces", href: "/dashboard/packages" },
     );
