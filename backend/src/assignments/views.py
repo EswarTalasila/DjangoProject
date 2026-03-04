@@ -34,7 +34,6 @@ from .services import (
     archive_assignment,
     assignment_to_dto,
     create_assignment,
-    delete_assignment,
     get_assignment,
     list_by_course,
     list_for_user,
@@ -42,6 +41,22 @@ from .services import (
     restore_assignment,
     update_assignment,
 )
+
+
+def _parse_include_archived(request):
+    raw = request.query_params.get("includeArchived")
+    if raw is None or raw == "":
+        return False, None
+    value = raw.lower()
+    if value not in {"true", "false"}:
+        return (
+            None,
+            Response(
+                {"detail": "includeArchived must be true or false"},
+                status=status.HTTP_400_BAD_REQUEST,
+            ),
+        )
+    return value == "true", None
 
 
 def _can_read_assignment(user: User, assignment) -> bool:
@@ -119,15 +134,18 @@ def detail(request, assignment_id: int):
 
     # DELETE with ?purge=true — admin-only hard delete of archived assignment
     if request.query_params.get("purge", "").lower() == "true":
-        if not request.user.is_staff:
-            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         audit_id = log_audit(
             actor=request.user,
             action=AuditAction.PURGE,
             target_resource_type="Assignment",
             target_resource_id=assignment.id,
+            old_value={"status": assignment.status},
+            new_value={"status": "PURGED"},
             ip_address=get_client_ip(request),
         )
+        if not request.user.is_staff:
+            complete_audit(audit_id, AuditOutcome.DENIED)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         try:
             purge_assignment(assignment)
         except ConflictError as exc:
@@ -136,16 +154,11 @@ def detail(request, assignment_id: int):
         complete_audit(audit_id, AuditOutcome.SUCCESS)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    # Regular DELETE
-    if not has_role(request.user, Role.TEACHER):
-        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
-    try:
-        delete_assignment(assignment, request.user)
-    except ForbiddenError as exc:
-        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
-    except ConflictError as exc:
-        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
-    return Response(status=status.HTTP_204_NO_CONTENT)
+    # Regular DELETE not supported — use archive instead
+    return Response(
+        {"detail": "Use POST /archive to archive, or DELETE ?purge=true to hard-delete."},
+        status=status.HTTP_409_CONFLICT,
+    )
 
 
 @api_view(["GET"])
@@ -166,7 +179,9 @@ def list_course(request, course_id: int):
             return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
         if not can_view_course(request.user, course):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
-    include_archived = request.query_params.get("includeArchived", "").lower() == "true"
+    include_archived, include_archived_error = _parse_include_archived(request)
+    if include_archived_error is not None:
+        return include_archived_error
     assignments = list_by_course(course_id, include_archived=include_archived)
     return paginate(assignments, request, transform_fn=lambda a: assignment_to_dto(a).model_dump())
 
@@ -206,6 +221,8 @@ def archive(request, assignment_id: int):
         action=AuditAction.ARCHIVE,
         target_resource_type="Assignment",
         target_resource_id=assignment.id,
+        old_value={"status": assignment.status},
+        new_value={"status": "ARCHIVED"},
         ip_address=get_client_ip(request),
     )
     try:
@@ -232,6 +249,8 @@ def restore(request, assignment_id: int):
         action=AuditAction.RESTORE,
         target_resource_type="Assignment",
         target_resource_id=assignment.id,
+        old_value={"status": assignment.status},
+        new_value={"status": "ACTIVE"},
         ip_address=get_client_ip(request),
     )
     try:

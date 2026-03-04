@@ -19,8 +19,8 @@ from rest_framework.test import APIClient
 from accounts.models import Role, TeacherProfile, UserRole
 from assessments.models import AssessmentStatus
 from assignments.models import AssignmentStatus
-from core.models import AuditAction, AuditLog
-from courses.models import CourseStatus
+from core.models import AuditAction, AuditLog, AuditOutcome
+from courses.models import CourseStatus, Enrollment, EnrollmentStatus
 from submissions.models import SubmissionStatus
 from tests.factories import (
     AssessmentFactory,
@@ -354,6 +354,28 @@ class TestARCH_UC_05:
         ids = [a["id"] for a in resp.json()["results"]]
         assert teacher_assignment.id in ids
 
+    def test_ARCH_UC_05_E2_invalid_include_archived_courses(
+        self, admin_client, teacher_course
+    ):
+        """Invalid includeArchived value returns 400 for courses."""
+        resp = admin_client.get("/api/v1/courses/?includeArchived=foo")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_ARCH_UC_05_E2_invalid_include_archived_assessments(
+        self, admin_client, assessment
+    ):
+        """Invalid includeArchived value returns 400 for assessments."""
+        resp = admin_client.get("/api/v1/assessments/?includeArchived=foo")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_ARCH_UC_05_E2_invalid_include_archived_assignments(
+        self, admin_client, teacher_assignment
+    ):
+        """Invalid includeArchived value returns 400 for assignments."""
+        course_id = teacher_assignment.course_id
+        resp = admin_client.get(f"/api/v1/assignments/courses/{course_id}?includeArchived=foo")
+        assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
 
 # ---------------------------------------------------------------------------
 # ARCH-UC-06 — Purge Archived Entity
@@ -441,6 +463,30 @@ class TestARCH_UC_07:
             target_resource_type="Assessment",
         ).exists()
 
+    def test_ARCH_CN_09_audit_has_status_transition(self, admin_client, assessment):
+        """Lifecycle audit payload includes old/new status values."""
+        admin_client.post(f"/api/v1/assessments/{assessment.id}/archive")
+        row = AuditLog.objects.filter(
+            action=AuditAction.ARCHIVE,
+            target_resource_type="Assessment",
+            target_resource_id=assessment.id,
+        ).order_by("-id").first()
+        assert row is not None
+        assert row.old_value == {"status": "ACTIVE"}
+        assert row.new_value == {"status": "ARCHIVED"}
+
+    def test_ARCH_CN_09_denied_archive_emits_audit(self, teacher_client, assessment):
+        """Denied lifecycle attempts are audited with DENIED outcome."""
+        resp = teacher_client.post(f"/api/v1/assessments/{assessment.id}/archive")
+        assert resp.status_code == status.HTTP_403_FORBIDDEN
+        row = AuditLog.objects.filter(
+            action=AuditAction.ARCHIVE,
+            target_resource_type="Assessment",
+            target_resource_id=assessment.id,
+        ).order_by("-id").first()
+        assert row is not None
+        assert row.outcome == AuditOutcome.DENIED
+
 
 # ---------------------------------------------------------------------------
 # ARCH-CN-03 — Archived Assessment Blocks Assignment Creation
@@ -494,6 +540,35 @@ class TestARCH_CN_05:
                 "openAt": timezone.now().isoformat(),
             },
             format="json",
+        )
+        assert resp.status_code == status.HTTP_409_CONFLICT
+
+    def test_ARCH_CN_05_add_student_blocked(
+        self, teacher_client, teacher_course
+    ):
+        """409 when adding a student to archived course."""
+        teacher_course.status = CourseStatus.ARCHIVED
+        teacher_course.save()
+        resp = teacher_client.post(
+            f"/api/v1/courses/{teacher_course.id}/students",
+            {"name": "Blocked Student", "consent": True},
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_409_CONFLICT
+
+    def test_ARCH_CN_05_remove_student_blocked(
+        self, teacher_client, teacher_course, student_user
+    ):
+        """409 when removing student from archived course."""
+        Enrollment.objects.create(
+            course=teacher_course,
+            student_profile=student_user.student_profile,
+            status=EnrollmentStatus.ACTIVE,
+        )
+        teacher_course.status = CourseStatus.ARCHIVED
+        teacher_course.save()
+        resp = teacher_client.delete(
+            f"/api/v1/courses/{teacher_course.id}/students/{student_user.id}"
         )
         assert resp.status_code == status.HTTP_409_CONFLICT
 

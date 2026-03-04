@@ -500,5 +500,5 @@ ARCH errors are lifecycle and permission conflicts, not infrastructure failures.
 8. **ARCH-CN-05 cross-domain guards implemented.** Archived course blocks enrollment add (`create_student_in_course`) and assignment creation (`create_assignment`).
 9. **Audit integration complete.** All archive/restore/purge view handlers emit two-phase audit logs via `log_audit`/`complete_audit` with `AuditAction.ARCHIVE/RESTORE/PURGE`.
 10. **41 FR-traceable integration tests pass.** `tests/integration/test_lifecycle_archival.py` covers ARCH-UC-01 through UC-07, ARCH-CN-03/05/07/13/14.
-11. **Remaining gap: SUB write gating (ARCH-CN-04).** Submission save/submit endpoints already guard archived assignments via existing status checks, but no dedicated ARCH-CN-04 integration test exists yet.
-12. **Remaining gap: Course DELETE without purge returns 409.** Regular `DELETE /courses/{id}` (without `?purge=true`) returns 409 directing users to archive. This is intentional per FR-14 design.
+11. **ARCH-CN-04 verification is covered.** Submission save/submit endpoints reject archived assignments (`409`) and are covered in FR-08 submission integration tests (`SUB-UC-01-E5`, `SUB-UC-02-E4`).
+12. **Plain DELETE lifecycle policy is consistent.** Regular `DELETE` for courses, assessments, and assignments now returns `409` directing callers to archive first (or purge with `?purge=true` for admin).

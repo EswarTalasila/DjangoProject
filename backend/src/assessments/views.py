@@ -17,6 +17,7 @@ Endpoints:
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from core.audit import complete_audit, get_client_ip, log_audit
@@ -33,12 +34,27 @@ from .services import (
     archive_assessment,
     assessment_to_dto,
     create_assessment,
-    delete_assessment,
     list_assessments,
     purge_assessment,
     restore_assessment,
     update_assessment,
 )
+
+
+def _parse_include_archived(request):
+    raw = request.query_params.get("includeArchived")
+    if raw is None or raw == "":
+        return False, None
+    value = raw.lower()
+    if value not in {"true", "false"}:
+        return (
+            None,
+            Response(
+                {"detail": "includeArchived must be true or false"},
+                status=status.HTTP_400_BAD_REQUEST,
+            ),
+        )
+    return value == "true", None
 
 
 @api_view(["GET", "POST"])
@@ -77,7 +93,9 @@ def list_or_create(request):
             return error_response(exc)
         return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_201_CREATED)
 
-    include_archived = request.query_params.get("includeArchived", "").lower() == "true"
+    include_archived, include_archived_error = _parse_include_archived(request)
+    if include_archived_error is not None:
+        return include_archived_error
     assessments = list_assessments(include_archived=include_archived)
     return paginate(assessments, request, transform_fn=lambda a: assessment_to_dto(a).model_dump())
 
@@ -128,15 +146,18 @@ def detail(request, assessment_id: int):
 
     # DELETE with ?purge=true — admin-only hard delete of archived assessment
     if request.query_params.get("purge", "").lower() == "true":
-        if not request.user.is_staff:
-            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         audit_id = log_audit(
             actor=request.user,
             action=AuditAction.PURGE,
             target_resource_type="Assessment",
             target_resource_id=assessment.id,
+            old_value={"status": assessment.status},
+            new_value={"status": "PURGED"},
             ip_address=get_client_ip(request),
         )
+        if not request.user.is_staff:
+            complete_audit(audit_id, AuditOutcome.DENIED)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         try:
             purge_assessment(assessment)
         except ConflictError as exc:
@@ -145,15 +166,14 @@ def detail(request, assessment_id: int):
         complete_audit(audit_id, AuditOutcome.SUCCESS)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    try:
-        delete_assessment(assessment)
-    except AssessmentReferencedError as exc:
-        return error_response(exc, status_code=status.HTTP_409_CONFLICT)
-    return Response(status=status.HTTP_204_NO_CONTENT)
+    return Response(
+        {"detail": "Use POST /archive to archive, or DELETE ?purge=true to hard-delete."},
+        status=status.HTTP_409_CONFLICT,
+    )
 
 
 @api_view(["POST"])
-@permission_classes([IsResearcherOrAdmin])
+@permission_classes([IsAuthenticated])
 def archive(request, assessment_id: int):
     """Archive an assessment (ARCH-UC-01). Researcher/admin only."""
     assessment = Assessment.objects.filter(id=assessment_id).first()
@@ -164,8 +184,13 @@ def archive(request, assessment_id: int):
         action=AuditAction.ARCHIVE,
         target_resource_type="Assessment",
         target_resource_id=assessment.id,
+        old_value={"status": assessment.status},
+        new_value={"status": "ARCHIVED"},
         ip_address=get_client_ip(request),
     )
+    if not IsResearcherOrAdmin().has_permission(request, None):
+        complete_audit(audit_id, AuditOutcome.DENIED)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     try:
         assessment = archive_assessment(request.user, assessment)
     except ConflictError as exc:
@@ -176,7 +201,7 @@ def archive(request, assessment_id: int):
 
 
 @api_view(["POST"])
-@permission_classes([IsResearcherOrAdmin])
+@permission_classes([IsAuthenticated])
 def restore(request, assessment_id: int):
     """Restore an archived assessment (ARCH-UC-04). Researcher/admin only."""
     assessment = Assessment.objects.filter(id=assessment_id).first()
@@ -187,8 +212,13 @@ def restore(request, assessment_id: int):
         action=AuditAction.RESTORE,
         target_resource_type="Assessment",
         target_resource_id=assessment.id,
+        old_value={"status": assessment.status},
+        new_value={"status": "ACTIVE"},
         ip_address=get_client_ip(request),
     )
+    if not IsResearcherOrAdmin().has_permission(request, None):
+        complete_audit(audit_id, AuditOutcome.DENIED)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     try:
         assessment = restore_assessment(request.user, assessment)
     except ConflictError as exc:

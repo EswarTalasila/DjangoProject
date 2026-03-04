@@ -226,9 +226,17 @@ class TestExtendedWorkflows:
         forbidden_delete = teacher_client.delete(f"/api/v1/assessments/{assessment_id}")
         assert forbidden_delete.status_code == 403
 
-        step("Admin deletes assessment")
+        step("Admin plain delete blocked by lifecycle policy")
         delete_response = admin_client.delete(f"/api/v1/assessments/{assessment_id}")
-        assert delete_response.status_code == 204
+        assert delete_response.status_code == 409
+
+        step("Admin archives assessment")
+        archive_response = admin_client.post(f"/api/v1/assessments/{assessment_id}/archive")
+        assert archive_response.status_code == 200
+
+        step("Admin purges archived assessment")
+        purge_response = admin_client.delete(f"/api/v1/assessments/{assessment_id}?purge=true")
+        assert purge_response.status_code == 204
 
         step("Admin confirms assessment removed")
         missing_response = admin_client.get(f"/api/v1/assessments/{assessment_id}")

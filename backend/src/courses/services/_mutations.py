@@ -22,7 +22,7 @@ from submissions.models import (
     SubmissionStatus,
 )
 
-from ..models import Course, Enrollment, EnrollmentStatus
+from ..models import Course, CourseStatus, Enrollment, EnrollmentStatus
 from ._queries import _teacher_profile_for
 
 logger = logging.getLogger(__name__)
@@ -130,6 +130,9 @@ def remove_student_from_course(course: Course, student_user_id: int) -> None:
     The student User account is preserved (CRS-CN-05). Already-DROPPED
     enrollments are treated as not found (CRS-UC-08-E2).
     """
+    if course.status == CourseStatus.ARCHIVED:
+        raise ConflictError("Cannot remove students from an archived course.")
+
     student_profile = StudentProfile.objects.filter(user_id=student_user_id).first()
     if not student_profile:
         raise ValueError("Student not found in course")

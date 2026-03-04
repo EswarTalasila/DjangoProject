@@ -271,19 +271,20 @@ class TestASMT_UC_05:
     """Delete assessment (DELETE /api/v1/assessments/{id})."""
 
     def test_ASMT_UC_05_ADMIN(self, api_client, admin_user):
-        """Admin can delete an unreferenced assessment."""
+        """Plain DELETE is blocked; caller must archive/purge."""
         a = _make_assessment(admin_user)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.delete(f"/api/v1/assessments/{a.id}")
-        assert resp.status_code == 204
-        assert not Assessment.objects.filter(id=a.id).exists()
+        assert resp.status_code == 409
+        assert "archive" in resp.json()["detail"].lower()
+        assert Assessment.objects.filter(id=a.id).exists()
 
     def test_ASMT_UC_05_RESEARCHER(self, api_client, admin_user, researcher_user):
-        """Researcher can delete an unreferenced assessment."""
+        """Researcher plain DELETE is also blocked by lifecycle policy."""
         a = _make_assessment(admin_user)
         api_client.force_authenticate(user=researcher_user)
         resp = api_client.delete(f"/api/v1/assessments/{a.id}")
-        assert resp.status_code == 204
+        assert resp.status_code == 409
 
     def test_ASMT_UC_05_E2_TEACHER(self, api_client, admin_user, teacher_user):
         """Teacher cannot delete assessment (403)."""
@@ -293,24 +294,24 @@ class TestASMT_UC_05:
         assert resp.status_code == 403
 
     def test_ASMT_UC_05_E3_referenced(self, api_client, admin_user, teacher_user):
-        """Delete blocked when assignments reference assessment (409 — ASMT-CN-05)."""
+        """Referenced assessment still returns conflict on plain DELETE."""
         a = _make_assessment(admin_user)
         _reference_assessment(a, teacher_user)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.delete(f"/api/v1/assessments/{a.id}")
         assert resp.status_code == 409
-        assert "referenced" in resp.json()["detail"].lower()
         assert Assessment.objects.filter(id=a.id).exists()
 
-    def test_ASMT_CN_05_unreferenced_delete_succeeds(self, api_client, admin_user, teacher_user):
-        """Unreferenced assessment can be deleted even if others are referenced."""
+    def test_ASMT_CN_05_unreferenced_delete_requires_archive(self, api_client, admin_user, teacher_user):
+        """Unreferenced assessment requires archive/purge (no plain hard delete)."""
         a_referenced = _make_assessment(admin_user, title="Referenced")
         a_free = _make_assessment(admin_user, title="Free")
         _reference_assessment(a_referenced, teacher_user)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.delete(f"/api/v1/assessments/{a_free.id}")
-        assert resp.status_code == 204
+        assert resp.status_code == 409
         assert Assessment.objects.filter(id=a_referenced.id).exists()
+        assert Assessment.objects.filter(id=a_free.id).exists()
 
 
 # ===========================================================================
