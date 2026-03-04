@@ -29,6 +29,7 @@
 - Raw submission data dumps (FR-08 SUB endpoints serve this purpose).
 - Individual student answer viewing (FR-08 SUB-UC-04, SUB-UC-05).
 - Data export to CSV/PDF (FR-10 EXP).
+- Mood meter frontend visualization UX is temporarily deferred; backend mood meter aggregate endpoint remains available.
 - Assessment template management (FR-06 ASMT).
 - Assignment lifecycle (FR-07 ASGN).
 - Student-facing dashboards (students cannot access VIZ endpoints).
@@ -541,14 +542,18 @@ Expected statuses by UC:
 
 ## 11) Current Implementation Alignment Notes
 
-This spec defines the target FR-09 contract. Current code implements a different approach (single raw-data POST endpoint) that must be replaced:
+As of 2026-03-03, FR-09 backend aggregate contract is implemented and verified in integration tests.
 
-1. **Replace endpoint architecture.** Current: single `POST /api/v1/visualization/` returning raw submission DTOs. Target: 4 purpose-specific GET endpoints returning backend-computed aggregates. Requires new views, services, serializers, and URL routes.
-2. **Remove legacy code.** Delete: `visualizations/views.py::get_visualizations`, `visualizations/serializers.py::VisualizationFilterSerializer`, `core/dtos.py::VisualizationSubmissionDTO`, current URL routes. These are fully replaced by the new aggregate endpoints.
-3. **Implement aggregate service layer.** Current service (`get_visualization_data`) returns full submission objects. New services must compute aggregates at the database level using Django ORM `Count`, `Avg`, `Max`, `Min`.
-4. **Add `VIEW_IDENTIFIABLE_VIZ` to SudoPermission enum.** New enum value in `accounts/models.py`. Update FR-03 spec SUDO-CN-09 to include this permission. Wire `has_sudo_permission` check into VIZ response serialization.
-5. **Add teacher course ownership gate.** Current endpoint does not enforce teacher course scoping. New endpoints must verify `course.teacher_profile == user.teacher_profile` for TEACHER callers.
-6. **Add anonymization response transform.** New: response-level field stripping when caller is RESEARCHER without `VIEW_IDENTIFIABLE_VIZ`. Omit `courseId`, `courseName`, `assignmentId`, `assessmentTitle` from response body.
-7. **Add mood meter type gate.** New: VIZ-UC-04 must check `assignment.assessment.grading_mode == GradingMode.MOOD_METER` and return `409` if not.
-8. **Rewrite tests.** Current test file has 2 tests. Target: full coverage for all 4 UCs, all error paths, all constraints, anonymization, and ownership gates.
-9. **Update frontend.** Current frontend dashboard components do not consume VIZ endpoints. Wire Recharts components to new aggregate endpoints. Build custom mood meter grid component.
+Completed alignment:
+1. Legacy raw endpoint removed; aggregate GET endpoints live under `/api/v1/visualizations/*`.
+2. Legacy serializer/DTO path removed (`VisualizationFilterSerializer`, `VisualizationSubmissionDTO`).
+3. Aggregate services use DB-side query/aggregation patterns (`Count`, `Avg`, `Max`, `Min`, `Case`, `Subquery`).
+4. `VIEW_IDENTIFIABLE_VIZ` sudo permission is enforced for researcher de-anonymization.
+5. Teacher ownership gates are enforced at course and assignment scopes.
+6. Researcher anonymization omits identifiable fields (IDs/titles/names) while retaining numeric aggregates.
+7. Mood meter type gate returns `409 Conflict` on non-mood-meter assessments.
+8. Integration suite covers UC/CN behavior and representative error paths (`tests/integration/test_visualizations_routes.py`).
+
+Known deferred/frontend items:
+1. Mood meter frontend visualization UX is deferred for now; backend endpoint and contract remain in place.
+2. Additional frontend filtering controls are deferred; backend filtering contract remains available.

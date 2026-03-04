@@ -253,6 +253,19 @@ class TestVizCourseSummary:
         resp = api_client.get(COURSE_URL.format(course.id))
         assert resp.status_code == 403
 
+    def test_VIZ_UC_02_E4_unauthenticated(self, api_client, teacher_user, admin_user):
+        """Unauthenticated gets 401."""
+        course, _, _ = _seed_course(teacher_user, admin_user=admin_user)
+        resp = api_client.get(COURSE_URL.format(course.id))
+        assert resp.status_code == 401
+
+    def test_VIZ_UC_02_E5_invalid_query_param(self, api_client, teacher_user, admin_user):
+        """Invalid query param type returns 400."""
+        course, _, _ = _seed_course(teacher_user, admin_user=admin_user)
+        api_client.force_authenticate(user=teacher_user)
+        resp = api_client.get(COURSE_URL.format(course.id), {"assessmentId": "not-an-int"})
+        assert resp.status_code == 400
+
 
 # ===========================================================================
 # VIZ-UC-03 — Assignment Grade Summary
@@ -339,6 +352,19 @@ class TestVizAssignmentSummary:
         api_client.force_authenticate(user=student_user)
         resp = api_client.get(ASSIGNMENT_URL.format(assignment.id))
         assert resp.status_code == 403
+
+    def test_VIZ_UC_03_E4_unauthenticated(self, api_client, teacher_user, admin_user):
+        """Unauthenticated gets 401."""
+        _, assignment, _ = _seed_course(teacher_user, admin_user=admin_user)
+        resp = api_client.get(ASSIGNMENT_URL.format(assignment.id))
+        assert resp.status_code == 401
+
+    def test_VIZ_UC_03_E5_invalid_query_param(self, api_client, teacher_user, admin_user):
+        """Invalid query param type returns 400."""
+        _, assignment, _ = _seed_course(teacher_user, admin_user=admin_user)
+        api_client.force_authenticate(user=teacher_user)
+        resp = api_client.get(ASSIGNMENT_URL.format(assignment.id), {"startDate": "bad-date"})
+        assert resp.status_code == 400
 
     def test_VIZ_CN_02_distribution_bins(self, api_client, teacher_user, admin_user):
         """Distribution bins are correct per VIZ-CN-02."""
@@ -521,6 +547,19 @@ class TestVizMoodMeter:
         api_client.force_authenticate(user=student_user)
         resp = api_client.get(MOOD_URL.format(assignment.id))
         assert resp.status_code == 403
+
+    def test_VIZ_UC_04_E5_unauthenticated(self, api_client, teacher_user, admin_user):
+        """Unauthenticated gets 401."""
+        course = CourseFactory(teacher_profile=teacher_user.teacher_profile)
+        assessment = AssessmentFactory(
+            grading_mode=GradingMode.MOOD_METER,
+            created_by_admin=admin_user,
+        )
+        assignment = AssignmentFactory(
+            assessment=assessment, course=course, created_by=teacher_user
+        )
+        resp = api_client.get(MOOD_URL.format(assignment.id))
+        assert resp.status_code == 401
 
     def test_VIZ_UC_04_quadrant_aggregation(self, api_client, teacher_user, admin_user):
         """Mood meter quadrants are derived from DB-backed row/col values."""
