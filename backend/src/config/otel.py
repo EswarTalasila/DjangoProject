@@ -10,10 +10,10 @@ from opentelemetry.instrumentation.django import DjangoInstrumentor
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.instrumentation.psycopg import PsycopgInstrumentor
 from opentelemetry.propagate import set_global_textmap
-from opentelemetry.propagators.textmap import W3CTraceContextTextMapPropagator
 from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 from config.env import env
 from core.otel_exporter import FileSpanExporter
@@ -34,7 +34,7 @@ def configure_tracing() -> None:
     provider = TracerProvider(resource=resource)
     trace.set_tracer_provider(provider)
 
-    set_global_textmap(W3CTraceContextTextMapPropagator())
+    set_global_textmap(TraceContextTextMapPropagator())
 
     endpoint = env.otel_exporter_otlp_endpoint
     headers = _parse_headers(os.environ.get("OTEL_EXPORTER_OTLP_HEADERS", ""))

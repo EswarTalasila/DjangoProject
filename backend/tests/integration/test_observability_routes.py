@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from django.utils import timezone
 
+import config.otel  # noqa: F401
 from accounts.models import Role, SudoGrant, SudoPermission, UserRole
 from assessments.models import GradingMode, ScoringPolicy
 from core.models import AuditAction, AuditLog, AuditOutcome
@@ -33,11 +34,8 @@ class TestConfigureTracing:
     @staticmethod
     def _reset_configured():
         """Reset the _CONFIGURED guard before each tracing config test."""
-        import importlib
+        import config.otel as otel_mod
 
-        import config.otel as otel_mod  # noqa: F811
-
-        importlib.reload(otel_mod)
         otel_mod._CONFIGURED = False
 
     @patch("config.otel.PsycopgInstrumentor")
@@ -136,9 +134,11 @@ class TestConfigureTracing:
 
             mock_set_textmap.assert_called_once()
             arg = mock_set_textmap.call_args[0][0]
-            from opentelemetry.propagators.textmap import W3CTraceContextTextMapPropagator
+            from opentelemetry.trace.propagation.tracecontext import (
+                TraceContextTextMapPropagator,
+            )
 
-            assert isinstance(arg, W3CTraceContextTextMapPropagator)
+            assert isinstance(arg, TraceContextTextMapPropagator)
 
         self._reset_configured()
 
