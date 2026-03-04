@@ -61,6 +61,11 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "link", label: "Visualizations", href: "/dashboard/visualizations" },
 
     { type: "divider" },
+    { type: "header", label: "Exports" },
+    { type: "link", label: "Download Exports", href: "/dashboard/exports" },
+    { type: "link", label: "Package Workspaces", href: "/dashboard/packages" },
+
+    { type: "divider" },
     { type: "header", label: "Registration" },
     { type: "link", label: "Registration Codes", href: "/dashboard/codes" },
   ],
@@ -88,6 +93,11 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "divider" },
     { type: "header", label: "Analytics" },
     { type: "link", label: "Visualizations", href: "/dashboard/visualizations" },
+
+    { type: "divider" },
+    { type: "header", label: "Exports" },
+    { type: "link", label: "Download Exports", href: "/dashboard/exports" },
+    { type: "link", label: "Package Workspaces", href: "/dashboard/packages" },
   ],
 
   RESEARCHER: [
@@ -114,7 +124,8 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
 
     { type: "divider" },
     { type: "header", label: "Exports" },
-    { type: "link", label: "Download Exports", href: "/dashboard/research/exports" },
+    { type: "link", label: "Download Exports", href: "/dashboard/exports" },
+    { type: "link", label: "Package Workspaces", href: "/dashboard/packages" },
 
     { type: "divider" },
     { type: "header", label: "Registration" },
