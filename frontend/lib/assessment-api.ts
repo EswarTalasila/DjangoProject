@@ -35,6 +35,8 @@ export type Question = {
   max: number | null;
 };
 
+export type AssessmentStatus = 'ACTIVE' | 'ARCHIVED';
+
 export type Assessment = {
   id: number;
   title: string;
@@ -43,6 +45,7 @@ export type Assessment = {
   questions: Question[];
   rubricId: number | null;
   rubricAssessmentIds: number[];
+  status?: AssessmentStatus;
 };
 
 export type QuestionInput = {
