@@ -71,6 +71,11 @@ export async function archiveAssignment(assignmentId: number): Promise<Assignmen
   return response.data;
 }
 
+export async function restoreAssignment(assignmentId: number): Promise<Assignment> {
+  const response = await api.post<Assignment>(`/assignments/${assignmentId}/restore`, {});
+  return response.data;
+}
+
 export async function listAssignmentsByCourse(courseId: number): Promise<Assignment[]> {
   const response = await api.get<Paginated<Assignment> | Assignment[]>(`/assignments/courses/${courseId}`);
   const data = response.data;

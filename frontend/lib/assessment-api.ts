@@ -93,3 +93,13 @@ export async function updateAssessment(id: number, payload: AssessmentInput): Pr
 export async function deleteAssessment(id: number): Promise<void> {
   await api.delete(`/assessments/${id}`);
 }
+
+export async function archiveAssessment(id: number): Promise<Assessment> {
+  const response = await api.post<Assessment>(`/assessments/${id}/archive`, {});
+  return response.data;
+}
+
+export async function restoreAssessment(id: number): Promise<Assessment> {
+  const response = await api.post<Assessment>(`/assessments/${id}/restore`, {});
+  return response.data;
+}

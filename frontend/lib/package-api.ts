@@ -61,6 +61,19 @@ export type BuildJob = {
   artifactId?: number;
 };
 
+export type WorkspaceSummary = {
+  id: number;
+  name: string;
+  description: string;
+  status: WorkspaceStatus;
+  scopeCourseId: number | null;
+  revision: number;
+  createdBy: number;
+  createdAt: string;
+  updatedAt: string;
+  nodeCount: number;
+};
+
 export type CreateWorkspacePayload = {
   name: string;
   description?: string;
@@ -95,6 +108,11 @@ export type UpdateNodePayload = {
   identifiable?: boolean;
   includeAnswers?: boolean;
 };
+
+export async function listWorkspaces(): Promise<PackageWorkspace[]> {
+  const { data } = await api.get<PackageWorkspace[]>('/packages/workspaces');
+  return data;
+}
 
 export async function createWorkspace(payload: CreateWorkspacePayload): Promise<PackageWorkspace> {
   const { data } = await api.post<PackageWorkspace>('/packages/workspaces', payload);

@@ -8,6 +8,7 @@ export interface CourseSummary {
   teacherId: number | null;
   teacherName: string | null;
   createdAt: string | null;
+  status: 'ACTIVE' | 'ARCHIVED';
 }
 
 export interface CourseStudent {
@@ -27,9 +28,13 @@ interface Paginated<T> {
   results: T[];
 }
 
-export async function listCourses(): Promise<CourseSummary[]> {
+export async function listCourses(
+  options?: { includeArchived?: boolean },
+): Promise<CourseSummary[]> {
+  const params = options?.includeArchived ? { includeArchived: true } : undefined;
   const response = await api.get<Paginated<CourseSummary> | CourseSummary[]>(
-    "/courses/"
+    "/courses/",
+    { params },
   );
   const data = response.data;
   if (Array.isArray(data)) return data;
@@ -87,4 +92,14 @@ export async function removeStudentFromCourse(
   studentUserId: number
 ): Promise<void> {
   await api.delete(`/courses/${courseId}/students/${studentUserId}`);
+}
+
+export async function archiveCourse(courseId: number): Promise<CourseSummary> {
+  const response = await api.post<CourseSummary>(`/courses/${courseId}/archive`, {});
+  return response.data;
+}
+
+export async function restoreCourse(courseId: number): Promise<CourseSummary> {
+  const response = await api.post<CourseSummary>(`/courses/${courseId}/restore`, {});
+  return response.data;
 }
