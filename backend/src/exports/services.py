@@ -98,6 +98,18 @@ def _log_audit(user, export_type, scope_course, filters, identifiable, row_count
     )
 
 
+def log_export_audit(user, export_type, scope_course, filters, identifiable=False, row_count=0):
+    """Public wrapper for audit entries used by early-return branches in views."""
+    _log_audit(
+        user=user,
+        export_type=export_type,
+        scope_course=scope_course,
+        filters=filters,
+        identifiable=identifiable,
+        row_count=row_count,
+    )
+
+
 # ── Answer serialization for includeAnswers ──────────────────────────
 
 def _serialize_answers(submission, identifiable: bool) -> str:

@@ -207,6 +207,13 @@ class TestRosterExport:
         resp = api_client.get(ROSTER_URL.format(course.id) + "?identifiable=true")
         assert resp.status_code == 403
 
+    def test_EXP_UC_01_E4_invalid_identifiable_param(self, api_client, admin_user, teacher_user):
+        """Invalid identifiable boolean returns 400."""
+        course, _ = _seed_course(teacher_user, admin_user=admin_user)
+        api_client.force_authenticate(user=admin_user)
+        resp = api_client.get(ROSTER_URL.format(course.id) + "?identifiable=maybe")
+        assert resp.status_code == 400
+
     def test_EXP_CN_01_anonymization(self, api_client, researcher_user, teacher_user, admin_user):
         """Verify anonymized columns are omitted, not nulled."""
         course, _ = _seed_course(teacher_user, admin_user=admin_user)
@@ -257,6 +264,20 @@ class TestRosterExport:
         rows = _parse_csv(resp)
         consents = {r["consent"] for r in rows}
         assert consents == {"true", "false"}
+
+    def test_EXP_CN_06_audit_roster_on_cap_rejection(
+        self, api_client, admin_user, teacher_user, monkeypatch
+    ):
+        """Row-cap rejection still writes audit log entry."""
+        course, _ = _seed_course(teacher_user, admin_user=admin_user, n_students=3)
+        monkeypatch.setattr("exports.views.COURSE_SCOPED_CAP", 1)
+        api_client.force_authenticate(user=admin_user)
+        resp = api_client.get(ROSTER_URL.format(course.id))
+        assert resp.status_code == 422
+        log = ExportAuditLog.objects.filter(user=admin_user).first()
+        assert log is not None
+        assert log.export_type == "roster"
+        assert log.row_count == 3
 
 
 # ===========================================================================
@@ -407,6 +428,22 @@ class TestCourseSubmissionExport:
         resp = api_client.get(COURSE_SUBS_URL.format(course.id) + "?identifiable=true")
         assert resp.status_code == 403
 
+    def test_EXP_UC_02_E5_invalid_include_answers_boolean(
+        self, api_client, teacher_user, admin_user
+    ):
+        """Invalid includeAnswers boolean returns 400."""
+        course, _ = _seed_course(teacher_user, admin_user=admin_user)
+        api_client.force_authenticate(user=teacher_user)
+        resp = api_client.get(COURSE_SUBS_URL.format(course.id) + "?includeAnswers=maybe")
+        assert resp.status_code == 400
+
+    def test_EXP_UC_02_E5_invalid_status_value(self, api_client, teacher_user, admin_user):
+        """Invalid submission status filter returns 400."""
+        course, _ = _seed_course(teacher_user, admin_user=admin_user)
+        api_client.force_authenticate(user=teacher_user)
+        resp = api_client.get(COURSE_SUBS_URL.format(course.id) + "?status=BAD_STATUS")
+        assert resp.status_code == 400
+
     def test_EXP_CN_06_audit_submissions(self, api_client, admin_user, teacher_user):
         """Audit log created for course submission export."""
         course, students = _seed_course(teacher_user, admin_user=admin_user)
@@ -511,6 +548,7 @@ class TestCrossCourseSubmissionExport:
         # Missing startDate
         resp = api_client.get(CROSS_SUBS_URL + "?endDate=2026-01-01")
         assert resp.status_code == 400
+        assert ExportAuditLog.objects.filter(user=admin_user).count() == 3
 
     def test_EXP_UC_03_E5_no_sudo(self, api_client, researcher_user, teacher_user, admin_user):
         """Researcher without sudo requesting identifiable=true gets 403."""
@@ -522,6 +560,30 @@ class TestCrossCourseSubmissionExport:
             CROSS_SUBS_URL + f"?startDate={today}&endDate={today}&identifiable=true"
         )
         assert resp.status_code == 403
+
+    def test_EXP_UC_03_E4_invalid_include_answers_boolean(
+        self, api_client, admin_user, teacher_user
+    ):
+        """Invalid includeAnswers boolean returns 400."""
+        course, students = _seed_course(teacher_user, admin_user=admin_user)
+        _seed_submissions(teacher_user, course, students, admin_user=admin_user)
+        today = timezone.now().strftime("%Y-%m-%d")
+        api_client.force_authenticate(user=admin_user)
+        resp = api_client.get(
+            CROSS_SUBS_URL + f"?startDate={today}&endDate={today}&includeAnswers=maybe"
+        )
+        assert resp.status_code == 400
+
+    def test_EXP_UC_03_E4_invalid_status_value(self, api_client, admin_user, teacher_user):
+        """Invalid submission status filter returns 400."""
+        course, students = _seed_course(teacher_user, admin_user=admin_user)
+        _seed_submissions(teacher_user, course, students, admin_user=admin_user)
+        today = timezone.now().strftime("%Y-%m-%d")
+        api_client.force_authenticate(user=admin_user)
+        resp = api_client.get(
+            CROSS_SUBS_URL + f"?startDate={today}&endDate={today}&status=BAD_STATUS"
+        )
+        assert resp.status_code == 400
 
     def test_EXP_CN_06_audit_cross_course(self, api_client, admin_user, teacher_user):
         """Audit log for cross-course export has scope_course=None."""

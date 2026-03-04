@@ -17,7 +17,8 @@ from rest_framework.response import Response
 
 from accounts.models import Role
 from core.permissions import IsResearcherOrAdmin, IsTeacherOrAbove, has_role
-from courses.models import Course
+from courses.models import Course, EnrollmentStatus
+from submissions.models import SubmissionStatus
 
 from .services import (
     COURSE_SCOPED_CAP,
@@ -25,18 +26,19 @@ from .services import (
     export_course_submissions,
     export_cross_course_submissions,
     export_roster,
+    log_export_audit,
     resolve_anonymization,
 )
 
 
-def _parse_bool(value: str | None) -> bool | None:
+def _parse_bool(value: str | None) -> bool | None | str:
     if value is None:
         return None
     if value.lower() in ("true", "1", "yes"):
         return True
     if value.lower() in ("false", "0", "no"):
         return False
-    return None
+    return "invalid"
 
 
 def _parse_date(value: str | None, *, end_of_day=False):
@@ -88,28 +90,73 @@ def _streaming_response(generator, row_count, is_anonymized, filename):
     return response
 
 
+def _audit_failure(user, export_type, scope_course, filters, identifiable=False, row_count=0):
+    """Log failure-path export attempts (cap/filter/validation/permission rejections)."""
+    log_export_audit(
+        user=user,
+        export_type=export_type,
+        scope_course=scope_course,
+        filters=filters,
+        identifiable=identifiable,
+        row_count=row_count,
+    )
+
+
 # ── EXP-UC-01 — Course Roster Export ─────────────────────────────────
 
 @api_view(["GET"])
 @permission_classes([IsTeacherOrAbove])
 def course_roster(request, course_id):
     """GET /api/v1/exports/courses/{courseId}/roster"""
+    filters = {
+        "status": request.query_params.get("status"),
+        "identifiable": request.query_params.get("identifiable"),
+    }
+    identifiable = False
+
+    identifiable_param = _parse_bool(request.query_params.get("identifiable"))
+    if identifiable_param == "invalid":
+        _audit_failure(
+            request.user, "roster", None, filters, identifiable=False, row_count=0
+        )
+        return Response(
+            {"detail": "Invalid boolean parameter."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     course = Course.objects.filter(id=course_id).first()
     if not course:
+        _audit_failure(
+            request.user, "roster", None, filters, identifiable=False, row_count=0
+        )
         return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
 
     access_err = _check_course_access(request.user, course)
     if access_err:
+        _audit_failure(
+            request.user, "roster", course, filters, identifiable=False, row_count=0
+        )
         return access_err
 
     # Anonymization
-    identifiable_param = _parse_bool(request.query_params.get("identifiable"))
     is_identifiable, anon_err = resolve_anonymization(request.user, identifiable_param)
+    identifiable = bool(is_identifiable)
     if anon_err:
+        _audit_failure(
+            request.user, "roster", course, filters, identifiable=False, row_count=0
+        )
         return Response({"detail": anon_err}, status=status.HTTP_403_FORBIDDEN)
 
     # Status filter
     status_filter = request.query_params.get("status")
+    if status_filter and status_filter not in EnrollmentStatus.values:
+        _audit_failure(
+            request.user, "roster", course, filters, identifiable=identifiable, row_count=0
+        )
+        return Response(
+            {"detail": "Invalid status value."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     # Row cap (EXP-CN-03)
     from courses.models import Enrollment
@@ -119,6 +166,14 @@ def course_roster(request, course_id):
         qs = qs.filter(status=status_filter)
     count = qs.count()
     if count > COURSE_SCOPED_CAP:
+        _audit_failure(
+            request.user,
+            "roster",
+            course,
+            filters,
+            identifiable=identifiable,
+            row_count=count,
+        )
         return Response(
             {"detail": "Export too large. Apply filters to reduce dataset."},
             status=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -143,22 +198,53 @@ def course_roster(request, course_id):
 @permission_classes([IsTeacherOrAbove])
 def course_submissions(request, course_id):
     """GET /api/v1/exports/courses/{courseId}/submissions"""
+    params = request.query_params
+    filters = {
+        "startDate": params.get("startDate"),
+        "endDate": params.get("endDate"),
+        "category": params.get("category"),
+        "assessmentId": params.get("assessmentId"),
+        "assignmentId": params.get("assignmentId"),
+        "status": params.get("status"),
+        "includeAnswers": params.get("includeAnswers"),
+        "identifiable": params.get("identifiable"),
+    }
+    identifiable = False
+
+    identifiable_param = _parse_bool(params.get("identifiable"))
+    if identifiable_param == "invalid":
+        _audit_failure(
+            request.user, "submissions", None, filters, identifiable=False, row_count=0
+        )
+        return Response(
+            {"detail": "Invalid boolean parameter."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     course = Course.objects.filter(id=course_id).first()
     if not course:
+        _audit_failure(
+            request.user, "submissions", None, filters, identifiable=False, row_count=0
+        )
         return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
 
     access_err = _check_course_access(request.user, course)
     if access_err:
+        _audit_failure(
+            request.user, "submissions", course, filters, identifiable=False, row_count=0
+        )
         return access_err
 
     # Anonymization
-    identifiable_param = _parse_bool(request.query_params.get("identifiable"))
     is_identifiable, anon_err = resolve_anonymization(request.user, identifiable_param)
+    identifiable = bool(is_identifiable)
     if anon_err:
+        _audit_failure(
+            request.user, "submissions", course, filters, identifiable=False, row_count=0
+        )
         return Response({"detail": anon_err}, status=status.HTTP_403_FORBIDDEN)
 
     # Parse filters
-    params = request.query_params
     start_date = _parse_date(params.get("startDate"))
     end_date = _parse_date(params.get("endDate"), end_of_day=True)
     assessment_id = _parse_int(params.get("assessmentId"))
@@ -166,11 +252,17 @@ def course_submissions(request, course_id):
 
     # Validate param types
     if start_date == "invalid" or end_date == "invalid":
+        _audit_failure(
+            request.user, "submissions", course, filters, identifiable=identifiable, row_count=0
+        )
         return Response(
             {"detail": "Invalid date format. Use YYYY-MM-DD."},
             status=status.HTTP_400_BAD_REQUEST,
         )
     if assessment_id == "invalid" or assignment_id == "invalid":
+        _audit_failure(
+            request.user, "submissions", course, filters, identifiable=identifiable, row_count=0
+        )
         return Response(
             {"detail": "Invalid integer parameter."},
             status=status.HTTP_400_BAD_REQUEST,
@@ -178,7 +270,25 @@ def course_submissions(request, course_id):
 
     category = params.get("category")
     status_filter = params.get("status")
-    include_answers = _parse_bool(params.get("includeAnswers")) or False
+    include_answers = _parse_bool(params.get("includeAnswers"))
+    if include_answers == "invalid":
+        _audit_failure(
+            request.user, "submissions", course, filters, identifiable=identifiable, row_count=0
+        )
+        return Response(
+            {"detail": "Invalid boolean parameter."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    include_answers = include_answers or False
+
+    if status_filter and status_filter not in SubmissionStatus.values:
+        _audit_failure(
+            request.user, "submissions", course, filters, identifiable=identifiable, row_count=0
+        )
+        return Response(
+            {"detail": "Invalid status value."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     # Row cap (EXP-CN-03) — estimate with same filters
     from submissions.models import Submission
@@ -199,6 +309,14 @@ def course_submissions(request, course_id):
 
     count = qs.count()
     if count > COURSE_SCOPED_CAP:
+        _audit_failure(
+            request.user,
+            "submissions",
+            course,
+            filters,
+            identifiable=identifiable,
+            row_count=count,
+        )
         return Response(
             {"detail": "Export too large. Apply filters to reduce dataset."},
             status=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -230,11 +348,24 @@ def course_submissions(request, course_id):
 def cross_course_submissions(request):
     """GET /api/v1/exports/submissions"""
     params = request.query_params
+    filters = {
+        "startDate": params.get("startDate"),
+        "endDate": params.get("endDate"),
+        "category": params.get("category"),
+        "assessmentId": params.get("assessmentId"),
+        "status": params.get("status"),
+        "includeAnswers": params.get("includeAnswers"),
+        "identifiable": params.get("identifiable"),
+    }
+    identifiable = False
 
     # Required date range (EXP-CN-04)
     raw_start = params.get("startDate")
     raw_end = params.get("endDate")
     if not raw_start or not raw_end:
+        _audit_failure(
+            request.user, "submissions", None, filters, identifiable=False, row_count=0
+        )
         return Response(
             {"detail": "Cross-course export requires startDate and endDate filters"},
             status=status.HTTP_400_BAD_REQUEST,
@@ -243,6 +374,9 @@ def cross_course_submissions(request):
     start_date = _parse_date(raw_start)
     end_date = _parse_date(raw_end, end_of_day=True)
     if start_date == "invalid" or end_date == "invalid":
+        _audit_failure(
+            request.user, "submissions", None, filters, identifiable=False, row_count=0
+        )
         return Response(
             {"detail": "Invalid date format. Use YYYY-MM-DD."},
             status=status.HTTP_400_BAD_REQUEST,
@@ -250,6 +384,9 @@ def cross_course_submissions(request):
 
     assessment_id = _parse_int(params.get("assessmentId"))
     if assessment_id == "invalid":
+        _audit_failure(
+            request.user, "submissions", None, filters, identifiable=False, row_count=0
+        )
         return Response(
             {"detail": "Invalid integer parameter."},
             status=status.HTTP_400_BAD_REQUEST,
@@ -257,13 +394,43 @@ def cross_course_submissions(request):
 
     # Anonymization
     identifiable_param = _parse_bool(params.get("identifiable"))
+    if identifiable_param == "invalid":
+        _audit_failure(
+            request.user, "submissions", None, filters, identifiable=False, row_count=0
+        )
+        return Response(
+            {"detail": "Invalid boolean parameter."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
     is_identifiable, anon_err = resolve_anonymization(request.user, identifiable_param)
+    identifiable = bool(is_identifiable)
     if anon_err:
+        _audit_failure(
+            request.user, "submissions", None, filters, identifiable=False, row_count=0
+        )
         return Response({"detail": anon_err}, status=status.HTTP_403_FORBIDDEN)
 
     category = params.get("category")
     status_filter = params.get("status")
-    include_answers = _parse_bool(params.get("includeAnswers")) or False
+    include_answers = _parse_bool(params.get("includeAnswers"))
+    if include_answers == "invalid":
+        _audit_failure(
+            request.user, "submissions", None, filters, identifiable=identifiable, row_count=0
+        )
+        return Response(
+            {"detail": "Invalid boolean parameter."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    include_answers = include_answers or False
+
+    if status_filter and status_filter not in SubmissionStatus.values:
+        _audit_failure(
+            request.user, "submissions", None, filters, identifiable=identifiable, row_count=0
+        )
+        return Response(
+            {"detail": "Invalid status value."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     # Row cap (EXP-CN-04) — estimate with same filters
     from submissions.models import Submission
@@ -281,6 +448,14 @@ def cross_course_submissions(request):
 
     count = qs.count()
     if count > CROSS_COURSE_CAP:
+        _audit_failure(
+            request.user,
+            "submissions",
+            None,
+            filters,
+            identifiable=identifiable,
+            row_count=count,
+        )
         return Response(
             {"detail": "Export too large. Narrow date range or apply additional filters."},
             status=status.HTTP_422_UNPROCESSABLE_ENTITY,
