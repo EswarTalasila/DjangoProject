@@ -21,11 +21,14 @@
 #   docker compose --profile proxy up # Include Nginx reverse proxy
 #
 # SERVICES:
-#   - database:     PostgreSQL 17 (internal only, access via docker compose exec)
-#   - backend:      Django REST API (port 8000)
-#   - frontend:     Next.js dev server (port 3000)
-#   - frontend-e2e: Playwright E2E tests (profile: e2e)
-#   - nginx:        Reverse proxy (profile: proxy, port 80)
+#   - database:       PostgreSQL 17 (internal only, access via docker compose exec)
+#   - backend:        Django REST API (port 8000)
+#   - frontend:       Next.js dev server (port 3000)
+#   - pgadmin:        Database management UI (port 5050)
+#   - otel-collector: OTel span receiver (ports 4317/4318)
+#   - jaeger:         Trace visualization UI (port 16686)
+#   - frontend-e2e:   Playwright E2E tests (profile: e2e)
+#   - nginx:          Reverse proxy (profile: proxy, port 80)
 # =============================================================================
 
 services:
@@ -110,7 +113,7 @@ services:
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - OTEL_ENABLED=${OTEL_ENABLED:-}
       - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-eel-backend}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318/v1/traces}
       - OTEL_EXPORTER_OTLP_HEADERS=${OTEL_EXPORTER_OTLP_HEADERS:-}
       - OTEL_TRACE_FILE=${OTEL_TRACE_FILE:-/app/traces/traces.jsonl}
       # Admin account seeding (used by ensure_admin management command)
@@ -124,6 +127,12 @@ services:
       - ./scripts:/app/scripts:cached
       - ./Docs:/app/Docs:cached
       - ./Docs/diagrams/otel:/app/traces:cached
+      # Infrastructure config files (read-only) for FR-13 contract tests
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
+      - ./otel-collector-config.yaml:/app/otel-collector-config.yaml:ro
+      - ./.pre-commit-config.yaml:/app/.pre-commit-config.yaml:ro
+      - ./Deployment:/app/Deployment:ro
+      - ./backend/Dockerfile:/app/Dockerfile:ro
     ports:
       - "8000:8000"
     depends_on:
@@ -217,6 +226,39 @@ services:
     depends_on:
       - frontend
       - backend
+    networks:
+      - eel-network
+
+  # ==========================================================================
+  # OTel Collector
+  # Receives OTLP spans from backend and forwards to Jaeger.
+  # Spec: FR-13 INFRA-UC-05, FR-11 OBS Section 6
+  # ==========================================================================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    container_name: eel-otel-collector
+    restart: unless-stopped
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    networks:
+      - eel-network
+
+  # ==========================================================================
+  # Jaeger - Trace Visualization
+  # Access at http://localhost:16686
+  # Spec: FR-13 INFRA-UC-05, FR-11 OBS Section 6
+  # ==========================================================================
+  jaeger:
+    image: jaegertracing/all-in-one:1.65
+    container_name: eel-jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
     networks:
       - eel-network
 

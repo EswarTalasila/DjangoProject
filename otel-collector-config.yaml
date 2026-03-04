@@ -1,0 +1,29 @@
+# OpenTelemetry Collector configuration for local development.
+# Receives OTLP spans from the backend and forwards them to Jaeger.
+#
+# Referenced by: docker-compose.yml (otel-collector service volume mount)
+# Spec: FR-13 INFRA-UC-05, FR-11 OBS Section 6
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+exporters:
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+processors:
+  batch:
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger]

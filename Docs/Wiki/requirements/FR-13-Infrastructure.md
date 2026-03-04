@@ -520,13 +520,14 @@ INFRA errors are operational. They manifest as Docker Compose failures, Taskfile
 
 ## 11) Current Implementation Alignment Notes
 
-This spec defines the target FR-13 contract. Current codebase has substantial infrastructure already implemented:
+All FR-13 infrastructure contracts are implemented. Status by area:
 
-1. **Docker Compose implemented.** `docker-compose.yml` (231 lines) defines 5 services: database, backend, frontend, pgadmin, nginx. Frontends use named volumes for `node_modules`. Backend uses multi-stage Dockerfile with non-root production user. `ENVIRONMENT` passthrough already wired (`ENVIRONMENT=${ENVIRONMENT:-development}`).
-2. **OTel services not yet added.** `otel-collector` and `jaeger` services defined in FR-11 OBS-CN-09 but not yet in `docker-compose.yml`. Collector config file (`otel-collector-config.yaml`) does not exist yet. `task otel` overlay is implemented but relies on backend-level `OTEL_ENABLED` toggle only.
-3. **Taskfile implemented.** `Taskfile.yml` (921 lines) provides ~60 tasks across 8 categories. Profile tasks (`up:dev/test/prod`), overlay tasks (`otel`, `proxy`), testing tasks (unit/integration/security/E2E/coverage), quality tasks, Docker management, Django management, diagrams, and local dev support all operational.
-4. **Pre-commit hooks implemented.** `.pre-commit-config.yaml` (79 lines) configures Ruff lint/format, file hygiene hooks, and branch guard. mypy hook commented out pending DTO work. All hooks scope to `^backend/` for Ruff.
-5. **Postgres version mismatch exists.** `docker-compose.yml` uses `postgres:17-alpine`; `Deployment/templates/docker-compose.template.yml` and `docker-compose.dev.template.yml` use `postgres:15`. Must sync to `postgres:17-alpine`.
-6. **No GitHub Actions CI.** `.github/workflows/` directory does not exist. CI is currently manual via Taskfile tasks. GitHub Actions workflow configuration is documented as future work (INFRA-UC-02).
-7. **E2E infrastructure implemented.** `frontend-e2e` service uses Playwright `v1.57.0-jammy` image under `e2e` compose profile. E2E seeding script, recording scripts, and role-filtered test execution all operational via Taskfile.
-8. **Deployment templates exist but are stale.** `Deployment/templates/` contains 12 template files (compose, pytest, pre-commit, Playwright config, security tools). Need postgres version sync and `ENVIRONMENT` variable alignment.
+1. **Docker Compose — DONE.** `docker-compose.yml` defines 8 services: database, backend, frontend, pgadmin, otel-collector, jaeger, frontend-e2e (e2e profile), nginx (proxy profile). Named volumes for `node_modules` and persistent data. Backend multi-stage Dockerfile with non-root production user. `ENVIRONMENT` passthrough wired (`ENVIRONMENT=${ENVIRONMENT:-development}`). Infrastructure config files mounted read-only into backend for contract tests.
+2. **OTel services — DONE.** `otel-collector` (`otel/opentelemetry-collector-contrib:0.120.0`, ports 4317/4318) and `jaeger` (`jaegertracing/all-in-one:1.65`, port 16686) added as default-profile services. `otel-collector-config.yaml` defines OTLP receiver → batch processor → Jaeger OTLP exporter pipeline. Backend OTLP endpoint defaults to `http://otel-collector:4318/v1/traces` in Docker context. `task otel` enables backend tracing; collector/Jaeger are always available.
+3. **Taskfile — DONE.** `Taskfile.yml` (~921 lines) provides ~60 tasks across 8 categories. All profile, overlay, testing, quality, Docker, Django, docs, and local tasks operational.
+4. **Pre-commit hooks — DONE.** `.pre-commit-config.yaml` configures Ruff lint/format (scoped to `^backend/`), file hygiene (large file guard, trailing whitespace, EOF newline, YAML/TOML check), and branch guard (`master`/`main`). mypy disabled pending DTO work (issues #3, #4).
+5. **Postgres version consistency — DONE.** All compose files and deployment templates use `postgres:17-alpine` (INFRA-CN-02).
+6. **GitHub Actions CI — DEFERRED.** `.github/workflows/` does not exist. CI is manual via Taskfile. GitHub Actions is documented as future work per INFRA-UC-02 scope note. No blocker for current development workflow.
+7. **E2E infrastructure — DONE.** `frontend-e2e` service uses Playwright `v1.57.0-jammy` image under `e2e` compose profile.
+8. **Deployment templates — DONE.** `Deployment/templates/` compose templates updated: `postgres:17-alpine`, `ENVIRONMENT` passthrough added to backend service environment in both production and dev templates.
+9. **Infrastructure contract tests — DONE.** 48 FR-traceable tests in `backend/tests/unit/test_infrastructure_contracts.py` covering INFRA-UC-01, INFRA-UC-01-E4, INFRA-UC-05, INFRA-CN-01 through CN-10.
