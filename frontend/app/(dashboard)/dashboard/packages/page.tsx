@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-import { getSessionProfile } from '@/lib/auth-session';
+import { getSessionProfile, getSudoCapabilities } from '@/lib/auth-session';
 
 export default async function PackagesPage() {
   const profile = await getSessionProfile();
@@ -9,8 +9,15 @@ export default async function PackagesPage() {
   }
 
   const role = profile.isStaff ? 'ADMIN' : (profile.role as string);
-  if (!['TEACHER', 'RESEARCHER', 'ADMIN'].includes(role)) {
-    redirect('/dashboard');
+  if (!['TEACHER', 'ADMIN'].includes(role)) {
+    if (role !== 'RESEARCHER') {
+      redirect('/dashboard');
+    }
+    const sudo = await getSudoCapabilities();
+    const canExport = sudo?.permissions?.includes('EXPORT_IDENTIFIABLE') === true;
+    if (!canExport) {
+      redirect('/dashboard');
+    }
   }
 
   return (

@@ -109,13 +109,8 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "divider" },
     { type: "header", label: "Assessments" },
     { type: "link", label: "Assessments", href: "/dashboard/assessments" },
-    { type: "link", label: "Assignments", href: "/dashboard/assignments" },
     { type: "link", label: "Submissions", href: "/dashboard/submissions" },
     { type: "link", label: "Rubrics", href: "/dashboard/rubrics" },
-
-    { type: "divider" },
-    { type: "header", label: "Courses" },
-    { type: "link", label: "All Courses", href: "/dashboard/courses" },
 
     { type: "divider" },
     { type: "header", label: "Users" },
@@ -124,11 +119,6 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "divider" },
     { type: "header", label: "Analytics" },
     { type: "link", label: "Visualizations", href: "/dashboard/visualizations" },
-
-    { type: "divider" },
-    { type: "header", label: "Exports" },
-    { type: "link", label: "Download Exports", href: "/dashboard/exports" },
-    { type: "link", label: "Package Workspaces", href: "/dashboard/packages" },
 
     { type: "divider" },
     { type: "header", label: "Registration" },
@@ -150,6 +140,16 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   ],
 };
 
+function removeDanglingDividers(items: NavItem[]): NavItem[] {
+  return items.filter((item, index) => {
+    if (item.type !== "divider") return true;
+    const prev = items[index - 1];
+    const next = items[index + 1];
+    if (!prev || !next) return false;
+    return prev.type !== "divider" && next.type !== "divider";
+  });
+}
+
 export async function SidebarWrapper() {
   const profile = await getSessionProfile();
   if (!profile) {
@@ -163,11 +163,21 @@ export async function SidebarWrapper() {
     const sudo = await getSudoCapabilities();
     const canGrantSudo = sudo?.canGrantSudo === true;
     const canViewSubmissions = sudo?.permissions?.includes("VIEW_SUBMISSIONS") === true;
+    const canExportData = sudo?.permissions?.includes("EXPORT_IDENTIFIABLE") === true;
 
     if (!canViewSubmissions) {
       items = items.filter(
         (item) =>
           !(item.type === "link" && item.href === "/dashboard/submissions")
+      );
+    }
+
+    if (canExportData) {
+      items.push(
+        { type: "divider" },
+        { type: "header", label: "Exports" },
+        { type: "link", label: "Download Exports", href: "/dashboard/exports" },
+        { type: "link", label: "Package Workspaces", href: "/dashboard/packages" },
       );
     }
 
@@ -177,15 +187,9 @@ export async function SidebarWrapper() {
           !(item.type === "header" && item.label === "Delegation") &&
           !(item.type === "link" && item.href === "/dashboard/sudo")
       );
-      // Remove consecutive dividers that may remain after filtering.
-      items = items.filter((item, index) => {
-        if (item.type !== "divider") return true;
-        const prev = items[index - 1];
-        const next = items[index + 1];
-        if (!prev || !next) return false;
-        return prev.type !== "divider" && next.type !== "divider";
-      });
     }
+
+    items = removeDanglingDividers(items);
   }
   const groups = groupNavItems(items);
   return <Sidebar role={userRole} groups={groups} />;

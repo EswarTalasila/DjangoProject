@@ -100,6 +100,11 @@ describe('Sidebar navigation configuration', () => {
     const sudoLink = links.find((l) => l.label === 'Sudo Delegation');
     expect(sudoLink).toBeDefined();
     expect(sudoLink!.href).toBe('/dashboard/sudo');
+    expect(links.find((l) => l.href === '/dashboard/courses')).toBeUndefined();
+    expect(links.find((l) => l.href === '/dashboard/assignments')).toBeUndefined();
+    expect(links.find((l) => l.href === '/dashboard/submissions')).toBeUndefined();
+    expect(links.find((l) => l.href === '/dashboard/exports')).toBeUndefined();
+    expect(links.find((l) => l.href === '/dashboard/packages')).toBeUndefined();
   });
 
   it('STUDENT nav does NOT include Registration Codes', async () => {
@@ -212,5 +217,47 @@ describe('Sidebar navigation configuration', () => {
     const links = findLinks(capturedGroups);
     const sudoLink = links.find((l) => l.label === 'Sudo Delegation');
     expect(sudoLink).toBeUndefined();
+  });
+
+  it('RESEARCHER nav shows submissions and exports only with explicit sudo permissions', async () => {
+    vi.resetModules();
+
+    let capturedGroups: NavGroup[] = [];
+
+    vi.doMock('@/lib/auth-session', () => ({
+      getSessionProfile: vi.fn().mockResolvedValue({
+        role: 'RESEARCHER',
+        firstName: 'Test',
+        lastName: 'Researcher',
+        username: 'researcher',
+      }),
+      getSudoCapabilities: vi.fn().mockResolvedValue({
+        hasSudo: true,
+        canGrantSudo: false,
+        permissions: ['VIEW_SUBMISSIONS', 'EXPORT_IDENTIFIABLE'],
+        isStaff: false,
+      }),
+    }));
+
+    vi.doMock('next/navigation', () => ({
+      redirect: vi.fn(),
+      usePathname: vi.fn().mockReturnValue('/dashboard'),
+    }));
+
+    vi.doMock('@/components/layout/sidebar', () => ({
+      Sidebar: ({ groups }: { role: string; groups: NavGroup[] }) => {
+        capturedGroups = groups;
+        return null;
+      },
+    }));
+
+    const { SidebarWrapper } = await import('@/components/layout/sidebarWrapper');
+    const element = await SidebarWrapper();
+    render(element);
+
+    const links = findLinks(capturedGroups);
+    expect(links.find((l) => l.href === '/dashboard/submissions')).toBeDefined();
+    expect(links.find((l) => l.href === '/dashboard/exports')).toBeDefined();
+    expect(links.find((l) => l.href === '/dashboard/packages')).toBeDefined();
   });
 });

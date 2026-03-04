@@ -9,11 +9,11 @@ export default async function AssignmentsPage() {
   }
 
   const role = profile.isStaff ? 'ADMIN' : (profile.role as string);
-  if (role !== 'TEACHER' && role !== 'RESEARCHER' && role !== 'ADMIN') {
+  if (role !== 'TEACHER' && role !== 'ADMIN') {
     redirect('/dashboard');
   }
 
   const canCreate = role === 'TEACHER';
 
-  return <AssignmentListView role={role as 'TEACHER' | 'RESEARCHER' | 'ADMIN'} userId={profile.id} canCreate={canCreate} />;
+  return <AssignmentListView role={role as 'TEACHER' | 'ADMIN'} userId={profile.id} canCreate={canCreate} />;
 }

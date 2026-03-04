@@ -15,7 +15,7 @@ export default async function CourseDetailPage({
   }
 
   const role = profile.role as string;
-  if (role !== 'TEACHER' && role !== 'RESEARCHER' && role !== 'STUDENT') {
+  if (role !== 'TEACHER' && role !== 'STUDENT') {
     redirect('/dashboard');
   }
 
@@ -28,7 +28,7 @@ export default async function CourseDetailPage({
   return (
     <CourseDetailView
       courseId={courseId}
-      userRole={role as 'TEACHER' | 'RESEARCHER' | 'STUDENT'}
+      userRole={role as 'TEACHER' | 'STUDENT'}
       userId={Number(profile.id)}
     />
   );

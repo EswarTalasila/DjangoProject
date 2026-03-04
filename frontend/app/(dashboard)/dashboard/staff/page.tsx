@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { getSessionProfile, getSudoCapabilities } from '@/lib/auth-session';
 import StaffManagementView from '@/components/staff/StaffManagementView';
 
-export default async function StaffPage() {
+export default async function Page() {
   const profile = await getSessionProfile();
   if (!profile) {
     redirect('/login');
