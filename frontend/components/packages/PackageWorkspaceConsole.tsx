@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Download, Loader2, Plus, RefreshCw } from 'lucide-react';
+import { ChevronRight, ChevronDown, Download, Folder, File, Plus, RefreshCw, Save, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -15,14 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { listCourses, type CourseSummary } from '@/lib/course-api';
 import {
   addNode,
@@ -98,6 +90,41 @@ function parseFilters(raw: string): Record<string, unknown> | null {
   return parsed as Record<string, unknown>;
 }
 
+function sortByOrder(nodes: PackageNode[]) {
+  return [...nodes].sort((a, b) => {
+    if (a.orderIndex !== b.orderIndex) {
+      return a.orderIndex - b.orderIndex;
+    }
+    return a.id - b.id;
+  });
+}
+
+function getSiblings(nodes: PackageNode[], node: PackageNode) {
+  return sortByOrder(nodes.filter((candidate) => candidate.parentId === node.parentId));
+}
+
+function prettyLabel(node: PackageNode) {
+  return `${node.label}${node.nodeType === 'FOLDER' ? '/' : ''}`;
+}
+
+function buildWorkspaceTree(nodes: PackageNode[]) {
+  const byParent = new Map<string, PackageNode[]>();
+  for (const node of sortByOrder(nodes)) {
+    const key = node.parentId == null ? 'ROOT' : String(node.parentId);
+    const bucket = byParent.get(key) ?? [];
+    bucket.push(node);
+    byParent.set(key, bucket);
+  }
+  return byParent;
+}
+
+function formatNodeDescription(node: PackageNode) {
+  if (node.nodeType === 'FOLDER') return 'Folder';
+  const binding = node.datasetBinding ?? 'No dataset';
+  const course = node.bindingCourseId == null ? 'all' : `course ${node.bindingCourseId}`;
+  return `${binding} · ${course}`;
+}
+
 export default function PackageWorkspaceConsole({
   role,
   canExportIdentifiable,
@@ -116,8 +143,11 @@ export default function PackageWorkspaceConsole({
   const [workspaceDescription, setWorkspaceDescription] = useState('');
   const [workspaceStatus, setWorkspaceStatus] = useState<WorkspaceStatus>('DRAFT');
 
-  const [addNodeForm, setAddNodeForm] = useState<NodeFormState>(EMPTY_NODE_FORM);
   const [selectedNodeId, setSelectedNodeId] = useState<number | null>(null);
+  const [expandedNodes, setExpandedNodes] = useState<Set<number>>(new Set());
+  const [addQuickMode, setAddQuickMode] = useState<'FOLDER' | 'FILE'>('FILE');
+  const [newNodeLabel, setNewNodeLabel] = useState('');
+
   const [editNodeForm, setEditNodeForm] = useState<NodeFormState>(EMPTY_NODE_FORM);
 
   const [strictMode, setStrictMode] = useState(true);
@@ -129,24 +159,27 @@ export default function PackageWorkspaceConsole({
   const [isSavingWorkspace, setIsSavingWorkspace] = useState(false);
   const [isAddingNode, setIsAddingNode] = useState(false);
   const [isSavingNode, setIsSavingNode] = useState(false);
+  const [isDeletingNode, setIsDeletingNode] = useState(false);
   const [isRunningValidation, setIsRunningValidation] = useState(false);
   const [isRunningBuild, setIsRunningBuild] = useState(false);
   const [isDownloadingArtifact, setIsDownloadingArtifact] = useState(false);
 
-  const folderNodes = useMemo(
-    () => (workspace?.nodes ?? []).filter((node) => node.nodeType === 'FOLDER'),
-    [workspace],
-  );
+  const treeMap = useMemo(() => buildWorkspaceTree(workspace?.nodes ?? []), [workspace?.nodes]);
 
   const selectedNode = useMemo(
     () => workspace?.nodes.find((node) => node.id === selectedNodeId) ?? null,
-    [selectedNodeId, workspace],
+    [selectedNodeId, workspace?.nodes],
   );
 
+  const hasSelectedFolder = selectedNode?.nodeType === 'FOLDER';
+  const selectedParentLabel = selectedNode?.parentId == null ? 'Root' : `#${selectedNode.parentId}`;
+  const siblingNodes = useMemo(() => {
+    if (!selectedNode) return [];
+    return getSiblings(workspace?.nodes ?? [], selectedNode);
+  }, [selectedNode, workspace?.nodes]);
+
   useEffect(() => {
-    void ensureCoursesLoaded().catch(() => {
-      toast.error('Failed to load courses for workspace builder.');
-    });
+    void ensureCoursesLoaded();
   }, []);
 
   async function ensureCoursesLoaded() {
@@ -163,7 +196,10 @@ export default function PackageWorkspaceConsole({
     setWorkspaceDescription(next.description);
     setWorkspaceStatus(next.status);
     setSelectedNodeId(null);
-    setEditNodeForm(EMPTY_NODE_FORM);
+    setValidationResult(null);
+    setBuildResult(null);
+    setAddQuickMode('FILE');
+    setNewNodeLabel('');
   }
 
   async function refreshWorkspace(nextId?: number) {
@@ -174,8 +210,6 @@ export default function PackageWorkspaceConsole({
       await ensureCoursesLoaded();
       const fresh = await getWorkspace(id);
       seedWorkspaceFields(fresh);
-      setValidationResult(null);
-      setBuildResult(null);
     } catch (error) {
       toast.error((error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Failed to load workspace.');
     } finally {
@@ -190,7 +224,6 @@ export default function PackageWorkspaceConsole({
     }
     setIsLoadingWorkspace(true);
     try {
-      await ensureCoursesLoaded();
       const created = await createWorkspace({
         name: createName.trim(),
         description: createDescription.trim() || undefined,
@@ -235,46 +268,68 @@ export default function PackageWorkspaceConsole({
     }
   }
 
+  async function moveSelectedNode(direction: 'up' | 'down') {
+    if (!workspace || !selectedNode) return;
+    const siblingNodes = getSiblings(workspace.nodes, selectedNode);
+    const index = siblingNodes.findIndex((node) => node.id === selectedNode.id);
+    const swapWith = direction === 'up' ? index - 1 : index + 1;
+    if (swapWith < 0 || swapWith >= siblingNodes.length) return;
+
+    const current = siblingNodes[index];
+    const target = siblingNodes[swapWith];
+
+    setIsSavingNode(true);
+    try {
+      await updateNode(workspace.id, current.id, {
+        parentId: current.parentId,
+        orderIndex: target.orderIndex,
+      });
+      await updateNode(workspace.id, target.id, {
+        parentId: target.parentId,
+        orderIndex: current.orderIndex,
+      });
+      await refreshWorkspace();
+      setSelectedNodeId(current.id);
+      toast.success('Order updated.');
+    } catch (error) {
+      toast.error((error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Failed to move node.');
+    } finally {
+      setIsSavingNode(false);
+    }
+  }
+
   async function handleAddNode() {
     if (!workspace) return;
-    if (!addNodeForm.label.trim()) {
+    if (!newNodeLabel.trim()) {
       toast.error('Node label is required.');
       return;
     }
 
     setIsAddingNode(true);
     try {
-      const filters = addNodeForm.nodeType === 'FILE' ? parseFilters(addNodeForm.filtersText) : null;
       await addNode(workspace.id, {
-        parentId: addNodeForm.parentId === 'ROOT' ? null : Number(addNodeForm.parentId),
-        nodeType: addNodeForm.nodeType,
-        label: addNodeForm.label.trim(),
-        orderIndex: Number(addNodeForm.orderIndex) || 0,
-        datasetBinding:
-          addNodeForm.nodeType === 'FILE' ? (addNodeForm.datasetBinding as DatasetBinding) : null,
-        bindingCourseId:
-          addNodeForm.nodeType === 'FILE' && addNodeForm.bindingCourseId
-            ? Number(addNodeForm.bindingCourseId)
-            : null,
-        filters,
-        identifiable: addNodeForm.nodeType === 'FILE' ? addNodeForm.identifiable : false,
-        includeAnswers: addNodeForm.nodeType === 'FILE' ? addNodeForm.includeAnswers : false,
+        parentId: selectedNodeId == null ? null : selectedNode?.nodeType === 'FOLDER' ? selectedNodeId : selectedNode?.parentId,
+        nodeType: addQuickMode,
+        label: newNodeLabel.trim(),
+        orderIndex: workspace.nodes.filter((node) => node.parentId === (selectedNode?.nodeType === 'FOLDER' ? selectedNodeId : null)).length,
+        datasetBinding: addQuickMode === 'FILE' ? 'ROSTER' : null,
+        bindingCourseId: null,
+        filters: null,
+        identifiable: false,
+        includeAnswers: false,
       });
       await refreshWorkspace();
-      setAddNodeForm({
-        ...EMPTY_NODE_FORM,
-        parentId: addNodeForm.parentId,
-      });
+      setNewNodeLabel('');
       toast.success('Node added.');
     } catch (error) {
-      const fallback = error instanceof Error ? error.message : 'Failed to add node.';
-      toast.error((error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? fallback);
+      const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(detail ?? 'Failed to add node.');
     } finally {
       setIsAddingNode(false);
     }
   }
 
-  function startEditNode(node: PackageNode) {
+  async function handleSelectNode(node: PackageNode) {
     setSelectedNodeId(node.id);
     setEditNodeForm({
       label: node.label,
@@ -287,31 +342,38 @@ export default function PackageWorkspaceConsole({
       includeAnswers: Boolean(node.includeAnswers),
       filtersText: node.filters ? JSON.stringify(node.filters, null, 2) : '{}',
     });
+    setExpandedNodes((prev) => {
+      const next = new Set(prev);
+      next.add(node.id);
+      return next;
+    });
   }
 
   async function handleSaveNode() {
-    if (!workspace || !selectedNodeId) return;
-    if (!editNodeForm.label.trim()) {
-      toast.error('Node label is required.');
-      return;
-    }
+    if (!workspace || !selectedNode) return;
     setIsSavingNode(true);
     try {
-      const filters = editNodeForm.nodeType === 'FILE' ? parseFilters(editNodeForm.filtersText) : null;
-      await updateNode(workspace.id, selectedNodeId, {
-        label: editNodeForm.label.trim(),
+      const filters =
+        editNodeForm.nodeType === 'FILE' ? parseFilters(editNodeForm.filtersText) : null;
+      const payload = {
+        label: editNodeForm.label.trim() || selectedNode.label,
         parentId: editNodeForm.parentId === 'ROOT' ? null : Number(editNodeForm.parentId),
         orderIndex: Number(editNodeForm.orderIndex) || 0,
         datasetBinding:
-          editNodeForm.nodeType === 'FILE' ? (editNodeForm.datasetBinding as DatasetBinding) : null,
+          editNodeForm.nodeType === 'FILE'
+            ? (editNodeForm.datasetBinding as DatasetBinding)
+            : null,
         bindingCourseId:
           editNodeForm.nodeType === 'FILE' && editNodeForm.bindingCourseId
             ? Number(editNodeForm.bindingCourseId)
             : null,
         filters,
-        identifiable: editNodeForm.nodeType === 'FILE' ? editNodeForm.identifiable : false,
-        includeAnswers: editNodeForm.nodeType === 'FILE' ? editNodeForm.includeAnswers : false,
-      });
+        identifiable:
+          editNodeForm.nodeType === 'FILE' ? editNodeForm.identifiable : false,
+        includeAnswers:
+          editNodeForm.nodeType === 'FILE' ? editNodeForm.includeAnswers : false,
+      };
+      await updateNode(workspace.id, selectedNode.id, payload);
       await refreshWorkspace();
       toast.success('Node updated.');
     } catch (error) {
@@ -322,20 +384,18 @@ export default function PackageWorkspaceConsole({
     }
   }
 
-  async function handleDeleteNode(nodeId: number) {
-    if (!workspace) return;
-    setIsSavingNode(true);
+  async function handleDeleteNode() {
+    if (!workspace || !selectedNode) return;
+    setIsDeletingNode(true);
     try {
-      await deleteNode(workspace.id, nodeId);
+      await deleteNode(workspace.id, selectedNode.id);
       await refreshWorkspace();
-      if (selectedNodeId === nodeId) {
-        setSelectedNodeId(null);
-      }
+      setSelectedNodeId(null);
       toast.success('Node deleted.');
     } catch (error) {
       toast.error((error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Failed to delete node.');
     } finally {
-      setIsSavingNode(false);
+      setIsDeletingNode(false);
     }
   }
 
@@ -354,8 +414,8 @@ export default function PackageWorkspaceConsole({
         toast.error('Validation failed.');
       }
     } catch (error) {
-      const responseData = (error as { response?: { data?: ValidationResult & { detail?: string } } })
-        ?.response?.data;
+      const responseData =
+        (error as { response?: { data?: ValidationResult & { detail?: string } } })?.response?.data;
       if (responseData && typeof responseData === 'object' && 'valid' in responseData) {
         setValidationResult(responseData);
       }
@@ -401,18 +461,73 @@ export default function PackageWorkspaceConsole({
     }
   }
 
+  function renderNode(node: PackageNode, depth: number) {
+    const children = treeMap.get(String(node.id)) ?? [];
+    const isExpanded = expandedNodes.has(node.id);
+    const hasChildren = children.length > 0;
+
+    return (
+      <div key={node.id} className="space-y-1">
+        <div
+          className={`group flex min-h-9 cursor-pointer items-center gap-2 rounded-sm px-2 py-1 text-sm ${
+            selectedNodeId === node.id ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/40'
+          }`}
+          style={{ paddingLeft: `${depth * 14 + 4}px` }}
+          onClick={() => void handleSelectNode(node)}
+          role="button"
+        >
+          {hasChildren ? (
+            isExpanded ? (
+              <ChevronDown
+                className="h-4 w-4 text-muted-foreground"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setExpandedNodes((prev) => {
+                    const next = new Set(prev);
+                    next.delete(node.id);
+                    return next;
+                  });
+                }}
+              />
+            ) : (
+              <ChevronRight
+                className="h-4 w-4 text-muted-foreground"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setExpandedNodes((prev) => new Set(prev).add(node.id));
+                }}
+              />
+            )
+          ) : (
+            <span className="inline-block h-4 w-4" />
+          )}
+          {node.nodeType === 'FOLDER' ? (
+            <Folder className="h-4 w-4 text-amber-500" />
+          ) : (
+            <File className="h-4 w-4 text-sky-500" />
+          )}
+          <span className="truncate font-medium text-foreground">{prettyLabel(node)}</span>
+          <span className="ml-auto text-xs text-muted-foreground">#{node.id}</span>
+        </div>
+        {hasChildren && isExpanded
+          ? children.map((child) => renderNode(child, depth + 1))
+          : null}
+      </div>
+    );
+  }
+
+  const rootNodes = treeMap.get('ROOT') ?? [];
+
   return (
-    <div className="space-y-6 p-6 w-full max-w-7xl">
+    <div className="w-full max-w-7xl space-y-6 p-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Package Workspaces</h1>
-        <p className="text-muted-foreground mt-1">
-          Build zipped export packages from a virtual file tree. Role: {role}.
-        </p>
+        <p className="text-muted-foreground mt-1">Build export packages with a file-style tree interface.</p>
       </div>
 
       <section className="rounded-sm border border-border bg-card p-4 space-y-4">
-        <h2 className="text-lg font-semibold text-foreground">Open Or Create Workspace</h2>
-        <div className="grid gap-3 md:grid-cols-4">
+        <h2 className="text-lg font-semibold text-foreground">Open or create a workspace</h2>
+        <div className="grid gap-3 md:grid-cols-5">
           <div className="space-y-1 md:col-span-2">
             <Label>Open Workspace ID</Label>
             <div className="flex gap-2">
@@ -422,7 +537,8 @@ export default function PackageWorkspaceConsole({
                 placeholder="Workspace ID"
               />
               <Button type="button" onClick={() => void handleOpenWorkspace()} disabled={isLoadingWorkspace}>
-                {isLoadingWorkspace ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Open
               </Button>
             </div>
           </div>
@@ -431,7 +547,7 @@ export default function PackageWorkspaceConsole({
             <Input
               value={createName}
               onChange={(event) => setCreateName(event.target.value)}
-              placeholder="Research Export Package"
+              placeholder="Export Package"
             />
           </div>
           <div className="space-y-1">
@@ -441,7 +557,7 @@ export default function PackageWorkspaceConsole({
                 <SelectValue placeholder="Unscoped" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Unscoped</SelectItem>
+                <SelectItem value="">Unscoped</SelectItem>
                 {courses.map((course) => (
                   <SelectItem key={course.id} value={String(course.id)}>
                     {course.name}
@@ -450,7 +566,13 @@ export default function PackageWorkspaceConsole({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1 md:col-span-3">
+          <div className="space-y-1 flex items-end">
+            <Button type="button" onClick={() => void handleCreateWorkspace()} disabled={isLoadingWorkspace}>
+              <Plus className="mr-2 h-4 w-4" />
+              Create
+            </Button>
+          </div>
+          <div className="space-y-1 md:col-span-5">
             <Label>Description</Label>
             <Input
               value={createDescription}
@@ -458,29 +580,21 @@ export default function PackageWorkspaceConsole({
               placeholder="Optional workspace description"
             />
           </div>
-          <div className="flex items-end">
-            <Button type="button" onClick={() => void handleCreateWorkspace()} disabled={isLoadingWorkspace}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create Workspace
-            </Button>
-          </div>
         </div>
       </section>
 
       {!workspace ? (
         <div className="rounded-sm border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-          Open an existing workspace ID or create a new one to start building a package.
+          Open an existing workspace or create a new one to start building your package.
         </div>
       ) : (
         <>
           <section className="rounded-sm border border-border bg-card p-4 space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-foreground">
-                Workspace #{workspace.id} (Revision {workspace.revision})
+                Workspace #{workspace.id} · Revision {workspace.revision}
               </h2>
-              <p className="text-xs text-muted-foreground">
-                Updated {new Date(workspace.updatedAt).toLocaleString()}
-              </p>
+              <p className="text-xs text-muted-foreground">Updated {new Date(workspace.updatedAt).toLocaleString()}</p>
             </div>
 
             <div className="grid gap-3 md:grid-cols-3">
@@ -504,21 +618,19 @@ export default function PackageWorkspaceConsole({
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label>Scope Course ID</Label>
+                <Label>Scope Course</Label>
                 <Input value={workspace.scopeCourseId ?? ''} readOnly />
               </div>
-              <div className="space-y-1 md:col-span-3">
+              <div className="md:col-span-3 space-y-1">
                 <Label>Description</Label>
-                <Input
-                  value={workspaceDescription}
-                  onChange={(event) => setWorkspaceDescription(event.target.value)}
-                />
+                <Input value={workspaceDescription} onChange={(event) => setWorkspaceDescription(event.target.value)} />
               </div>
             </div>
 
             <div className="flex gap-2">
               <Button type="button" onClick={() => void handleSaveWorkspace()} disabled={isSavingWorkspace}>
-                {isSavingWorkspace ? 'Saving...' : 'Save Workspace'}
+                <Save className="mr-2 h-4 w-4" />
+                {isSavingWorkspace ? 'Saving...' : 'Save'}
               </Button>
               <Button type="button" variant="outline" onClick={() => void refreshWorkspace()} disabled={isLoadingWorkspace}>
                 Refresh
@@ -526,414 +638,319 @@ export default function PackageWorkspaceConsole({
             </div>
           </section>
 
-          <section className="rounded-sm border border-border bg-card p-4 space-y-4">
-            <h2 className="text-lg font-semibold text-foreground">Add Node</h2>
-            <div className="grid gap-3 md:grid-cols-4">
-              <div className="space-y-1">
-                <Label>Label</Label>
-                <Input
-                  value={addNodeForm.label}
-                  onChange={(event) => setAddNodeForm((prev) => ({ ...prev, label: event.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Node Type</Label>
-                <Select
-                  value={addNodeForm.nodeType}
-                  onValueChange={(value) =>
-                    setAddNodeForm((prev) => ({
-                      ...prev,
-                      nodeType: value as 'FOLDER' | 'FILE',
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="FOLDER">FOLDER</SelectItem>
-                    <SelectItem value="FILE">FILE</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>Parent</Label>
-                <Select
-                  value={addNodeForm.parentId}
-                  onValueChange={(value) => setAddNodeForm((prev) => ({ ...prev, parentId: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ROOT">Root</SelectItem>
-                    {folderNodes.map((node) => (
-                      <SelectItem key={node.id} value={String(node.id)}>
-                        {node.label} (#{node.id})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>Order Index</Label>
-                <Input
-                  value={addNodeForm.orderIndex}
-                  onChange={(event) =>
-                    setAddNodeForm((prev) => ({ ...prev, orderIndex: event.target.value }))
-                  }
-                />
-              </div>
-            </div>
-
-            {addNodeForm.nodeType === 'FILE' && (
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="space-y-1">
-                  <Label>Dataset Binding</Label>
-                  <Select
-                    value={addNodeForm.datasetBinding}
-                    onValueChange={(value) =>
-                      setAddNodeForm((prev) => ({ ...prev, datasetBinding: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DATASET_BINDINGS.map((binding) => (
-                        <SelectItem key={binding.value} value={binding.value}>
-                          {binding.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>Binding Course ID (optional)</Label>
-                  <Input
-                    value={addNodeForm.bindingCourseId}
-                    onChange={(event) =>
-                      setAddNodeForm((prev) => ({ ...prev, bindingCourseId: event.target.value }))
-                    }
-                    placeholder="e.g. 12"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Filters JSON (optional)</Label>
-                  <Input
-                    value={addNodeForm.filtersText}
-                    onChange={(event) =>
-                      setAddNodeForm((prev) => ({ ...prev, filtersText: event.target.value }))
-                    }
-                    placeholder='{"status":"SUBMITTED"}'
-                  />
-                </div>
-                <div className="md:col-span-3 flex gap-6">
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Checkbox
-                      checked={addNodeForm.identifiable}
-                      disabled={!canExportIdentifiable}
-                      onCheckedChange={(checked) =>
-                        setAddNodeForm((prev) => ({ ...prev, identifiable: checked === true }))
-                      }
-                    />
-                    Identifiable output
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Checkbox
-                      checked={addNodeForm.includeAnswers}
-                      onCheckedChange={(checked) =>
-                        setAddNodeForm((prev) => ({ ...prev, includeAnswers: checked === true }))
-                      }
-                    />
-                    Include answer details
-                  </label>
-                </div>
-              </div>
-            )}
-
-            <Button type="button" onClick={() => void handleAddNode()} disabled={isAddingNode}>
-              {isAddingNode ? 'Adding...' : 'Add Node'}
-            </Button>
-          </section>
-
-          <section className="rounded-sm border border-border bg-card overflow-hidden">
-            <div className="px-4 py-3 border-b border-border">
-              <h2 className="text-lg font-semibold text-foreground">Workspace Nodes</h2>
-            </div>
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted border-b border-border">
-                  <TableHead>ID</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Label</TableHead>
-                  <TableHead>Parent</TableHead>
-                  <TableHead>Binding</TableHead>
-                  <TableHead>Course</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {workspace.nodes.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                      No nodes yet.
-                    </TableCell>
-                  </TableRow>
-                )}
-                {workspace.nodes.map((node) => (
-                  <TableRow
-                    key={node.id}
-                    className={selectedNodeId === node.id ? 'bg-accent/60' : 'even:bg-muted/40'}
-                  >
-                    <TableCell>{node.id}</TableCell>
-                    <TableCell>{node.nodeType}</TableCell>
-                    <TableCell className="font-medium">{node.label}</TableCell>
-                    <TableCell>{node.parentId ?? '-'}</TableCell>
-                    <TableCell>{node.datasetBinding ?? '-'}</TableCell>
-                    <TableCell>{node.bindingCourseId ?? '-'}</TableCell>
-                    <TableCell className="text-right">
-                      <div className="inline-flex gap-2">
-                        <Button type="button" size="sm" variant="outline" onClick={() => startEditNode(node)}>
-                          Edit
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => void handleDeleteNode(node.id)}
-                          disabled={isSavingNode}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </section>
-
-          {selectedNode && (
-            <section className="rounded-sm border border-border bg-card p-4 space-y-4">
-              <h2 className="text-lg font-semibold text-foreground">
-                Edit Node #{selectedNode.id}
-              </h2>
-              <div className="grid gap-3 md:grid-cols-4">
-                <div className="space-y-1">
-                  <Label>Label</Label>
-                  <Input
-                    value={editNodeForm.label}
-                    onChange={(event) => setEditNodeForm((prev) => ({ ...prev, label: event.target.value }))}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Parent</Label>
-                  <Select
-                    value={editNodeForm.parentId}
-                    onValueChange={(value) => setEditNodeForm((prev) => ({ ...prev, parentId: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ROOT">Root</SelectItem>
-                      {folderNodes
-                        .filter((node) => node.id !== selectedNode.id)
-                        .map((node) => (
-                          <SelectItem key={node.id} value={String(node.id)}>
-                            {node.label} (#{node.id})
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>Order Index</Label>
-                  <Input
-                    value={editNodeForm.orderIndex}
-                    onChange={(event) =>
-                      setEditNodeForm((prev) => ({ ...prev, orderIndex: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Node Type</Label>
-                  <Input value={editNodeForm.nodeType} readOnly />
-                </div>
-              </div>
-
-              {editNodeForm.nodeType === 'FILE' && (
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="space-y-1">
-                    <Label>Dataset Binding</Label>
-                    <Select
-                      value={editNodeForm.datasetBinding}
-                      onValueChange={(value) =>
-                        setEditNodeForm((prev) => ({ ...prev, datasetBinding: value }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {DATASET_BINDINGS.map((binding) => (
-                          <SelectItem key={binding.value} value={binding.value}>
-                            {binding.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Binding Course ID</Label>
-                    <Input
-                      value={editNodeForm.bindingCourseId}
-                      onChange={(event) =>
-                        setEditNodeForm((prev) => ({ ...prev, bindingCourseId: event.target.value }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Filters JSON</Label>
-                    <Input
-                      value={editNodeForm.filtersText}
-                      onChange={(event) =>
-                        setEditNodeForm((prev) => ({ ...prev, filtersText: event.target.value }))
-                      }
-                    />
-                  </div>
-                  <div className="md:col-span-3 flex gap-6">
-                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Checkbox
-                        checked={editNodeForm.identifiable}
-                        disabled={!canExportIdentifiable}
-                        onCheckedChange={(checked) =>
-                          setEditNodeForm((prev) => ({ ...prev, identifiable: checked === true }))
-                        }
-                      />
-                      Identifiable output
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Checkbox
-                        checked={editNodeForm.includeAnswers}
-                        onCheckedChange={(checked) =>
-                          setEditNodeForm((prev) => ({ ...prev, includeAnswers: checked === true }))
-                        }
-                      />
-                      Include answer details
-                    </label>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <Button type="button" onClick={() => void handleSaveNode()} disabled={isSavingNode}>
-                  {isSavingNode ? 'Saving...' : 'Save Node'}
-                </Button>
-                <Button type="button" variant="outline" onClick={() => setSelectedNodeId(null)}>
-                  Cancel
-                </Button>
-              </div>
-            </section>
-          )}
-
-          <section className="rounded-sm border border-border bg-card p-4 space-y-4">
-            <h2 className="text-lg font-semibold text-foreground">Validate & Build</h2>
-            <div className="grid gap-3 md:grid-cols-3">
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Checkbox checked={strictMode} onCheckedChange={(checked) => setStrictMode(checked === true)} />
-                Strict mode
-              </label>
-              <div className="space-y-1">
-                <Label>Snapshot ID (optional)</Label>
-                <Input
-                  value={snapshotIdText}
-                  onChange={(event) => setSnapshotIdText(event.target.value)}
-                  placeholder="Live mode if blank"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2 flex-wrap">
-              <Button type="button" onClick={() => void handleValidateWorkspace()} disabled={isRunningValidation}>
-                {isRunningValidation ? 'Validating...' : 'Validate Workspace'}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => void handleBuildWorkspace()} disabled={isRunningBuild}>
-                {isRunningBuild ? 'Building...' : 'Build Package'}
-              </Button>
-              {buildResult?.artifactId && buildResult.status === 'COMPLETED' && (
+          <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
+            <section className="rounded-sm border border-border bg-card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-foreground">Tree</h2>
                 <Button
                   type="button"
-                  variant="secondary"
-                  onClick={() => void handleDownloadArtifact()}
-                  disabled={isDownloadingArtifact}
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setExpandedNodes(new Set(rootNodes.map((node) => node.id)))}
                 >
-                  <Download className="mr-2 h-4 w-4" />
-                  {isDownloadingArtifact ? 'Downloading...' : 'Download Artifact'}
+                  Expand All
                 </Button>
+              </div>
+
+              {rootNodes.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No nodes yet. Add one below.</p>
+              ) : (
+                <div className="space-y-1">
+                  {rootNodes.map((node) => renderNode(node, 0))}
+                </div>
               )}
-            </div>
 
-            {validationResult && (
-              <div className="rounded-sm border border-border p-3 text-sm space-y-2">
-                <p className="font-medium text-foreground">
-                  Validation: {validationResult.valid ? 'VALID' : 'INVALID'} | Files: {validationResult.fileCount} | Estimated rows: {validationResult.estimatedRows}
+              <div className="space-y-2 border-t border-border pt-3">
+                <p className="text-sm font-medium text-foreground">Add item in {selectedNode ? `#${selectedNodeId} (${selectedNode.label})` : 'root'}</p>
+                <div className="grid grid-cols-6 gap-2">
+                  <Select value={addQuickMode} onValueChange={(value) => setAddQuickMode(value as 'FOLDER' | 'FILE')}>
+                    <SelectTrigger className="col-span-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="FILE">File</SelectItem>
+                      <SelectItem value="FOLDER">Folder</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    className="col-span-4"
+                    placeholder={`Add ${addQuickMode.toLowerCase()} name`}
+                    value={newNodeLabel}
+                    onChange={(event) => setNewNodeLabel(event.target.value)}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  className="w-full"
+                  onClick={() => void handleAddNode()}
+                  disabled={isAddingNode}
+                >
+                  {isAddingNode ? 'Adding...' : `Add ${addQuickMode.toLowerCase()}`}
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Use folder nodes to create nested structures. Drag-like reordering is handled with
+                  Up / Down on the selected item.
                 </p>
-                {validationResult.violations.length > 0 && (
-                  <div>
-                    <p className="font-medium text-destructive mb-1">Violations</p>
-                    <ul className="list-disc pl-5 text-muted-foreground space-y-1">
-                      {validationResult.violations.map((issue, index) => (
-                        <li key={`${issue.code}-${index}`}>
-                          [{issue.code}] {issue.message}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {validationResult.warnings.length > 0 && (
-                  <div>
-                    <p className="font-medium text-amber-600 mb-1">Warnings</p>
-                    <ul className="list-disc pl-5 text-muted-foreground space-y-1">
-                      {validationResult.warnings.map((issue, index) => (
-                        <li key={`${issue.code}-${index}`}>
-                          [{issue.code}] {issue.message}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
               </div>
-            )}
+            </section>
 
-            {buildResult && (
-              <div className="rounded-sm border border-border p-3 text-sm">
-                <p className="font-medium text-foreground">
-                  Build #{buildResult.id}: {buildResult.status}
-                </p>
-                {buildResult.errorMessage && (
-                  <p className="text-destructive mt-1">{buildResult.errorMessage}</p>
-                )}
-                {buildResult.warnings && buildResult.warnings.length > 0 && (
-                  <p className="text-muted-foreground mt-1">
-                    {buildResult.warnings.length} warning(s) emitted during build.
+            <section className="space-y-4">
+              <div className="rounded-sm border border-border bg-card p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold text-foreground">Selection</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Parent: {selectedParentLabel}
                   </p>
-                )}
-                {buildResult.artifactId && (
-                  <p className="text-muted-foreground mt-1">Artifact ID: {buildResult.artifactId}</p>
-                )}
-              </div>
-            )}
+                </div>
 
-            {!canExportIdentifiable && role === 'RESEARCHER' && (
-              <div className="rounded-sm border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-                Identifiable package nodes are disabled for your account. Request the
-                <span className="font-mono"> EXPORT_IDENTIFIABLE </span>
-                sudo permission to enable that option.
+                {!selectedNode ? (
+                  <p className="text-sm text-muted-foreground">Select a file or folder in the tree to edit its settings.</p>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <Label>Label</Label>
+                        <Input
+                          value={editNodeForm.label}
+                          onChange={(event) => setEditNodeForm((prev) => ({ ...prev, label: event.target.value }))}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Type</Label>
+                        <Input value={editNodeForm.nodeType} readOnly />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Parent</Label>
+                        <Select
+                          value={editNodeForm.parentId}
+                          onValueChange={(value) => setEditNodeForm((prev) => ({ ...prev, parentId: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ROOT">Root</SelectItem>
+                            {workspace.nodes
+                              .filter((candidate) => candidate.id !== selectedNode.id && candidate.nodeType === 'FOLDER')
+                              .map((candidate) => (
+                                <SelectItem key={candidate.id} value={String(candidate.id)}>
+                                  {candidate.label} (#{candidate.id})
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Order</Label>
+                        <Input
+                          value={editNodeForm.orderIndex}
+                          onChange={(event) => setEditNodeForm((prev) => ({ ...prev, orderIndex: event.target.value }))}
+                        />
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-muted-foreground">{formatNodeDescription(selectedNode)}</p>
+
+                    {selectedNode.nodeType === 'FILE' ? (
+                      <div className="space-y-3 border border-border p-3 rounded-sm">
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div className="space-y-1">
+                            <Label>Dataset Binding</Label>
+                            <Select
+                              value={editNodeForm.datasetBinding}
+                              onValueChange={(value) => setEditNodeForm((prev) => ({ ...prev, datasetBinding: value }))}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {DATASET_BINDINGS.map((binding) => (
+                                  <SelectItem key={binding.value} value={binding.value}>
+                                    {binding.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label>Binding Course ID</Label>
+                            <Input
+                              value={editNodeForm.bindingCourseId}
+                              onChange={(event) => setEditNodeForm((prev) => ({ ...prev, bindingCourseId: event.target.value }))}
+                            />
+                          </div>
+                          <div className="space-y-1 md:col-span-2">
+                            <Label>Filters JSON</Label>
+                            <Input
+                              value={editNodeForm.filtersText}
+                              onChange={(event) => setEditNodeForm((prev) => ({ ...prev, filtersText: event.target.value }))}
+                            />
+                          </div>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Checkbox
+                              checked={editNodeForm.identifiable}
+                              disabled={!canExportIdentifiable}
+                              onCheckedChange={(checked) =>
+                                setEditNodeForm((prev) => ({ ...prev, identifiable: checked === true }))
+                              }
+                            />
+                            Identifiable output
+                          </label>
+                          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Checkbox
+                              checked={editNodeForm.includeAnswers}
+                              onCheckedChange={(checked) =>
+                                setEditNodeForm((prev) => ({ ...prev, includeAnswers: checked === true }))
+                              }
+                            />
+                            Include answer details
+                          </label>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Folder nodes only control structure. Bindings belong to file nodes.
+                      </p>
+                    )}
+
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" onClick={() => void moveSelectedNode('up')} disabled={isSavingNode}>
+                        Move Up
+                      </Button>
+                      <Button type="button" variant="outline" onClick={() => void moveSelectedNode('down')} disabled={isSavingNode}>
+                        Move Down
+                      </Button>
+                      <Button type="button" onClick={() => void handleSaveNode()} disabled={isSavingNode}>
+                        <Save className="mr-2 h-4 w-4" />
+                        {isSavingNode ? 'Saving...' : 'Save changes'}
+                      </Button>
+                      <Button type="button" variant="destructive" onClick={() => void handleDeleteNode()} disabled={isDeletingNode}>
+                        {isDeletingNode ? 'Deleting...' : 'Delete'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedNodeId(null);
+                          setEditNodeForm(EMPTY_NODE_FORM);
+                        }}
+                      >
+                        <X className="mr-2 h-4 w-4" />
+                        Clear
+                      </Button>
+                    </div>
+                    {selectedNode.nodeType === 'FILE' && (
+                      <p className="text-xs text-muted-foreground">
+                        Sibling count: {siblingNodes.length}. Use up/down to reorder within the same folder.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
-          </section>
+
+              <section className="rounded-sm border border-border bg-card p-4 space-y-4">
+                <h2 className="text-lg font-semibold text-foreground">Validate & Build</h2>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Checkbox checked={strictMode} onCheckedChange={(checked) => setStrictMode(checked === true)} />
+                    Strict mode
+                  </label>
+                  <div className="space-y-1">
+                    <Label>Snapshot ID (optional)</Label>
+                    <Input
+                      value={snapshotIdText}
+                      onChange={(event) => setSnapshotIdText(event.target.value)}
+                      placeholder="Live mode if blank"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => void handleValidateWorkspace()}
+                    disabled={isRunningValidation}
+                  >
+                    {isRunningValidation ? 'Validating...' : 'Validate'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void handleBuildWorkspace()}
+                    disabled={isRunningBuild}
+                  >
+                    {isRunningBuild ? 'Building...' : 'Build'}
+                  </Button>
+                  {buildResult?.artifactId && buildResult.status === 'COMPLETED' && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => void handleDownloadArtifact()}
+                      disabled={isDownloadingArtifact}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      {isDownloadingArtifact ? 'Downloading...' : 'Download package'}
+                    </Button>
+                  )}
+                </div>
+
+                {validationResult && (
+                  <div className="rounded-sm border border-border p-3 text-sm space-y-2">
+                    <p className="font-medium text-foreground">
+                      Validation: {validationResult.valid ? 'valid' : 'invalid'} | Files: {validationResult.fileCount} | Estimated rows: {validationResult.estimatedRows}
+                    </p>
+                    {validationResult.violations.length > 0 && (
+                      <div>
+                        <p className="font-medium text-destructive mb-1">Violations</p>
+                        <ul className="list-disc pl-5 text-muted-foreground space-y-1">
+                          {validationResult.violations.map((issue, index) => (
+                            <li key={`${issue.code}-${index}`}>
+                              [{issue.code}] {issue.message}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {validationResult.warnings.length > 0 && (
+                      <div>
+                        <p className="font-medium text-amber-600 mb-1">Warnings</p>
+                        <ul className="list-disc pl-5 text-muted-foreground space-y-1">
+                          {validationResult.warnings.map((issue, index) => (
+                            <li key={`${issue.code}-${index}`}>
+                              [{issue.code}] {issue.message}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {buildResult && (
+                  <div className="rounded-sm border border-border p-3 text-sm">
+                    <p className="font-medium text-foreground">
+                      Build #{buildResult.id}: {buildResult.status}
+                    </p>
+                    {buildResult.errorMessage && <p className="text-destructive mt-1">{buildResult.errorMessage}</p>}
+                    {buildResult.warnings && buildResult.warnings.length > 0 && (
+                      <p className="text-muted-foreground mt-1">
+                        {buildResult.warnings.length} warning(s) emitted during build.
+                      </p>
+                    )}
+                    {buildResult.artifactId && <p className="text-muted-foreground mt-1">Artifact ID: {buildResult.artifactId}</p>}
+                  </div>
+                )}
+
+                {!canExportIdentifiable && role === 'RESEARCHER' && (
+                  <div className="rounded-sm border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                    Identifiable nodes are disabled. Request EXPORT_IDENTIFIABLE to unlock.
+                  </div>
+                )}
+              </section>
+            </section>
+          </div>
         </>
       )}
     </div>
