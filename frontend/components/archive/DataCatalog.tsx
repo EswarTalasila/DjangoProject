@@ -31,6 +31,7 @@ import { listRubrics, type Rubric } from '@/lib/rubric-api';
 import { toErrorMessage } from '@/lib/utils';
 
 type DataCatalogProps = {
+  role: 'TEACHER' | 'RESEARCHER' | 'ADMIN';
   onAddItem: (config: {
     label: string;
     datasetBinding: DatasetBinding;
@@ -38,7 +39,7 @@ type DataCatalogProps = {
   }) => void;
 };
 
-export default function DataCatalog({ onAddItem }: DataCatalogProps) {
+export default function DataCatalog({ role, onAddItem }: DataCatalogProps) {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [rubrics, setRubrics] = useState<Rubric[]>([]);
@@ -104,10 +105,11 @@ export default function DataCatalog({ onAddItem }: DataCatalogProps) {
   );
 
   const showCrossCourse =
-    lowerFilter.length === 0 ||
-    'cross-course submissions'.includes(lowerFilter) ||
-    'cross course submissions'.includes(lowerFilter) ||
-    'global data'.includes(lowerFilter);
+    (role === 'RESEARCHER' || role === 'ADMIN') &&
+    (lowerFilter.length === 0 ||
+      'cross-course submissions'.includes(lowerFilter) ||
+      'cross course submissions'.includes(lowerFilter) ||
+      'global data'.includes(lowerFilter));
 
   function toggleCourse(courseId: number) {
     setExpandedCourses((prev) => {

@@ -120,6 +120,27 @@ function buildChildrenMap(nodes: PackageNode[]) {
   return map;
 }
 
+function getBuildErrorMessage(raw: string | undefined): string {
+  if (!raw) return 'Package creation failed.';
+  try {
+    const parsed = JSON.parse(raw) as Array<{ message?: string }> | unknown;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      const first = parsed[0];
+      if (
+        first &&
+        typeof first === 'object' &&
+        'message' in first &&
+        typeof first.message === 'string'
+      ) {
+        return first.message;
+      }
+    }
+  } catch {
+    // fall through and return raw string
+  }
+  return raw;
+}
+
 /* ---------------------------------------------------------------------------
  * File icon helper — colors icon based on datasetBinding
  * --------------------------------------------------------------------------- */
@@ -601,12 +622,18 @@ export default function PackageEditor({
       if (job.status === 'COMPLETED') {
         toast.success('Package created successfully.');
       } else if (job.errorMessage) {
-        toast.error(job.errorMessage);
+        toast.error(getBuildErrorMessage(job.errorMessage));
       } else {
         toast.error('Package creation failed.');
       }
     } catch (error) {
-      toast.error(toErrorMessage(error));
+      const status = (error as { response?: { status?: number } })?.response
+        ?.status;
+      if (status === 401) {
+        toast.error('Session expired. Please sign in again.');
+      } else {
+        toast.error(toErrorMessage(error));
+      }
     } finally {
       setIsBuilding(false);
     }
@@ -1136,6 +1163,7 @@ export default function PackageEditor({
               className="flex-1 overflow-y-auto px-3 pb-3"
             >
               <DataCatalog
+                role={role}
                 onAddItem={handleAddFromCatalog}
               />
             </TabsContent>
