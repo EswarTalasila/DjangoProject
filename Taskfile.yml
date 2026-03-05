@@ -97,6 +97,7 @@ tasks:
         print_section "${C_BLUE}" "Quality"
         print_cmd "task check" "lint + format-check + mypy"
         print_cmd "task check:env" "FR-12 env/runtime scoped checks"
+        print_cmd "task audit:prod" "production runtime + Django deploy security checks"
         print_cmd "task lint" "ruff lint (check-only)"
         print_cmd "task lint:fix" "ruff lint with auto-fixes"
         print_cmd "task format" "ruff format"
@@ -208,6 +209,20 @@ tasks:
           exit 1
         msg: "Frontend container is not running. Run 'task up:dev' first."
 
+  _check:backend-prod-running:
+    internal: true
+    desc: Verify backend-prod container is running (with short wait)
+    preconditions:
+      - sh: |
+          for i in $(seq 1 20); do
+            if docker compose ps --status running --services | grep -qx backend-prod; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+        msg: "backend-prod is not running. Run 'task up:prod' first."
+
   _check:otel-traces:
     internal: true
     desc: Verify OTEL trace file exists
@@ -274,8 +289,8 @@ tasks:
     desc: Start all services with production profile (strict fail-fast validation)
     deps: [_check:docker, _check:env]
     cmds:
-      - "ENVIRONMENT=production {{.DOCKER_COMPOSE}} up -d"
-      - "./scripts/runtime/profile_guard.py --profile production --wait 10"
+      - "ENVIRONMENT=production {{.DOCKER_COMPOSE}} --profile prod up -d database backend-prod frontend-prod nginx-prod"
+      - "./scripts/runtime/profile_guard.py --profile production --service backend-prod --wait 20"
 
   down:
     desc: Stop all services
@@ -769,6 +784,13 @@ tasks:
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} ruff check src/config/env.py src/config/settings.py src/config/urls.py src/core/management/commands/env_report.py"
       - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} mypy src/config/env.py src/config/urls.py"
       - python3 -m py_compile scripts/runtime/profile_guard.py
+
+  audit:prod:
+    desc: Run production security/runtime audits on running prod backend
+    deps: [_check:docker, _check:backend-prod-running]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec -T backend-prod python src/manage.py env_report --profile production --strict"
+      - "{{.DOCKER_COMPOSE}} exec -T backend-prod python src/manage.py check --deploy --fail-level WARNING"
 
   # ===========================================================================
   # Pre-commit

@@ -20,9 +20,9 @@ def run(cmd: str, capture: bool = False) -> subprocess.CompletedProcess[str]:
     )
 
 
-def backend_status(compose_bin: str) -> tuple[bool, bool]:
+def backend_status(compose_bin: str, service: str) -> tuple[bool, bool]:
     """Return (running, restarting) state for backend service."""
-    container_id = run(f"{compose_bin} ps -q backend", capture=True).stdout.strip()
+    container_id = run(f"{compose_bin} ps -q {service}", capture=True).stdout.strip()
     if not container_id:
         return False, False
 
@@ -93,19 +93,24 @@ def main() -> int:
         default=10,
         help="Max seconds to wait for backend container to enter running state.",
     )
+    parser.add_argument(
+        "--service",
+        default="backend",
+        help="Compose service name to validate (default: backend).",
+    )
     args = parser.parse_args()
 
     compose_bin = "docker compose"
     deadline = time.time() + args.wait
     while time.time() < deadline:
-        running, restarting = backend_status(compose_bin)
+        running, restarting = backend_status(compose_bin, args.service)
         if running and not restarting:
             break
         time.sleep(1)
 
-    running, restarting = backend_status(compose_bin)
+    running, restarting = backend_status(compose_bin, args.service)
     if not running or restarting:
-        logs = run(f"{compose_bin} logs --tail=200 backend", capture=True).stdout
+        logs = run(f"{compose_bin} logs --tail=200 {args.service}", capture=True).stdout
         reason = parse_reason(logs)
 
         print(f"[env-check] profile={args.profile} status=error")
@@ -119,7 +124,7 @@ def main() -> int:
 
     strict_flag = "--strict" if args.profile == "production" else ""
     result = run(
-        f"{compose_bin} exec -T backend python src/manage.py env_report --profile {args.profile} {strict_flag}".strip(),
+        f"{compose_bin} exec -T {args.service} python src/manage.py env_report --profile {args.profile} {strict_flag}".strip(),
         capture=True,
     )
     if result.stdout:
@@ -127,7 +132,7 @@ def main() -> int:
     if result.returncode == 0:
         return 0
 
-    logs = run(f"{compose_bin} logs --tail=200 backend", capture=True).stdout
+    logs = run(f"{compose_bin} logs --tail=200 {args.service}", capture=True).stdout
     reason = parse_reason(f"{result.stdout}\n{result.stderr}\n{logs}")
     print(f"[env-check] profile={args.profile} status=error")
     if args.profile == "production":
