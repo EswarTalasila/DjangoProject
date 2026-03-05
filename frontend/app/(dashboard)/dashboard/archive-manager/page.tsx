@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-import ArchiveManagerView from '@/components/archive/ArchiveManagerView';
+import ArchiveManagerHub from '@/components/archive/ArchiveManagerHub';
 import { getSessionProfile, getSudoCapabilities } from '@/lib/auth-session';
 
 export default async function ArchiveManagerPage() {
@@ -21,7 +21,7 @@ export default async function ArchiveManagerPage() {
       : true;
 
   return (
-    <ArchiveManagerView
+    <ArchiveManagerHub
       role={role as 'TEACHER' | 'RESEARCHER' | 'ADMIN'}
       canExportIdentifiable={canExportIdentifiable}
     />

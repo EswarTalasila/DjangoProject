@@ -62,10 +62,8 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "link", label: "Visualizations", href: "/dashboard/visualizations" },
 
     { type: "divider" },
-    { type: "header", label: "Exports" },
+    { type: "header", label: "Data & Exports" },
     { type: "link", label: "Archive Manager", href: "/dashboard/archive-manager" },
-    { type: "link", label: "Download Exports", href: "/dashboard/exports" },
-    { type: "link", label: "Package Workspaces", href: "/dashboard/packages" },
 
     { type: "divider" },
     { type: "header", label: "Registration" },
@@ -98,10 +96,8 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "link", label: "Visualizations", href: "/dashboard/visualizations" },
 
     { type: "divider" },
-    { type: "header", label: "Exports" },
+    { type: "header", label: "Data & Exports" },
     { type: "link", label: "Archive Manager", href: "/dashboard/archive-manager" },
-    { type: "link", label: "Download Exports", href: "/dashboard/exports" },
-    { type: "link", label: "Package Workspaces", href: "/dashboard/packages" },
   ],
 
   RESEARCHER: [
@@ -175,10 +171,8 @@ export async function SidebarWrapper() {
 
     items.push(
       { type: "divider" },
-      { type: "header", label: "Exports" },
+      { type: "header", label: "Data & Exports" },
       { type: "link", label: "Archive Manager", href: "/dashboard/archive-manager" },
-      { type: "link", label: "Download Exports", href: "/dashboard/exports" },
-      { type: "link", label: "Package Workspaces", href: "/dashboard/packages" },
     );
 
     if (!canGrantSudo) {
