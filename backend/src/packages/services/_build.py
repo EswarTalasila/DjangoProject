@@ -167,6 +167,12 @@ def _materialize_node(node, user) -> bytes:
         snapshot = node.snapshot
         if snapshot is None:
             raise ValueError(f"Node {node.id} has source_type=SNAPSHOT but no snapshot linked")
+        if snapshot.expires_at and snapshot.expires_at < timezone.now():
+            snapshot.status = SnapshotStatus.EXPIRED
+            snapshot.save(update_fields=["status", "updated_at"])
+            raise ValueError(
+                f"Snapshot {snapshot.id} has expired (expired at {snapshot.expires_at})"
+            )
         if snapshot.status == SnapshotStatus.EXPIRED:
             raise ValueError(
                 f"Snapshot {snapshot.id} has expired (expired at {snapshot.expires_at})"

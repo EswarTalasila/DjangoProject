@@ -27,6 +27,7 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
   Registration: KeyRound,
   Analytics: TrendingUp,
   Exports: LibraryBig,
+  "Data & Exports": LibraryBig,
   Users: Users,
   Delegation: Shield,
 };

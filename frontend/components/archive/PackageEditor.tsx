@@ -13,6 +13,7 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
+  GripVertical,
   MoveDown,
   MoveUp,
   Pencil,
@@ -45,6 +46,7 @@ import {
   deleteNode,
   downloadArtifact,
   getWorkspace,
+  reorderNode,
   type BuildJob,
   type DatasetBinding,
   type PackageNode,
@@ -187,6 +189,10 @@ export default function PackageEditor({
   const [isValidating, setIsValidating] = useState(false);
   const [isBuilding, setIsBuilding] = useState(false);
   const [isDownloadingArtifact, setIsDownloadingArtifact] = useState(false);
+
+  /* Drag-and-drop state */
+  const [draggedNodeId, setDraggedNodeId] = useState<number | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<number | 'ROOT' | null>(null);
 
   const childrenMap = useMemo(
     () => buildChildrenMap(workspace?.nodes ?? []),
@@ -434,6 +440,47 @@ export default function PackageEditor({
     await updateSiblingOrder(node, target);
   }
 
+  async function handleDropNode(movedId: number, targetParentId: number | null) {
+    if (!workspace) return;
+    const movedNode = workspace.nodes.find((n) => n.id === movedId);
+    if (!movedNode) return;
+    if (movedNode.parentId === targetParentId) return;
+    if (targetParentId === movedId) return;
+    /* Cyclic-move guard: don't drop a folder into its own descendant */
+    if (targetParentId != null && movedNode.nodeType === 'FOLDER') {
+      let current = workspace.nodes.find((n) => n.id === targetParentId);
+      while (current) {
+        if (current.id === movedId) {
+          toast.error('Cannot move a folder into its own descendant.');
+          return;
+        }
+        current = current.parentId != null
+          ? workspace.nodes.find((n) => n.id === current!.parentId)
+          : undefined;
+      }
+    }
+    setIsSavingNode(true);
+    try {
+      const targetChildren = workspace.nodes.filter(
+        (n) => n.parentId === targetParentId && n.id !== movedId,
+      );
+      const updated = await reorderNode(workspace.id, {
+        movedNodeId: movedId,
+        targetParentId,
+        targetOrderIndex: targetChildren.length,
+      });
+      seedWorkspace(updated);
+      if (targetParentId != null) {
+        setExpandedFolders((prev) => new Set(prev).add(targetParentId));
+      }
+      toast.success('Moved.');
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    } finally {
+      setIsSavingNode(false);
+    }
+  }
+
   async function handleDeleteNode(node: PackageNode) {
     if (!workspace) return;
     if (!window.confirm(`Delete "${node.label}" and all contents?`)) return;
@@ -585,6 +632,8 @@ export default function PackageEditor({
     label: string;
     datasetBinding: DatasetBinding;
     bindingCourseId: number | null;
+    sourceType?: 'LIVE' | 'SNAPSHOT';
+    snapshotId?: number | null;
   }) {
     if (!workspace) return;
     setIsSavingNode(true);
@@ -606,6 +655,8 @@ export default function PackageEditor({
         filters: null,
         identifiable: false,
         includeAnswers: false,
+        sourceType: config.sourceType ?? 'LIVE',
+        snapshotId: config.snapshotId ?? null,
       });
       await refreshWorkspace();
       /* Auto-expand the parent folder so the new file is visible */
@@ -638,15 +689,47 @@ export default function PackageEditor({
     const addingToThis = addCursor?.parentId === node.id;
 
     return (
-      <div key={node.id} className="select-none">
+      <div
+        key={node.id}
+        className="select-none"
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData('application/node-id', String(node.id));
+          e.dataTransfer.effectAllowed = 'move';
+          setDraggedNodeId(node.id);
+        }}
+        onDragEnd={() => {
+          setDraggedNodeId(null);
+          setDropTargetId(null);
+        }}
+      >
         <div
           className={`group flex min-h-9 items-center gap-2 rounded-md px-2 py-1 text-sm ${
             selectedNodeId === node.id
               ? 'bg-accent text-foreground'
               : 'text-muted-foreground hover:bg-accent/30'
-          }`}
+          }${draggedNodeId === node.id ? ' opacity-40' : ''}${dropTargetId === node.id && isFolder ? ' ring-2 ring-primary bg-primary/5' : ''}`}
+          onDragOver={(e) => {
+            if (isFolder && draggedNodeId != null && draggedNodeId !== node.id) {
+              e.preventDefault();
+              e.stopPropagation();
+              setDropTargetId(node.id);
+            }
+          }}
+          onDragLeave={() => {
+            if (dropTargetId === node.id) setDropTargetId(null);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setDropTargetId(null);
+            if (draggedNodeId != null && isFolder) {
+              void handleDropNode(draggedNodeId, node.id);
+            }
+          }}
         >
           <div className="flex items-center gap-2 min-w-0 flex-1">
+            <GripVertical className="size-3.5 shrink-0 cursor-grab text-muted-foreground/40 hover:text-muted-foreground" />
             {isFolder && (
               <button
                 type="button"
@@ -706,6 +789,11 @@ export default function PackageEditor({
                 <span>{node.label}</span>
               )}
             </button>
+            {node.nodeType === 'FILE' && node.sourceType === 'SNAPSHOT' && (
+              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">
+                Snapshot
+              </span>
+            )}
           </div>
           <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
@@ -1002,6 +1090,35 @@ export default function PackageEditor({
             ) : (
               rootNodes.map((node) => renderNode(node, 0))
             )}
+
+            {/* Root drop zone — appears during drag */}
+            {draggedNodeId != null && (
+              <div
+                className={`mt-2 rounded-md border-2 border-dashed py-3 text-center text-xs ${
+                  dropTargetId === 'ROOT'
+                    ? 'border-primary bg-primary/5 text-foreground'
+                    : 'border-border text-muted-foreground'
+                }`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDropTargetId('ROOT');
+                }}
+                onDragLeave={() => {
+                  if (dropTargetId === 'ROOT') setDropTargetId(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setDropTargetId(null);
+                  if (draggedNodeId != null) {
+                    void handleDropNode(draggedNodeId, null);
+                  }
+                }}
+              >
+                Drop here to move to root
+              </div>
+            )}
           </div>
         </section>
 
@@ -1018,7 +1135,11 @@ export default function PackageEditor({
               value="catalog"
               className="flex-1 overflow-y-auto px-3 pb-3"
             >
-              <DataCatalog onAddItem={handleAddFromCatalog} />
+              <DataCatalog
+                workspaceId={workspace.id}
+                canExportIdentifiable={canExportIdentifiable}
+                onAddItem={handleAddFromCatalog}
+              />
             </TabsContent>
 
             {/* Properties tab */}

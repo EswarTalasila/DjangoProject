@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from courses.models import Course
@@ -188,9 +189,18 @@ def _materialize_snapshot(snapshot: DataSnapshot, user, is_identifiable: bool):
 
 def list_snapshots(workspace: PackageWorkspace) -> list[DataSnapshot]:
     """Return all non-expired snapshots for a workspace, newest first."""
+    # Keep status in sync for time-expired snapshots even if cleanup command has not run.
+    now = timezone.now()
+    DataSnapshot.objects.filter(
+        workspace=workspace,
+        expires_at__lt=now,
+    ).exclude(status=SnapshotStatus.EXPIRED).update(status=SnapshotStatus.EXPIRED)
+
     return list(
         DataSnapshot.objects.filter(
             workspace=workspace,
+        ).filter(
+            Q(expires_at__isnull=True) | Q(expires_at__gte=now),
         ).exclude(
             status=SnapshotStatus.EXPIRED,
         ).order_by("-created_at")

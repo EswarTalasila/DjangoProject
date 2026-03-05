@@ -34,6 +34,7 @@ from .models import (
     PackageWorkspace,
     PkgAuditAction,
     PkgAuditOutcome,
+    SnapshotStatus,
 )
 from .serializers import (
     AddNodeSerializer,
@@ -157,7 +158,6 @@ def _snapshot_to_dict(snapshot):
         "filters": snapshot.filters,
         "includeAnswers": snapshot.include_answers,
         "identifiable": snapshot.identifiable,
-        "storageKey": snapshot.storage_key,
         "rowCount": snapshot.row_count,
         "fileSize": snapshot.file_size,
         "checksumSha256": snapshot.checksum_sha256,
@@ -194,10 +194,10 @@ def workspace_list_create_view(request):
     return Response(_workspace_to_dict(ws), status=status.HTTP_201_CREATED)
 
 
-@api_view(["GET", "PATCH"])
+@api_view(["GET", "PATCH", "DELETE"])
 @permission_classes([IsTeacherOrAbove])
 def workspace_detail(request, workspace_id):
-    """GET/PATCH /api/v1/packages/workspaces/{workspaceId}"""
+    """GET/PATCH/DELETE /api/v1/packages/workspaces/{workspaceId}"""
     ws = PackageWorkspace.objects.filter(id=workspace_id).first()
     if not ws:
         return Response({"detail": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -208,6 +208,18 @@ def workspace_detail(request, workspace_id):
 
     if request.method == "GET":
         return Response(_workspace_to_dict(ws))
+
+    if request.method == "DELETE":
+        from .models import PackageAuditLog
+
+        PackageAuditLog.objects.create(
+            actor=request.user,
+            action=PkgAuditAction.WORKSPACE_DELETE,
+            metadata={"workspace_id": ws.id, "workspace_name": ws.name},
+            outcome=PkgAuditOutcome.SUCCESS,
+        )
+        ws.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     # PATCH
     ser = UpdateWorkspaceSerializer(data=request.data)
@@ -233,9 +245,30 @@ def add_node_view(request, workspace_id):
 
     ser = AddNodeSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
+    payload = dict(ser.validated_data)
+
+    snapshot_id = payload.get("snapshotId")
+    source_type = payload.get("sourceType")
+    if snapshot_id is not None:
+        snapshot = ws.snapshots.filter(id=snapshot_id).first()
+        if not snapshot:
+            return Response(
+                {"detail": "snapshotId not found in this workspace"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if snapshot.status in (SnapshotStatus.EXPIRED, SnapshotStatus.FAILED):
+            return Response(
+                {"detail": f"Snapshot {snapshot.id} is not usable ({snapshot.status})"},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if source_type == "SNAPSHOT":
+            payload["datasetBinding"] = snapshot.dataset_binding
+            payload["bindingCourseId"] = snapshot.scope_course_id
+            payload["identifiable"] = snapshot.identifiable
+            payload["includeAnswers"] = snapshot.include_answers
 
     # Validate parent belongs to this workspace
-    parent_id = ser.validated_data.get("parentId")
+    parent_id = payload.get("parentId")
     if parent_id is not None:
         if not ws.nodes.filter(id=parent_id).exists():
             return Response(
@@ -243,7 +276,7 @@ def add_node_view(request, workspace_id):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-    node = add_node(request.user, ws, ser.validated_data)
+    node = add_node(request.user, ws, payload)
     return Response(_node_to_dict(node), status=status.HTTP_201_CREATED)
 
 
@@ -270,7 +303,28 @@ def node_detail(request, workspace_id, node_id):
     # PATCH
     ser = UpdateNodeSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
-    node = update_node(request.user, node, ser.validated_data)
+    payload = dict(ser.validated_data)
+    snapshot_id = payload.get("snapshotId")
+    source_type = payload.get("sourceType")
+    if snapshot_id is not None:
+        snapshot = ws.snapshots.filter(id=snapshot_id).first()
+        if not snapshot:
+            return Response(
+                {"detail": "snapshotId not found in this workspace"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if snapshot.status in (SnapshotStatus.EXPIRED, SnapshotStatus.FAILED):
+            return Response(
+                {"detail": f"Snapshot {snapshot.id} is not usable ({snapshot.status})"},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if source_type == "SNAPSHOT":
+            payload["datasetBinding"] = snapshot.dataset_binding
+            payload["bindingCourseId"] = snapshot.scope_course_id
+            payload["identifiable"] = snapshot.identifiable
+            payload["includeAnswers"] = snapshot.include_answers
+
+    node = update_node(request.user, node, payload)
     return Response(_node_to_dict(node))
 
 

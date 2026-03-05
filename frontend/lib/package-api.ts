@@ -74,7 +74,6 @@ export type DataSnapshot = {
   filters: Record<string, unknown> | null;
   includeAnswers: boolean;
   identifiable: boolean;
-  storageKey: string;
   rowCount: number;
   fileSize: number;
   checksumSha256: string;
@@ -135,6 +134,8 @@ export type AddNodePayload = {
   filters?: Record<string, unknown> | null;
   identifiable?: boolean;
   includeAnswers?: boolean;
+  sourceType?: NodeSourceType;
+  snapshotId?: number | null;
 };
 
 export type UpdateNodePayload = {
@@ -146,6 +147,8 @@ export type UpdateNodePayload = {
   filters?: Record<string, unknown> | null;
   identifiable?: boolean;
   includeAnswers?: boolean;
+  sourceType?: NodeSourceType;
+  snapshotId?: number | null;
 };
 
 export async function listWorkspaces(): Promise<PackageWorkspace[]> {
@@ -246,6 +249,10 @@ export async function listSnapshots(workspaceId: number): Promise<DataSnapshot[]
   return data;
 }
 
+export async function deleteWorkspace(workspaceId: number): Promise<void> {
+  await api.delete(`/packages/workspaces/${workspaceId}`);
+}
+
 export async function reorderNode(
   workspaceId: number,
   payload: ReorderNodePayload,
@@ -256,4 +263,3 @@ export async function reorderNode(
   );
   return data;
 }
-

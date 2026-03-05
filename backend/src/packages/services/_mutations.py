@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from ..models import (
     BuildStatus,
+    NodeSourceType,
     NodeType,
     PackageAuditLog,
     PackageBuildJob,
@@ -90,6 +91,8 @@ def add_node(user: User, workspace: PackageWorkspace, payload: dict) -> PackageN
         filters=payload.get("filters"),
         identifiable=payload.get("identifiable", False),
         include_answers=payload.get("includeAnswers", False),
+        source_type=payload.get("sourceType", NodeSourceType.LIVE),
+        snapshot_id=payload.get("snapshotId"),
     )
     workspace.revision += 1
     workspace.save(update_fields=["revision", "updated_at"])
@@ -120,6 +123,10 @@ def update_node(user: User, node: PackageNode, payload: dict) -> PackageNode:
         node.identifiable = payload["identifiable"]
     if "includeAnswers" in payload:
         node.include_answers = payload["includeAnswers"]
+    if "sourceType" in payload:
+        node.source_type = payload["sourceType"]
+    if "snapshotId" in payload:
+        node.snapshot_id = payload["snapshotId"]
     node.save()
     node.workspace.revision += 1
     node.workspace.save(update_fields=["revision", "updated_at"])
@@ -163,9 +170,16 @@ def reorder_node(
     old_parent_id = moved_node.parent_id
     old_order_index = moved_node.order_index
 
+    sibling_count = (
+        PackageNode.objects.filter(workspace=workspace, parent_id=target_parent_id)
+        .exclude(id=moved_node.id)
+        .count()
+    )
+    bounded_index = max(0, min(target_order_index, sibling_count))
+
     # Update the moved node's parent and order
     moved_node.parent_id = target_parent_id
-    moved_node.order_index = target_order_index
+    moved_node.order_index = bounded_index
     moved_node.save(update_fields=["parent_id", "order_index", "updated_at"])
 
     # Reindex siblings in the target parent to make room
@@ -176,7 +190,7 @@ def reorder_node(
     )
     idx = 0
     for sibling in siblings:
-        if idx == target_order_index:
+        if idx == bounded_index:
             idx += 1  # skip the slot for the moved node
         if sibling.order_index != idx:
             sibling.order_index = idx
@@ -207,7 +221,7 @@ def reorder_node(
             "fromParentId": old_parent_id,
             "toParentId": target_parent_id,
             "fromIndex": old_order_index,
-            "toIndex": target_order_index,
+            "toIndex": bounded_index,
         },
     )
 
