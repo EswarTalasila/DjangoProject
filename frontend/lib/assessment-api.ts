@@ -2,8 +2,10 @@ import api from '@/lib/api';
 
 // -- Types --
 
-export type GradingMode = 'AUTO' | 'MANUAL' | 'HYBRID' | 'RUBRIC' | 'REFLECTION' | 'MOOD_METER';
-export type QuestionKind = 'MULTIPLE_CHOICE' | 'SHORT_ANSWER' | 'NUMBER_SCALE' | 'MOOD_METER';
+export type GradingMode = 'AUTO' | 'MANUAL' | 'HYBRID';
+export type GradingStrategy = 'AUTO' | 'MANUAL';
+export type ScoringPolicy = 'STANDARD' | 'COMPLETION';
+export type QuestionKind = 'MULTIPLE_CHOICE' | 'SHORT_ANSWER' | 'NUMBER_SCALE';
 
 export type McqChoice = {
   prompt: string;
@@ -18,7 +20,13 @@ export type QuestionData = {
   min?: number;
   max?: number;
   target?: number | null;
-  labels?: string[];
+};
+
+export type QuestionGroup = {
+  id: number;
+  name: string;
+  rubricId: number | null;
+  orderIndex: number;
 };
 
 export type Question = {
@@ -33,6 +41,9 @@ export type Question = {
   selectAll: boolean | null;
   min: number | null;
   max: number | null;
+  groupId: number | null;
+  rubricId: number | null;
+  gradingStrategy: GradingStrategy;
 };
 
 export type AssessmentStatus = 'ACTIVE' | 'ARCHIVED';
@@ -42,10 +53,18 @@ export type Assessment = {
   title: string;
   category: string | null;
   gradingMode: GradingMode;
+  scoringPolicy: ScoringPolicy;
   questions: Question[];
+  questionGroups: QuestionGroup[];
   rubricId: number | null;
   rubricAssessmentIds: number[];
   status?: AssessmentStatus;
+};
+
+export type QuestionGroupInput = {
+  clientKey: string;
+  name: string;
+  rubricId?: number | null;
 };
 
 export type QuestionInput = {
@@ -53,15 +72,18 @@ export type QuestionInput = {
   prompt: string;
   maxPoints: number;
   data?: QuestionData;
+  groupClientKey?: string;
+  rubricId?: number | null;
+  gradingStrategy?: GradingStrategy;
 };
 
 export type AssessmentInput = {
   title: string;
   category?: string | null;
   gradingMode: GradingMode;
+  scoringPolicy?: ScoringPolicy;
   questions: QuestionInput[];
-  rubricId?: number | null;
-  rubricAssessmentIds?: number[];
+  questionGroups?: QuestionGroupInput[];
 };
 
 type Paginated<T> = {

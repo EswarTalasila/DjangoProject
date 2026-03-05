@@ -9,11 +9,12 @@ export default async function AssessmentsPage() {
   }
 
   const role = profile.role as string;
-  if (role !== 'TEACHER' && role !== 'RESEARCHER') {
+  const isAdmin = Boolean(profile.isStaff);
+  if (!isAdmin && role !== 'TEACHER' && role !== 'RESEARCHER') {
     redirect('/dashboard');
   }
 
-  const canManage = role === 'RESEARCHER' || Boolean(profile.isStaff);
+  const canManage = isAdmin || role === 'RESEARCHER';
 
   return <AssessmentListView canManage={canManage} />;
 }

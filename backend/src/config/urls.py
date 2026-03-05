@@ -47,6 +47,7 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path("api/v1/teachers/", include("accounts.urls_teachers")),
     path("api/v1/visualizations/", include("visualizations.urls")),
     path("api/v1/exports/", include("exports.urls")),
+    path("api/v1/packages/", include("packages.urls")),
 ]
 
 if settings.ENVIRONMENT != "production":  # ENV-UC-05, ENV-CN-07

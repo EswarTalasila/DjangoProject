@@ -13,7 +13,8 @@ export default async function AssessmentDetailPage({
   }
 
   const role = profile.role as string;
-  if (role !== 'TEACHER' && role !== 'RESEARCHER') {
+  const isAdmin = Boolean(profile.isStaff);
+  if (!isAdmin && role !== 'TEACHER' && role !== 'RESEARCHER') {
     redirect('/dashboard');
   }
 
@@ -23,7 +24,7 @@ export default async function AssessmentDetailPage({
     redirect('/dashboard/assessments');
   }
 
-  const canManage = role === 'RESEARCHER' || Boolean(profile.isStaff);
+  const canManage = isAdmin || role === 'RESEARCHER';
 
   return <AssessmentDetailView assessmentId={assessmentId} canManage={canManage} />;
 }

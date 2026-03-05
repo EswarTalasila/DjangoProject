@@ -322,10 +322,6 @@ def test_answer_type_from_question_mapping():
         answer_type_from_question(SimpleNamespace(kind=QuestionKind.NUMBER_SCALE))
         == AnswerType.NUMBER_SCALE
     )
-    assert (
-        answer_type_from_question(SimpleNamespace(kind=QuestionKind.MOOD_METER))
-        == AnswerType.MOOD_METER
-    )
     assert answer_type_from_question(SimpleNamespace(kind="UNKNOWN")) == AnswerType.SHORT_ANSWER
 
 

@@ -173,6 +173,9 @@ export default function AssessmentListView({ canManage }: AssessmentListViewProp
                   Grading Mode
                 </TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Scoring
+                </TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Questions
                 </TableHead>
                 {canManage && (
@@ -187,7 +190,11 @@ export default function AssessmentListView({ canManage }: AssessmentListViewProp
                 <TableRow
                   key={assessment.id}
                   className="even:bg-muted/50 hover:bg-accent transition-colors cursor-pointer"
-                  onClick={() => handleRowClick(assessment.id)}
+                  onClick={() => {
+                    // Avoid accidental row navigation while a delete dialog/action is active.
+                    if (deleteTargetId !== null || isDeleting) return;
+                    handleRowClick(assessment.id);
+                  }}
                 >
                   <TableCell className="font-medium text-sm text-foreground">
                     {assessment.title}
@@ -197,6 +204,9 @@ export default function AssessmentListView({ canManage }: AssessmentListViewProp
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {assessment.gradingMode}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {assessment.scoringPolicy}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {assessment.questions.length}
@@ -253,6 +263,7 @@ export default function AssessmentListView({ canManage }: AssessmentListViewProp
                                 disabled={isDeleting}
                                 onClick={(e) => {
                                   e.preventDefault();
+                                  e.stopPropagation();
                                   void handleDelete();
                                 }}
                               >

@@ -17,7 +17,7 @@ export type SudoCapabilities = {
   isStaff: boolean;
 };
 
-const VALID_ROLES = ["TEACHER", "RESEARCHER", "STUDENT"] as const;
+const VALID_ROLES = ["ADMIN", "TEACHER", "RESEARCHER", "STUDENT"] as const;
 
 const EMPTY_SUDO_CAPABILITIES: SudoCapabilities = {
   hasSudo: false,

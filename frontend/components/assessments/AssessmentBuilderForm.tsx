@@ -7,7 +7,6 @@ import {
   Loader2,
   Layers,
   Trash2,
-  CircleHelp,
   Eye,
   Pencil,
   GripVertical,
@@ -24,11 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { HelpTip } from '@/components/ui/help-tip';
 import {
   type Assessment,
   type AssessmentInput,
@@ -118,25 +113,6 @@ function normalizeQuestionKind(kind: string): QuestionKind {
   // Legacy types (e.g. MOOD_METER / REFLECTION) are no longer supported.
   // Treat them as short-answer prompts so existing assessments remain editable.
   return 'SHORT_ANSWER';
-}
-
-function HelpTip({ text }: { text: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex items-center text-muted-foreground hover:text-foreground"
-          aria-label="Show help"
-        >
-          <CircleHelp className="h-3.5 w-3.5" />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent sideOffset={6} className="max-w-xs whitespace-pre-line">
-        {text}
-      </TooltipContent>
-    </Tooltip>
-  );
 }
 
 // -- Props --

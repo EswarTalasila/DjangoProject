@@ -43,10 +43,12 @@ INSTALLED_APPS = [
     "accounts",
     "courses",
     "assessments",
+    "rubrics",
     "assignments",
     "submissions",
     "visualizations",
     "exports",
+    "packages",
 ]
 
 # Development-only apps (not loaded in production)

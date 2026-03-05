@@ -21,7 +21,7 @@
   - update assessment (when unreferenced by assignments)
   - delete assessment (when unreferenced by assignments)
 - 4 question types (current backend): `MULTIPLE_CHOICE`, `SHORT_ANSWER`, `NUMBER_SCALE`, `MOOD_METER`.
-- 6 grading modes: `AUTO`, `MANUAL`, `HYBRID`, `RUBRIC`, `REFLECTION`, `MOOD_METER`.
+- Grading modes in active backend contract: `AUTO`, `MANUAL`, `HYBRID`, `MOOD_METER`, with `RUBRIC` accepted as an input compatibility alias that persists as `MANUAL`.
 - Rubric linkage/lifecycle within assessment domain (assessment-linked `rubric` FK + `rubric_assessment_ids`).
 - Authorization matrix:
   - RESEARCHER/ADMIN: full CRUD
@@ -260,7 +260,7 @@
 - Applies to: ASMT-UC-01, ASMT-UC-04.
 
 ### ASMT-CN-04 — Grading Mode Enumeration
-- Supported grading modes: `AUTO`, `MANUAL`, `HYBRID`, `RUBRIC`, `REFLECTION`, `MOOD_METER`.
+- Supported grading modes: `AUTO`, `MANUAL`, `HYBRID`, `MOOD_METER`; `RUBRIC` is accepted as an input compatibility alias and normalized to `MANUAL`.
 - Grading mode determines auto-grading eligibility and rubric linkage requirements.
 - Applies to: ASMT-UC-01, ASMT-UC-04.
 
@@ -428,3 +428,184 @@ This draft defines the target FR-06 contract. Current code has known deltas that
 7. Add `status` field (`ACTIVE`/`ARCHIVED`) to Assessment model and archive endpoint (ASMT-CN-13). Implementation deferred; archive lifecycle will be addressed in a future release.
 8. Add missing FR-06 traceability tests for constraints and error paths.
 9. Preserve paginated listing behavior on `GET /api/v1/assessments` during FR-06 changes.
+
+---
+
+## 12) Rubric Entity Extension (FR-06 Addendum, Draft v1)
+
+This addendum updates FR-06 direction to support a full rubric system where rubrics are first-class grading tools, not assessment templates.
+
+### 12.1 Decision and Scope
+
+- Rubric is a standalone domain entity.
+- Assessments remain content templates; rubrics define manual grading criteria.
+- Rubrics can be attached per question or per question group.
+- `trimWhitespace` and `caseSensitive` remain short-answer config flags and must be explained in the builder UI.
+
+When this addendum is implemented, it supersedes current self-referential rubric linkage behavior described in `ASMT-CN-07`.
+
+### 12.2 Updated Grading Semantics
+
+- `AUTO`: all gradable questions are auto-graded; manual rubric attachment is disallowed.
+- `MANUAL`: all gradable questions require rubric linkage (direct or inherited via group).
+- `HYBRID`: mixture of auto-graded and rubric-graded questions is allowed.
+- `RUBRIC`: compatibility alias for `MANUAL` during migration; new UI should not surface this as a separate authoring mode.
+- `MOOD_METER`: no scoring; no rubric linkage.
+
+### 12.3 Backend Data Model (Target)
+
+Add standalone rubric models:
+
+- `Rubric`
+  - `id`
+  - `title` (required)
+  - `description` (optional)
+  - `status` (`ACTIVE` or `ARCHIVED`)
+  - `created_by` (ADMIN/RESEARCHER)
+  - `created_at`, `updated_at`
+- `RubricCriterion`
+  - `id`
+  - `rubric_id` (FK)
+  - `title` (required)
+  - `description` (optional)
+  - `order_index`
+  - `weight` (default `1.0`)
+- `RubricLevel`
+  - `id`
+  - `criterion_id` (FK)
+  - `label` (required, example: `Excellent`, `Proficient`, `Developing`)
+  - `points` (numeric)
+  - `description` (optional)
+  - `order_index`
+
+Add question grouping for shared rubric assignment:
+
+- `AssessmentQuestionGroup`
+  - `id`
+  - `assessment_id` (FK)
+  - `name` (required)
+  - `rubric_id` (nullable FK)
+  - `order_index`
+- `Question`
+  - add `question_group_id` (nullable FK)
+  - add `rubric_id` (nullable FK override)
+  - keep existing type-specific extension models
+
+Resolution order for rubric at grading time:
+1. `question.rubric_id` (question override)
+2. `question.question_group.rubric_id` (group default)
+3. none (invalid for `MANUAL`, allowed only in `AUTO` and manual-optional modes)
+
+### 12.4 API Contract (Rubrics)
+
+New rubric endpoints:
+
+| Method | Path | Auth | Behavior |
+|--------|------|------|----------|
+| GET | `/api/v1/rubrics` | IsTeacherOrAbove | List rubrics (teachers read-only) |
+| POST | `/api/v1/rubrics` | IsTeacherOrAbove + researcher/admin gate | Create rubric |
+| GET | `/api/v1/rubrics/{rubric_id}` | IsTeacherOrAbove | Rubric detail |
+| PATCH | `/api/v1/rubrics/{rubric_id}` | IsTeacherOrAbove + researcher/admin gate | Update rubric (blocked if policy requires immutability after use) |
+| DELETE | `/api/v1/rubrics/{rubric_id}` | IsTeacherOrAbove + researcher/admin gate | Delete rubric if unreferenced; else `409` |
+| POST | `/api/v1/rubrics/{rubric_id}/archive` | IsTeacherOrAbove + researcher/admin gate | Archive rubric (`ACTIVE` -> `ARCHIVED`) |
+
+Assessment payload updates:
+
+- Remove `rubricId` and `rubricAssessmentIds` from assessment-level payload.
+- Add optional `questionGroups` and per-question rubric linkage:
+  - `questionGroups[]`: `{ clientKey, name, rubricId? }`
+  - `questions[]`: include `groupClientKey?` and `rubricId?`
+
+Compatibility note:
+- Existing clients posting `rubricId`/`rubricAssessmentIds` should receive `400` with migration guidance after rollout completion.
+
+### 12.5 Validation Rules
+
+- `MANUAL`: every gradable question must resolve to a rubric via question or group.
+- `HYBRID`: questions marked manual must resolve to rubric; auto-graded questions must not carry rubric.
+- `AUTO`: rubric linkage is invalid and returns `400`.
+- `MOOD_METER`: no rubric linkage; questions are auto-configured as today.
+- Rubric delete/update:
+  - `409` when rubric is referenced by assessments, groups, or persisted grading artifacts.
+- Assessment update/delete:
+  - keep existing `409` assignment-reference protections.
+
+### 12.6 Frontend Builder Contract
+
+#### Page placement
+
+- Keep assessment authoring under:
+  - `/dashboard/assessments`
+  - `/dashboard/assessments/new`
+  - `/dashboard/assessments/[id]`
+  - `/dashboard/assessments/[id]/edit`
+- Add rubric authoring under:
+  - `/dashboard/rubrics`
+  - `/dashboard/rubrics/new`
+  - `/dashboard/rubrics/[id]`
+  - `/dashboard/rubrics/[id]/edit`
+
+#### Assessment builder UX requirements
+
+- Metadata block:
+  - `title`, `category`, `gradingMode`
+- Question builder:
+  - add/remove/reorder questions
+  - per-question type-specific fields
+  - per-question grading selector (`Auto` or `Manual`) when mode is `HYBRID`
+  - per-question rubric selector (optional override)
+- Question groups:
+  - create named groups
+  - assign group-level rubric
+  - assign questions to group
+
+#### Required helper text (short answer)
+
+- `Trim Whitespace`: "Ignores extra spaces at the start/end and treats repeated spaces as equivalent when comparing answers."
+- `Case Sensitive`: "When enabled, uppercase/lowercase must match exactly (example: `DNA` is different from `dna`)."
+
+#### Rubric authoring UX requirements
+
+- Criterion rows with reorder support.
+- Level columns with explicit points per level.
+- Live total-points preview per criterion and per rubric.
+- Guardrail: prevent save when any criterion has zero levels.
+
+### 12.7 Migration Plan
+
+Phase A (compatibility):
+- Add new rubric tables and endpoints.
+- Keep legacy assessment rubric fields read-only in DTO output for one release.
+- Add server-side mapping from legacy linkage to new question/group linkage when feasible.
+
+Phase B (cutover):
+- Update frontend to use standalone rubric APIs.
+- Stop sending legacy `rubricId` and `rubricAssessmentIds`.
+- Add data migration to populate `Question.rubric_id` and/or `AssessmentQuestionGroup.rubric_id`.
+
+Phase C (cleanup):
+- Remove legacy assessment rubric fields and linkage helper code (`_apply_rubric_links` path).
+- Remove compatibility alias `RUBRIC` from authoring UI (backend may keep enum alias for backward compatibility).
+
+### 12.8 Testing Additions
+
+Backend integration additions:
+- `ASMT-RBX-UC-01`: create rubric with criteria+levels.
+- `ASMT-RBX-UC-02`: attach rubric to manual questions/groups in assessment create.
+- `ASMT-RBX-UC-03`: reject `MANUAL` assessment with unresolved rubric linkage (`400`).
+- `ASMT-RBX-UC-04`: reject rubric deletion when referenced (`409`).
+- `ASMT-RBX-UC-05`: teacher can list/view rubrics but cannot mutate (`403` on write).
+
+Frontend tests:
+- Question builder shows helper text for `Trim Whitespace` and `Case Sensitive`.
+- `HYBRID` mode supports mixed auto/manual question configuration.
+- Manual question cannot submit without rubric.
+
+### 12.9 Recommended Implementation Order
+
+1. Ship rubric backend models + CRUD + permissions.
+2. Add question/group rubric linkage in assessment APIs.
+3. Enforce validation rules for `MANUAL` and `HYBRID`.
+4. Build rubric UI pages.
+5. Integrate rubric selectors into assessment builder.
+6. Remove legacy rubric-as-assessment linkage.
