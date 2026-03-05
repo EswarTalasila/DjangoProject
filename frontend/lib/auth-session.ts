@@ -26,6 +26,7 @@ const EMPTY_SUDO_CAPABILITIES: SudoCapabilities = {
   isStaff: false,
 };
 
+/** Resolve the API base URL for server-side fetches, preferring PROXY_TARGET when localhost is configured. */
 function resolveApiBaseUrl() {
   const configured = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
   try {
@@ -72,6 +73,7 @@ export const getSessionProfile = cache(async (): Promise<SessionProfile | null> 
   return profile;
 });
 
+/** GET /api/v1/sudo-grants/me — Fetch the current user's sudo capabilities (cached per render pass). */
 export const getSudoCapabilities = cache(async (): Promise<SudoCapabilities | null> => {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;

@@ -151,21 +151,25 @@ export type UpdateNodePayload = {
   snapshotId?: number | null;
 };
 
+/** GET /packages/workspaces — List all package workspaces. */
 export async function listWorkspaces(): Promise<PackageWorkspace[]> {
   const { data } = await api.get<PackageWorkspace[]>('/packages/workspaces');
   return data;
 }
 
+/** POST /packages/workspaces — Create a new package workspace. */
 export async function createWorkspace(payload: CreateWorkspacePayload): Promise<PackageWorkspace> {
   const { data } = await api.post<PackageWorkspace>('/packages/workspaces', payload);
   return data;
 }
 
+/** GET /packages/workspaces/:id — Fetch a single workspace with its node tree. */
 export async function getWorkspace(workspaceId: number): Promise<PackageWorkspace> {
   const { data } = await api.get<PackageWorkspace>(`/packages/workspaces/${workspaceId}`);
   return data;
 }
 
+/** PATCH /packages/workspaces/:id — Update workspace metadata or status. */
 export async function updateWorkspace(
   workspaceId: number,
   payload: UpdateWorkspacePayload,
@@ -174,11 +178,13 @@ export async function updateWorkspace(
   return data;
 }
 
+/** POST /packages/workspaces/:id/nodes — Add a file or folder node to a workspace. */
 export async function addNode(workspaceId: number, payload: AddNodePayload): Promise<PackageNode> {
   const { data } = await api.post<PackageNode>(`/packages/workspaces/${workspaceId}/nodes`, payload);
   return data;
 }
 
+/** PATCH /packages/workspaces/:wid/nodes/:nid — Update properties of an existing node. */
 export async function updateNode(
   workspaceId: number,
   nodeId: number,
@@ -191,10 +197,12 @@ export async function updateNode(
   return data;
 }
 
+/** DELETE /packages/workspaces/:wid/nodes/:nid — Remove a node from a workspace. */
 export async function deleteNode(workspaceId: number, nodeId: number): Promise<void> {
   await api.delete(`/packages/workspaces/${workspaceId}/nodes/${nodeId}`);
 }
 
+/** POST /packages/workspaces/:id/validate — Run pre-build validation on a workspace. */
 export async function validateWorkspace(
   workspaceId: number,
   payload?: { strictMode?: boolean; snapshotId?: number | null },
@@ -206,6 +214,7 @@ export async function validateWorkspace(
   return data;
 }
 
+/** POST /packages/workspaces/:id/build — Start a build job to produce a downloadable archive. */
 export async function buildWorkspace(
   workspaceId: number,
   payload?: {
@@ -218,11 +227,13 @@ export async function buildWorkspace(
   return data;
 }
 
+/** GET /packages/jobs/:id — Poll the status of a build job. */
 export async function getBuildJob(jobId: number): Promise<BuildJob> {
   const { data } = await api.get<BuildJob>(`/packages/jobs/${jobId}`);
   return data;
 }
 
+/** GET /packages/artifacts/:id/download — Download a completed build artifact as a zip blob. */
 export async function downloadArtifact(artifactId: number): Promise<{ blob: Blob; filename: string }> {
   const response = await api.get(`/packages/artifacts/${artifactId}/download`, {
     responseType: 'blob',
@@ -235,6 +246,7 @@ export async function downloadArtifact(artifactId: number): Promise<{ blob: Blob
   };
 }
 
+/** POST /packages/workspaces/:id/snapshots — Capture a point-in-time data snapshot for a workspace. */
 export async function createSnapshot(
   workspaceId: number,
   payload: CreateSnapshotPayload,
@@ -246,6 +258,7 @@ export async function createSnapshot(
   return data;
 }
 
+/** GET /packages/workspaces/:id/snapshots — List all data snapshots for a workspace. */
 export async function listSnapshots(workspaceId: number): Promise<DataSnapshot[]> {
   const { data } = await api.get<DataSnapshot[]>(
     `/packages/workspaces/${workspaceId}/snapshots`,
@@ -253,10 +266,12 @@ export async function listSnapshots(workspaceId: number): Promise<DataSnapshot[]
   return data;
 }
 
+/** DELETE /packages/workspaces/:id — Permanently delete a workspace and its nodes. */
 export async function deleteWorkspace(workspaceId: number): Promise<void> {
   await api.delete(`/packages/workspaces/${workspaceId}`);
 }
 
+/** POST /packages/workspaces/:id/nodes/reorder — Move a node to a new parent or position. */
 export async function reorderNode(
   workspaceId: number,
   payload: ReorderNodePayload,

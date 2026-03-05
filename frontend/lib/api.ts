@@ -1,6 +1,15 @@
+/**
+ * Shared axios instance with automatic token refresh and 401 redirect.
+ *
+ * - Attaches credentials on every request.
+ * - On 401, attempts a silent token exchange via /auth/token-exchanges.
+ * - If the refresh also fails, clears the user cookie and redirects to /login.
+ * - Public endpoints (login, registration, password reset) skip the refresh cycle.
+ */
 import axios from 'axios';
 import Cookies from 'js-cookie';
 
+/** Resolve the API base URL, swapping localhost for the Docker service name when running inside a container. */
 function resolveApiUrl(): string {
   const configured = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
   try {

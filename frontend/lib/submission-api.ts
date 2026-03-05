@@ -39,6 +39,7 @@ export type Paginated<T> = {
 
 // -- API calls --
 
+/** GET /students/:sid/assignments/:aid/submission/ — Fetch a student's submission for an assignment. */
 export async function getStudentSubmission(
   studentId: number,
   assignmentId: number,
@@ -49,6 +50,7 @@ export async function getStudentSubmission(
   return data;
 }
 
+/** PATCH /students/:sid/assignments/:aid/draft/ — Save in-progress answers without final submission. */
 export async function saveDraft(
   studentId: number,
   assignmentId: number,
@@ -61,6 +63,7 @@ export async function saveDraft(
   return data;
 }
 
+/** POST /assignments/:aid/submissions — Submit final answers (transitions status to SUBMITTED). */
 export async function submitFinal(
   assignmentId: number,
   studentId: number,
@@ -78,11 +81,13 @@ export async function submitFinal(
   return data;
 }
 
+/** GET /submissions/:id — Fetch a single submission by ID (includes answers). */
 export async function getSubmission(submissionId: number): Promise<SubmissionDTO> {
   const { data } = await api.get(`/submissions/${submissionId}`);
   return data;
 }
 
+/** GET /submissions/me — List the current user's own submissions (compact, no answers). */
 export async function listMySubmissions(
   status?: SubmissionStatus,
 ): Promise<Paginated<SubmissionCompactDTO> | SubmissionCompactDTO[]> {
@@ -93,6 +98,7 @@ export async function listMySubmissions(
   return data;
 }
 
+/** GET /assignments/:aid/submissions — List all submissions for an assignment (compact). */
 export async function listAssignmentSubmissions(
   assignmentId: number,
 ): Promise<Paginated<SubmissionCompactDTO> | SubmissionCompactDTO[]> {
@@ -100,6 +106,7 @@ export async function listAssignmentSubmissions(
   return data;
 }
 
+/** GET /students/:sid/submissions/ — List all submissions by a specific student (compact). */
 export async function listStudentSubmissions(
   studentId: number,
 ): Promise<Paginated<SubmissionCompactDTO> | SubmissionCompactDTO[]> {
@@ -107,6 +114,7 @@ export async function listStudentSubmissions(
   return data;
 }
 
+/** PATCH /submissions/:id/override-score — Teacher override of per-question scores. */
 export async function overrideSubmissionScore(
   submissionId: number,
   scores: number[],

@@ -28,6 +28,7 @@ interface Paginated<T> {
   results: T[];
 }
 
+/** GET /courses/ — List courses visible to the current user. */
 export async function listCourses(
   options?: { includeArchived?: boolean },
 ): Promise<CourseSummary[]> {
@@ -41,16 +42,19 @@ export async function listCourses(
   return data.results;
 }
 
+/** POST /courses/ — Create a new course with the given name. */
 export async function createCourse(name: string): Promise<CourseSummary> {
   const response = await api.post<CourseSummary>("/courses/", { name });
   return response.data;
 }
 
+/** GET /courses/:id — Fetch a single course by ID. */
 export async function getCourse(courseId: number): Promise<CourseSummary> {
   const response = await api.get<CourseSummary>(`/courses/${courseId}`);
   return response.data;
 }
 
+/** PATCH /courses/:id — Rename a course. */
 export async function updateCourse(
   courseId: number,
   name: string
@@ -61,10 +65,12 @@ export async function updateCourse(
   return response.data;
 }
 
+/** DELETE /courses/:id — Permanently delete a course. */
 export async function deleteCourse(courseId: number): Promise<void> {
   await api.delete(`/courses/${courseId}`);
 }
 
+/** GET /courses/:id/students — List all students enrolled in a course. */
 export async function listStudentsInCourse(
   courseId: number
 ): Promise<CourseStudent[]> {
@@ -76,6 +82,7 @@ export async function listStudentsInCourse(
   return data.results;
 }
 
+/** POST /courses/:id/students — Enroll a new student in a course (creates account if needed). */
 export async function addStudentToCourse(
   courseId: number,
   payload: { name: string; consent?: boolean; password?: string }
@@ -87,6 +94,7 @@ export async function addStudentToCourse(
   return response.data;
 }
 
+/** DELETE /courses/:id/students/:uid — Remove a student from a course. */
 export async function removeStudentFromCourse(
   courseId: number,
   studentUserId: number
@@ -94,11 +102,13 @@ export async function removeStudentFromCourse(
   await api.delete(`/courses/${courseId}/students/${studentUserId}`);
 }
 
+/** POST /courses/:id/archive — Soft-archive a course. */
 export async function archiveCourse(courseId: number): Promise<CourseSummary> {
   const response = await api.post<CourseSummary>(`/courses/${courseId}/archive`, {});
   return response.data;
 }
 
+/** POST /courses/:id/restore — Restore a previously archived course. */
 export async function restoreCourse(courseId: number): Promise<CourseSummary> {
   const response = await api.post<CourseSummary>(`/courses/${courseId}/restore`, {});
   return response.data;

@@ -95,35 +95,42 @@ type Paginated<T> = {
 
 // -- API Functions --
 
+/** GET /assessments/ — Fetch all assessments (paginated, returns results array). */
 export async function listAssessments(): Promise<Assessment[]> {
   const response = await api.get<Paginated<Assessment>>('/assessments/');
   return response.data.results;
 }
 
+/** GET /assessments/:id — Fetch a single assessment by ID. */
 export async function getAssessment(id: number): Promise<Assessment> {
   const response = await api.get<Assessment>(`/assessments/${id}`);
   return response.data;
 }
 
+/** POST /assessments/ — Create a new assessment with questions and optional groups. */
 export async function createAssessment(payload: AssessmentInput): Promise<Assessment> {
   const response = await api.post<Assessment>('/assessments/', payload);
   return response.data;
 }
 
+/** PATCH /assessments/:id — Partially update an existing assessment. */
 export async function updateAssessment(id: number, payload: AssessmentInput): Promise<Assessment> {
   const response = await api.patch<Assessment>(`/assessments/${id}`, payload);
   return response.data;
 }
 
+/** DELETE /assessments/:id — Permanently delete an assessment. */
 export async function deleteAssessment(id: number): Promise<void> {
   await api.delete(`/assessments/${id}`);
 }
 
+/** POST /assessments/:id/archive — Soft-archive an assessment. */
 export async function archiveAssessment(id: number): Promise<Assessment> {
   const response = await api.post<Assessment>(`/assessments/${id}/archive`, {});
   return response.data;
 }
 
+/** POST /assessments/:id/restore — Restore a previously archived assessment. */
 export async function restoreAssessment(id: number): Promise<Assessment> {
   const response = await api.post<Assessment>(`/assessments/${id}/restore`, {});
   return response.data;

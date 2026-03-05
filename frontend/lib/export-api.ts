@@ -29,6 +29,7 @@ function parseFilename(contentDisposition: string | undefined, fallback: string)
   return match?.[1] || fallback;
 }
 
+/** Fetch a CSV export from the given API path and return the blob with its filename. */
 async function getCsv(
   path: string,
   params: Record<string, string | number | boolean | undefined>,
@@ -43,6 +44,7 @@ async function getCsv(
   return { blob: response.data, filename };
 }
 
+/** GET /exports/courses/:id/roster — Download a course roster as CSV. */
 export async function downloadCourseRoster(
   courseId: number,
   params: RosterExportParams = {},
@@ -54,6 +56,7 @@ export async function downloadCourseRoster(
   );
 }
 
+/** GET /exports/courses/:id/submissions — Download course submissions as CSV. */
 export async function downloadCourseSubmissions(
   courseId: number,
   params: CourseSubmissionsExportParams = {},
@@ -65,6 +68,7 @@ export async function downloadCourseSubmissions(
   );
 }
 
+/** Extract a human-readable error message from an export failure response (handles Blob and JSON bodies). */
 export async function extractExportErrorMessage(error: unknown): Promise<string> {
   const defaultMessage = 'Export failed. Please check filters and permissions.';
   if (!error || typeof error !== 'object') return defaultMessage;
