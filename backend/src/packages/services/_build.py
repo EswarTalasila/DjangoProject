@@ -267,6 +267,7 @@ def _build_manifest(
     warnings: list[dict],
     auto_live_snapshots: dict[int, DataSnapshot] | None = None,
 ) -> dict[str, Any]:
+    """Build a MANIFEST.json dict with file inventory, checksums, and snapshot lineage."""
     from ..models import NodeSourceType
 
     # Collect snapshot metadata from file nodes
@@ -322,6 +323,7 @@ def _build_manifest(
 
 
 def _read_snapshot_bytes(snapshot: DataSnapshot) -> bytes:
+    """Read CSV bytes from a snapshot's storage file. Raises ValueError if expired/failed/missing."""
     from ..models import SnapshotStatus
 
     if snapshot.expires_at and snapshot.expires_at < timezone.now():

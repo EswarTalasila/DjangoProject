@@ -40,6 +40,21 @@ class EnvSettings(BaseSettings):
         validation_alias="DJANGO_DEBUG",
         description="Optional debug override (development only)",
     )
+    django_secure_ssl_redirect: bool | None = Field(
+        default=None,
+        validation_alias="DJANGO_SECURE_SSL_REDIRECT",
+        description="Optional SSL redirect override (defaults true in production).",
+    )
+    django_session_cookie_secure: bool | None = Field(
+        default=None,
+        validation_alias="DJANGO_SESSION_COOKIE_SECURE",
+        description="Optional session cookie secure override (defaults true in production).",
+    )
+    django_csrf_cookie_secure: bool | None = Field(
+        default=None,
+        validation_alias="DJANGO_CSRF_COOKIE_SECURE",
+        description="Optional CSRF cookie secure override (defaults true in production).",
+    )
     django_allowed_hosts: str = Field(
         default="localhost,127.0.0.1",
         description="Comma-separated list of allowed hosts",
@@ -147,14 +162,20 @@ class EnvSettings(BaseSettings):
 
     @property
     def ssl_redirect_enabled(self) -> bool:
+        if self.django_secure_ssl_redirect is not None:
+            return bool(self.django_secure_ssl_redirect)
         return self.is_production
 
     @property
     def session_cookie_secure(self) -> bool:
+        if self.django_session_cookie_secure is not None:
+            return bool(self.django_session_cookie_secure)
         return self.is_testing or self.is_production
 
     @property
     def csrf_cookie_secure(self) -> bool:
+        if self.django_csrf_cookie_secure is not None:
+            return bool(self.django_csrf_cookie_secure)
         return self.is_testing or self.is_production
 
     @property

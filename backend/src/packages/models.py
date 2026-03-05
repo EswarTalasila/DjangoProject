@@ -39,6 +39,8 @@ class NodeSourceType(models.TextChoices):
 
 
 class PackageWorkspace(models.Model):
+    """A packaging workspace that organizes data export nodes into a tree structure."""
+
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True, default="")
     status = models.CharField(
@@ -71,6 +73,8 @@ class PackageWorkspace(models.Model):
 
 
 class PackageNode(models.Model):
+    """A folder or file node in a workspace tree. File nodes bind to a dataset for export."""
+
     workspace = models.ForeignKey(
         PackageWorkspace,
         on_delete=models.CASCADE,
@@ -119,6 +123,8 @@ class PackageNode(models.Model):
 
 
 class PackageBuildJob(models.Model):
+    """Tracks a build pipeline run that materializes workspace nodes into a ZIP artifact."""
+
     workspace = models.ForeignKey(
         PackageWorkspace,
         on_delete=models.CASCADE,
@@ -152,6 +158,8 @@ class PackageBuildJob(models.Model):
 
 
 class PackageArtifact(models.Model):
+    """ZIP artifact produced by a completed build job, with checksum and expiry metadata."""
+
     build_job = models.OneToOneField(
         PackageBuildJob,
         on_delete=models.CASCADE,
@@ -173,6 +181,8 @@ class PackageArtifact(models.Model):
 
 
 class DataSnapshot(models.Model):
+    """Point-in-time capture of a dataset binding, stored as a CSV file on disk."""
+
     workspace = models.ForeignKey(
         PackageWorkspace,
         on_delete=models.CASCADE,
@@ -238,6 +248,8 @@ class PkgAuditOutcome(models.TextChoices):
 
 
 class PackageAuditLog(models.Model):
+    """Immutable audit trail entry for workspace, node, build, and download actions."""
+
     actor = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

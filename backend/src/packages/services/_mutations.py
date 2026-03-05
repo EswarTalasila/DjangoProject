@@ -41,6 +41,7 @@ def _log_pkg_audit(actor, action, workspace=None, scope="", metadata=None, outco
 
 @transaction.atomic
 def create_workspace(user: User, payload: dict) -> PackageWorkspace:
+    """Create a new packaging workspace and log the audit event."""
     ws = PackageWorkspace.objects.create(
         name=payload["name"],
         description=payload.get("description", ""),
@@ -58,6 +59,7 @@ def create_workspace(user: User, payload: dict) -> PackageWorkspace:
 
 @transaction.atomic
 def update_workspace(user: User, workspace: PackageWorkspace, payload: dict) -> PackageWorkspace:
+    """Update workspace fields (name, description, status) and bump revision."""
     if "name" in payload:
         workspace.name = payload["name"]
     if "description" in payload:
@@ -80,6 +82,7 @@ def update_workspace(user: User, workspace: PackageWorkspace, payload: dict) -> 
 
 @transaction.atomic
 def add_node(user: User, workspace: PackageWorkspace, payload: dict) -> PackageNode:
+    """Add a folder or file node to the workspace tree and bump revision."""
     node = PackageNode.objects.create(
         workspace=workspace,
         parent_id=payload.get("parentId"),
@@ -107,6 +110,7 @@ def add_node(user: User, workspace: PackageWorkspace, payload: dict) -> PackageN
 
 @transaction.atomic
 def update_node(user: User, node: PackageNode, payload: dict) -> PackageNode:
+    """Update mutable node fields (label, parent, binding, filters, etc.) and bump revision."""
     if "label" in payload:
         node.label = payload["label"]
     if "parentId" in payload:
@@ -141,6 +145,7 @@ def update_node(user: User, node: PackageNode, payload: dict) -> PackageNode:
 
 @transaction.atomic
 def delete_node(user: User, node: PackageNode) -> None:
+    """Delete a node from the workspace tree and bump revision."""
     workspace = node.workspace
     node_id = node.id
     node.delete()
@@ -237,6 +242,7 @@ def create_build_job(
     strict_mode: bool = True,
     snapshot_id: int | None = None,
 ) -> PackageBuildJob:
+    """Create a build job record for the workspace (live or snapshot mode)."""
     mode = "snapshot" if snapshot_id is not None else "live"
     job = PackageBuildJob.objects.create(
         workspace=workspace,
@@ -272,6 +278,7 @@ def run_build(
 
 
 def log_download_audit(user, workspace, artifact, outcome=PkgAuditOutcome.SUCCESS):
+    """Record an audit log entry for an artifact download."""
     _log_pkg_audit(
         user,
         PkgAuditAction.DOWNLOAD,

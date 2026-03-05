@@ -241,6 +241,7 @@ def compute_node_path(node: PackageNode, node_map: dict[int, PackageNode]) -> st
 def _validate_deterministic_paths(
     nodes: list[PackageNode], result: ValidationResult
 ):
+    """Check for duplicate output paths among file nodes (PKG-CN-08)."""
     node_map = {n.id: n for n in nodes}
     file_nodes = [n for n in nodes if n.node_type == NodeType.FILE]
     seen_paths: dict[str, int] = {}
@@ -262,6 +263,7 @@ def _validate_deterministic_paths(
 
 
 def _validate_caps(nodes: list[PackageNode], result: ValidationResult):
+    """Enforce maximum file count limits (PKG-CN-03)."""
     file_count = sum(1 for n in nodes if n.node_type == NodeType.FILE)
     if file_count > MAX_FILE_COUNT:
         result.add_violation(

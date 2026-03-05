@@ -29,6 +29,7 @@ from .services import (
 
 
 def _parse_bool(value: str | None) -> bool | None | str:
+    """Parse a query-string boolean. Returns True/False, None if absent, or 'invalid'."""
     if value is None:
         return None
     if value.lower() in ("true", "1", "yes"):
@@ -39,6 +40,7 @@ def _parse_bool(value: str | None) -> bool | None | str:
 
 
 def _parse_date(value: str | None, *, end_of_day=False):
+    """Parse an ISO date string to a UTC datetime. Returns None if absent, or 'invalid'."""
     if not value:
         return None
     try:
@@ -50,6 +52,7 @@ def _parse_date(value: str | None, *, end_of_day=False):
 
 
 def _parse_int(value: str | None):
+    """Parse a query-string integer. Returns None if absent, or 'invalid'."""
     if value is None:
         return None
     try:
