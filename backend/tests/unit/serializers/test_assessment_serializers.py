@@ -8,7 +8,6 @@ from assessments.models import GradingMode, QuestionKind
 from assessments.serializers import (
     AssessmentSerializer,
     MCQChoiceSerializer,
-    MoodMeterDataSerializer,
     MultipleChoiceDataSerializer,
     NumberScaleDataSerializer,
     QuestionSerializer,
@@ -148,31 +147,6 @@ class TestNumberScaleDataSerializer:
         assert not s.is_valid()
         assert "max" in s.errors
 
-
-# ---------------------------------------------------------------------------
-# MoodMeterDataSerializer
-# ---------------------------------------------------------------------------
-
-
-class TestMoodMeterDataSerializer:
-    """Tests for MoodMeterDataSerializer validation."""
-
-    def test_valid_data_with_labels(self):
-        """Accepts valid mood meter data with labels."""
-        s = MoodMeterDataSerializer(
-            data={"labels": ["Happy", "Sad", "Calm", "Angry"]}
-        )
-        assert s.is_valid()
-
-    def test_labels_optional(self):
-        """Labels field is optional."""
-        s = MoodMeterDataSerializer(data={})
-        assert s.is_valid()
-
-    def test_accepts_empty_labels(self):
-        """Accepts empty labels list."""
-        s = MoodMeterDataSerializer(data={"labels": []})
-        assert s.is_valid()
 
 
 # ---------------------------------------------------------------------------

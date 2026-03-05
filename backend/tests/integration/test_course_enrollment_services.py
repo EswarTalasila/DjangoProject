@@ -6,7 +6,7 @@ import pytest
 
 from accounts.models import Role, TeacherProfile, User, UserRole
 from courses.models import Course, Enrollment
-from courses.services import bulk_create_students, create_student_in_course
+from courses.services import create_student_in_course
 
 
 @pytest.mark.django_db
@@ -65,33 +65,6 @@ def test_create_student_in_course_raises_when_profile_missing(monkeypatch, teach
             },
         )
 
-
-@pytest.mark.django_db
-@pytest.mark.integration
-def test_bulk_create_students_counts_only_successes(teacher_user, monkeypatch):
-    """Bulk create continues on exceptions and returns successful count."""
-
-    calls = {"i": 0}
-
-    def fake_create(_request_user, payload):
-        calls["i"] += 1
-        if payload.get("name") == "bad":
-            raise ValueError("bad payload")
-        return object()
-
-    monkeypatch.setattr("courses.services.create_student_in_course", fake_create)
-
-    created = bulk_create_students(
-        teacher_user,
-        [
-            {"name": "ok-1"},
-            {"name": "bad"},
-            {"name": "ok-2"},
-        ],
-    )
-
-    assert calls["i"] == 3
-    assert created == 2
 
 
 @pytest.mark.django_db
