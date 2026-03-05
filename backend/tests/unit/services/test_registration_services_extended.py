@@ -396,14 +396,14 @@ class TestCanGenerateCodeType:
     """Tests for _can_generate_code_type permission checks."""
 
     @patch("accounts.services._registration.primary_role")
-    def test_staff_can_only_generate_researcher_codes(self, mock_role):
-        """Staff users can only generate RESEARCHER codes."""
+    def test_staff_can_generate_all_code_types(self, mock_role):
+        """Staff users can generate any code type."""
         user = Mock()
         user.is_staff = True
 
         assert _can_generate_code_type(user, "RESEARCHER") is True
-        assert _can_generate_code_type(user, "TEACHER") is False
-        assert _can_generate_code_type(user, "STUDENT") is False
+        assert _can_generate_code_type(user, "TEACHER") is True
+        assert _can_generate_code_type(user, "STUDENT") is True
 
     @patch("accounts.services._registration.has_sudo_permission")
     @patch("accounts.services._registration.primary_role")

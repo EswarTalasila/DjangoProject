@@ -1086,11 +1086,11 @@ class TestAccountRoutes:
         assert response.status_code == 403
 
     def test_USER_UC_03_E1(self, api_client, admin_user, teacher_user):
-        """Delete outside scope is masked as not found."""
+        """Delete outside scope returns 403 Forbidden."""
         api_client.force_authenticate(user=teacher_user)
         response = api_client.delete(f"/api/v1/users/{admin_user.id}")
-        assert response.status_code == 404
-        assert response.json()["detail"] == "User not found"
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Forbidden"
 
     def test_USER_UC_03_E2(self, api_client, admin_user):
         """Delete request returns 404 when target user does not exist."""
@@ -1138,7 +1138,7 @@ class TestAccountRoutes:
         assert response.status_code == 403
 
     def test_USER_UC_02_E2(self, api_client, admin_user):
-        """Staff-target user cannot be edited; returns 403."""
+        """Staff-target user cannot be edited; masked as 404."""
         staff_target = User.objects.create_user(
             username="staff-target",
             email="staff-target@example.com",
@@ -1152,7 +1152,7 @@ class TestAccountRoutes:
             {"name": "Hacked Name"},
             format="json",
         )
-        assert response.status_code == 403
+        assert response.status_code == 404
 
     def test_USER_UC_01(self, api_client, admin_user):
         """Created user is assigned exactly one role; response returns user object."""

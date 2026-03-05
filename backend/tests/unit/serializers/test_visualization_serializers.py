@@ -11,105 +11,140 @@ pytestmark = pytest.mark.unit
 
 
 # ============================================================================
-# VisualizationFilterSerializer
+# CourseSummaryParamsSerializer
 # ============================================================================
 
 
-class TestVisualizationFilterSerializer:
-    """Tests for VisualizationFilterSerializer field validation."""
+class TestCourseSummaryParamsSerializer:
+    """Tests for CourseSummaryParamsSerializer field validation."""
 
     def test_empty_body_is_valid(self):
         """All filter fields are optional so an empty dict is valid."""
-        from visualizations.serializers import VisualizationFilterSerializer
+        from visualizations.serializers import CourseSummaryParamsSerializer
 
-        s = VisualizationFilterSerializer(data={})
+        s = CourseSummaryParamsSerializer(data={})
         assert s.is_valid(), s.errors
 
-    def test_student_id_filter(self):
-        """studentId is accepted as an integer."""
-        from visualizations.serializers import VisualizationFilterSerializer
+    def test_start_date_filter(self):
+        """startDate is accepted as a date string."""
+        from visualizations.serializers import CourseSummaryParamsSerializer
 
-        s = VisualizationFilterSerializer(data={"studentId": 42})
+        s = CourseSummaryParamsSerializer(data={"startDate": "2026-01-01"})
         assert s.is_valid()
-        assert s.validated_data["studentId"] == 42
 
-    def test_course_id_filter(self):
-        """courseId is accepted as an integer."""
-        from visualizations.serializers import VisualizationFilterSerializer
+    def test_end_date_filter(self):
+        """endDate is accepted as a date string."""
+        from visualizations.serializers import CourseSummaryParamsSerializer
 
-        s = VisualizationFilterSerializer(data={"courseId": 7})
+        s = CourseSummaryParamsSerializer(data={"endDate": "2026-12-31"})
         assert s.is_valid()
-        assert s.validated_data["courseId"] == 7
 
     def test_category_filter(self):
         """category is accepted as a string."""
-        from visualizations.serializers import VisualizationFilterSerializer
+        from visualizations.serializers import CourseSummaryParamsSerializer
 
-        s = VisualizationFilterSerializer(data={"category": "Math"})
+        s = CourseSummaryParamsSerializer(data={"category": "Math"})
         assert s.is_valid()
         assert s.validated_data["category"] == "Math"
 
     def test_category_allows_blank(self):
         """category accepts blank strings."""
-        from visualizations.serializers import VisualizationFilterSerializer
+        from visualizations.serializers import CourseSummaryParamsSerializer
 
-        s = VisualizationFilterSerializer(data={"category": ""})
+        s = CourseSummaryParamsSerializer(data={"category": ""})
         assert s.is_valid()
 
     def test_category_allows_null(self):
         """category accepts null values."""
-        from visualizations.serializers import VisualizationFilterSerializer
+        from visualizations.serializers import CourseSummaryParamsSerializer
 
-        s = VisualizationFilterSerializer(data={"category": None})
+        s = CourseSummaryParamsSerializer(data={"category": None})
         assert s.is_valid()
 
     def test_assessment_id_filter(self):
         """assessmentId is accepted as an integer."""
-        from visualizations.serializers import VisualizationFilterSerializer
+        from visualizations.serializers import CourseSummaryParamsSerializer
 
-        s = VisualizationFilterSerializer(data={"assessmentId": 15})
+        s = CourseSummaryParamsSerializer(data={"assessmentId": 15})
         assert s.is_valid()
         assert s.validated_data["assessmentId"] == 15
 
-    def test_teacher_id_filter(self):
-        """teacherId is accepted as an integer."""
-        from visualizations.serializers import VisualizationFilterSerializer
-
-        s = VisualizationFilterSerializer(data={"teacherId": 99})
-        assert s.is_valid()
-        assert s.validated_data["teacherId"] == 99
-
-    def test_is_mood_meter_boolean(self):
-        """isMoodMeter is accepted as a boolean."""
-        from visualizations.serializers import VisualizationFilterSerializer
-
-        s = VisualizationFilterSerializer(data={"isMoodMeter": True})
-        assert s.is_valid()
-        assert s.validated_data["isMoodMeter"] is True
-
     def test_multiple_filters_combined(self):
         """Multiple filters can be combined in a single request."""
-        from visualizations.serializers import VisualizationFilterSerializer
+        from visualizations.serializers import CourseSummaryParamsSerializer
 
-        data = {"studentId": 1, "courseId": 2, "category": "SEL", "assessmentId": 3}
-        s = VisualizationFilterSerializer(data=data)
+        data = {"startDate": "2026-01-01", "endDate": "2026-12-31", "category": "SEL", "assessmentId": 3}
+        s = CourseSummaryParamsSerializer(data=data)
         assert s.is_valid()
-        assert s.validated_data["studentId"] == 1
-        assert s.validated_data["courseId"] == 2
         assert s.validated_data["category"] == "SEL"
+        assert s.validated_data["assessmentId"] == 3
 
-    def test_null_integer_fields(self):
-        """Null values are accepted for optional integer fields."""
-        from visualizations.serializers import VisualizationFilterSerializer
+    def test_null_date_fields(self):
+        """Null values are accepted for optional date fields."""
+        from visualizations.serializers import CourseSummaryParamsSerializer
 
-        data = {"studentId": None, "courseId": None, "assessmentId": None, "teacherId": None}
-        s = VisualizationFilterSerializer(data=data)
+        data = {"startDate": None, "endDate": None, "assessmentId": None}
+        s = CourseSummaryParamsSerializer(data=data)
         assert s.is_valid()
 
     def test_string_rejected_for_integer_field(self):
         """Non-numeric string is rejected for integer fields."""
-        from visualizations.serializers import VisualizationFilterSerializer
+        from visualizations.serializers import CourseSummaryParamsSerializer
 
-        s = VisualizationFilterSerializer(data={"studentId": "not-a-number"})
+        s = CourseSummaryParamsSerializer(data={"assessmentId": "not-a-number"})
         assert not s.is_valid()
-        assert "studentId" in s.errors
+        assert "assessmentId" in s.errors
+
+    def test_invalid_date_format_rejected(self):
+        """Invalid date format is rejected."""
+        from visualizations.serializers import CourseSummaryParamsSerializer
+
+        s = CourseSummaryParamsSerializer(data={"startDate": "not-a-date"})
+        assert not s.is_valid()
+        assert "startDate" in s.errors
+
+
+# ============================================================================
+# AssignmentSummaryParamsSerializer
+# ============================================================================
+
+
+class TestAssignmentSummaryParamsSerializer:
+    """Tests for AssignmentSummaryParamsSerializer field validation."""
+
+    def test_empty_body_is_valid(self):
+        """All filter fields are optional so an empty dict is valid."""
+        from visualizations.serializers import AssignmentSummaryParamsSerializer
+
+        s = AssignmentSummaryParamsSerializer(data={})
+        assert s.is_valid(), s.errors
+
+    def test_start_date_filter(self):
+        """startDate is accepted as a date string."""
+        from visualizations.serializers import AssignmentSummaryParamsSerializer
+
+        s = AssignmentSummaryParamsSerializer(data={"startDate": "2026-01-01"})
+        assert s.is_valid()
+
+    def test_end_date_filter(self):
+        """endDate is accepted as a date string."""
+        from visualizations.serializers import AssignmentSummaryParamsSerializer
+
+        s = AssignmentSummaryParamsSerializer(data={"endDate": "2026-12-31"})
+        assert s.is_valid()
+
+    def test_null_date_fields(self):
+        """Null values are accepted for optional date fields."""
+        from visualizations.serializers import AssignmentSummaryParamsSerializer
+
+        data = {"startDate": None, "endDate": None}
+        s = AssignmentSummaryParamsSerializer(data=data)
+        assert s.is_valid()
+
+    def test_invalid_date_format_rejected(self):
+        """Invalid date format is rejected."""
+        from visualizations.serializers import AssignmentSummaryParamsSerializer
+
+        s = AssignmentSummaryParamsSerializer(data={"startDate": "not-a-date"})
+        assert not s.is_valid()
+        assert "startDate" in s.errors

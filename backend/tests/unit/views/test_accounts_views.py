@@ -773,8 +773,8 @@ class TestCreateUserView:
     @patch("accounts.views.IsTeacherOrAbove.has_permission", return_value=True)
     @patch("accounts.views.identifier_in_use")
     @patch("accounts.views.can_create_user")
-    def test_duplicate_email_returns_400(self, mock_can_create, mock_in_use, _mock_perm):
-        """Duplicate email returns 400."""
+    def test_duplicate_email_returns_409(self, mock_can_create, mock_in_use, _mock_perm):
+        """Duplicate email returns 409."""
         from accounts.views import create_user
 
         mock_can_create.return_value = True
@@ -786,7 +786,7 @@ class TestCreateUserView:
             user=user,
         )
         response = create_user(request)
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.status_code == status.HTTP_409_CONFLICT
         assert "Email already taken" in response.data["detail"]
 
     @patch("accounts.views.IsTeacherOrAbove.has_permission", return_value=True)
@@ -869,8 +869,8 @@ class TestManageUserView:
     @patch("accounts.views.IsTeacherOrAbove.has_permission", return_value=True)
     @patch("accounts.views.can_delete_user")
     @patch("accounts.views.User")
-    def test_delete_forbidden_returns_404_masked(self, mock_user_model, mock_can_delete, _mock_perm):
-        """DELETE without permission masks as 404."""
+    def test_delete_forbidden_returns_403(self, mock_user_model, mock_can_delete, _mock_perm):
+        """DELETE without permission returns 403."""
         from accounts.views import manage_user
 
         mock_can_delete.return_value = False
@@ -879,7 +879,7 @@ class TestManageUserView:
         actor = _user(role=Role.TEACHER)
         request = _auth_request("delete", "/api/v1/users/50", user=actor)
         response = manage_user(request, user_id=50)
-        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @patch("accounts.views.IsTeacherOrAbove.has_permission", return_value=True)
     @patch("accounts.views.can_delete_user")
@@ -1048,12 +1048,19 @@ class TestCodeDetailView:
 class TestIssuePasswordResetCodeView:
     """Tests for issue_password_reset_code_view."""
 
+    @patch("accounts.views.complete_audit")
+    @patch("accounts.views.log_audit", return_value=1)
+    @patch("accounts.views.get_client_ip", return_value="127.0.0.1")
+    @patch("accounts.views.User")
     @patch("accounts.views.IsTeacherOrAbove.has_permission", return_value=True)
     @patch("accounts.views.issue_password_reset_code")
-    def test_value_error_not_found_returns_404(self, mock_issue, _mock_perm):
+    def test_value_error_not_found_returns_404(
+        self, mock_issue, _mock_perm, mock_user_model, _mock_ip, _mock_log, _mock_complete
+    ):
         """ValueError with 'not found' returns 404."""
         from accounts.views import issue_password_reset_code_view
 
+        mock_user_model.objects.filter.return_value.first.return_value = None
         mock_issue.side_effect = ValueError("Target user not found")
         user = _user(role=Role.TEACHER)
         request = _auth_request(
@@ -1063,12 +1070,19 @@ class TestIssuePasswordResetCodeView:
         response = issue_password_reset_code_view(request)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
+    @patch("accounts.views.complete_audit")
+    @patch("accounts.views.log_audit", return_value=1)
+    @patch("accounts.views.get_client_ip", return_value="127.0.0.1")
+    @patch("accounts.views.User")
     @patch("accounts.views.IsTeacherOrAbove.has_permission", return_value=True)
     @patch("accounts.views.issue_password_reset_code")
-    def test_value_error_without_not_found_returns_400(self, mock_issue, _mock_perm):
+    def test_value_error_without_not_found_returns_400(
+        self, mock_issue, _mock_perm, mock_user_model, _mock_ip, _mock_log, _mock_complete
+    ):
         """ValueError without 'not found' returns 400."""
         from accounts.views import issue_password_reset_code_view
 
+        mock_user_model.objects.filter.return_value.first.return_value = _user(id=1)
         mock_issue.side_effect = ValueError("Invalid operation")
         user = _user(role=Role.TEACHER)
         request = _auth_request(
@@ -1078,12 +1092,19 @@ class TestIssuePasswordResetCodeView:
         response = issue_password_reset_code_view(request)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    @patch("accounts.views.complete_audit")
+    @patch("accounts.views.log_audit", return_value=1)
+    @patch("accounts.views.get_client_ip", return_value="127.0.0.1")
+    @patch("accounts.views.User")
     @patch("accounts.views.IsTeacherOrAbove.has_permission", return_value=True)
     @patch("accounts.views.issue_password_reset_code")
-    def test_permission_error_returns_403(self, mock_issue, _mock_perm):
+    def test_permission_error_returns_403(
+        self, mock_issue, _mock_perm, mock_user_model, _mock_ip, _mock_log, _mock_complete
+    ):
         """PermissionError returns 403."""
         from accounts.views import issue_password_reset_code_view
 
+        mock_user_model.objects.filter.return_value.first.return_value = _user(id=1)
         mock_issue.side_effect = PermissionError("Not allowed")
         user = _user(role=Role.TEACHER)
         request = _auth_request(
@@ -1093,14 +1114,19 @@ class TestIssuePasswordResetCodeView:
         response = issue_password_reset_code_view(request)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    @patch("accounts.views.complete_audit")
+    @patch("accounts.views.log_audit", return_value=1)
+    @patch("accounts.views.get_client_ip", return_value="127.0.0.1")
+    @patch("accounts.views.User")
     @patch("accounts.views.IsTeacherOrAbove.has_permission", return_value=True)
     @patch("accounts.views.issue_password_reset_code")
-    def test_success_returns_201(self, mock_issue, _mock_perm):
+    def test_success_returns_201(self, mock_issue, _mock_perm, mock_user_model, _mock_ip, _mock_log, _mock_complete):
         """Successful issuance returns 201 with reset code details."""
         from django.utils import timezone
 
         from accounts.views import issue_password_reset_code_view
 
+        mock_user_model.objects.filter.return_value.first.return_value = _user(id=1)
         reset_request = SimpleNamespace(
             id=42,
             requested_role="STUDENT",
@@ -1287,27 +1313,27 @@ class TestMySudoGrantView:
 
 @pytest.mark.unit
 class TestGrantSudoView:
-    """Tests for grant_sudo view."""
+    """Tests for _grant_sudo view (dispatched via sudo_grants_collection POST)."""
 
     @patch("accounts.views.IsResearcherOrAdmin.has_permission", return_value=True)
     @patch("accounts.views.User")
     def test_missing_user_id_returns_400(self, mock_user_model, _mock_perm):
         """Missing user_id returns 400."""
-        from accounts.views import grant_sudo
+        from accounts.views import sudo_grants_collection
 
         user = _user(is_staff=True, role=Role.RESEARCHER)
         request = _auth_request(
             "post", "/api/v1/sudo-grants",
             data={"permissions": []}, user=user,
         )
-        response = grant_sudo(request)
+        response = sudo_grants_collection(request)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
     @patch("accounts.views.IsResearcherOrAdmin.has_permission", return_value=True)
     @patch("accounts.views.User")
     def test_user_not_found_returns_404(self, mock_user_model, _mock_perm):
         """Non-existent grantee returns 404."""
-        from accounts.views import grant_sudo
+        from accounts.views import sudo_grants_collection
 
         mock_user_model.objects.filter.return_value.first.return_value = None
         user = _user(is_staff=True, role=Role.RESEARCHER)
@@ -1315,15 +1341,20 @@ class TestGrantSudoView:
             "post", "/api/v1/sudo-grants",
             data={"user_id": 99999, "permissions": []}, user=user,
         )
-        response = grant_sudo(request)
+        response = sudo_grants_collection(request)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
+    @patch("accounts.views.complete_audit")
+    @patch("accounts.views.log_audit", return_value=1)
+    @patch("accounts.views.get_client_ip", return_value="127.0.0.1")
     @patch("accounts.views.IsResearcherOrAdmin.has_permission", return_value=True)
     @patch("accounts.views.grant_sudo_to_researcher")
     @patch("accounts.views.User")
-    def test_value_error_returns_400(self, mock_user_model, mock_grant, _mock_perm):
+    def test_value_error_returns_400(
+        self, mock_user_model, mock_grant, _mock_perm, _mock_ip, _mock_log, _mock_complete
+    ):
         """ValueError from service returns 400."""
-        from accounts.views import grant_sudo
+        from accounts.views import sudo_grants_collection
 
         mock_grant.side_effect = ValueError("Invalid permissions")
         grantee = _user(id=50)
@@ -1334,15 +1365,20 @@ class TestGrantSudoView:
             data={"user_id": 50, "permissions": ["INVALID"]},
             user=admin,
         )
-        response = grant_sudo(request)
+        response = sudo_grants_collection(request)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    @patch("accounts.views.complete_audit")
+    @patch("accounts.views.log_audit", return_value=1)
+    @patch("accounts.views.get_client_ip", return_value="127.0.0.1")
     @patch("accounts.views.IsResearcherOrAdmin.has_permission", return_value=True)
     @patch("accounts.views.grant_sudo_to_researcher")
     @patch("accounts.views.User")
-    def test_permission_error_returns_403(self, mock_user_model, mock_grant, _mock_perm):
+    def test_permission_error_returns_403(
+        self, mock_user_model, mock_grant, _mock_perm, _mock_ip, _mock_log, _mock_complete
+    ):
         """PermissionError from service returns 403."""
-        from accounts.views import grant_sudo
+        from accounts.views import sudo_grants_collection
 
         mock_grant.side_effect = PermissionError("Not authorized")
         grantee = _user(id=50)
@@ -1353,15 +1389,20 @@ class TestGrantSudoView:
             data={"user_id": 50, "permissions": ["CREATE_TEACHER"]},
             user=admin,
         )
-        response = grant_sudo(request)
+        response = sudo_grants_collection(request)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    @patch("accounts.views.complete_audit")
+    @patch("accounts.views.log_audit", return_value=1)
+    @patch("accounts.views.get_client_ip", return_value="127.0.0.1")
     @patch("accounts.views.IsResearcherOrAdmin.has_permission", return_value=True)
     @patch("accounts.views.grant_sudo_to_researcher")
     @patch("accounts.views.User")
-    def test_success_returns_201(self, mock_user_model, mock_grant, _mock_perm):
+    def test_success_returns_201(
+        self, mock_user_model, mock_grant, _mock_perm, _mock_ip, _mock_log, _mock_complete
+    ):
         """Successful grant returns 201 with grant_id."""
-        from accounts.views import grant_sudo
+        from accounts.views import sudo_grants_collection
 
         mock_grant.return_value = SimpleNamespace(id=7)
         grantee = _user(id=50)
@@ -1372,7 +1413,7 @@ class TestGrantSudoView:
             data={"user_id": 50, "permissions": ["CREATE_TEACHER"]},
             user=admin,
         )
-        response = grant_sudo(request)
+        response = sudo_grants_collection(request)
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["grant_id"] == 7
 
@@ -1386,36 +1427,59 @@ class TestGrantSudoView:
 class TestRevokeSudoView:
     """Tests for revoke_sudo view."""
 
+    @patch("accounts.views.complete_audit")
+    @patch("accounts.views.log_audit", return_value=1)
+    @patch("accounts.views.get_client_ip", return_value="127.0.0.1")
+    @patch("accounts.views.SudoGrant")
     @patch("accounts.views.IsResearcherOrAdmin.has_permission", return_value=True)
     @patch("accounts.views.revoke_sudo_grant")
-    def test_not_found_returns_404(self, mock_revoke, _mock_perm):
+    def test_not_found_returns_404(
+        self, mock_revoke, _mock_perm, mock_sudo_grant_model, _mock_ip, _mock_log, _mock_complete
+    ):
         """ValueError from service returns 404."""
         from accounts.views import revoke_sudo
 
+        mock_sudo_grant_model.objects.filter.return_value.select_related.return_value.first.return_value = None
         mock_revoke.side_effect = ValueError("Grant not found")
         user = _user(is_staff=True, role=Role.RESEARCHER)
         request = _auth_request("delete", "/api/v1/sudo-grants/99", user=user)
         response = revoke_sudo(request, grant_id=99)
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
+    @patch("accounts.views.complete_audit")
+    @patch("accounts.views.log_audit", return_value=1)
+    @patch("accounts.views.get_client_ip", return_value="127.0.0.1")
+    @patch("accounts.views.SudoGrant")
     @patch("accounts.views.IsResearcherOrAdmin.has_permission", return_value=True)
     @patch("accounts.views.revoke_sudo_grant")
-    def test_permission_error_returns_403(self, mock_revoke, _mock_perm):
+    def test_permission_error_returns_403(
+        self, mock_revoke, _mock_perm, mock_sudo_grant_model, _mock_ip, _mock_log, _mock_complete
+    ):
         """PermissionError from service returns 403."""
         from accounts.views import revoke_sudo
 
+        fake_grant = SimpleNamespace(user=_user(id=50))
+        mock_sudo_grant_model.objects.filter.return_value.select_related.return_value.first.return_value = fake_grant
         mock_revoke.side_effect = PermissionError("Not authorized")
         user = _user(is_staff=True, role=Role.RESEARCHER)
         request = _auth_request("delete", "/api/v1/sudo-grants/99", user=user)
         response = revoke_sudo(request, grant_id=99)
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    @patch("accounts.views.complete_audit")
+    @patch("accounts.views.log_audit", return_value=1)
+    @patch("accounts.views.get_client_ip", return_value="127.0.0.1")
+    @patch("accounts.views.SudoGrant")
     @patch("accounts.views.IsResearcherOrAdmin.has_permission", return_value=True)
     @patch("accounts.views.revoke_sudo_grant")
-    def test_success_returns_204(self, mock_revoke, _mock_perm):
+    def test_success_returns_204(
+        self, mock_revoke, _mock_perm, mock_sudo_grant_model, _mock_ip, _mock_log, _mock_complete
+    ):
         """Successful revocation returns 204."""
         from accounts.views import revoke_sudo
 
+        fake_grant = SimpleNamespace(user=_user(id=50))
+        mock_sudo_grant_model.objects.filter.return_value.select_related.return_value.first.return_value = fake_grant
         mock_revoke.return_value = None
         user = _user(is_staff=True, role=Role.RESEARCHER)
         request = _auth_request("delete", "/api/v1/sudo-grants/1", user=user)

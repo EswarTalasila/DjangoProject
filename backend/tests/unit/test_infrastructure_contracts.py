@@ -305,7 +305,7 @@ class TestINFRA_CN_07:
         services = _compose_services()
         img = services["jaeger"]["image"]
         assert ":latest" not in img
-        assert "1.65" in img, f"Jaeger must be pinned to 1.65, got {img}"
+        assert "1.76" in img, f"Jaeger must be pinned to 1.76, got {img}"
 
 
 # ---------------------------------------------------------------------------

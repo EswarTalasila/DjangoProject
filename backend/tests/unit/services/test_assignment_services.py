@@ -50,39 +50,50 @@ class TestAssignmentToDto:
         from assignments.services._queries import assignment_to_dto
 
         now = datetime(2025, 6, 1, 12, 0, tzinfo=UTC)
+        assessment = SimpleNamespace(title="Test Assessment")
         assignment = SimpleNamespace(
             id=1,
+            title="My Assignment",
             assessment_id=10,
+            assessment=assessment,
             audience_type=AudienceType.COURSE,
             course_id=20,
             teacher_id=None,
             open_at=now,
             due_at=None,
+            status="ACTIVE",
         )
 
         dto = assignment_to_dto(assignment)
 
         assert dto.id == 1
+        assert dto.title == "My Assignment"
         assert dto.assessmentId == 10
+        assert dto.assessmentTitle == "Test Assessment"
         assert dto.audienceType == AudienceType.COURSE
         assert dto.courseId == 20
         assert dto.targetTeacherId is None
         assert dto.openAt == now
         assert dto.dueAt is None
+        assert dto.status == "ACTIVE"
 
     def test_teacher_type_assignment(self):
         """Converts TEACHER-type assignment with teacher_id set."""
         from assignments.services._queries import assignment_to_dto
 
         now = datetime(2025, 6, 1, 12, 0, tzinfo=UTC)
+        assessment = SimpleNamespace(title="Teacher Assessment")
         assignment = SimpleNamespace(
             id=2,
+            title="Teacher Self-Assessment",
             assessment_id=11,
+            assessment=assessment,
             audience_type=AudienceType.TEACHER,
             course_id=None,
             teacher_id=42,
             open_at=now,
             due_at=now,
+            status="ACTIVE",
         )
 
         dto = assignment_to_dto(assignment)
@@ -133,11 +144,13 @@ class TestListByCourse:
 
     @patch("assignments.services._queries.Assignment")
     def test_returns_assignments_for_course(self, mock_assignment_model):
-        """Returns list of assignments for a specific course."""
+        """Returns list of assignments for a specific course (ACTIVE only by default)."""
         from assignments.services._queries import list_by_course
 
         sentinel = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
-        mock_assignment_model.objects.filter.return_value = sentinel
+        mock_qs = MagicMock()
+        mock_assignment_model.objects.filter.return_value = mock_qs
+        mock_qs.filter.return_value = sentinel
 
         result = list_by_course(10)
 
@@ -162,6 +175,7 @@ class TestListForUser:
     ):
         """Student sees assignments from courses they are enrolled in."""
         from assignments.services._queries import list_for_user
+        from assignments.models import AssignmentStatus
 
         now = datetime(2025, 6, 1, tzinfo=UTC)
         mock_tz.now.return_value = now
@@ -183,16 +197,17 @@ class TestListForUser:
 
         assert result == sentinel
         mock_assignment_model.objects.filter.assert_called_once_with(
-            course_id__in=[10, 20], open_at__lte=now
+            course_id__in=[10, 20], open_at__lte=now,
+            status=AssignmentStatus.ACTIVE,
         )
 
     @patch("assignments.services._queries.timezone")
     @patch("assignments.services._queries.Assignment")
     @patch("assignments.services._queries.primary_role", return_value="TEACHER")
-    def test_teacher_sees_self_assignments(
+    def test_teacher_sees_own_created_assignments(
         self, mock_role, mock_assignment_model, mock_tz
     ):
-        """Teacher sees assignments targeted at them."""
+        """Teacher sees assignments they created."""
         from assignments.services._queries import list_for_user
 
         now = datetime(2025, 6, 1, tzinfo=UTC)
@@ -201,7 +216,7 @@ class TestListForUser:
         sentinel = [SimpleNamespace(id=2)]
         mock_qs = MagicMock()
         mock_assignment_model.objects.filter.return_value = mock_qs
-        mock_qs.filter.return_value.order_by.return_value = sentinel
+        mock_qs.order_by.return_value = sentinel
 
         user = SimpleNamespace(id=42, is_authenticated=True)
 
@@ -209,7 +224,7 @@ class TestListForUser:
 
         assert result == sentinel
         mock_assignment_model.objects.filter.assert_called_once_with(
-            teacher_id=42, open_at__lte=now
+            created_by=user,
         )
 
     @patch("assignments.services._queries.primary_role", return_value="ADMIN")
@@ -276,11 +291,11 @@ class TestCreateAssignment:
                 },
             )
 
-    def test_raises_when_teacher_type_missing_teacher_id(self):
-        """Raises ValueError when TEACHER type has no targetTeacherId."""
+    def test_raises_when_teacher_type_deprecated(self):
+        """Raises ValueError when TEACHER audience type is used (deprecated)."""
         from assignments.services._mutations import create_assignment
 
-        with pytest.raises(ValueError, match="targetTeacherId must be set"):
+        with pytest.raises(ValueError, match="TEACHER audience type is deprecated"):
             create_assignment(
                 SimpleNamespace(id=1),
                 {
@@ -292,11 +307,23 @@ class TestCreateAssignment:
 
     @patch("assignments.services._mutations._create_submissions_for_course")
     @patch("assignments.services._mutations.Assignment")
+    @patch("assignments.services._mutations.can_manage_course", return_value=True)
+    @patch("assignments.services._mutations.Course")
+    @patch("assignments.services._mutations.Assessment")
     def test_creates_course_assignment_with_submissions(
-        self, mock_assignment_model, mock_create_subs
+        self, mock_assessment_model, mock_course_model, mock_can_manage,
+        mock_assignment_model, mock_create_subs
     ):
         """Creates COURSE assignment and triggers submission creation."""
         from assignments.services._mutations import create_assignment
+        from assessments.models import AssessmentStatus
+
+        fake_assessment = SimpleNamespace(
+            id=5, title="Test", status=AssessmentStatus.ACTIVE,
+        )
+        mock_assessment_model.objects.filter.return_value.first.return_value = fake_assessment
+        fake_course = SimpleNamespace(id=10, status="ACTIVE")
+        mock_course_model.objects.filter.return_value.first.return_value = fake_course
 
         fake_assignment = SimpleNamespace(id=1, course_id=10)
         mock_assignment_model.objects.create.return_value = fake_assignment
@@ -315,30 +342,6 @@ class TestCreateAssignment:
         assert result is fake_assignment
         mock_create_subs.assert_called_once_with(fake_assignment)
 
-    @patch("assignments.services._mutations._create_submissions_for_course")
-    @patch("assignments.services._mutations.Assignment")
-    def test_creates_teacher_assignment_no_submissions(
-        self, mock_assignment_model, mock_create_subs
-    ):
-        """Creates TEACHER assignment without triggering submission creation."""
-        from assignments.services._mutations import create_assignment
-
-        fake_assignment = SimpleNamespace(id=2, course_id=None)
-        mock_assignment_model.objects.create.return_value = fake_assignment
-
-        user = SimpleNamespace(id=1)
-        payload = {
-            "assessmentId": 5,
-            "audienceType": AudienceType.TEACHER,
-            "targetTeacherId": 42,
-            "openAt": "2025-01-01",
-        }
-
-        result = create_assignment(user, payload)
-
-        assert result is fake_assignment
-        mock_create_subs.assert_not_called()
-
 
 # ---------------------------------------------------------------------------
 # delete_assignment (mutation)
@@ -352,17 +355,20 @@ class TestDeleteAssignment(_NoopAtomicMixin):
     def test_deletes_submissions_then_assignment(
         self, mock_submission_model
     ):
-        """Deletes all submissions before the assignment."""
+        """Deletes all submissions before the assignment when none have progressed."""
         from assignments.services._mutations import delete_assignment
 
         assignment = MagicMock()
+        assignment.created_by_id = 1
+        # First filter call is the progressed check (.exclude().exists())
+        # Second filter call is the deletion
+        mock_qs = MagicMock()
+        mock_qs.exclude.return_value.exists.return_value = False
+        mock_submission_model.objects.filter.return_value = mock_qs
 
-        delete_assignment(assignment)
+        caller = SimpleNamespace(id=1)
+        delete_assignment(assignment, caller)
 
-        mock_submission_model.objects.filter.assert_called_once_with(
-            assignment=assignment
-        )
-        mock_submission_model.objects.filter.return_value.delete.assert_called_once()
         assignment.delete.assert_called_once()
 
 
@@ -386,29 +392,25 @@ class TestCreateSubmissionsForCourse(_NoopAtomicMixin):
         _create_submissions_for_course(assignment)
 
     @patch("assignments.services._mutations.Assessment")
-    def test_skips_mood_meter_assessments(self, mock_assessment_model):
-        """Skips submission creation for MOOD_METER assessments."""
-        from assessments.models import GradingMode
+    def test_skips_when_no_course_id_is_none(self, mock_assessment_model):
+        """Skips submission creation when assignment has no course_id."""
         from assignments.services._mutations import _create_submissions_for_course
 
-        mock_assessment_model.objects.filter.return_value.first.return_value = (
-            SimpleNamespace(grading_mode=GradingMode.MOOD_METER)
-        )
-        assignment = SimpleNamespace(assessment_id=1)
+        fake_assessment = MagicMock()
+        mock_assessment_model.objects.filter.return_value.first.return_value = fake_assessment
+        assignment = SimpleNamespace(assessment_id=1, course_id=None)
 
         _create_submissions_for_course(assignment)
 
     @patch("assignments.services._mutations.Assessment")
-    def test_skips_when_no_course_id(self, mock_assessment_model):
-        """Skips when assignment has no course_id."""
-        from assessments.models import GradingMode
+    def test_skips_when_assessment_not_found_returns_early(self, mock_assessment_model):
+        """Skips when assessment does not exist (returns early)."""
         from assignments.services._mutations import _create_submissions_for_course
 
-        mock_assessment_model.objects.filter.return_value.first.return_value = (
-            SimpleNamespace(grading_mode=GradingMode.AUTO)
-        )
-        assignment = SimpleNamespace(assessment_id=1, course_id=None)
+        mock_assessment_model.objects.filter.return_value.first.return_value = None
+        assignment = SimpleNamespace(assessment_id=999)
 
+        # Should not raise
         _create_submissions_for_course(assignment)
 
     @patch("assignments.services._mutations.NumberScaleAnswer")
@@ -431,7 +433,7 @@ class TestCreateSubmissionsForCourse(_NoopAtomicMixin):
         mock_nsa,
     ):
         """Creates submissions with answers for each enrolled student."""
-        from assessments.models import GradingMode, QuestionKind
+        from assessments.models import QuestionKind
         from assignments.services._mutations import _create_submissions_for_course
 
         mc_question = SimpleNamespace(kind=QuestionKind.MULTIPLE_CHOICE)
@@ -439,7 +441,6 @@ class TestCreateSubmissionsForCourse(_NoopAtomicMixin):
         ns_question = SimpleNamespace(kind=QuestionKind.NUMBER_SCALE)
 
         fake_assessment = MagicMock()
-        fake_assessment.grading_mode = GradingMode.AUTO
         fake_assessment.questions.all.return_value = [
             mc_question, sa_question, ns_question
         ]
@@ -475,11 +476,9 @@ class TestCreateSubmissionsForCourse(_NoopAtomicMixin):
         mock_submission_model,
     ):
         """Skips submission creation when submission already exists for student."""
-        from assessments.models import GradingMode
         from assignments.services._mutations import _create_submissions_for_course
 
         fake_assessment = MagicMock()
-        fake_assessment.grading_mode = GradingMode.AUTO
         mock_assessment_model.objects.filter.return_value.first.return_value = (
             fake_assessment
         )

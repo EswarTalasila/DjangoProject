@@ -14,7 +14,7 @@ from courses.services import create_student_in_course
 def test_create_student_in_course_requires_course_id(teacher_user):
     """Missing courseId is rejected early in student creation flow."""
 
-    with pytest.raises(ValueError, match="courseId is required"):
+    with pytest.raises(TypeError):
         create_student_in_course(teacher_user, {"name": "Student"})
 
 

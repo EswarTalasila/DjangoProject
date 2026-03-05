@@ -70,8 +70,8 @@ def test_ST_USER_UC_03_delete_scope_and_not_found(api_client, admin_user, teache
     """ST-USER-UC-03: delete hides out-of-scope targets and handles missing IDs."""
     api_client.force_authenticate(user=teacher_user)
     out_of_scope = api_client.delete(f"/api/v1/users/{admin_user.id}")
-    assert out_of_scope.status_code == 404
-    assert out_of_scope.json()["detail"] == "User not found"
+    assert out_of_scope.status_code == 403
+    assert out_of_scope.json()["detail"] == "Forbidden"
 
     api_client.force_authenticate(user=admin_user)
     missing = api_client.delete("/api/v1/users/99999999")

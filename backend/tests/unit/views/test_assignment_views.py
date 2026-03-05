@@ -59,8 +59,10 @@ class TestCreateView:
         fake_assignment = SimpleNamespace(id=1)
         mock_create.return_value = fake_assignment
         dto = AssignmentDTO(
-            id=1, assessmentId=10, audienceType=AudienceType.COURSE,
-            courseId=20, targetTeacherId=None, openAt=now, dueAt=None
+            id=1, title="Test Assignment", assessmentId=10,
+            audienceType=AudienceType.COURSE,
+            courseId=20, targetTeacherId=None, openAt=now, dueAt=None,
+            status="ACTIVE",
         )
         mock_dto.return_value = dto
 
@@ -144,24 +146,28 @@ class TestDetailView:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     @patch("assignments.views.assignment_to_dto")
+    @patch("assignments.views.can_view_course", return_value=True)
     @patch("assignments.views.primary_role", return_value="TEACHER")
     @patch("assignments.views.get_assignment")
     @patch("assignments.views.IsAuthenticated.has_permission", return_value=True)
     def test_get_returns_dto_for_teacher(
-        self, mock_perm, mock_get, mock_role, mock_dto
+        self, mock_perm, mock_get, mock_role, mock_can_view, mock_dto
     ):
         """GET returns assignment DTO for teacher role."""
         from assignments.views import detail
 
         now = datetime(2025, 6, 1, tzinfo=UTC)
+        fake_course = SimpleNamespace(id=20)
         fake_assignment = SimpleNamespace(
             id=1, assessment_id=10, audience_type="COURSE",
-            course_id=20, teacher_id=None, open_at=now, due_at=None
+            course_id=20, course=fake_course, teacher_id=None,
+            open_at=now, due_at=None,
         )
         mock_get.return_value = fake_assignment
         dto = AssignmentDTO(
-            id=1, assessmentId=10, audienceType="COURSE",
-            courseId=20, targetTeacherId=None, openAt=now, dueAt=None
+            id=1, title="Test", assessmentId=10, audienceType="COURSE",
+            courseId=20, targetTeacherId=None, openAt=now, dueAt=None,
+            status="ACTIVE",
         )
         mock_dto.return_value = dto
 
@@ -213,47 +219,23 @@ class TestDetailView:
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    @patch("assignments.views.delete_assignment")
-    @patch("assignments.views.IsTeacher")
     @patch("assignments.views.get_assignment")
     @patch("assignments.views.IsAuthenticated.has_permission", return_value=True)
-    def test_delete_removes_assignment(
-        self, mock_perm, mock_get, mock_is_teacher, mock_delete
+    def test_delete_without_purge_returns_409(
+        self, mock_perm, mock_get
     ):
-        """DELETE removes assignment and returns 204."""
+        """DELETE without ?purge=true returns 409 (use archive instead)."""
         from assignments.views import detail
 
-        mock_is_teacher.return_value.has_permission.return_value = True
-        fake_assignment = SimpleNamespace(id=1)
+        fake_assignment = SimpleNamespace(id=1, status="ACTIVE")
         mock_get.return_value = fake_assignment
 
-        user = MagicMock(is_authenticated=True)
+        user = MagicMock(is_authenticated=True, is_staff=False)
         request = _authed_request("delete", "/api/v1/assignments/1", user=user)
 
         response = detail(request, assignment_id=1)
 
-        assert response.status_code == status.HTTP_204_NO_CONTENT
-        mock_delete.assert_called_once_with(fake_assignment)
-
-    @patch("assignments.views.IsTeacher")
-    @patch("assignments.views.get_assignment")
-    @patch("assignments.views.IsAuthenticated.has_permission", return_value=True)
-    def test_delete_forbidden_for_non_teacher(
-        self, mock_perm, mock_get, mock_is_teacher
-    ):
-        """DELETE returns 403 when user is not a teacher."""
-        from assignments.views import detail
-
-        mock_is_teacher.return_value.has_permission.return_value = False
-        fake_assignment = SimpleNamespace(id=1)
-        mock_get.return_value = fake_assignment
-
-        user = MagicMock(is_authenticated=True)
-        request = _authed_request("delete", "/api/v1/assignments/1", user=user)
-
-        response = detail(request, assignment_id=1)
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_409_CONFLICT
 
 
 # ---------------------------------------------------------------------------
@@ -281,7 +263,7 @@ class TestListCourseView:
 
         list_course(request, course_id=10)
 
-        mock_list.assert_called_once_with(10)
+        mock_list.assert_called_once_with(10, include_archived=False)
         mock_paginate.assert_called_once()
 
 

@@ -20,7 +20,7 @@ pytestmark = pytest.mark.unit
 factory = APIRequestFactory()
 
 
-def _authed_request(method, url, data=None, user=None):
+def _authed_request(method, url, data=None, user=None, query_params=None):
     """Build an authenticated DRF request with force_authenticate."""
     builder = getattr(factory, method)
     request = builder(url, data=data, format="json")
@@ -35,6 +35,16 @@ def _paginated_response(results=None):
         {"count": len(results or []), "next": None, "previous": None, "results": results or []},
         status=status.HTTP_200_OK,
     )
+
+
+def _make_dto(**overrides):
+    """Build an AssessmentDTO with sensible defaults."""
+    defaults = dict(
+        id=1, title="Quiz", category=None, gradingMode=GradingMode.AUTO,
+        scoringPolicy="STANDARD", questions=[], questionGroups=[],
+    )
+    defaults.update(overrides)
+    return AssessmentDTO(**defaults)
 
 
 # ---------------------------------------------------------------------------
@@ -74,11 +84,7 @@ class TestListOrCreateView:
         mock_is_ra.return_value.has_permission.return_value = True
         fake_assessment = SimpleNamespace(id=1)
         mock_create.return_value = fake_assessment
-        dto = AssessmentDTO(
-            id=1, title="Quiz", category=None, gradingMode=GradingMode.AUTO,
-            questions=[], rubricId=None, rubricAssessmentIds=[]
-        )
-        mock_dto.return_value = dto
+        mock_dto.return_value = _make_dto()
 
         user = MagicMock(is_authenticated=True)
         request = _authed_request(
@@ -143,7 +149,7 @@ class TestDetailView:
     """Tests for the detail assessment view."""
 
     @patch("assessments.views.Assessment")
-    @patch("assessments.views.IsAuthenticated.has_permission", return_value=True)
+    @patch("assessments.views.IsTeacherOrAbove.has_permission", return_value=True)
     def test_returns_404_when_not_found(self, mock_perm, mock_assessment_model):
         """Returns 404 when assessment does not exist."""
         from assessments.views import detail
@@ -157,24 +163,19 @@ class TestDetailView:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     @patch("assessments.views.assessment_to_dto")
-    @patch("assessments.views.primary_role", return_value="TEACHER")
     @patch("assessments.views.Assessment")
-    @patch("assessments.views.IsAuthenticated.has_permission", return_value=True)
-    def test_get_returns_dto_for_teacher(
-        self, mock_perm, mock_assessment_model, mock_role, mock_dto
+    @patch("assessments.views.IsTeacherOrAbove.has_permission", return_value=True)
+    def test_get_returns_dto(
+        self, mock_perm, mock_assessment_model, mock_dto
     ):
-        """GET returns assessment DTO for teacher role."""
+        """GET returns assessment DTO."""
         from assessments.views import detail
 
         fake_assessment = SimpleNamespace(id=1)
         mock_assessment_model.objects.filter.return_value.first.return_value = (
             fake_assessment
         )
-        dto = AssessmentDTO(
-            id=1, title="Quiz", category=None, gradingMode=GradingMode.AUTO,
-            questions=[], rubricId=None, rubricAssessmentIds=[]
-        )
-        mock_dto.return_value = dto
+        mock_dto.return_value = _make_dto()
 
         user = MagicMock(is_authenticated=True)
         request = _authed_request("get", "/api/v1/assessments/1", user=user)
@@ -184,69 +185,11 @@ class TestDetailView:
         assert response.status_code == status.HTTP_200_OK
         assert response.data["id"] == 1
 
-    @patch("assessments.views.Assignment")
-    @patch("assessments.views.Enrollment")
-    @patch("assessments.views.primary_role", return_value="STUDENT")
-    @patch("assessments.views.Assessment")
-    @patch("assessments.views.IsAuthenticated.has_permission", return_value=True)
-    def test_get_student_forbidden_when_not_enrolled(
-        self, mock_perm, mock_assessment_model, mock_role,
-        mock_enrollment_model, mock_assignment_model
-    ):
-        """GET returns 403 for student not enrolled in course with this assessment."""
-        from assessments.views import detail
-
-        fake_assessment = SimpleNamespace(id=1)
-        mock_assessment_model.objects.filter.return_value.first.return_value = (
-            fake_assessment
-        )
-        mock_enrollment_model.objects.filter.return_value.values_list.return_value = []
-        mock_assignment_model.objects.filter.return_value.exists.return_value = False
-
-        user = MagicMock(is_authenticated=True)
-        request = _authed_request("get", "/api/v1/assessments/1", user=user)
-
-        response = detail(request, assessment_id=1)
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-    @patch("assessments.views.assessment_to_dto")
-    @patch("assessments.views.Assignment")
-    @patch("assessments.views.Enrollment")
-    @patch("assessments.views.primary_role", return_value="STUDENT")
-    @patch("assessments.views.Assessment")
-    @patch("assessments.views.IsAuthenticated.has_permission", return_value=True)
-    def test_get_student_allowed_when_enrolled(
-        self, mock_perm, mock_assessment_model, mock_role,
-        mock_enrollment_model, mock_assignment_model, mock_dto
-    ):
-        """GET returns DTO for student enrolled in course with this assessment."""
-        from assessments.views import detail
-
-        fake_assessment = SimpleNamespace(id=1)
-        mock_assessment_model.objects.filter.return_value.first.return_value = (
-            fake_assessment
-        )
-        mock_enrollment_model.objects.filter.return_value.values_list.return_value = [10]
-        mock_assignment_model.objects.filter.return_value.exists.return_value = True
-        dto = AssessmentDTO(
-            id=1, title="Quiz", category=None, gradingMode=GradingMode.AUTO,
-            questions=[], rubricId=None, rubricAssessmentIds=[]
-        )
-        mock_dto.return_value = dto
-
-        user = MagicMock(is_authenticated=True)
-        request = _authed_request("get", "/api/v1/assessments/1", user=user)
-
-        response = detail(request, assessment_id=1)
-
-        assert response.status_code == status.HTTP_200_OK
-
     @patch("assessments.views.assessment_to_dto")
     @patch("assessments.views.update_assessment")
     @patch("assessments.views.IsResearcherOrAdmin")
     @patch("assessments.views.Assessment")
-    @patch("assessments.views.IsAuthenticated.has_permission", return_value=True)
+    @patch("assessments.views.IsTeacherOrAbove.has_permission", return_value=True)
     def test_patch_updates_assessment(
         self, mock_perm, mock_assessment_model, mock_is_ra, mock_update, mock_dto
     ):
@@ -259,11 +202,7 @@ class TestDetailView:
             fake_assessment
         )
         mock_update.return_value = fake_assessment
-        dto = AssessmentDTO(
-            id=1, title="Updated", category=None, gradingMode=GradingMode.AUTO,
-            questions=[], rubricId=None, rubricAssessmentIds=[]
-        )
-        mock_dto.return_value = dto
+        mock_dto.return_value = _make_dto(title="Updated")
 
         user = MagicMock(is_authenticated=True)
         request = _authed_request(
@@ -279,7 +218,7 @@ class TestDetailView:
 
     @patch("assessments.views.IsResearcherOrAdmin")
     @patch("assessments.views.Assessment")
-    @patch("assessments.views.IsAuthenticated.has_permission", return_value=True)
+    @patch("assessments.views.IsTeacherOrAbove.has_permission", return_value=True)
     def test_patch_forbidden_for_teacher(
         self, mock_perm, mock_assessment_model, mock_is_ra
     ):
@@ -303,14 +242,13 @@ class TestDetailView:
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    @patch("assessments.views.delete_assessment")
     @patch("assessments.views.IsResearcherOrAdmin")
     @patch("assessments.views.Assessment")
-    @patch("assessments.views.IsAuthenticated.has_permission", return_value=True)
-    def test_delete_removes_assessment(
-        self, mock_perm, mock_assessment_model, mock_is_ra, mock_delete
+    @patch("assessments.views.IsTeacherOrAbove.has_permission", return_value=True)
+    def test_delete_without_purge_returns_409(
+        self, mock_perm, mock_assessment_model, mock_is_ra
     ):
-        """DELETE removes assessment and returns 204."""
+        """DELETE without ?purge=true returns 409 with guidance."""
         from assessments.views import detail
 
         mock_is_ra.return_value.has_permission.return_value = True
@@ -324,12 +262,11 @@ class TestDetailView:
 
         response = detail(request, assessment_id=1)
 
-        assert response.status_code == status.HTTP_204_NO_CONTENT
-        mock_delete.assert_called_once_with(fake_assessment)
+        assert response.status_code == status.HTTP_409_CONFLICT
 
     @patch("assessments.views.IsResearcherOrAdmin")
     @patch("assessments.views.Assessment")
-    @patch("assessments.views.IsAuthenticated.has_permission", return_value=True)
+    @patch("assessments.views.IsTeacherOrAbove.has_permission", return_value=True)
     def test_delete_forbidden_for_teacher(
         self, mock_perm, mock_assessment_model, mock_is_ra
     ):
@@ -351,7 +288,7 @@ class TestDetailView:
     @patch("assessments.views.update_assessment", side_effect=ValueError("bad question"))
     @patch("assessments.views.IsResearcherOrAdmin")
     @patch("assessments.views.Assessment")
-    @patch("assessments.views.IsAuthenticated.has_permission", return_value=True)
+    @patch("assessments.views.IsTeacherOrAbove.has_permission", return_value=True)
     def test_patch_handles_value_error(
         self, mock_perm, mock_assessment_model, mock_is_ra, mock_update
     ):

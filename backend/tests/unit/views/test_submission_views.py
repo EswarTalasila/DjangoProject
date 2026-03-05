@@ -73,13 +73,15 @@ def _mock_submission_dto():
     return dto
 
 
-def _mock_assignment(*, id=10, teacher_id=1, course=None, course_id=None):
+def _mock_assignment(*, id=10, teacher_id=1, course=None, course_id=None, status="ACTIVE", open_at=None):
     """Build a mock assignment."""
     a = MagicMock()
     a.id = id
     a.teacher_id = teacher_id
     a.course = course
     a.course_id = course_id
+    a.status = status
+    a.open_at = open_at
     return a
 
 
@@ -259,10 +261,12 @@ class TestCanAccessSubmission:
 
         assert _can_access_submission(user, sub) is True
 
-    def test_researcher_has_access(self):
-        """Researchers can access any submission."""
+    @patch("submissions.views.has_sudo_permission")
+    def test_researcher_has_access(self, mock_sudo):
+        """Researchers with sudo permission can access any submission."""
         from submissions.views import _can_access_submission
 
+        mock_sudo.return_value = True
         user = _user(role=Role.RESEARCHER)
         sub = MagicMock()
 
@@ -403,134 +407,57 @@ class TestStudentEnrolledInAssignment:
 
 
 # ============================================================================
-# teacher_self_assess
+# list_me_view
 # ============================================================================
 
 
-class TestTeacherSelfAssess:
-    """Tests for the teacher_self_assess view."""
+class TestListMeView:
+    """Tests for the list_me_view endpoint."""
 
-    @patch("submissions.views.submission_to_dto")
-    @patch("submissions.views.submit_teacher_self_assessment")
-    def test_returns_201_on_success(self, mock_service, mock_dto):
-        """Returns 201 with DTO when self-assessment succeeds."""
-        from submissions.views import teacher_self_assess
+    @patch("submissions.views.paginate")
+    @patch("submissions.views.list_me")
+    def test_returns_own_submissions(self, mock_list, mock_paginate):
+        """Returns submissions for the authenticated user."""
+        from submissions.views import list_me_view
 
-        mock_service.return_value = MagicMock()
-        mock_dto.return_value = _mock_submission_dto()
-
-        user = _user(id=200, role=Role.TEACHER)
-        data = [{"questionId": 1, "type": "MOOD_METER", "data": {"row": 1, "col": 2}}]
-        request = _authed_request("post", "/submissions/teacher/1/", data, user=user)
-
-        response = teacher_self_assess(request, 1)
-
-        assert response.status_code == http_status.HTTP_201_CREATED
-
-    def test_returns_400_when_not_list(self):
-        """Returns 400 when request body is not a list."""
-        from submissions.views import teacher_self_assess
-
-        user = _user(id=200, role=Role.TEACHER)
-        request = _authed_request("post", "/submissions/teacher/1/", {"questionId": 1}, user=user)
-
-        response = teacher_self_assess(request, 1)
-
-        assert response.status_code == http_status.HTTP_400_BAD_REQUEST
-
-    @patch("submissions.views.submit_teacher_self_assessment")
-    def test_returns_error_on_value_error(self, mock_service):
-        """Returns error response when service raises ValueError."""
-        from submissions.views import teacher_self_assess
-
-        mock_service.side_effect = ValueError("Assessment not found")
-
-        user = _user(id=200, role=Role.TEACHER)
-        data = [{"questionId": 1, "type": "MOOD_METER", "data": {"row": 1, "col": 2}}]
-        request = _authed_request("post", "/submissions/teacher/1/", data, user=user)
-
-        response = teacher_self_assess(request, 1)
-
-        assert response.status_code == http_status.HTTP_404_NOT_FOUND
-
-
-# ============================================================================
-# list_mine_view
-# ============================================================================
-
-
-class TestListMineView:
-    """Tests for the list_mine_view endpoint."""
-
-    def test_returns_400_when_user_id_missing(self):
-        """Returns 400 when userId query param is not provided."""
-        from submissions.views import list_mine_view
-
-        user = _user(id=100)
-        request = _authed_request("get", "/submissions/mine/", user=user)
-
-        response = list_mine_view(request)
-
-        assert response.status_code == http_status.HTTP_400_BAD_REQUEST
-
-    def test_returns_403_when_different_user(self):
-        """Returns 403 when non-admin requests another user's submissions."""
-        from submissions.views import list_mine_view
+        mock_list.return_value = []
+        mock_paginate.return_value = Response([], status=200)
 
         user = _user(id=100, role=Role.STUDENT)
-        request = _authed_request("get", "/submissions/mine/?userId=999", user=user)
+        request = _authed_request("get", "/submissions/mine/", user=user)
 
-        response = list_mine_view(request)
+        list_me_view(request)
 
-        assert response.status_code == http_status.HTTP_403_FORBIDDEN
-
-    @patch("submissions.views.paginate")
-    @patch("submissions.views.list_mine")
-    def test_admin_can_view_any_user(self, mock_list, mock_paginate):
-        """Admin can view any user's submissions."""
-        from submissions.views import list_mine_view
-
-        mock_list.return_value = []
-        mock_paginate.return_value = Response([], status=200)
-
-        user = _user(id=1, is_staff=True, role=Role.STUDENT)
-        request = _authed_request("get", "/submissions/mine/?userId=999", user=user)
-
-        list_mine_view(request)
-
-        mock_list.assert_called_once_with(999, None)
+        mock_list.assert_called_once_with(100, None)
 
     @patch("submissions.views.paginate")
-    @patch("submissions.views.list_mine")
-    def test_researcher_can_view_any_user(self, mock_list, mock_paginate):
-        """Researcher can view any user's submissions."""
-        from submissions.views import list_mine_view
-
-        mock_list.return_value = []
-        mock_paginate.return_value = Response([], status=200)
-
-        user = _user(id=1, role=Role.RESEARCHER)
-        request = _authed_request("get", "/submissions/mine/?userId=999", user=user)
-
-        list_mine_view(request)
-
-        mock_list.assert_called_once_with(999, None)
-
-    @patch("submissions.views.paginate")
-    @patch("submissions.views.list_mine")
+    @patch("submissions.views.list_me")
     def test_passes_status_filter(self, mock_list, mock_paginate):
         """Status query param is forwarded to service."""
-        from submissions.views import list_mine_view
+        from submissions.views import list_me_view
 
         mock_list.return_value = []
         mock_paginate.return_value = Response([], status=200)
 
-        user = _user(id=100)
-        request = _authed_request("get", "/submissions/mine/?userId=100&status=GRADED", user=user)
+        user = _user(id=100, role=Role.STUDENT)
+        request = _authed_request("get", "/submissions/mine/?status=GRADED", user=user)
 
-        list_mine_view(request)
+        list_me_view(request)
 
         mock_list.assert_called_once_with(100, "GRADED")
+
+    @patch("submissions.views.has_sudo_permission")
+    def test_researcher_without_sudo_gets_403(self, mock_sudo):
+        """Researcher without sudo permission gets 403."""
+        from submissions.views import list_me_view
+
+        mock_sudo.return_value = False
+        user = _user(id=100, role=Role.RESEARCHER)
+        request = _authed_request("get", "/submissions/mine/", user=user)
+
+        response = list_me_view(request)
+
+        assert response.status_code == http_status.HTTP_403_FORBIDDEN
 
 
 # ============================================================================
@@ -653,53 +580,6 @@ class TestGetByStudentId:
 
 
 # ============================================================================
-# get_by_teacher_id
-# ============================================================================
-
-
-class TestGetByTeacherId:
-    """Tests for the get_by_teacher_id view."""
-
-    def test_teacher_cannot_view_other_teacher(self):
-        """Teacher cannot view another teacher's submissions."""
-        from submissions.views import get_by_teacher_id
-
-        user = _user(id=200, role=Role.TEACHER)
-        request = _authed_request("get", "/submissions/teachers/999/", user=user)
-
-        response = get_by_teacher_id(request, 999)
-
-        assert response.status_code == http_status.HTTP_403_FORBIDDEN
-
-    @patch("submissions.views.paginate")
-    @patch("submissions.views.get_by_teacher")
-    def test_teacher_can_view_own(self, mock_get, mock_paginate):
-        """Teacher can view their own self-assessment submissions."""
-        from submissions.views import get_by_teacher_id
-
-        mock_get.return_value = []
-        mock_paginate.return_value = Response([], status=200)
-
-        user = _user(id=200, role=Role.TEACHER)
-        request = _authed_request("get", "/submissions/teachers/200/", user=user)
-
-        get_by_teacher_id(request, 200)
-
-        mock_get.assert_called_once_with(200)
-
-    def test_student_gets_403(self):
-        """Students cannot access teacher submission views."""
-        from submissions.views import get_by_teacher_id
-
-        user = _user(id=100, role=Role.STUDENT)
-        request = _authed_request("get", "/submissions/teachers/200/", user=user)
-
-        response = get_by_teacher_id(request, 200)
-
-        assert response.status_code == http_status.HTTP_403_FORBIDDEN
-
-
-# ============================================================================
 # save_draft
 # ============================================================================
 
@@ -751,17 +631,9 @@ class TestSaveDraft:
 
         assert response.status_code == http_status.HTTP_403_FORBIDDEN
 
-    @patch("submissions.views.submission_to_dto")
-    @patch("submissions.views.create_submission")
-    @patch("submissions.views._student_enrolled_in_assignment")
-    @patch("submissions.views._assignment_for")
-    def test_admin_can_save_draft(self, mock_assign_for, mock_enrolled, mock_create, mock_dto):
-        """Admin can save a draft for any student."""
+    def test_admin_non_student_gets_403(self):
+        """Admin who is not a student cannot save drafts (student-only endpoint)."""
         from submissions.views import save_draft
-
-        mock_assign_for.return_value = _mock_assignment()
-        mock_create.return_value = MagicMock()
-        mock_dto.return_value = _mock_submission_dto()
 
         user = _user(id=1, is_staff=True)
         request = _authed_request(
@@ -773,7 +645,7 @@ class TestSaveDraft:
 
         response = save_draft(request, 100, 10)
 
-        assert response.status_code == http_status.HTTP_200_OK
+        assert response.status_code == http_status.HTTP_403_FORBIDDEN
 
     @patch("submissions.views._assignment_for")
     def test_student_cannot_save_for_other_student(self, mock_assign_for):
@@ -949,13 +821,15 @@ class TestAssignmentSubmissions:
 
         mock_get_by.assert_called_once_with(10)
 
+    @patch("submissions.views.has_sudo_permission")
     @patch("submissions.views.paginate")
     @patch("submissions.views.get_by_assignment")
     @patch("submissions.views._assignment_for")
-    def test_get_researcher_can_view_any_assignment(self, mock_assign_for, mock_get_by, mock_paginate):
+    def test_get_researcher_can_view_any_assignment(self, mock_assign_for, mock_get_by, mock_paginate, mock_sudo):
         """GET as researcher can view any assignment's submissions."""
         from submissions.views import assignment_submissions
 
+        mock_sudo.return_value = True
         mock_assign_for.return_value = _mock_assignment(teacher_id=999)
         mock_get_by.return_value = []
         mock_paginate.return_value = Response([], status=200)
@@ -1058,13 +932,15 @@ class TestGetByAssignmentId:
 
         mock_get_by.assert_called_once_with(10)
 
+    @patch("submissions.views.has_sudo_permission")
     @patch("submissions.views.paginate")
     @patch("submissions.views.get_by_assignment")
     @patch("submissions.views._assignment_for")
-    def test_researcher_can_view_any(self, mock_assign_for, mock_get_by, mock_paginate):
+    def test_researcher_can_view_any(self, mock_assign_for, mock_get_by, mock_paginate, mock_sudo):
         """Researcher can view any assignment's submissions."""
         from submissions.views import get_by_assignment_id
 
+        mock_sudo.return_value = True
         mock_assign_for.return_value = _mock_assignment()
         mock_get_by.return_value = []
         mock_paginate.return_value = Response([], status=200)
@@ -1101,12 +977,14 @@ class TestGetByStudentIdExtended:
 
         mock_get.assert_called_once_with(999)
 
+    @patch("submissions.views.has_sudo_permission")
     @patch("submissions.views.paginate")
     @patch("submissions.views.get_by_student")
-    def test_researcher_can_view_any_student(self, mock_get, mock_paginate):
+    def test_researcher_can_view_any_student(self, mock_get, mock_paginate, mock_sudo):
         """Researcher can view any student's submissions."""
         from submissions.views import get_by_student_id
 
+        mock_sudo.return_value = True
         mock_get.return_value = []
         mock_paginate.return_value = Response([], status=200)
 
@@ -1117,56 +995,34 @@ class TestGetByStudentIdExtended:
 
         mock_get.assert_called_once_with(999)
 
-    @patch("submissions.views.teacher_owns_student")
-    @patch("submissions.views.User")
     @patch("submissions.views.paginate")
-    @patch("submissions.views.get_by_student")
-    def test_teacher_owning_student_can_view(self, mock_get, mock_paginate, mock_user_model, mock_owns):
-        """Teacher who owns the student can view their submissions."""
+    @patch("submissions.views.Submission")
+    def test_teacher_owning_student_can_view(self, mock_sub_model, mock_paginate):
+        """Teacher who owns the student (via assignment course) can view their submissions."""
         from submissions.views import get_by_student_id
 
-        mock_get.return_value = []
+        owned_subs = [MagicMock()]
+        mock_sub_model.objects.filter.return_value = owned_subs
         mock_paginate.return_value = Response([], status=200)
-        student_user = MagicMock()
-        mock_user_model.objects.filter.return_value.first.return_value = student_user
-        mock_owns.return_value = True
 
         user = _user(id=200, role=Role.TEACHER)
         request = _authed_request("get", "/submissions/students/100/", user=user)
 
         get_by_student_id(request, 100)
 
-        mock_get.assert_called_once_with(100)
-        mock_owns.assert_called_once_with(user, student_user)
+        mock_paginate.assert_called_once()
 
-    @patch("submissions.views.teacher_owns_student")
-    @patch("submissions.views.User")
-    def test_teacher_not_owning_gets_403(self, mock_user_model, mock_owns):
-        """Teacher who does not own the student gets 403."""
+    @patch("submissions.views.Submission")
+    def test_teacher_no_owned_submissions_gets_403(self, mock_sub_model):
+        """Teacher with no owned submissions for the student gets 403."""
         from submissions.views import get_by_student_id
 
-        student_user = MagicMock()
-        mock_user_model.objects.filter.return_value.first.return_value = student_user
-        mock_owns.return_value = False
+        mock_sub_model.objects.filter.return_value = []
 
         user = _user(id=200, role=Role.TEACHER)
         request = _authed_request("get", "/submissions/students/100/", user=user)
 
         response = get_by_student_id(request, 100)
-
-        assert response.status_code == http_status.HTTP_403_FORBIDDEN
-
-    @patch("submissions.views.User")
-    def test_teacher_student_not_found_gets_403(self, mock_user_model):
-        """Teacher requesting non-existent student gets 403."""
-        from submissions.views import get_by_student_id
-
-        mock_user_model.objects.filter.return_value.first.return_value = None
-
-        user = _user(id=200, role=Role.TEACHER)
-        request = _authed_request("get", "/submissions/students/999/", user=user)
-
-        response = get_by_student_id(request, 999)
 
         assert response.status_code == http_status.HTTP_403_FORBIDDEN
 
@@ -1180,47 +1036,6 @@ class TestGetByStudentIdExtended:
         response = get_by_student_id(request, 100)
 
         assert response.status_code == http_status.HTTP_403_FORBIDDEN
-
-
-# ============================================================================
-# get_by_teacher_id (extended coverage)
-# ============================================================================
-
-
-class TestGetByTeacherIdExtended:
-    """Extended tests for the get_by_teacher_id view covering admin/researcher."""
-
-    @patch("submissions.views.paginate")
-    @patch("submissions.views.get_by_teacher")
-    def test_admin_can_view_any_teacher(self, mock_get, mock_paginate):
-        """Admin can view any teacher's self-assessments."""
-        from submissions.views import get_by_teacher_id
-
-        mock_get.return_value = []
-        mock_paginate.return_value = Response([], status=200)
-
-        user = _user(id=1, is_staff=True)
-        request = _authed_request("get", "/submissions/teachers/999/", user=user)
-
-        get_by_teacher_id(request, 999)
-
-        mock_get.assert_called_once_with(999)
-
-    @patch("submissions.views.paginate")
-    @patch("submissions.views.get_by_teacher")
-    def test_researcher_can_view_any_teacher(self, mock_get, mock_paginate):
-        """Researcher can view any teacher's self-assessments."""
-        from submissions.views import get_by_teacher_id
-
-        mock_get.return_value = []
-        mock_paginate.return_value = Response([], status=200)
-
-        user = _user(id=1, role=Role.RESEARCHER)
-        request = _authed_request("get", "/submissions/teachers/999/", user=user)
-
-        get_by_teacher_id(request, 999)
-
-        mock_get.assert_called_once_with(999)
 
 
 # ============================================================================
@@ -1263,13 +1078,15 @@ class TestGetStudentSubmission:
 
         assert response.status_code == http_status.HTTP_200_OK
 
+    @patch("submissions.views.has_sudo_permission")
     @patch("submissions.views.submission_to_dto")
     @patch("submissions.views.get_by_student_and_assignment")
     @patch("submissions.views._assignment_for")
-    def test_researcher_can_view_any(self, mock_assign_for, mock_get, mock_dto):
-        """Researcher can view any student's submission."""
+    def test_researcher_can_view_any(self, mock_assign_for, mock_get, mock_dto, mock_sudo):
+        """Researcher with sudo can view any student's submission."""
         from submissions.views import get_student_submission
 
+        mock_sudo.return_value = True
         mock_assign_for.return_value = _mock_assignment()
         mock_get.return_value = MagicMock()
         mock_dto.return_value = _mock_submission_dto()
@@ -1399,237 +1216,6 @@ class TestGetStudentSubmission:
         assert response.status_code == http_status.HTTP_404_NOT_FOUND
 
 
-# ============================================================================
-# edit
-# ============================================================================
-
-
-class TestEditView:
-    """Tests for the edit submission view."""
-
-    @patch("submissions.views._assignment_for")
-    def test_returns_404_when_assignment_missing(self, mock_assign_for):
-        """Returns 404 when assignment does not exist."""
-        from submissions.views import edit
-
-        mock_assign_for.return_value = None
-
-        user = _user(id=100, role=Role.STUDENT)
-        data = {
-            "assignmentId": 999,
-            "studentId": 100,
-            "status": "SUBMITTED",
-            "answers": [],
-        }
-        request = _authed_request("patch", "/submissions/", data, user=user)
-
-        response = edit(request)
-
-        assert response.status_code == http_status.HTTP_404_NOT_FOUND
-
-    @patch("submissions.views.submission_to_dto")
-    @patch("submissions.views.edit_submission")
-    @patch("submissions.views._assignment_for")
-    def test_admin_can_edit_any_submission(self, mock_assign_for, mock_edit, mock_dto):
-        """Admin can edit any submission."""
-        from submissions.views import edit
-
-        mock_assign_for.return_value = _mock_assignment()
-        mock_edit.return_value = MagicMock()
-        mock_dto.return_value = _mock_submission_dto()
-
-        user = _user(id=1, is_staff=True)
-        data = {
-            "assignmentId": 10,
-            "studentId": 100,
-            "status": "SUBMITTED",
-            "answers": [],
-        }
-        request = _authed_request("patch", "/submissions/", data, user=user)
-
-        response = edit(request)
-
-        assert response.status_code == http_status.HTTP_200_OK
-
-    @patch("submissions.views._student_enrolled_in_assignment")
-    @patch("submissions.views._assignment_for")
-    def test_student_cannot_edit_other_student(self, mock_assign_for, mock_enrolled):
-        """Student cannot edit another student's submission."""
-        from submissions.views import edit
-
-        mock_assign_for.return_value = _mock_assignment()
-
-        user = _user(id=100, role=Role.STUDENT)
-        data = {
-            "assignmentId": 10,
-            "studentId": 999,
-            "status": "SUBMITTED",
-            "answers": [],
-        }
-        request = _authed_request("patch", "/submissions/", data, user=user)
-
-        response = edit(request)
-
-        assert response.status_code == http_status.HTTP_403_FORBIDDEN
-
-    @patch("submissions.views._student_enrolled_in_assignment")
-    @patch("submissions.views._assignment_for")
-    def test_student_not_enrolled_gets_403(self, mock_assign_for, mock_enrolled):
-        """Student not enrolled in the assignment's course gets 403."""
-        from submissions.views import edit
-
-        mock_assign_for.return_value = _mock_assignment(course_id=50)
-        mock_enrolled.return_value = False
-
-        user = _user(id=100, role=Role.STUDENT)
-        data = {
-            "assignmentId": 10,
-            "studentId": 100,
-            "status": "SUBMITTED",
-            "answers": [],
-        }
-        request = _authed_request("patch", "/submissions/", data, user=user)
-
-        response = edit(request)
-
-        assert response.status_code == http_status.HTTP_403_FORBIDDEN
-
-    @patch("submissions.views._teacher_owns_assignment")
-    @patch("submissions.views._assignment_for")
-    def test_teacher_not_matching_teacher_id_gets_403(self, mock_assign_for, mock_owns):
-        """Teacher whose ID does not match teacherId gets 403."""
-        from submissions.views import edit
-
-        mock_assign_for.return_value = _mock_assignment()
-
-        user = _user(id=200, role=Role.TEACHER)
-        data = {
-            "assignmentId": 10,
-            "teacherId": 999,
-            "status": "SUBMITTED",
-            "answers": [],
-        }
-        request = _authed_request("patch", "/submissions/", data, user=user)
-
-        response = edit(request)
-
-        assert response.status_code == http_status.HTTP_403_FORBIDDEN
-
-    @patch("submissions.views._teacher_owns_assignment")
-    @patch("submissions.views._assignment_for")
-    def test_teacher_not_owning_assignment_gets_403(self, mock_assign_for, mock_owns):
-        """Teacher who does not own the assignment gets 403."""
-        from submissions.views import edit
-
-        mock_assign_for.return_value = _mock_assignment(teacher_id=999)
-        mock_owns.return_value = False
-
-        user = _user(id=200, role=Role.TEACHER)
-        data = {
-            "assignmentId": 10,
-            "teacherId": 200,
-            "status": "SUBMITTED",
-            "answers": [],
-        }
-        request = _authed_request("patch", "/submissions/", data, user=user)
-
-        response = edit(request)
-
-        assert response.status_code == http_status.HTTP_403_FORBIDDEN
-
-    @patch("submissions.views.submission_to_dto")
-    @patch("submissions.views.edit_submission")
-    @patch("submissions.views._teacher_owns_assignment")
-    @patch("submissions.views._assignment_for")
-    def test_teacher_owning_can_edit(self, mock_assign_for, mock_owns, mock_edit, mock_dto):
-        """Teacher who owns the assignment can edit the submission."""
-        from submissions.views import edit
-
-        mock_assign_for.return_value = _mock_assignment(teacher_id=200)
-        mock_owns.return_value = True
-        mock_edit.return_value = MagicMock()
-        mock_dto.return_value = _mock_submission_dto()
-
-        user = _user(id=200, role=Role.TEACHER)
-        data = {
-            "assignmentId": 10,
-            "teacherId": 200,
-            "status": "SUBMITTED",
-            "answers": [],
-        }
-        request = _authed_request("patch", "/submissions/", data, user=user)
-
-        response = edit(request)
-
-        assert response.status_code == http_status.HTTP_200_OK
-
-    @patch("submissions.views._assignment_for")
-    def test_unknown_role_gets_403(self, mock_assign_for):
-        """User with unrecognized role gets 403."""
-        from submissions.views import edit
-
-        mock_assign_for.return_value = _mock_assignment()
-
-        user = _user(id=300, role="UNKNOWN")
-        data = {
-            "assignmentId": 10,
-            "studentId": 100,
-            "status": "SUBMITTED",
-            "answers": [],
-        }
-        request = _authed_request("patch", "/submissions/", data, user=user)
-
-        response = edit(request)
-
-        assert response.status_code == http_status.HTTP_403_FORBIDDEN
-
-    @patch("submissions.views.edit_submission")
-    @patch("submissions.views._assignment_for")
-    def test_value_error_returns_error_response(self, mock_assign_for, mock_edit):
-        """ValueError from edit_submission returns error response."""
-        from submissions.views import edit
-
-        mock_assign_for.return_value = _mock_assignment()
-        mock_edit.side_effect = ValueError("Submission not found")
-
-        user = _user(id=1, is_staff=True)
-        data = {
-            "assignmentId": 10,
-            "studentId": 100,
-            "status": "SUBMITTED",
-            "answers": [],
-        }
-        request = _authed_request("patch", "/submissions/", data, user=user)
-
-        response = edit(request)
-
-        assert response.status_code == http_status.HTTP_404_NOT_FOUND
-
-    @patch("submissions.views.submission_to_dto")
-    @patch("submissions.views.edit_submission")
-    @patch("submissions.views._student_enrolled_in_assignment")
-    @patch("submissions.views._assignment_for")
-    def test_student_enrolled_can_edit_own(self, mock_assign_for, mock_enrolled, mock_edit, mock_dto):
-        """Student enrolled in the course can edit their own submission."""
-        from submissions.views import edit
-
-        mock_assign_for.return_value = _mock_assignment(course_id=50)
-        mock_enrolled.return_value = True
-        mock_edit.return_value = MagicMock()
-        mock_dto.return_value = _mock_submission_dto()
-
-        user = _user(id=100, role=Role.STUDENT)
-        data = {
-            "assignmentId": 10,
-            "studentId": 100,
-            "status": "IN_PROGRESS",
-            "answers": [],
-        }
-        request = _authed_request("patch", "/submissions/", data, user=user)
-
-        response = edit(request)
-
-        assert response.status_code == http_status.HTTP_200_OK
 
 
 # ============================================================================

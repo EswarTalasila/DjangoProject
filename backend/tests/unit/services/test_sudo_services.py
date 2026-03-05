@@ -95,11 +95,11 @@ class TestCanGrantPermissions:
         granter.is_staff = False
         grant = Mock()
         grant.can_grant_sudo = True
-        grant.permissions = ["CREATE_RESEARCHER_CODES"]
+        grant.permissions = ["ISSUE_RESEARCHER_REG_CODE"]
         granter.sudo_grant = grant
 
         allowed, message = _can_grant_permissions(
-            granter, ["CREATE_RESEARCHER_CODES"], False
+            granter, ["ISSUE_RESEARCHER_REG_CODE"], False
         )
 
         assert allowed is False

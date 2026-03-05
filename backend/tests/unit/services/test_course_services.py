@@ -218,7 +218,9 @@ class TestEnrollmentToStudentDto:
 
         user = SimpleNamespace(id=42, name="Alice", username="alice123")
         student_profile = SimpleNamespace(user=user, consent=True)
-        enrollment = SimpleNamespace(student_profile=student_profile, course_id=10)
+        enrollment = SimpleNamespace(
+            student_profile=student_profile, course_id=10, enrolled_at=None
+        )
 
         dto = enrollment_to_student_dto(enrollment)
 
@@ -233,7 +235,9 @@ class TestEnrollmentToStudentDto:
         """Handles enrollment with None student_profile gracefully."""
         from courses.services._queries import enrollment_to_student_dto
 
-        enrollment = SimpleNamespace(student_profile=None, course_id=10)
+        enrollment = SimpleNamespace(
+            student_profile=None, course_id=10, enrolled_at=None
+        )
 
         dto = enrollment_to_student_dto(enrollment)
 
@@ -248,7 +252,9 @@ class TestEnrollmentToStudentDto:
 
         user = SimpleNamespace(id=1, name="Bob", username="bob")
         student_profile = SimpleNamespace(user=user, consent=False)
-        enrollment = SimpleNamespace(student_profile=student_profile, course_id=5)
+        enrollment = SimpleNamespace(
+            student_profile=student_profile, course_id=5, enrolled_at=None
+        )
 
         dto = enrollment_to_student_dto(enrollment)
 
@@ -269,13 +275,20 @@ class TestCourseToDto:
         """Converts Course to CourseDTO with students and assignment IDs."""
         from courses.services._queries import course_to_dto
 
+        teacher_user = SimpleNamespace(id=42, name="Teacher Smith")
         user = SimpleNamespace(id=1, name="Student1", username="s1")
         student_profile = SimpleNamespace(user=user, consent=True)
-        enrollment = SimpleNamespace(student_profile=student_profile, course_id=100)
+        enrollment = SimpleNamespace(
+            student_profile=student_profile, course_id=100, enrolled_at=None
+        )
         mock_enrollment_model.objects.filter.return_value = [enrollment]
         mock_assignment_model.objects.filter.return_value.values_list.return_value = [5, 6]
 
-        course = SimpleNamespace(id=100, name="Math 101", teacher_profile_id=42)
+        course = SimpleNamespace(
+            id=100, name="Math 101", teacher_profile_id=42,
+            teacher_profile=SimpleNamespace(user=teacher_user),
+            created_at=None,
+        )
 
         dto = course_to_dto(course)
 
@@ -284,6 +297,7 @@ class TestCourseToDto:
         assert dto.studentCount == 1
         assert dto.assignmentIds == [5, 6]
         assert dto.teacherId == 42
+        assert dto.teacherName == "Teacher Smith"
 
     @patch("courses.services._queries.Assignment")
     @patch("courses.services._queries.Enrollment")
@@ -294,7 +308,11 @@ class TestCourseToDto:
         mock_enrollment_model.objects.filter.return_value = []
         mock_assignment_model.objects.filter.return_value.values_list.return_value = []
 
-        course = SimpleNamespace(id=1, name="Empty", teacher_profile_id=None)
+        course = SimpleNamespace(
+            id=1, name="Empty", teacher_profile_id=None,
+            teacher_profile=None,
+            created_at=None,
+        )
 
         dto = course_to_dto(course)
 
@@ -314,27 +332,30 @@ class TestListCoursesForUser:
 
     @patch("courses.services._queries.Course")
     def test_admin_sees_all_courses(self, mock_course_model):
-        """Admin (is_staff) sees all courses."""
+        """Admin (is_staff) sees all active courses by default."""
         from courses.services._queries import list_courses_for_user
 
         sentinel = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
-        mock_course_model.objects.all.return_value = sentinel
+        mock_qs = MagicMock()
+        mock_course_model.objects.all.return_value = mock_qs
+        mock_qs.filter.return_value = sentinel
 
         admin = SimpleNamespace(id=1, is_staff=True, is_authenticated=True)
 
         result = list_courses_for_user(admin)
 
         assert result == sentinel
-        mock_course_model.objects.all.assert_called_once()
 
     @patch("courses.services._queries.has_role", return_value=True)
     @patch("courses.services._queries.Course")
     def test_researcher_sees_all_courses(self, mock_course_model, mock_has_role):
-        """Researcher sees all courses."""
+        """Researcher sees all active courses."""
         from courses.services._queries import list_courses_for_user
 
         sentinel = [SimpleNamespace(id=1)]
-        mock_course_model.objects.all.return_value = sentinel
+        mock_qs = MagicMock()
+        mock_course_model.objects.all.return_value = mock_qs
+        mock_qs.filter.return_value = sentinel
 
         researcher = SimpleNamespace(id=2, is_staff=False, is_authenticated=True)
 
@@ -345,18 +366,23 @@ class TestListCoursesForUser:
     @patch("courses.services._queries.has_role", return_value=False)
     @patch("courses.services._queries.Course")
     def test_teacher_sees_own_courses(self, mock_course_model, mock_has_role):
-        """Teacher sees only their own courses."""
+        """Teacher sees only their own active courses."""
         from courses.services._queries import list_courses_for_user
 
         sentinel = [SimpleNamespace(id=3)]
-        mock_course_model.objects.filter.return_value = sentinel
+        mock_qs = MagicMock()
+        mock_filtered_qs = MagicMock()
+        mock_course_model.objects.all.return_value = mock_qs
+        # First .filter(status=ACTIVE) returns a filtered queryset
+        mock_qs.filter.return_value = mock_filtered_qs
+        # Second .filter(teacher_profile__user=user) returns sentinel
+        mock_filtered_qs.filter.return_value = sentinel
 
         teacher = SimpleNamespace(id=5, is_staff=False, is_authenticated=True)
 
         result = list_courses_for_user(teacher)
 
         assert result == sentinel
-        mock_course_model.objects.filter.assert_called_once_with(teacher_profile__user=teacher)
 
 
 # ---------------------------------------------------------------------------
@@ -374,7 +400,9 @@ class TestListStudentsInCourse:
 
         user = SimpleNamespace(id=1, name="Student", username="s1")
         student_profile = SimpleNamespace(user=user, consent=True)
-        enrollment = SimpleNamespace(student_profile=student_profile, course_id=10)
+        enrollment = SimpleNamespace(
+            student_profile=student_profile, course_id=10, enrolled_at=None
+        )
         mock_enrollment_model.objects.filter.return_value = [enrollment]
 
         course = SimpleNamespace(id=10)
@@ -454,37 +482,19 @@ class TestEditCourse(_NoopAtomicMixin):
 class TestDeleteCourse(_NoopAtomicMixin):
     """Tests for delete_course mutation."""
 
-    @patch("courses.services._mutations.User")
-    @patch("courses.services._mutations.Enrollment")
-    def test_deletes_course_enrollments_and_students(
-        self, mock_enrollment_model, mock_user_model
-    ):
-        """Deletes course, enrollments, and associated student users."""
+    def test_deletes_course(self):
+        """Deletes course (enrollments cascade via Django)."""
         from courses.services._mutations import delete_course
-
-        mock_qs = MagicMock()
-        mock_qs.values_list.return_value = [1, 2, 3]
-        mock_enrollment_model.objects.filter.return_value = mock_qs
 
         course = MagicMock()
 
         delete_course(course)
 
-        mock_enrollment_model.objects.filter.assert_called_once_with(course=course)
-        mock_qs.delete.assert_called_once()
-        mock_user_model.objects.filter.assert_called_once_with(id__in=[1, 2, 3])
         course.delete.assert_called_once()
 
 
 class TestCreateStudentInCourse(_NoopAtomicMixin):
     """Tests for create_student_in_course mutation."""
-
-    def test_raises_when_no_course_id(self):
-        """Raises ValueError when courseId is missing from payload."""
-        from courses.services._mutations import create_student_in_course
-
-        with pytest.raises(ValueError, match="courseId is required"):
-            create_student_in_course(SimpleNamespace(id=1), {"name": "Student"})
 
     @patch("courses.services._mutations.Course")
     def test_raises_when_course_not_found(self, mock_course_model):
@@ -494,18 +504,20 @@ class TestCreateStudentInCourse(_NoopAtomicMixin):
         mock_course_model.objects.filter.return_value.first.return_value = None
 
         with pytest.raises(ValueError, match="Course not found"):
-            create_student_in_course(SimpleNamespace(id=1), {"name": "S", "courseId": 999})
+            create_student_in_course(SimpleNamespace(id=1), 999, {"name": "S"})
 
     @patch("courses.services._mutations.Course")
     def test_rejects_client_supplied_username(self, mock_course_model):
         """Raises ValueError when client supplies a username."""
         from courses.services._mutations import create_student_in_course
 
-        mock_course_model.objects.filter.return_value.first.return_value = SimpleNamespace(id=1)
+        mock_course_model.objects.filter.return_value.first.return_value = SimpleNamespace(
+            id=1, status="ACTIVE"
+        )
 
         with pytest.raises(ValueError, match="system-managed"):
             create_student_in_course(
-                SimpleNamespace(id=1), {"name": "S", "courseId": 1, "username": "my-user"}
+                SimpleNamespace(id=1), 1, {"name": "S", "username": "my-user"}
             )
 
     @patch("courses.services._mutations._create_submissions_for_student")
@@ -521,12 +533,14 @@ class TestCreateStudentInCourse(_NoopAtomicMixin):
         """Raises ValueError when StudentProfile is not created."""
         from courses.services._mutations import create_student_in_course
 
-        mock_course_model.objects.filter.return_value.first.return_value = SimpleNamespace(id=1)
+        mock_course_model.objects.filter.return_value.first.return_value = SimpleNamespace(
+            id=1, status="ACTIVE"
+        )
         mock_create_user.return_value = SimpleNamespace(id=50)
         mock_sp.objects.filter.return_value.first.return_value = None
 
         with pytest.raises(ValueError, match="StudentProfile not created"):
-            create_student_in_course(SimpleNamespace(id=1), {"name": "S", "courseId": 1})
+            create_student_in_course(SimpleNamespace(id=1), 1, {"name": "S"})
 
     @patch("courses.services._mutations._create_submissions_for_student")
     @patch("courses.services._mutations.Enrollment")
@@ -541,14 +555,16 @@ class TestCreateStudentInCourse(_NoopAtomicMixin):
         """Raises ValueError when student is already enrolled."""
         from courses.services._mutations import create_student_in_course
 
-        mock_course_model.objects.filter.return_value.first.return_value = SimpleNamespace(id=1)
+        mock_course_model.objects.filter.return_value.first.return_value = SimpleNamespace(
+            id=1, status="ACTIVE"
+        )
         mock_create_user.return_value = SimpleNamespace(id=50)
         fake_profile = SimpleNamespace(id=10, consent=False, save=MagicMock())
         mock_sp.objects.filter.return_value.first.return_value = fake_profile
         mock_enroll.objects.filter.return_value.exists.return_value = True
 
         with pytest.raises(ValueError, match="Student already enrolled"):
-            create_student_in_course(SimpleNamespace(id=1), {"name": "S", "courseId": 1})
+            create_student_in_course(SimpleNamespace(id=1), 1, {"name": "S"})
 
     @patch("courses.services._mutations._create_submissions_for_student")
     @patch("courses.services._mutations.Enrollment")
@@ -563,7 +579,7 @@ class TestCreateStudentInCourse(_NoopAtomicMixin):
         """Happy path creates enrollment and returns it."""
         from courses.services._mutations import create_student_in_course
 
-        fake_course = SimpleNamespace(id=1)
+        fake_course = SimpleNamespace(id=1, status="ACTIVE")
         mock_course_model.objects.filter.return_value.first.return_value = fake_course
         student_user = SimpleNamespace(id=50)
         mock_create_user.return_value = student_user
@@ -574,7 +590,7 @@ class TestCreateStudentInCourse(_NoopAtomicMixin):
         mock_enroll.objects.create.return_value = fake_enrollment
 
         result = create_student_in_course(
-            SimpleNamespace(id=1), {"name": "Student", "courseId": 1, "consent": True}
+            SimpleNamespace(id=1), 1, {"name": "Student", "consent": True}
         )
 
         assert result is fake_enrollment
@@ -583,45 +599,6 @@ class TestCreateStudentInCourse(_NoopAtomicMixin):
         )
         assert fake_profile.consent is True
         mock_subs.assert_called_once_with(student_user, fake_course)
-
-
-class TestBulkCreateStudents(_NoopAtomicMixin):
-    """Tests for bulk_create_students mutation."""
-
-    def test_counts_successes_and_skips_failures(self):
-        """Counts successful creates and skips failures."""
-        from courses.services._mutations import bulk_create_students
-
-        call_count = {"i": 0}
-
-        def fake_create(user, payload):
-            call_count["i"] += 1
-            if payload.get("name") == "fail":
-                raise ValueError("bad")
-            return SimpleNamespace()
-
-        with patch("courses.services.create_student_in_course", fake_create):
-            result = bulk_create_students(
-                SimpleNamespace(id=1),
-                [{"name": "ok"}, {"name": "fail"}, {"name": "ok2"}],
-            )
-
-        assert result == 2
-        assert call_count["i"] == 3
-
-    def test_returns_zero_on_all_failures(self):
-        """Returns 0 when all payloads fail."""
-        from courses.services._mutations import bulk_create_students
-
-        with patch(
-            "courses.services.create_student_in_course",
-            side_effect=ValueError("bad"),
-        ):
-            result = bulk_create_students(
-                SimpleNamespace(id=1), [{"name": "a"}, {"name": "b"}]
-            )
-
-        assert result == 0
 
 
 class TestRemoveStudentFromCourse(_NoopAtomicMixin):
@@ -633,28 +610,27 @@ class TestRemoveStudentFromCourse(_NoopAtomicMixin):
         from courses.services._mutations import remove_student_from_course
 
         mock_sp_model.objects.filter.return_value.first.return_value = None
+        course = SimpleNamespace(id=1, status="ACTIVE")
 
-        with pytest.raises(ValueError, match="Student profile not found"):
-            remove_student_from_course(SimpleNamespace(id=1), 999)
+        with pytest.raises(ValueError, match="Student not found in course"):
+            remove_student_from_course(course, 999)
 
-    @patch("courses.services._mutations.User")
     @patch("courses.services._mutations.Enrollment")
     @patch("courses.services._mutations.StudentProfile")
-    def test_removes_enrollment_and_user(
-        self, mock_sp_model, mock_enrollment_model, mock_user_model
-    ):
-        """Removes enrollment and deletes user account."""
+    def test_drops_enrollment(self, mock_sp_model, mock_enrollment_model):
+        """Soft-deletes enrollment by setting status to DROPPED."""
         from courses.services._mutations import remove_student_from_course
 
         fake_profile = SimpleNamespace(id=10)
         mock_sp_model.objects.filter.return_value.first.return_value = fake_profile
+        fake_enrollment = MagicMock()
+        mock_enrollment_model.objects.filter.return_value.first.return_value = fake_enrollment
 
-        remove_student_from_course(SimpleNamespace(id=1), 42)
+        course = SimpleNamespace(id=1, status="ACTIVE")
+        remove_student_from_course(course, 42)
 
-        mock_enrollment_model.objects.filter.assert_called_once_with(
-            course=SimpleNamespace(id=1), student_profile=fake_profile
-        )
-        mock_user_model.objects.filter.assert_called_once_with(id=42)
+        assert fake_enrollment.status == EnrollmentStatus.DROPPED
+        fake_enrollment.save.assert_called_once_with(update_fields=["status"])
 
 
 # ---------------------------------------------------------------------------
@@ -664,26 +640,6 @@ class TestRemoveStudentFromCourse(_NoopAtomicMixin):
 
 class TestCreateSubmissionsForStudent:
     """Tests for _create_submissions_for_student internal helper."""
-
-    @patch("courses.services._mutations.Assignment")
-    @patch("courses.services._mutations.Assessment")
-    @patch("courses.services._mutations.Submission")
-    def test_skips_mood_meter_assessments(
-        self, mock_submission, mock_assessment_model, mock_assignment_model
-    ):
-        """Skips submission creation for MOOD_METER assessments."""
-        from assessments.models import GradingMode
-        from courses.services._mutations import _create_submissions_for_student
-
-        fake_assignment = SimpleNamespace(id=1, assessment_id=10)
-        mock_assignment_model.objects.filter.return_value = [fake_assignment]
-        mock_assessment_model.objects.filter.return_value.first.return_value = (
-            SimpleNamespace(id=10, grading_mode=GradingMode.MOOD_METER)
-        )
-
-        _create_submissions_for_student(SimpleNamespace(id=1), SimpleNamespace(id=1))
-
-        mock_submission.objects.create.assert_not_called()
 
     @patch("courses.services._mutations.Assignment")
     @patch("courses.services._mutations.Assessment")
@@ -710,7 +666,7 @@ class TestCreateSubmissionsForStudent:
         mock_submission_model, mock_answer_model, mock_mca, mock_saa, mock_nsa,
     ):
         """Creates submission with correct answer types for each question kind."""
-        from assessments.models import GradingMode, QuestionKind
+        from assessments.models import QuestionKind
         from courses.services._mutations import _create_submissions_for_student
 
         fake_assignment = SimpleNamespace(id=1, assessment_id=10)
@@ -719,12 +675,10 @@ class TestCreateSubmissionsForStudent:
         mc_q = SimpleNamespace(kind=QuestionKind.MULTIPLE_CHOICE)
         sa_q = SimpleNamespace(kind=QuestionKind.SHORT_ANSWER)
         ns_q = SimpleNamespace(kind=QuestionKind.NUMBER_SCALE)
-        mm_q = SimpleNamespace(kind=QuestionKind.MOOD_METER)
 
         fake_assessment = MagicMock()
         fake_assessment.id = 10
-        fake_assessment.grading_mode = GradingMode.AUTO
-        fake_assessment.questions.all.return_value = [mc_q, sa_q, ns_q, mm_q]
+        fake_assessment.questions.all.return_value = [mc_q, sa_q, ns_q]
         mock_assessment_model.objects.filter.return_value.first.return_value = fake_assessment
         mock_submission_model.objects.filter.return_value.exists.return_value = False
         mock_submission_model.objects.create.return_value = SimpleNamespace(id=100)

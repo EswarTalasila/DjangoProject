@@ -46,7 +46,7 @@ class TestListOrCreateView:
 
     @patch("courses.views.paginate")
     @patch("courses.views.list_courses_for_user")
-    @patch("courses.views.IsTeacherOrAbove.has_permission", return_value=True)
+    @patch("courses.views.IsAuthenticated.has_permission", return_value=True)
     def test_get_lists_courses(self, mock_perm, mock_list, mock_paginate):
         """GET returns paginated course list."""
         from courses.views import list_or_create
@@ -57,13 +57,13 @@ class TestListOrCreateView:
 
         list_or_create(request)
 
-        mock_list.assert_called_once_with(user)
+        mock_list.assert_called_once_with(user, include_archived=False)
         mock_paginate.assert_called_once()
 
     @patch("courses.views.course_to_dto")
     @patch("courses.views.create_course")
     @patch("courses.views.IsTeacher")
-    @patch("courses.views.IsTeacherOrAbove.has_permission", return_value=True)
+    @patch("courses.views.IsAuthenticated.has_permission", return_value=True)
     def test_post_creates_course(self, mock_perm, mock_is_teacher, mock_create, mock_dto):
         """POST creates a new course and returns DTO."""
         from courses.views import list_or_create
@@ -73,7 +73,7 @@ class TestListOrCreateView:
         mock_create.return_value = fake_course
         dto = CourseDTO(
             id=1, name="Math", students=[], studentCount=0,
-            assignmentIds=[], teacherId=1
+            assignmentIds=[], teacherId=1, teacherName="Teacher", createdAt=None
         )
         mock_dto.return_value = dto
 
@@ -89,7 +89,7 @@ class TestListOrCreateView:
         mock_create.assert_called_once_with(user, "Math")
 
     @patch("courses.views.IsTeacher")
-    @patch("courses.views.IsTeacherOrAbove.has_permission", return_value=True)
+    @patch("courses.views.IsAuthenticated.has_permission", return_value=True)
     def test_post_forbidden_for_non_teacher(self, mock_perm, mock_is_teacher):
         """POST returns 403 when user is not a teacher (admin creating)."""
         from courses.views import list_or_create
@@ -107,7 +107,7 @@ class TestListOrCreateView:
 
     @patch("courses.views.create_course", side_effect=ValueError("Teacher profile not found"))
     @patch("courses.views.IsTeacher")
-    @patch("courses.views.IsTeacherOrAbove.has_permission", return_value=True)
+    @patch("courses.views.IsAuthenticated.has_permission", return_value=True)
     def test_post_handles_value_error(self, mock_perm, mock_is_teacher, mock_create):
         """POST returns error response when create_course raises ValueError."""
         from courses.views import list_or_create
@@ -128,7 +128,7 @@ class TestListOrCreateView:
         )
 
     @patch("courses.views.IsTeacher")
-    @patch("courses.views.IsTeacherOrAbove.has_permission", return_value=True)
+    @patch("courses.views.IsAuthenticated.has_permission", return_value=True)
     def test_post_invalid_payload_returns_400(self, mock_perm, mock_is_teacher):
         """POST returns 400 for invalid serializer input."""
         from courses.views import list_or_create
@@ -154,7 +154,7 @@ class TestDetailView:
     """Tests for the detail course view."""
 
     @patch("courses.views.Course")
-    @patch("courses.views.IsTeacherOrAbove.has_permission", return_value=True)
+    @patch("courses.views.IsAuthenticated.has_permission", return_value=True)
     def test_returns_404_when_course_not_found(self, mock_perm, mock_course_model):
         """Returns 404 when course does not exist."""
         from courses.views import detail
@@ -170,7 +170,7 @@ class TestDetailView:
     @patch("courses.views.course_to_dto")
     @patch("courses.views.can_view_course", return_value=True)
     @patch("courses.views.Course")
-    @patch("courses.views.IsTeacherOrAbove.has_permission", return_value=True)
+    @patch("courses.views.IsAuthenticated.has_permission", return_value=True)
     def test_get_returns_course_dto(self, mock_perm, mock_course_model, mock_can_view, mock_dto):
         """GET returns course DTO when user can view."""
         from courses.views import detail
@@ -179,7 +179,7 @@ class TestDetailView:
         mock_course_model.objects.filter.return_value.first.return_value = fake_course
         dto = CourseDTO(
             id=1, name="Course", students=[], studentCount=0,
-            assignmentIds=[], teacherId=1
+            assignmentIds=[], teacherId=1, teacherName="Teacher", createdAt=None
         )
         mock_dto.return_value = dto
 
@@ -193,7 +193,7 @@ class TestDetailView:
 
     @patch("courses.views.can_view_course", return_value=False)
     @patch("courses.views.Course")
-    @patch("courses.views.IsTeacherOrAbove.has_permission", return_value=True)
+    @patch("courses.views.IsAuthenticated.has_permission", return_value=True)
     def test_get_returns_403_when_not_authorized(
         self, mock_perm, mock_course_model, mock_can_view
     ):
@@ -215,7 +215,7 @@ class TestDetailView:
     @patch("courses.views.edit_course")
     @patch("courses.views.can_manage_course", return_value=True)
     @patch("courses.views.Course")
-    @patch("courses.views.IsTeacherOrAbove.has_permission", return_value=True)
+    @patch("courses.views.IsAuthenticated.has_permission", return_value=True)
     def test_patch_updates_course(
         self, mock_perm, mock_course_model, mock_can_manage, mock_edit, mock_dto
     ):
@@ -228,7 +228,7 @@ class TestDetailView:
         mock_edit.return_value = updated_course
         dto = CourseDTO(
             id=1, name="New", students=[], studentCount=0,
-            assignmentIds=[], teacherId=1
+            assignmentIds=[], teacherId=1, teacherName="Teacher", createdAt=None
         )
         mock_dto.return_value = dto
 
@@ -244,7 +244,7 @@ class TestDetailView:
 
     @patch("courses.views.can_manage_course", return_value=False)
     @patch("courses.views.Course")
-    @patch("courses.views.IsTeacherOrAbove.has_permission", return_value=True)
+    @patch("courses.views.IsAuthenticated.has_permission", return_value=True)
     def test_patch_returns_403_when_not_owner(
         self, mock_perm, mock_course_model, mock_can_manage
     ):
@@ -264,46 +264,23 @@ class TestDetailView:
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    @patch("courses.views.delete_course")
-    @patch("courses.views.can_manage_course", return_value=True)
     @patch("courses.views.Course")
-    @patch("courses.views.IsTeacherOrAbove.has_permission", return_value=True)
-    def test_delete_removes_course(
-        self, mock_perm, mock_course_model, mock_can_manage, mock_delete
+    @patch("courses.views.IsAuthenticated.has_permission", return_value=True)
+    def test_delete_without_purge_returns_409(
+        self, mock_perm, mock_course_model
     ):
-        """DELETE removes course and returns 204."""
+        """DELETE without ?purge=true returns 409 (use archive instead)."""
         from courses.views import detail
 
-        fake_course = SimpleNamespace(id=1)
+        fake_course = SimpleNamespace(id=1, status="ACTIVE")
         mock_course_model.objects.filter.return_value.first.return_value = fake_course
 
-        user = MagicMock(is_authenticated=True)
+        user = MagicMock(is_authenticated=True, is_staff=False)
         request = _authed_request("delete", "/api/v1/courses/1", user=user)
 
         response = detail(request, course_id=1)
 
-        assert response.status_code == status.HTTP_204_NO_CONTENT
-        mock_delete.assert_called_once_with(fake_course)
-
-    @patch("courses.views.can_manage_course", return_value=False)
-    @patch("courses.views.Course")
-    @patch("courses.views.IsTeacherOrAbove.has_permission", return_value=True)
-    def test_delete_returns_403_when_not_owner(
-        self, mock_perm, mock_course_model, mock_can_manage
-    ):
-        """DELETE returns 403 when user is not the course owner."""
-        from courses.views import detail
-
-        mock_course_model.objects.filter.return_value.first.return_value = (
-            SimpleNamespace(id=1)
-        )
-
-        user = MagicMock(is_authenticated=True)
-        request = _authed_request("delete", "/api/v1/courses/1", user=user)
-
-        response = detail(request, course_id=1)
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_409_CONFLICT
 
 
 # ---------------------------------------------------------------------------
@@ -312,20 +289,20 @@ class TestDetailView:
 
 
 class TestListStudentsView:
-    """Tests for the list_students course view."""
+    """Tests for the list_or_add_students course view."""
 
     @patch("courses.views.Course")
     @patch("courses.views.IsTeacherOrAbove.has_permission", return_value=True)
     def test_returns_404_when_course_not_found(self, mock_perm, mock_course_model):
         """Returns 404 when course does not exist."""
-        from courses.views import list_students
+        from courses.views import list_or_add_students
 
         mock_course_model.objects.filter.return_value.first.return_value = None
 
         user = MagicMock(is_authenticated=True)
         request = _authed_request("get", "/api/v1/courses/1/students", user=user)
 
-        response = list_students(request, course_id=1)
+        response = list_or_add_students(request, course_id=1)
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -336,7 +313,7 @@ class TestListStudentsView:
         self, mock_perm, mock_course_model, mock_can_view
     ):
         """Returns 403 when user cannot view course."""
-        from courses.views import list_students
+        from courses.views import list_or_add_students
 
         mock_course_model.objects.filter.return_value.first.return_value = (
             SimpleNamespace(id=1)
@@ -345,7 +322,7 @@ class TestListStudentsView:
         user = MagicMock(is_authenticated=True)
         request = _authed_request("get", "/api/v1/courses/1/students", user=user)
 
-        response = list_students(request, course_id=1)
+        response = list_or_add_students(request, course_id=1)
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
@@ -358,7 +335,7 @@ class TestListStudentsView:
         self, mock_perm, mock_course_model, mock_can_view, mock_list, mock_paginate
     ):
         """Returns paginated student list."""
-        from courses.views import list_students
+        from courses.views import list_or_add_students
 
         fake_course = SimpleNamespace(id=1)
         mock_course_model.objects.filter.return_value.first.return_value = fake_course
@@ -367,7 +344,7 @@ class TestListStudentsView:
         user = MagicMock(is_authenticated=True)
         request = _authed_request("get", "/api/v1/courses/1/students", user=user)
 
-        list_students(request, course_id=1)
+        list_or_add_students(request, course_id=1)
 
         mock_list.assert_called_once_with(fake_course)
         mock_paginate.assert_called_once()
@@ -430,7 +407,7 @@ class TestRemoveStudentView:
         """Successfully removes student and returns 204."""
         from courses.views import remove_student
 
-        fake_course = SimpleNamespace(id=1)
+        fake_course = SimpleNamespace(id=1, status="ACTIVE")
         mock_course_model.objects.filter.return_value.first.return_value = fake_course
 
         user = MagicMock(is_authenticated=True)
@@ -445,7 +422,7 @@ class TestRemoveStudentView:
 
     @patch(
         "courses.views.remove_student_from_course",
-        side_effect=ValueError("Student profile not found"),
+        side_effect=ValueError("Student not found in course"),
     )
     @patch("courses.views.can_manage_course", return_value=True)
     @patch("courses.views.Course")
@@ -457,7 +434,7 @@ class TestRemoveStudentView:
         from courses.views import remove_student
 
         mock_course_model.objects.filter.return_value.first.return_value = (
-            SimpleNamespace(id=1)
+            SimpleNamespace(id=1, status="ACTIVE")
         )
 
         user = MagicMock(is_authenticated=True)

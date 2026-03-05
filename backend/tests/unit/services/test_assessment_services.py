@@ -53,9 +53,9 @@ class TestAssessmentToDto:
         assessment.title = "Test Assessment"
         assessment.category = "General"
         assessment.grading_mode = GradingMode.AUTO
-        assessment.rubric_id = None
-        assessment.rubric_assessment_ids = []
+        assessment.scoring_policy = "STANDARD"
         assessment.questions.all.return_value = []
+        assessment.question_groups.all.return_value.order_by.return_value = []
 
         dto = assessment_to_dto(assessment)
 
@@ -63,12 +63,12 @@ class TestAssessmentToDto:
         assert dto.title == "Test Assessment"
         assert dto.category == "General"
         assert dto.gradingMode == GradingMode.AUTO
+        assert dto.scoringPolicy == "STANDARD"
         assert dto.questions == []
-        assert dto.rubricId is None
-        assert dto.rubricAssessmentIds == []
+        assert dto.questionGroups == []
 
-    def test_handles_none_rubric_assessment_ids(self):
-        """Handles None rubric_assessment_ids by defaulting to empty list."""
+    def test_handles_scoring_policy_completion(self):
+        """Handles COMPLETION scoring policy."""
         from assessments.services import assessment_to_dto
 
         assessment = MagicMock()
@@ -76,14 +76,14 @@ class TestAssessmentToDto:
         assessment.title = "Test"
         assessment.category = None
         assessment.grading_mode = GradingMode.MANUAL
-        assessment.rubric_id = 5
-        assessment.rubric_assessment_ids = None
+        assessment.scoring_policy = "COMPLETION"
         assessment.questions.all.return_value = []
+        assessment.question_groups.all.return_value.order_by.return_value = []
 
         dto = assessment_to_dto(assessment)
 
-        assert dto.rubricAssessmentIds == []
-        assert dto.rubricId == 5
+        assert dto.scoringPolicy == "COMPLETION"
+        assert dto.questionGroups == []
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +108,9 @@ class TestQuestionToDto:
         question.max_points = 5.0
         question.auto_gradable = True
         question.graded = False
+        question.question_group_id = None
+        question.rubric_id = None
+        question.grading_strategy = "AUTO"
         question.mcq_choices.all.return_value = [choice1, choice2]
         question.multiple_choice.select_all = False
 
@@ -133,6 +136,9 @@ class TestQuestionToDto:
         question.max_points = 10.0
         question.auto_gradable = False
         question.graded = True
+        question.question_group_id = None
+        question.rubric_id = None
+        question.grading_strategy = "AUTO"
         question.short_answer.case_sensitive = True
         question.short_answer.trim = False
 
@@ -154,6 +160,9 @@ class TestQuestionToDto:
         question.max_points = 5.0
         question.auto_gradable = True
         question.graded = True
+        question.question_group_id = None
+        question.rubric_id = None
+        question.grading_strategy = "AUTO"
         question.number_scale.min = 1
         question.number_scale.max = 5
         question.number_scale.target = 3
@@ -163,26 +172,6 @@ class TestQuestionToDto:
         assert dto.data == {"min": 1, "max": 5, "target": 3}
         assert dto.min == 1
         assert dto.max == 5
-
-    def test_mood_meter_question(self):
-        """Converts MOOD_METER with custom labels."""
-        from assessments.services import question_to_dto
-
-        label1 = SimpleNamespace(label="Happy")
-        label2 = SimpleNamespace(label="Sad")
-
-        question = MagicMock()
-        question.id = 40
-        question.kind = QuestionKind.MOOD_METER
-        question.prompt = "How are you?"
-        question.max_points = 0.0
-        question.auto_gradable = False
-        question.graded = False
-        question.mood_meter_labels.all.return_value = [label1, label2]
-
-        dto = question_to_dto(question)
-
-        assert dto.data == {"labels": ["Happy", "Sad"]}
 
     def test_unknown_question_kind_returns_none_data(self):
         """Unknown question kind produces None data field."""
@@ -195,6 +184,9 @@ class TestQuestionToDto:
         question.max_points = 0.0
         question.auto_gradable = False
         question.graded = False
+        question.question_group_id = None
+        question.rubric_id = None
+        question.grading_strategy = "AUTO"
 
         dto = question_to_dto(question)
 
@@ -225,43 +217,24 @@ class TestCreateAssessment(_NoopAtomicMixin):
                 SimpleNamespace(id=1), {"gradingMode": GradingMode.AUTO}
             )
 
-    @patch("assessments.services.create_mood_meter_assessment")
-    def test_delegates_mood_meter_to_specialized_function(
-        self, mock_create_mm
-    ):
-        """Delegates MOOD_METER grading mode to specialized creator."""
-        from assessments.services import create_assessment
-
-        mock_create_mm.return_value = SimpleNamespace(id=1)
-        user = SimpleNamespace(id=1)
-        payload = {
-            "title": "Mood Check",
-            "gradingMode": GradingMode.MOOD_METER,
-        }
-
-        result = create_assessment(user, payload)
-
-        mock_create_mm.assert_called_once_with(user, payload)
-        assert result.id == 1
-
-    @patch("assessments.services._apply_rubric_links")
+    @patch("assessments.services._validate_rubric_rules")
     @patch("assessments.services._replace_questions")
+    @patch("assessments.services._create_question_groups")
     @patch("assessments.services.Assessment")
     def test_creates_standard_assessment(
-        self, mock_assessment_model, mock_replace, mock_apply
+        self, mock_assessment_model, mock_create_groups, mock_replace, mock_validate
     ):
-        """Creates a standard (non-mood-meter) assessment with questions."""
+        """Creates a standard assessment with questions."""
         from assessments.services import create_assessment
 
         fake_assessment = SimpleNamespace(id=5)
         mock_assessment_model.objects.create.return_value = fake_assessment
+        mock_create_groups.return_value = {}
         user = SimpleNamespace(id=1)
         payload = {
             "title": "Quiz 1",
             "gradingMode": GradingMode.AUTO,
             "category": "Math",
-            "rubricId": None,
-            "rubricAssessmentIds": [10, 20],
             "questions": [{"type": "MULTIPLE_CHOICE", "prompt": "Q1"}],
         }
 
@@ -271,24 +244,25 @@ class TestCreateAssessment(_NoopAtomicMixin):
         mock_assessment_model.objects.create.assert_called_once_with(
             title="Quiz 1",
             grading_mode=GradingMode.AUTO,
+            scoring_policy="STANDARD",
             created_by_admin=user,
-            rubric_id=None,
-            rubric_assessment_ids=[10, 20],
             category="Math",
         )
         mock_replace.assert_called_once()
-        mock_apply.assert_called_once_with(fake_assessment)
+        mock_validate.assert_called_once_with(fake_assessment)
 
-    @patch("assessments.services._apply_rubric_links")
+    @patch("assessments.services._validate_rubric_rules")
     @patch("assessments.services._replace_questions")
+    @patch("assessments.services._create_question_groups")
     @patch("assessments.services.Assessment")
-    def test_defaults_empty_rubric_assessment_ids(
-        self, mock_assessment_model, mock_replace, mock_apply
+    def test_defaults_scoring_policy_to_standard(
+        self, mock_assessment_model, mock_create_groups, mock_replace, mock_validate
     ):
-        """Defaults rubricAssessmentIds to empty list when None."""
+        """Defaults scoringPolicy to STANDARD when not provided."""
         from assessments.services import create_assessment
 
         mock_assessment_model.objects.create.return_value = SimpleNamespace(id=1)
+        mock_create_groups.return_value = {}
         user = SimpleNamespace(id=1)
         payload = {
             "title": "Quiz",
@@ -298,56 +272,7 @@ class TestCreateAssessment(_NoopAtomicMixin):
         create_assessment(user, payload)
 
         create_call = mock_assessment_model.objects.create.call_args
-        assert create_call.kwargs["rubric_assessment_ids"] == []
-
-
-# ---------------------------------------------------------------------------
-# create_mood_meter_assessment
-# ---------------------------------------------------------------------------
-
-
-class TestCreateMoodMeterAssessment:
-    """Tests for create_mood_meter_assessment service."""
-
-    def test_raises_when_no_title(self):
-        """Raises ValueError when title is missing."""
-        from assessments.services import create_mood_meter_assessment
-
-        with pytest.raises(ValueError, match="title is required"):
-            create_mood_meter_assessment(
-                SimpleNamespace(id=1), {"gradingMode": GradingMode.MOOD_METER}
-            )
-
-    @patch("assessments.services.MoodMeterQuestion")
-    @patch("assessments.services.Question")
-    @patch("assessments.services.Assessment")
-    def test_creates_mood_meter_with_default_question(
-        self, mock_assessment_model, mock_question_model, mock_mm_model
-    ):
-        """Creates assessment with pre-configured mood meter question."""
-        from assessments.services import create_mood_meter_assessment
-
-        fake_assessment = SimpleNamespace(id=10)
-        mock_assessment_model.objects.create.return_value = fake_assessment
-        fake_question = SimpleNamespace(id=20)
-        mock_question_model.objects.create.return_value = fake_question
-        user = SimpleNamespace(id=1)
-
-        result = create_mood_meter_assessment(
-            user, {"title": "Daily Check", "category": "Wellness"}
-        )
-
-        assert result is fake_assessment
-        mock_assessment_model.objects.create.assert_called_once_with(
-            title="Daily Check",
-            grading_mode=GradingMode.MOOD_METER,
-            created_by_admin=user,
-            rubric_id=None,
-            rubric_assessment_ids=[],
-            category="Wellness",
-        )
-        mock_question_model.objects.create.assert_called_once()
-        mock_mm_model.objects.create.assert_called_once_with(question=fake_question)
+        assert create_call.kwargs["scoring_policy"] == "STANDARD"
 
 
 # ---------------------------------------------------------------------------
@@ -358,27 +283,31 @@ class TestCreateMoodMeterAssessment:
 class TestUpdateAssessment(_NoopAtomicMixin):
     """Tests for update_assessment service."""
 
-    @patch("assessments.services._apply_rubric_links")
+    @patch("assessments.services._validate_rubric_rules")
     @patch("assessments.services._replace_questions")
+    @patch("assessments.services._create_question_groups")
+    @patch("assessments.services.AssessmentQuestionGroup")
+    @patch("assessments.services.Assignment")
     def test_updates_fields_and_replaces_questions(
-        self, mock_replace, mock_apply
+        self, mock_assignment, mock_aqg, mock_create_groups, mock_replace, mock_validate
     ):
         """Updates assessment fields and replaces all questions."""
         from assessments.services import update_assessment
+
+        mock_assignment.objects.filter.return_value.exists.return_value = False
+        mock_create_groups.return_value = {}
 
         assessment = MagicMock()
         assessment.title = "Old Title"
         assessment.category = "Old Cat"
         assessment.grading_mode = GradingMode.AUTO
-        assessment.rubric_id = None
-        assessment.rubric_assessment_ids = []
+        assessment.scoring_policy = "STANDARD"
 
         payload = {
             "title": "New Title",
             "category": "New Cat",
             "gradingMode": GradingMode.MANUAL,
-            "rubricId": 5,
-            "rubricAssessmentIds": [10],
+            "scoringPolicy": "COMPLETION",
             "questions": [{"type": "SHORT_ANSWER", "prompt": "Q"}],
         }
 
@@ -387,22 +316,29 @@ class TestUpdateAssessment(_NoopAtomicMixin):
         assert result.title == "New Title"
         assert result.category == "New Cat"
         assert result.grading_mode == GradingMode.MANUAL
-        assert result.rubric_id == 5
-        assert result.rubric_assessment_ids == [10]
+        assert result.scoring_policy == "COMPLETION"
         assessment.save.assert_called_once()
         mock_replace.assert_called_once()
-        mock_apply.assert_called_once()
+        mock_validate.assert_called_once()
 
-    @patch("assessments.services._apply_rubric_links")
+    @patch("assessments.services._validate_rubric_rules")
     @patch("assessments.services._replace_questions")
+    @patch("assessments.services._create_question_groups")
+    @patch("assessments.services.AssessmentQuestionGroup")
+    @patch("assessments.services.Assignment")
     def test_preserves_title_when_not_provided(
-        self, mock_replace, mock_apply
+        self, mock_assignment, mock_aqg, mock_create_groups, mock_replace, mock_validate
     ):
         """Preserves existing title when not in payload."""
         from assessments.services import update_assessment
 
+        mock_assignment.objects.filter.return_value.exists.return_value = False
+        mock_create_groups.return_value = {}
+
         assessment = MagicMock()
         assessment.title = "Keep Me"
+        assessment.grading_mode = GradingMode.AUTO
+        assessment.scoring_policy = "STANDARD"
 
         payload = {"category": "New"}
 
@@ -420,12 +356,13 @@ class TestDeleteAssessment(_NoopAtomicMixin):
     """Tests for delete_assessment service."""
 
     @patch("assessments.services.Assignment")
-    def test_deletes_assignments_then_assessment(
+    def test_deletes_assessment_when_no_assignments(
         self, mock_assignment_model
     ):
-        """Deletes associated assignments before the assessment itself."""
+        """Deletes assessment when no assignments reference it."""
         from assessments.services import delete_assessment
 
+        mock_assignment_model.objects.filter.return_value.exists.return_value = False
         assessment = MagicMock()
 
         delete_assessment(assessment)
@@ -433,8 +370,20 @@ class TestDeleteAssessment(_NoopAtomicMixin):
         mock_assignment_model.objects.filter.assert_called_once_with(
             assessment=assessment
         )
-        mock_assignment_model.objects.filter.return_value.delete.assert_called_once()
         assessment.delete.assert_called_once()
+
+    @patch("assessments.services.Assignment")
+    def test_raises_when_assignments_reference(
+        self, mock_assignment_model
+    ):
+        """Raises AssessmentReferencedError when assignments reference the assessment."""
+        from assessments.services import AssessmentReferencedError, delete_assessment
+
+        mock_assignment_model.objects.filter.return_value.exists.return_value = True
+        assessment = MagicMock()
+
+        with pytest.raises(AssessmentReferencedError):
+            delete_assessment(assessment)
 
 
 # ---------------------------------------------------------------------------
@@ -446,14 +395,29 @@ class TestListAssessments:
     """Tests for list_assessments service."""
 
     @patch("assessments.services.Assessment")
-    def test_returns_all_assessments(self, mock_assessment_model):
-        """Returns list of all assessments."""
+    def test_returns_active_assessments_by_default(self, mock_assessment_model):
+        """Returns list of active assessments by default."""
+        from assessments.services import list_assessments
+
+        sentinel = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
+        qs = MagicMock()
+        mock_assessment_model.objects.all.return_value = qs
+        qs.filter.return_value = sentinel
+
+        result = list_assessments()
+
+        assert result == sentinel
+        qs.filter.assert_called_once()
+
+    @patch("assessments.services.Assessment")
+    def test_returns_all_when_include_archived(self, mock_assessment_model):
+        """Returns all assessments when include_archived=True."""
         from assessments.services import list_assessments
 
         sentinel = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
         mock_assessment_model.objects.all.return_value = sentinel
 
-        result = list_assessments()
+        result = list_assessments(include_archived=True)
 
         assert result == sentinel
 
@@ -515,7 +479,7 @@ class TestCreateQuestion:
         from assessments.services import _create_question
 
         with pytest.raises(ValueError, match="Question type is required"):
-            _create_question(SimpleNamespace(id=1), {"prompt": "Q"})
+            _create_question(SimpleNamespace(id=1), {"prompt": "Q"}, {})
 
     def test_raises_when_no_prompt(self):
         """Raises ValueError when prompt is missing."""
@@ -523,7 +487,7 @@ class TestCreateQuestion:
 
         with pytest.raises(ValueError, match="Question prompt is required"):
             _create_question(
-                SimpleNamespace(id=1), {"type": QuestionKind.SHORT_ANSWER}
+                SimpleNamespace(id=1), {"type": QuestionKind.SHORT_ANSWER}, {}
             )
 
     @patch("assessments.services.MultipleChoiceQuestion")
@@ -551,7 +515,7 @@ class TestCreateQuestion:
             },
         }
 
-        result = _create_question(SimpleNamespace(id=1), payload)
+        result = _create_question(SimpleNamespace(id=1), payload, {})
 
         assert result is fake_question
         mock_mcq_model.objects.create.assert_called_once_with(
@@ -574,7 +538,7 @@ class TestCreateQuestion:
             "data": {"caseSensitive": True, "trim": False},
         }
 
-        result = _create_question(SimpleNamespace(id=1), payload)
+        result = _create_question(SimpleNamespace(id=1), payload, {})
 
         assert result is fake_question
         mock_sa_model.objects.create.assert_called_once_with(
@@ -596,7 +560,7 @@ class TestCreateQuestion:
             "data": {"min": 1, "max": 5, "target": 3},
         }
 
-        result = _create_question(SimpleNamespace(id=1), payload)
+        result = _create_question(SimpleNamespace(id=1), payload, {})
 
         assert result is fake_question
         mock_ns_model.objects.create.assert_called_once_with(
@@ -623,6 +587,7 @@ class TestCreateQuestion:
                     "prompt": "Rate",
                     "data": {"min": 1},
                 },
+                {},
             )
 
     @patch("assessments.services.NumberScaleQuestion")
@@ -642,37 +607,12 @@ class TestCreateQuestion:
                 "prompt": "Rate",
                 "data": {"min": 10, "max": 1},
             },
+            {},
         )
 
         create_call = mock_ns_model.objects.create.call_args
         assert create_call.kwargs["min"] == 1
         assert create_call.kwargs["max"] == 10
-
-    @patch("assessments.services.MoodMeterLabel")
-    @patch("assessments.services.MoodMeterQuestion")
-    @patch("assessments.services.Question")
-    def test_creates_mood_meter_with_labels(
-        self, mock_q_model, mock_mm_model, mock_label_model
-    ):
-        """Creates mood meter question with custom labels."""
-        from assessments.services import _create_question
-
-        fake_question = SimpleNamespace(id=10)
-        mock_q_model.objects.create.return_value = fake_question
-
-        payload = {
-            "type": QuestionKind.MOOD_METER,
-            "prompt": "How are you?",
-            "data": {"labels": ["Happy", "Sad", "Calm", "Angry"]},
-        }
-
-        result = _create_question(SimpleNamespace(id=1), payload)
-
-        assert result is fake_question
-        mock_mm_model.objects.create.assert_called_once_with(
-            question=fake_question
-        )
-        assert mock_label_model.objects.create.call_count == 4
 
     @patch("assessments.services.Question")
     def test_auto_gradable_set_for_mcq_and_number_scale(self, mock_q_model):
@@ -690,6 +630,7 @@ class TestCreateQuestion:
                     "prompt": "Q",
                     "data": {},
                 },
+                {},
             )
 
         create_call = mock_q_model.objects.create.call_args
@@ -712,81 +653,8 @@ class TestCreateQuestion:
                 "prompt": "Q",
                 "data": {},
             },
+            {},
         )
 
         create_call = mock_q_model.objects.create.call_args
         assert create_call.kwargs["auto_gradable"] is False
-
-
-# ---------------------------------------------------------------------------
-# _apply_rubric_links
-# ---------------------------------------------------------------------------
-
-
-class TestApplyRubricLinks:
-    """Tests for _apply_rubric_links internal helper."""
-
-    def test_does_nothing_for_non_rubric_mode(self):
-        """Does nothing when grading_mode is not RUBRIC."""
-        from assessments.services import _apply_rubric_links
-
-        assessment = SimpleNamespace(grading_mode=GradingMode.AUTO)
-
-        # Should not raise
-        _apply_rubric_links(assessment)
-
-    def test_does_nothing_when_no_rubric_ids(self):
-        """Does nothing when rubric_assessment_ids is empty."""
-        from assessments.services import _apply_rubric_links
-
-        assessment = SimpleNamespace(
-            grading_mode=GradingMode.RUBRIC,
-            rubric_assessment_ids=[],
-        )
-
-        _apply_rubric_links(assessment)
-
-    @patch("assessments.services.Assessment")
-    def test_links_rubric_to_target_assessments(self, mock_assessment_model):
-        """Updates rubric_id on target assessments."""
-        from assessments.services import _apply_rubric_links
-
-        target1 = MagicMock()
-        target2 = MagicMock()
-
-        def filter_side_effect(id):
-            mapping = {10: target1, 20: target2}
-            result = MagicMock()
-            result.first.return_value = mapping.get(id)
-            return result
-
-        mock_assessment_model.objects.filter.side_effect = filter_side_effect
-
-        assessment = SimpleNamespace(
-            id=99,
-            grading_mode=GradingMode.RUBRIC,
-            rubric_assessment_ids=[10, 20],
-        )
-
-        _apply_rubric_links(assessment)
-
-        assert target1.rubric_id == 99
-        target1.save.assert_called_once_with(update_fields=["rubric_id"])
-        assert target2.rubric_id == 99
-        target2.save.assert_called_once_with(update_fields=["rubric_id"])
-
-    @patch("assessments.services.Assessment")
-    def test_skips_missing_target_assessments(self, mock_assessment_model):
-        """Skips target assessment IDs that do not exist."""
-        from assessments.services import _apply_rubric_links
-
-        mock_assessment_model.objects.filter.return_value.first.return_value = None
-
-        assessment = SimpleNamespace(
-            id=99,
-            grading_mode=GradingMode.RUBRIC,
-            rubric_assessment_ids=[999],
-        )
-
-        # Should not raise
-        _apply_rubric_links(assessment)

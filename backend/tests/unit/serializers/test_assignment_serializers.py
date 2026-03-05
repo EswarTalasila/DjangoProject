@@ -27,8 +27,8 @@ class TestAssignmentSerializer:
         assert s.validated_data["audienceType"] == "COURSE"
         assert s.validated_data["courseId"] == 10
 
-    def test_valid_teacher_assignment(self):
-        """Accepts valid TEACHER-type assignment payload."""
+    def test_teacher_audience_type_rejected(self):
+        """Rejects TEACHER audience type (deprecated)."""
         data = {
             "assessmentId": 2,
             "audienceType": "TEACHER",
@@ -36,7 +36,8 @@ class TestAssignmentSerializer:
             "openAt": "2025-06-01T12:00:00Z",
         }
         s = AssignmentSerializer(data=data)
-        assert s.is_valid(), s.errors
+        assert not s.is_valid()
+        assert "audienceType" in s.errors
 
     def test_rejects_missing_assessment_id(self):
         """Rejects payload without assessmentId."""
@@ -96,9 +97,8 @@ class TestAssignmentSerializer:
         """courseId is optional and allows null."""
         data = {
             "assessmentId": 1,
-            "audienceType": "TEACHER",
+            "audienceType": "COURSE",
             "courseId": None,
-            "targetTeacherId": 42,
             "openAt": "2025-06-01T12:00:00Z",
         }
         s = AssignmentSerializer(data=data)

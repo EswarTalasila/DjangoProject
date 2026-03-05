@@ -303,28 +303,34 @@ class TestAssessmentSerializer:
         s = AssessmentSerializer(data=data)
         assert s.is_valid()
 
-    def test_rubric_id_is_optional_and_nullable(self):
-        """rubricId is optional and allows null."""
+    def test_rejects_legacy_rubric_id_field(self):
+        """Rejects legacy rubricId field with validation error."""
         data = {
             "title": "Quiz",
             "gradingMode": GradingMode.AUTO,
             "rubricId": None,
         }
         s = AssessmentSerializer(data=data)
-        assert s.is_valid()
+        assert not s.is_valid()
 
-    def test_rubric_assessment_ids_is_optional(self):
-        """rubricAssessmentIds is optional."""
-        data = {"title": "Quiz", "gradingMode": GradingMode.AUTO}
-        s = AssessmentSerializer(data=data)
-        assert s.is_valid()
-
-    def test_rubric_assessment_ids_allows_empty_list(self):
-        """rubricAssessmentIds allows empty list."""
+    def test_rejects_legacy_rubric_assessment_ids_field(self):
+        """Rejects legacy rubricAssessmentIds field with validation error."""
         data = {
             "title": "Quiz",
             "gradingMode": GradingMode.AUTO,
             "rubricAssessmentIds": [],
         }
+        s = AssessmentSerializer(data=data)
+        assert not s.is_valid()
+
+    def test_scoring_policy_is_optional(self):
+        """scoringPolicy is optional and defaults to STANDARD."""
+        data = {"title": "Quiz", "gradingMode": GradingMode.AUTO}
+        s = AssessmentSerializer(data=data)
+        assert s.is_valid()
+
+    def test_question_groups_are_optional(self):
+        """questionGroups field is optional."""
+        data = {"title": "Quiz", "gradingMode": GradingMode.MANUAL}
         s = AssessmentSerializer(data=data)
         assert s.is_valid()

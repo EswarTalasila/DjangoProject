@@ -42,13 +42,14 @@ class TestAnswerSerializer:
         s = AnswerSerializer(data=data)
         assert s.is_valid(), s.errors
 
-    def test_valid_mood_meter(self):
-        """Valid MOOD_METER payload passes validation."""
+    def test_invalid_mood_meter_rejected(self):
+        """MOOD_METER type is no longer valid and is rejected."""
         from submissions.serializers import AnswerSerializer
 
         data = {"questionId": 4, "type": "MOOD_METER", "data": {"row": 1, "col": 2}}
         s = AnswerSerializer(data=data)
-        assert s.is_valid(), s.errors
+        assert not s.is_valid()
+        assert "type" in s.errors
 
     def test_invalid_type_rejected(self):
         """Invalid answer type is rejected."""
