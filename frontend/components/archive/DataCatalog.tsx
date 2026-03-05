@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
-  Files,
   FileSpreadsheet,
   GraduationCap,
   Layers,
@@ -31,7 +30,6 @@ import { listRubrics, type Rubric } from '@/lib/rubric-api';
 import { toErrorMessage } from '@/lib/utils';
 
 type DataCatalogProps = {
-  role: 'TEACHER' | 'RESEARCHER' | 'ADMIN';
   onAddItem: (config: {
     label: string;
     datasetBinding: DatasetBinding;
@@ -39,7 +37,7 @@ type DataCatalogProps = {
   }) => void;
 };
 
-export default function DataCatalog({ role, onAddItem }: DataCatalogProps) {
+export default function DataCatalog({ onAddItem }: DataCatalogProps) {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [rubrics, setRubrics] = useState<Rubric[]>([]);
@@ -47,7 +45,6 @@ export default function DataCatalog({ role, onAddItem }: DataCatalogProps) {
   const [filterText, setFilterText] = useState('');
 
   /* Collapsible section state */
-  const [globalOpen, setGlobalOpen] = useState(true);
   const [coursesOpen, setCoursesOpen] = useState(true);
   const [assessmentsOpen, setAssessmentsOpen] = useState(true);
   const [rubricsOpen, setRubricsOpen] = useState(true);
@@ -104,13 +101,6 @@ export default function DataCatalog({ role, onAddItem }: DataCatalogProps) {
     [rubrics, lowerFilter],
   );
 
-  const showCrossCourse =
-    (role === 'RESEARCHER' || role === 'ADMIN') &&
-    (lowerFilter.length === 0 ||
-      'cross-course submissions'.includes(lowerFilter) ||
-      'cross course submissions'.includes(lowerFilter) ||
-      'global data'.includes(lowerFilter));
-
   function toggleCourse(courseId: number) {
     setExpandedCourses((prev) => {
       const next = new Set(prev);
@@ -147,55 +137,6 @@ export default function DataCatalog({ role, onAddItem }: DataCatalogProps) {
         Add data sources to the explorer. Live data is automatically snapshotted
         when you build the package.
       </p>
-
-      {/* Courses section */}
-      <Collapsible open={globalOpen} onOpenChange={setGlobalOpen}>
-        <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold text-foreground hover:bg-accent/30">
-          {globalOpen ? (
-            <ChevronDown className="size-4" />
-          ) : (
-            <ChevronRight className="size-4" />
-          )}
-          <Files className="size-4" />
-          Global Data
-          <span className="ml-auto text-xs text-muted-foreground">
-            {showCrossCourse ? 1 : 0}
-          </span>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-0.5 pl-2">
-          {showCrossCourse ? (
-            <>
-              <div className="flex items-center gap-2 rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-accent/30">
-                <FileSpreadsheet className="size-3.5 text-purple-500" />
-                <span className="truncate">Cross-Course Submissions</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="ml-auto h-6 w-6 p-0"
-                  title="Add Cross-Course Submissions to package"
-                  onClick={() =>
-                    onAddItem({
-                      label: 'Cross-Course Submissions.csv',
-                      datasetBinding: 'CROSS_COURSE_SUBMISSIONS',
-                      bindingCourseId: null,
-                    })
-                  }
-                >
-                  <Plus className="size-3.5" />
-                </Button>
-              </div>
-              <p className="px-2 pb-0.5 text-xs text-muted-foreground">
-                Captured automatically at build time.
-              </p>
-            </>
-          ) : (
-            <p className="px-2 py-1 text-xs text-muted-foreground">
-              No global datasets found.
-            </p>
-          )}
-        </CollapsibleContent>
-      </Collapsible>
 
       {/* Courses section */}
       <Collapsible open={coursesOpen} onOpenChange={setCoursesOpen}>

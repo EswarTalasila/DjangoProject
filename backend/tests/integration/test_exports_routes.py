@@ -29,7 +29,6 @@ from tests.factories import (
 
 ROSTER_URL = "/api/v1/exports/courses/{}/roster"
 COURSE_SUBS_URL = "/api/v1/exports/courses/{}/submissions"
-CROSS_SUBS_URL = "/api/v1/exports/submissions"
 
 
 def _parse_csv(response) -> list[dict]:
@@ -457,152 +456,14 @@ class TestCourseSubmissionExport:
 
 
 # ===========================================================================
-# EXP-UC-03 — Cross-Course Submission Export
+# EXP-UC-03 — Cross-Course Submission Export (removed)
 # ===========================================================================
 
 
 @pytest.mark.django_db
-class TestCrossCourseSubmissionExport:
-    def test_EXP_UC_03_ADMIN(self, api_client, admin_user, teacher_user):
-        """Admin can export cross-course submissions (identifiable)."""
-        course, students = _seed_course(teacher_user, admin_user=admin_user)
-        _seed_submissions(teacher_user, course, students, admin_user=admin_user)
-        today = timezone.now().strftime("%Y-%m-%d")
+class TestCrossCourseSubmissionExportRemoved:
+    def test_EXP_UC_03_removed_endpoint_returns_404(self, api_client, admin_user):
+        """Cross-course submissions export endpoint is removed by product decision."""
         api_client.force_authenticate(user=admin_user)
-        resp = api_client.get(CROSS_SUBS_URL + f"?startDate={today}&endDate={today}")
-        assert resp.status_code == 200
-        rows = _parse_csv(resp)
-        assert len(rows) == 3
-        assert "courseId" in rows[0]
-        assert "studentId" in rows[0]
-        assert resp["X-Export-Anonymized"] == "false"
-
-    def test_EXP_UC_03_RESEARCHER(self, api_client, researcher_user, teacher_user, admin_user):
-        """Researcher gets anonymized cross-course submissions."""
-        course, students = _seed_course(teacher_user, admin_user=admin_user)
-        _seed_submissions(teacher_user, course, students, admin_user=admin_user)
-        today = timezone.now().strftime("%Y-%m-%d")
-        api_client.force_authenticate(user=researcher_user)
-        resp = api_client.get(CROSS_SUBS_URL + f"?startDate={today}&endDate={today}")
-        assert resp.status_code == 200
-        rows = _parse_csv(resp)
-        assert "studentId" not in rows[0]
-        assert "courseId" not in rows[0]
-        assert resp["X-Export-Anonymized"] == "true"
-
-    def test_EXP_UC_03_RESEARCHER_anonymized(self, api_client, researcher_user, teacher_user, admin_user):
-        """Cross-course anonymized columns are exactly per spec."""
-        course, students = _seed_course(teacher_user, admin_user=admin_user)
-        _seed_submissions(teacher_user, course, students, admin_user=admin_user)
-        today = timezone.now().strftime("%Y-%m-%d")
-        api_client.force_authenticate(user=researcher_user)
-        resp = api_client.get(CROSS_SUBS_URL + f"?startDate={today}&endDate={today}")
-        rows = _parse_csv(resp)
-        assert set(rows[0].keys()) == {
-            "consent", "assessmentCategory", "gradingMode", "status", "score", "submittedAt"
-        }
-
-    def test_EXP_UC_03_RESEARCHER_identifiable(self, api_client, researcher_user, teacher_user, admin_user):
-        """Researcher with sudo + identifiable=true sees PII on cross-course."""
-        course, students = _seed_course(teacher_user, admin_user=admin_user)
-        _seed_submissions(teacher_user, course, students, admin_user=admin_user)
-        SudoGrant.objects.create(
-            user=researcher_user,
-            granted_by=admin_user,
-            permissions=[SudoPermission.EXPORT_IDENTIFIABLE],
-        )
-        today = timezone.now().strftime("%Y-%m-%d")
-        api_client.force_authenticate(user=researcher_user)
-        resp = api_client.get(CROSS_SUBS_URL + f"?startDate={today}&endDate={today}&identifiable=true")
-        assert resp.status_code == 200
-        rows = _parse_csv(resp)
-        assert "studentId" in rows[0]
-        assert "courseId" in rows[0]
-
-    def test_EXP_UC_03_E1_teacher_blocked(self, api_client, teacher_user, admin_user):
-        """Teacher is forbidden from cross-course endpoint."""
-        today = timezone.now().strftime("%Y-%m-%d")
-        api_client.force_authenticate(user=teacher_user)
-        resp = api_client.get(CROSS_SUBS_URL + f"?startDate={today}&endDate={today}")
-        assert resp.status_code == 403
-
-    def test_EXP_UC_03_E1_student_blocked(self, api_client, student_user):
-        """Student is forbidden from cross-course endpoint."""
-        today = timezone.now().strftime("%Y-%m-%d")
-        api_client.force_authenticate(user=student_user)
-        resp = api_client.get(CROSS_SUBS_URL + f"?startDate={today}&endDate={today}")
-        assert resp.status_code == 403
-
-    def test_EXP_UC_03_E2_missing_date_range(self, api_client, admin_user):
-        """Missing startDate/endDate returns 400."""
-        api_client.force_authenticate(user=admin_user)
-        # Missing both
-        resp = api_client.get(CROSS_SUBS_URL)
-        assert resp.status_code == 400
-        assert "startDate" in resp.json()["detail"]
-
-        # Missing endDate
-        resp = api_client.get(CROSS_SUBS_URL + "?startDate=2026-01-01")
-        assert resp.status_code == 400
-
-        # Missing startDate
-        resp = api_client.get(CROSS_SUBS_URL + "?endDate=2026-01-01")
-        assert resp.status_code == 400
-        assert ExportAuditLog.objects.filter(user=admin_user).count() == 3
-
-    def test_EXP_UC_03_E5_no_sudo(self, api_client, researcher_user, teacher_user, admin_user):
-        """Researcher without sudo requesting identifiable=true gets 403."""
-        course, students = _seed_course(teacher_user, admin_user=admin_user)
-        _seed_submissions(teacher_user, course, students, admin_user=admin_user)
-        today = timezone.now().strftime("%Y-%m-%d")
-        api_client.force_authenticate(user=researcher_user)
-        resp = api_client.get(
-            CROSS_SUBS_URL + f"?startDate={today}&endDate={today}&identifiable=true"
-        )
-        assert resp.status_code == 403
-
-    def test_EXP_UC_03_E4_invalid_include_answers_boolean(
-        self, api_client, admin_user, teacher_user
-    ):
-        """Invalid includeAnswers boolean returns 400."""
-        course, students = _seed_course(teacher_user, admin_user=admin_user)
-        _seed_submissions(teacher_user, course, students, admin_user=admin_user)
-        today = timezone.now().strftime("%Y-%m-%d")
-        api_client.force_authenticate(user=admin_user)
-        resp = api_client.get(
-            CROSS_SUBS_URL + f"?startDate={today}&endDate={today}&includeAnswers=maybe"
-        )
-        assert resp.status_code == 400
-
-    def test_EXP_UC_03_E4_invalid_status_value(self, api_client, admin_user, teacher_user):
-        """Invalid submission status filter returns 400."""
-        course, students = _seed_course(teacher_user, admin_user=admin_user)
-        _seed_submissions(teacher_user, course, students, admin_user=admin_user)
-        today = timezone.now().strftime("%Y-%m-%d")
-        api_client.force_authenticate(user=admin_user)
-        resp = api_client.get(
-            CROSS_SUBS_URL + f"?startDate={today}&endDate={today}&status=BAD_STATUS"
-        )
-        assert resp.status_code == 400
-
-    def test_EXP_CN_06_audit_cross_course(self, api_client, admin_user, teacher_user):
-        """Audit log for cross-course export has scope_course=None."""
-        course, students = _seed_course(teacher_user, admin_user=admin_user)
-        _seed_submissions(teacher_user, course, students, admin_user=admin_user)
-        today = timezone.now().strftime("%Y-%m-%d")
-        api_client.force_authenticate(user=admin_user)
-        api_client.get(CROSS_SUBS_URL + f"?startDate={today}&endDate={today}")
-        log = ExportAuditLog.objects.filter(user=admin_user).first()
-        assert log is not None
-        assert log.scope_course is None
-        assert log.export_type == "submissions"
-
-    def test_EXP_CN_05_cross_course_headers(self, api_client, admin_user, teacher_user):
-        """Streaming CSV headers on cross-course endpoint."""
-        course, students = _seed_course(teacher_user, admin_user=admin_user)
-        _seed_submissions(teacher_user, course, students, admin_user=admin_user)
-        today = timezone.now().strftime("%Y-%m-%d")
-        api_client.force_authenticate(user=admin_user)
-        resp = api_client.get(CROSS_SUBS_URL + f"?startDate={today}&endDate={today}")
-        assert "submissions-cross-course" in resp["Content-Disposition"]
-        assert resp["X-Export-Row-Count"] == "3"
+        resp = api_client.get("/api/v1/exports/submissions")
+        assert resp.status_code == 404

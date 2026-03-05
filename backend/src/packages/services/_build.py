@@ -18,7 +18,6 @@ from django.utils import timezone
 from courses.models import Course
 from exports.services import (
     export_course_submissions,
-    export_cross_course_submissions,
     export_roster,
     resolve_anonymization,
 )
@@ -46,12 +45,16 @@ ARTIFACT_DIR = os.path.join(
 ARTIFACT_RETENTION_HOURS = 72
 
 
-def execute_build(job: PackageBuildJob) -> PackageBuildJob:
+def execute_build(
+    job: PackageBuildJob,
+    *,
+    include_metadata_files: bool = True,
+) -> PackageBuildJob:
     """Run a build job synchronously.
 
     1. Validate workspace.
     2. Materialize each file node into CSV bytes.
-    3. Generate MANIFEST.json + CHECKSUMS.txt.
+    3. Optionally generate MANIFEST.json + CHECKSUMS.txt.
     4. Zip everything and persist artifact metadata.
     """
     job.status = BuildStatus.RUNNING
@@ -152,7 +155,7 @@ def execute_build(job: PackageBuildJob) -> PackageBuildJob:
                     }
                 )
 
-        # 3. Generate manifest
+        # 3. Generate manifest for audit/persistence (optionally included in ZIP)
         manifest = _build_manifest(
             workspace,
             job,
@@ -163,12 +166,14 @@ def execute_build(job: PackageBuildJob) -> PackageBuildJob:
         )
         manifest_bytes = json.dumps(manifest, indent=2, default=str).encode("utf-8")
 
-        # 4. Generate checksums file
-        checksums_lines = [f"{sha}  {path}" for path, sha in sorted(checksums.items())]
-        # Include MANIFEST.json checksum
-        manifest_sha = hashlib.sha256(manifest_bytes).hexdigest()
-        checksums_lines.append(f"{manifest_sha}  MANIFEST.json")
-        checksums_bytes = "\n".join(checksums_lines).encode("utf-8")
+        checksums_bytes: bytes | None = None
+        if include_metadata_files:
+            # 4. Generate checksums file
+            checksums_lines = [f"{sha}  {path}" for path, sha in sorted(checksums.items())]
+            # Include MANIFEST.json checksum
+            manifest_sha = hashlib.sha256(manifest_bytes).hexdigest()
+            checksums_lines.append(f"{manifest_sha}  MANIFEST.json")
+            checksums_bytes = "\n".join(checksums_lines).encode("utf-8")
 
         # 5. Write zip
         os.makedirs(ARTIFACT_DIR, exist_ok=True)
@@ -178,8 +183,10 @@ def execute_build(job: PackageBuildJob) -> PackageBuildJob:
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for path, data in sorted(file_contents.items()):
                 zf.writestr(path, data)
-            zf.writestr("MANIFEST.json", manifest_bytes)
-            zf.writestr("CHECKSUMS.txt", checksums_bytes)
+            if include_metadata_files:
+                zf.writestr("MANIFEST.json", manifest_bytes)
+                if checksums_bytes is not None:
+                    zf.writestr("CHECKSUMS.txt", checksums_bytes)
 
         file_size = os.path.getsize(zip_path)
 
@@ -243,20 +250,6 @@ def _materialize_node(node, user) -> bytes:
             category=filters.get("category"),
             assessment_id=filters.get("assessmentId"),
             assignment_id=filters.get("assignmentId"),
-            status_filter=filters.get("status"),
-            include_answers=node.include_answers,
-            identifiable=is_identifiable,
-        )
-        return b"".join(gen)
-
-    if node.dataset_binding == DatasetBinding.CROSS_COURSE_SUBMISSIONS:
-        filters = node.filters or {}
-        gen, _count, _anon = export_cross_course_submissions(
-            user,
-            start_date=filters.get("startDate"),
-            end_date=filters.get("endDate"),
-            category=filters.get("category"),
-            assessment_id=filters.get("assessmentId"),
             status_filter=filters.get("status"),
             include_answers=node.include_answers,
             identifiable=is_identifiable,

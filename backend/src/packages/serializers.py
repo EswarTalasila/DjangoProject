@@ -77,6 +77,7 @@ class ValidateWorkspaceSerializer(serializers.Serializer):
 class BuildWorkspaceSerializer(serializers.Serializer):
     strictMode = serializers.BooleanField(required=False, default=True)
     snapshotId = serializers.IntegerField(required=False, allow_null=True)
+    includeMetadataFiles = serializers.BooleanField(required=False, default=True)
 
 
 class CreateSnapshotSerializer(serializers.Serializer):

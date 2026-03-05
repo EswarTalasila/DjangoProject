@@ -17,7 +17,6 @@ class NodeType(models.TextChoices):
 class DatasetBinding(models.TextChoices):
     ROSTER = "ROSTER", "Roster"
     COURSE_SUBMISSIONS = "COURSE_SUBMISSIONS", "Course Submissions"
-    CROSS_COURSE_SUBMISSIONS = "CROSS_COURSE_SUBMISSIONS", "Cross-Course Submissions"
 
 
 class BuildStatus(models.TextChoices):
@@ -220,6 +219,7 @@ class DataSnapshot(models.Model):
 class PkgAuditAction(models.TextChoices):
     WORKSPACE_CREATE = "WORKSPACE_CREATE"
     WORKSPACE_UPDATE = "WORKSPACE_UPDATE"
+    WORKSPACE_DELETE = "WORKSPACE_DELETE"
     NODE_ADD = "NODE_ADD"
     NODE_UPDATE = "NODE_UPDATE"
     NODE_DELETE = "NODE_DELETE"

@@ -89,6 +89,16 @@ def _check_workspace_access(user, workspace):
     return None
 
 
+def _cleanup_legacy_cross_course_nodes(workspace: PackageWorkspace) -> None:
+    """Remove legacy nodes that use removed CROSS_COURSE_SUBMISSIONS binding."""
+    deleted, _ = workspace.nodes.filter(
+        dataset_binding="CROSS_COURSE_SUBMISSIONS"
+    ).delete()
+    if deleted:
+        workspace.revision += 1
+        workspace.save(update_fields=["revision", "updated_at"])
+
+
 def _workspace_to_dict(workspace):
     nodes = list(workspace.nodes.select_related("parent").order_by("order_index", "id"))
     return {
@@ -205,6 +215,8 @@ def workspace_detail(request, workspace_id):
     access_err = _check_workspace_access(request.user, ws)
     if access_err:
         return access_err
+
+    _cleanup_legacy_cross_course_nodes(ws)
 
     if request.method == "GET":
         return Response(_workspace_to_dict(ws))
@@ -457,6 +469,8 @@ def validate_workspace_view(request, workspace_id):
     if access_err:
         return access_err
 
+    _cleanup_legacy_cross_course_nodes(ws)
+
     ser = ValidateWorkspaceSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
 
@@ -498,6 +512,8 @@ def build_workspace_view(request, workspace_id):
     if access_err:
         return access_err
 
+    _cleanup_legacy_cross_course_nodes(ws)
+
     ser = BuildWorkspaceSerializer(data=request.data)
     ser.is_valid(raise_exception=True)
 
@@ -509,7 +525,10 @@ def build_workspace_view(request, workspace_id):
     )
 
     # Execute synchronously for now (async upgrade is future work)
-    job = run_build(job)
+    job = run_build(
+        job,
+        include_metadata_files=ser.validated_data.get("includeMetadataFiles", True),
+    )
 
     if job.status == BuildStatus.FAILED:
         return Response(_job_to_dict(job), status=status.HTTP_422_UNPROCESSABLE_ENTITY)

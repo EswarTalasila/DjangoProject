@@ -18,15 +18,6 @@ export type CourseSubmissionsExportParams = BaseExportParams & {
   includeAnswers?: boolean;
 };
 
-export type CrossCourseExportParams = BaseExportParams & {
-  startDate: string;
-  endDate: string;
-  category?: string;
-  assessmentId?: number;
-  status?: string;
-  includeAnswers?: boolean;
-};
-
 export type ExportDownload = {
   blob: Blob;
   filename: string;
@@ -71,16 +62,6 @@ export async function downloadCourseSubmissions(
     `/exports/courses/${courseId}/submissions`,
     params,
     `submissions-course-${courseId}.csv`,
-  );
-}
-
-export async function downloadCrossCourseSubmissions(
-  params: CrossCourseExportParams,
-): Promise<ExportDownload> {
-  return getCsv(
-    '/exports/submissions',
-    params,
-    'submissions-cross-course.csv',
   );
 }
 

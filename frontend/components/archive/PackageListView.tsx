@@ -1,10 +1,20 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Package, Plus, RefreshCw } from 'lucide-react';
+import { Package, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Dialog,
   DialogContent,
@@ -26,6 +36,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { listCourses, type CourseSummary } from '@/lib/course-api';
 import {
   createWorkspace,
+  deleteWorkspace,
   listWorkspaces,
   type PackageWorkspace,
 } from '@/lib/package-api';
@@ -49,6 +60,9 @@ export default function PackageListView({
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<PackageWorkspace | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [createName, setCreateName] = useState('');
   const [createDescription, setCreateDescription] = useState('');
@@ -100,6 +114,21 @@ export default function PackageListView({
     }
   }
 
+  async function handleDelete() {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await deleteWorkspace(deleteTarget.id);
+      setPackages((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+      toast.success(`"${deleteTarget.name}" deleted.`);
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -141,7 +170,7 @@ export default function PackageListView({
                 <div className="space-y-1">
                   <Label>
                     Associated Course
-                    <HelpTip text="Scope this package to a single course, or leave as 'All' for cross-course data." />
+                    <HelpTip text="Scope this package to a single course or leave as 'All' to manage multiple course-specific files in one package." />
                   </Label>
                   <Select value={createCourseId} onValueChange={setCreateCourseId}>
                     <SelectTrigger>
@@ -213,7 +242,20 @@ export default function PackageListView({
             >
               <div className="flex items-start justify-between gap-2">
                 <span className="font-semibold text-foreground">{pkg.name}</span>
-                <StatusBadge status={pkg.status} />
+                <div className="flex items-center gap-1.5">
+                  <StatusBadge status={pkg.status} />
+                  <button
+                    type="button"
+                    className="rounded p-1 text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                    title="Delete package"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(pkg);
+                    }}
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
               </div>
               <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
                 {pkg.description || '\u2014'}
@@ -225,6 +267,30 @@ export default function PackageListView({
           ))}
         </div>
       )}
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={deleteTarget != null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Package</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete &ldquo;{deleteTarget?.name}&rdquo;? This
+              will permanently remove the workspace and all its nodes. This action
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void handleDelete()}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

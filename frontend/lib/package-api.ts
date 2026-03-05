@@ -2,7 +2,7 @@ import api from '@/lib/api';
 
 export type WorkspaceStatus = 'DRAFT' | 'SEALED';
 export type NodeType = 'FOLDER' | 'FILE';
-export type DatasetBinding = 'ROSTER' | 'COURSE_SUBMISSIONS' | 'CROSS_COURSE_SUBMISSIONS';
+export type DatasetBinding = 'ROSTER' | 'COURSE_SUBMISSIONS';
 export type BuildStatus = 'QUEUED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
 
 export type PackageNode = {
@@ -208,7 +208,11 @@ export async function validateWorkspace(
 
 export async function buildWorkspace(
   workspaceId: number,
-  payload?: { strictMode?: boolean; snapshotId?: number | null },
+  payload?: {
+    strictMode?: boolean;
+    snapshotId?: number | null;
+    includeMetadataFiles?: boolean;
+  },
 ): Promise<BuildJob> {
   const { data } = await api.post<BuildJob>(`/packages/workspaces/${workspaceId}/build`, payload ?? {});
   return data;

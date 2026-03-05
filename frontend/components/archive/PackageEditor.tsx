@@ -93,7 +93,6 @@ type NodeBindingForm = {
 const DATA_SOURCES: Array<{ value: DatasetBinding; label: string }> = [
   { value: 'ROSTER', label: 'Roster CSV' },
   { value: 'COURSE_SUBMISSIONS', label: 'Course Submissions CSV' },
-  { value: 'CROSS_COURSE_SUBMISSIONS', label: 'Cross-Course Submissions CSV' },
 ];
 
 const NONE_SELECT = '__ROOT__';
@@ -167,7 +166,6 @@ function FileIcon({
     case 'ROSTER':
       return <Users className="size-4 text-green-500" />;
     case 'COURSE_SUBMISSIONS':
-    case 'CROSS_COURSE_SUBMISSIONS':
       return <FileText className="size-4 text-purple-500" />;
     default:
       return <File className="size-4 text-sky-500" />;
@@ -210,6 +208,7 @@ export default function PackageEditor({
   });
 
   const [strictMode, setStrictMode] = useState(true);
+  const [includeMetadataFiles, setIncludeMetadataFiles] = useState(true);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [buildResult, setBuildResult] = useState<BuildJob | null>(null);
 
@@ -630,6 +629,7 @@ export default function PackageEditor({
       );
       const job = await buildWorkspace(workspace.id, {
         strictMode,
+        includeMetadataFiles,
       });
       setBuildResult(job);
       if (job.status === 'COMPLETED') {
@@ -1176,7 +1176,6 @@ export default function PackageEditor({
               className="flex-1 overflow-y-auto px-3 pb-3"
             >
               <DataCatalog
-                role={role}
                 onAddItem={handleAddFromCatalog}
               />
             </TabsContent>
@@ -1392,6 +1391,8 @@ export default function PackageEditor({
         role={role}
         strictMode={strictMode}
         onStrictModeChange={setStrictMode}
+        includeMetadataFiles={includeMetadataFiles}
+        onIncludeMetadataFilesChange={setIncludeMetadataFiles}
         validationResult={validationResult}
         buildResult={buildResult}
         isValidating={isValidating}

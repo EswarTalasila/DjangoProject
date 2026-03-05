@@ -27,6 +27,8 @@ type PackageBuildBarProps = {
   /* State */
   strictMode: boolean;
   onStrictModeChange: (value: boolean) => void;
+  includeMetadataFiles: boolean;
+  onIncludeMetadataFilesChange: (value: boolean) => void;
   validationResult: ValidationResult | null;
   buildResult: BuildJob | null;
   /* Loading flags */
@@ -44,6 +46,8 @@ export default function PackageBuildBar({
   role,
   strictMode,
   onStrictModeChange,
+  includeMetadataFiles,
+  onIncludeMetadataFilesChange,
   validationResult,
   buildResult,
   isValidating,
@@ -145,6 +149,16 @@ export default function PackageBuildBar({
               />
               Strict mode
               <HelpTip text="Stop validation on the first problem found instead of collecting all issues." />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Checkbox
+                checked={includeMetadataFiles}
+                onCheckedChange={(checked) =>
+                  onIncludeMetadataFilesChange(checked === true)
+                }
+              />
+              Include metadata files
+              <HelpTip text="Adds MANIFEST.json and CHECKSUMS.txt to the ZIP. Disable for a clean folders/files-only download." />
             </label>
             <p className="text-xs text-muted-foreground">
               Live data is automatically snapshotted at build start.

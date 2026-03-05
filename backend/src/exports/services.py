@@ -17,7 +17,6 @@ from .models import ExportAuditLog
 
 # ── Row caps (EXP-CN-03 / EXP-CN-04) ────────────────────────────────
 COURSE_SCOPED_CAP = 10_000
-CROSS_COURSE_CAP = 5_000
 
 # ── CSV pseudo-buffer (one-row-at-a-time pattern) ────────────────────
 UTF8_BOM = b"\xef\xbb\xbf"
@@ -47,16 +46,6 @@ COURSE_SUB_COLS_ANONYMIZED = [
     "score", "submittedAt",
 ]
 
-CROSS_SUB_COLS_IDENTIFIABLE = [
-    "courseId", "courseName",
-    "studentId", "studentName", "studentUsername", "consent",
-    "assignmentId", "assessmentTitle", "assessmentCategory",
-    "gradingMode", "status", "score", "submittedAt",
-]
-CROSS_SUB_COLS_ANONYMIZED = [
-    "consent", "assessmentCategory", "gradingMode", "status",
-    "score", "submittedAt",
-]
 
 
 # ── Anonymization resolver (EXP-CN-01) ───────────────────────────────
@@ -321,98 +310,3 @@ def export_course_submissions(
 
     return _generate(), row_count, not identifiable
 
-
-def export_cross_course_submissions(
-    user,
-    *,
-    start_date,
-    end_date,
-    category=None,
-    assessment_id=None,
-    status_filter=None,
-    include_answers=False,
-    identifiable=True,
-):
-    """
-    Generate streaming CSV for cross-course submission export (EXP-UC-03).
-
-    Returns (generator, row_count, is_anonymized).
-    """
-    qs = Submission.objects.filter(
-        submitted_at__gte=start_date,
-        submitted_at__lte=end_date,
-    ).select_related(
-        "assignment__assessment", "assignment__course", "student",
-    )
-
-    if category:
-        qs = qs.filter(assignment__assessment__category=category)
-    if assessment_id:
-        qs = qs.filter(assignment__assessment_id=assessment_id)
-    if status_filter:
-        qs = qs.filter(status=status_filter)
-
-    if include_answers:
-        qs = qs.prefetch_related(
-            "answers__question",
-            "answers__multiple_choice__selected",
-            "answers__short_answer",
-            "answers__number_scale",
-        )
-
-    row_count = qs.count()
-
-    cols = CROSS_SUB_COLS_IDENTIFIABLE if identifiable else CROSS_SUB_COLS_ANONYMIZED
-    if include_answers:
-        cols = [*cols, "answers"]
-
-    _log_audit(
-        user=user,
-        export_type="submissions",
-        scope_course=None,
-        filters={
-            "startDate": str(start_date),
-            "endDate": str(end_date),
-            "category": category,
-            "assessmentId": assessment_id,
-            "status": status_filter,
-            "includeAnswers": include_answers,
-        },
-        identifiable=identifiable,
-        row_count=row_count,
-    )
-
-    def _generate():
-        buf, writer = _make_writer()
-        yield UTF8_BOM + writer.writerow(cols).encode("utf-8")
-        for sub in qs.iterator(chunk_size=2000):
-            student = sub.student
-            assessment = sub.assignment.assessment
-            course = sub.assignment.course
-            consent = ""
-            if student:
-                try:
-                    consent = student.student_profile.consent
-                except Exception:
-                    consent = ""
-            data = {
-                "courseId": course.id if course else "",
-                "courseName": course.name if course else "",
-                "studentId": student.id if student else "",
-                "studentName": student.name if student else "",
-                "studentUsername": student.username if student else "",
-                "consent": consent,
-                "assignmentId": sub.assignment_id,
-                "assessmentTitle": assessment.title if assessment else "",
-                "assessmentCategory": assessment.category if assessment else "",
-                "gradingMode": assessment.grading_mode if assessment else "",
-                "status": sub.status,
-                "score": sub.score,
-                "submittedAt": sub.submitted_at.isoformat() if sub.submitted_at else "",
-            }
-            if include_answers:
-                data["answers"] = _serialize_answers(sub, identifiable)
-            row_str = writer.writerow([_csv_val(data.get(c)) for c in cols])
-            yield row_str.encode("utf-8")
-
-    return _generate(), row_count, not identifiable

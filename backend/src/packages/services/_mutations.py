@@ -259,9 +259,13 @@ def create_build_job(
     return job
 
 
-def run_build(job: PackageBuildJob) -> PackageBuildJob:
+def run_build(
+    job: PackageBuildJob,
+    *,
+    include_metadata_files: bool = True,
+) -> PackageBuildJob:
     """Execute build (called after job creation, outside transaction)."""
-    return execute_build(job)
+    return execute_build(job, include_metadata_files=include_metadata_files)
 
 
 # ── Download audit ───────────────────────────────────────────────────

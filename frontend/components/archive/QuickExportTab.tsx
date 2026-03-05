@@ -6,7 +6,6 @@ import {
   CalendarDays,
   ClipboardList,
   Download,
-  Files,
   FileText,
   TableProperties,
   Users,
@@ -30,7 +29,6 @@ import { listCourses, type CourseSummary } from '@/lib/course-api';
 import {
   downloadCourseRoster,
   downloadCourseSubmissions,
-  downloadCrossCourseSubmissions,
   extractExportErrorMessage,
 } from '@/lib/export-api';
 import { triggerBrowserDownload } from '@/lib/utils';
@@ -89,17 +87,6 @@ export default function QuickExportTab({ role, canExportIdentifiable }: QuickExp
   const [subsIncludeAnswers, setSubsIncludeAnswers] = useState(false);
   const [subsIdentifiable, setSubsIdentifiable] = useState(false);
   const [downloadingSubs, setDownloadingSubs] = useState(false);
-
-  /* ---- cross-course submissions state ---- */
-  const [crossStartDate, setCrossStartDate] = useState('');
-  const [crossEndDate, setCrossEndDate] = useState('');
-  const [crossCategory, setCrossCategory] = useState(NONE);
-  const [crossStatus, setCrossStatus] = useState(NONE);
-  const [crossIncludeAnswers, setCrossIncludeAnswers] = useState(false);
-  const [crossIdentifiable, setCrossIdentifiable] = useState(false);
-  const [downloadingCross, setDownloadingCross] = useState(false);
-
-  const canUseCrossCourse = role === 'RESEARCHER' || role === 'ADMIN';
 
   /* ---- load courses on mount ---- */
   useEffect(() => {
@@ -180,31 +167,6 @@ export default function QuickExportTab({ role, canExportIdentifiable }: QuickExp
       toast.error(await extractExportErrorMessage(error));
     } finally {
       setDownloadingSubs(false);
-    }
-  }
-
-  async function handleCrossDownload() {
-    if (!canUseCrossCourse) return;
-    if (!crossStartDate || !crossEndDate) {
-      toast.error('A date range is required for this download.');
-      return;
-    }
-    setDownloadingCross(true);
-    try {
-      const { blob, filename } = await downloadCrossCourseSubmissions({
-        startDate: crossStartDate,
-        endDate: crossEndDate,
-        category: val(crossCategory),
-        status: val(crossStatus),
-        includeAnswers: crossIncludeAnswers || undefined,
-        identifiable: crossIdentifiable || undefined,
-      });
-      triggerBrowserDownload(blob, filename);
-      toast.success('Download started.');
-    } catch (error) {
-      toast.error(await extractExportErrorMessage(error));
-    } finally {
-      setDownloadingCross(false);
     }
   }
 
@@ -398,102 +360,6 @@ export default function QuickExportTab({ role, canExportIdentifiable }: QuickExp
           </Button>
         </div>
       </ExportCard>
-
-      {/* ── Card 3: All Submissions (cross-course, hidden for TEACHER) ── */}
-      {canUseCrossCourse && (
-        <ExportCard
-          icon={<Files className="size-5" />}
-          title="All Submissions"
-          description="Download submission records across all courses. A date range is required."
-          helpText="Export submission data across every course as a single CSV file."
-        >
-          <div className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-3">
-              {/* Date range (required) */}
-              <div className="space-y-1">
-                <Label>From <HelpTip text="Filter to submissions within this date range." /></Label>
-                <Input
-                  type="date"
-                  value={crossStartDate}
-                  onChange={(e) => setCrossStartDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>To <HelpTip text="Filter to submissions within this date range." /></Label>
-                <Input
-                  type="date"
-                  value={crossEndDate}
-                  onChange={(e) => setCrossEndDate(e.target.value)}
-                />
-              </div>
-
-              {/* Category filter */}
-              <div className="space-y-1">
-                <Label>Category <HelpTip text="Filter by assignment category (Quiz, Exam, Homework, etc.)." /></Label>
-                <Select value={crossCategory} onValueChange={setCrossCategory}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORY_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Status filter */}
-              <div className="space-y-1">
-                <Label>Status <HelpTip text="Filter by submission status." /></Label>
-                <Select value={crossStatus} onValueChange={setCrossStatus}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SUBMISSION_STATUS_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Checkboxes */}
-              <div className="flex flex-col justify-end gap-3">
-                <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Checkbox
-                    checked={crossIncludeAnswers}
-                    onCheckedChange={(checked) => setCrossIncludeAnswers(checked === true)}
-                  />
-                  Include student answers
-                  <HelpTip text="Include the full text of student responses in the export." />
-                </label>
-                {canExportIdentifiable && (
-                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Checkbox
-                      checked={crossIdentifiable}
-                      onCheckedChange={(checked) => setCrossIdentifiable(checked === true)}
-                    />
-                    Include names &amp; emails
-                    <HelpTip text="Include student names and email addresses. Requires EXPORT_IDENTIFIABLE permission." />
-                  </label>
-                )}
-              </div>
-            </div>
-
-            <Button
-              onClick={() => void handleCrossDownload()}
-              disabled={downloadingCross || !crossStartDate || !crossEndDate}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              {downloadingCross ? 'Downloading...' : 'Download All Submissions'}
-            </Button>
-          </div>
-        </ExportCard>
-      )}
 
       {/* ── Placeholder Cards (future export types) ── */}
       <ExportCard

@@ -16,7 +16,6 @@ from django.utils import timezone
 from courses.models import Course
 from exports.services import (
     export_course_submissions,
-    export_cross_course_submissions,
     export_roster,
     resolve_anonymization,
 )
@@ -164,20 +163,6 @@ def _materialize_snapshot(snapshot: DataSnapshot, user, is_identifiable: bool):
             category=filters.get("category"),
             assessment_id=filters.get("assessmentId"),
             assignment_id=filters.get("assignmentId"),
-            status_filter=filters.get("status"),
-            include_answers=snapshot.include_answers,
-            identifiable=is_identifiable,
-        )
-        return b"".join(gen), row_count, course_name
-
-    if snapshot.dataset_binding == DatasetBinding.CROSS_COURSE_SUBMISSIONS:
-        filters = snapshot.filters or {}
-        gen, row_count, _anon = export_cross_course_submissions(
-            user,
-            start_date=filters.get("startDate"),
-            end_date=filters.get("endDate"),
-            category=filters.get("category"),
-            assessment_id=filters.get("assessmentId"),
             status_filter=filters.get("status"),
             include_answers=snapshot.include_answers,
             identifiable=is_identifiable,

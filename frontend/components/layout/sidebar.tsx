@@ -10,10 +10,10 @@ import {
   FileText,
   CheckSquare,
   KeyRound,
-  LibraryBig,
   Shield,
   Users,
   TrendingUp,
+  Archive,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -26,8 +26,8 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
   "Assignments & Grading": CheckSquare,
   Registration: KeyRound,
   Analytics: TrendingUp,
-  Exports: LibraryBig,
-  "Data & Exports": LibraryBig,
+  Exports: Archive,
+  "Data & Exports": Archive,
   Users: Users,
   Delegation: Shield,
 };

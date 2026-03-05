@@ -4,7 +4,6 @@ FR-10 Export endpoints — streaming CSV exports for roster and submissions.
 Endpoints:
     GET /api/v1/exports/courses/{courseId}/roster      (EXP-UC-01)
     GET /api/v1/exports/courses/{courseId}/submissions  (EXP-UC-02)
-    GET /api/v1/exports/submissions                    (EXP-UC-03)
 """
 
 import datetime as dt
@@ -16,15 +15,13 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from accounts.models import Role
-from core.permissions import IsResearcherOrAdmin, IsTeacherOrAbove, has_role
+from core.permissions import IsTeacherOrAbove, has_role
 from courses.models import Course, EnrollmentStatus
 from submissions.models import SubmissionStatus
 
 from .services import (
     COURSE_SCOPED_CAP,
-    CROSS_COURSE_CAP,
     export_course_submissions,
-    export_cross_course_submissions,
     export_roster,
     log_export_audit,
     resolve_anonymization,
@@ -340,140 +337,3 @@ def course_submissions(request, course_id):
         f"submissions-course-{course_id}-{today}.csv",
     )
 
-
-# ── EXP-UC-03 — Cross-Course Submission Export ───────────────────────
-
-@api_view(["GET"])
-@permission_classes([IsResearcherOrAdmin])
-def cross_course_submissions(request):
-    """GET /api/v1/exports/submissions"""
-    params = request.query_params
-    filters = {
-        "startDate": params.get("startDate"),
-        "endDate": params.get("endDate"),
-        "category": params.get("category"),
-        "assessmentId": params.get("assessmentId"),
-        "status": params.get("status"),
-        "includeAnswers": params.get("includeAnswers"),
-        "identifiable": params.get("identifiable"),
-    }
-    identifiable = False
-
-    # Required date range (EXP-CN-04)
-    raw_start = params.get("startDate")
-    raw_end = params.get("endDate")
-    if not raw_start or not raw_end:
-        _audit_failure(
-            request.user, "submissions", None, filters, identifiable=False, row_count=0
-        )
-        return Response(
-            {"detail": "Cross-course export requires startDate and endDate filters"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    start_date = _parse_date(raw_start)
-    end_date = _parse_date(raw_end, end_of_day=True)
-    if start_date == "invalid" or end_date == "invalid":
-        _audit_failure(
-            request.user, "submissions", None, filters, identifiable=False, row_count=0
-        )
-        return Response(
-            {"detail": "Invalid date format. Use YYYY-MM-DD."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    assessment_id = _parse_int(params.get("assessmentId"))
-    if assessment_id == "invalid":
-        _audit_failure(
-            request.user, "submissions", None, filters, identifiable=False, row_count=0
-        )
-        return Response(
-            {"detail": "Invalid integer parameter."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # Anonymization
-    identifiable_param = _parse_bool(params.get("identifiable"))
-    if identifiable_param == "invalid":
-        _audit_failure(
-            request.user, "submissions", None, filters, identifiable=False, row_count=0
-        )
-        return Response(
-            {"detail": "Invalid boolean parameter."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    is_identifiable, anon_err = resolve_anonymization(request.user, identifiable_param)
-    identifiable = bool(is_identifiable)
-    if anon_err:
-        _audit_failure(
-            request.user, "submissions", None, filters, identifiable=False, row_count=0
-        )
-        return Response({"detail": anon_err}, status=status.HTTP_403_FORBIDDEN)
-
-    category = params.get("category")
-    status_filter = params.get("status")
-    include_answers = _parse_bool(params.get("includeAnswers"))
-    if include_answers == "invalid":
-        _audit_failure(
-            request.user, "submissions", None, filters, identifiable=identifiable, row_count=0
-        )
-        return Response(
-            {"detail": "Invalid boolean parameter."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-    include_answers = include_answers or False
-
-    if status_filter and status_filter not in SubmissionStatus.values:
-        _audit_failure(
-            request.user, "submissions", None, filters, identifiable=identifiable, row_count=0
-        )
-        return Response(
-            {"detail": "Invalid status value."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # Row cap (EXP-CN-04) — estimate with same filters
-    from submissions.models import Submission
-
-    qs = Submission.objects.filter(
-        submitted_at__gte=start_date,
-        submitted_at__lte=end_date,
-    )
-    if category:
-        qs = qs.filter(assignment__assessment__category=category)
-    if assessment_id:
-        qs = qs.filter(assignment__assessment_id=assessment_id)
-    if status_filter:
-        qs = qs.filter(status=status_filter)
-
-    count = qs.count()
-    if count > CROSS_COURSE_CAP:
-        _audit_failure(
-            request.user,
-            "submissions",
-            None,
-            filters,
-            identifiable=identifiable,
-            row_count=count,
-        )
-        return Response(
-            {"detail": "Export too large. Narrow date range or apply additional filters."},
-            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        )
-
-    generator, row_count, is_anonymized = export_cross_course_submissions(
-        request.user,
-        start_date=start_date,
-        end_date=end_date,
-        category=category,
-        assessment_id=assessment_id,
-        status_filter=status_filter,
-        include_answers=include_answers,
-        identifiable=is_identifiable,
-    )
-
-    today = timezone.now().strftime("%Y-%m-%d")
-    return _streaming_response(
-        generator, row_count, is_anonymized,
-        f"submissions-cross-course-{today}.csv",
-    )
