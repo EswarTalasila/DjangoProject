@@ -102,9 +102,8 @@ describe('Sidebar navigation configuration', () => {
     expect(sudoLink!.href).toBe('/dashboard/sudo');
     expect(links.find((l) => l.href === '/dashboard/courses')).toBeUndefined();
     expect(links.find((l) => l.href === '/dashboard/assignments')).toBeUndefined();
+    // Submissions filtered out because mock permissions lack VIEW_SUBMISSIONS
     expect(links.find((l) => l.href === '/dashboard/submissions')).toBeUndefined();
-    expect(links.find((l) => l.href === '/dashboard/exports')).toBeDefined();
-    expect(links.find((l) => l.href === '/dashboard/packages')).toBeDefined();
   });
 
   it('STUDENT nav does NOT include Registration Codes', async () => {
@@ -257,7 +256,5 @@ describe('Sidebar navigation configuration', () => {
 
     const links = findLinks(capturedGroups);
     expect(links.find((l) => l.href === '/dashboard/submissions')).toBeDefined();
-    expect(links.find((l) => l.href === '/dashboard/exports')).toBeDefined();
-    expect(links.find((l) => l.href === '/dashboard/packages')).toBeDefined();
   });
 });

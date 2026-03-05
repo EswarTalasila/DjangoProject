@@ -622,21 +622,5 @@ class TestENV_CN_03:
         # No ValidationError raised — dev doesn't require strong secrets
 
 
-# ===================================================================
-# ENV-CN-12 — Task and Compose Profile Explicitness
-# ===================================================================
-
-
-@pytest.mark.unit
-class TestENV_CN_12:
-    """ENV-CN-12: docker-compose explicitly sets ENVIRONMENT."""
-
-    def test_ENV_CN_12_compose_passes_environment(self):
-        """docker-compose.yml backend service includes ENVIRONMENT variable."""
-        from pathlib import Path
-
-        compose_path = Path(__file__).resolve().parents[4] / "docker-compose.yml"
-        if not compose_path.exists():
-            pytest.skip("docker-compose.yml not found at project root")
-        content = compose_path.read_text()
-        assert "ENVIRONMENT=" in content
+# ENV-CN-12 compose checks are covered by test_infrastructure_contracts.py
+# (TestINFRA_CN_02) which properly loads compose files via fixture.

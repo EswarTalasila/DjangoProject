@@ -1,21 +1,15 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockListCourses = vi.fn();
-const mockJoinCourseByCode = vi.fn();
-const mockToastSuccess = vi.fn();
-const mockToastInfo = vi.fn();
+const mockListMySubmissions = vi.fn();
 
 function setupModuleMocks() {
   vi.doMock("@/lib/course-api", () => ({
     listCourses: mockListCourses,
   }));
-  vi.doMock("@/lib/registration-code-api", () => ({
-    joinCourseByCode: mockJoinCourseByCode,
-  }));
-  vi.doMock("sonner", () => ({
-    toast: { success: mockToastSuccess, info: mockToastInfo },
+  vi.doMock("@/lib/submission-api", () => ({
+    listMySubmissions: mockListMySubmissions,
   }));
 }
 
@@ -31,140 +25,114 @@ describe("StudentView", () => {
     vi.clearAllMocks();
   });
 
-  it("renders join-course form and empty state when no courses", async () => {
+  it("renders dashboard heading and stats bar", async () => {
     mockListCourses.mockResolvedValueOnce([]);
+    mockListMySubmissions.mockResolvedValueOnce({ results: [] });
 
     const StudentView = await loadStudentView();
     render(<StudentView />);
 
-    expect(screen.getByLabelText("Course Code")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Join" })).toBeInTheDocument();
+    expect(screen.getByText("Student Dashboard")).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByText("No courses yet. Enter a course code above to get started.")).toBeInTheDocument();
+      expect(screen.getByText("In Progress")).toBeInTheDocument();
+      expect(screen.getByText("Submitted")).toBeInTheDocument();
+      expect(screen.getByText("Graded")).toBeInTheDocument();
     });
   });
 
-  it("renders enrolled courses when they exist", async () => {
+  it("shows empty state when no courses enrolled", async () => {
+    mockListCourses.mockResolvedValueOnce([]);
+    mockListMySubmissions.mockResolvedValueOnce({ results: [] });
+
+    const StudentView = await loadStudentView();
+    render(<StudentView />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("You are not enrolled in any courses yet.")
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows course count when enrolled", async () => {
     mockListCourses.mockResolvedValueOnce([
       { id: 1, name: "Biology 101", studentCount: 20, assignmentIds: [] },
-      { id: 2, name: "Chemistry 201", studentCount: 15, assignmentIds: [] },
+      { id: 2, name: "Physics 301", studentCount: 15, assignmentIds: [] },
     ]);
+    mockListMySubmissions.mockResolvedValueOnce({ results: [] });
 
     const StudentView = await loadStudentView();
     render(<StudentView />);
 
     await waitFor(() => {
-      expect(screen.getByText("Biology 101")).toBeInTheDocument();
-      expect(screen.getByText("Chemistry 201")).toBeInTheDocument();
+      expect(
+        screen.getByText("You are enrolled in 2 courses.")
+      ).toBeInTheDocument();
     });
   });
 
-  it("submits code, shows success toast, and refreshes course list", async () => {
+  it("shows submission stats breakdown", async () => {
     mockListCourses.mockResolvedValueOnce([]);
-    mockJoinCourseByCode.mockResolvedValueOnce({
-      message: "Invite redeemed",
-      courseId: 5,
-      alreadyEnrolled: false,
+    mockListMySubmissions.mockResolvedValueOnce({
+      results: [
+        { id: 1, assignmentId: 1, submittedAt: null, score: null, status: "IN_PROGRESS" },
+        { id: 2, assignmentId: 2, submittedAt: "2026-03-01", score: null, status: "SUBMITTED" },
+        { id: 3, assignmentId: 3, submittedAt: "2026-03-01", score: 85, status: "GRADED" },
+        { id: 4, assignmentId: 4, submittedAt: null, score: null, status: "NOT_STARTED" },
+      ],
     });
-    mockListCourses.mockResolvedValueOnce([
-      { id: 5, name: "Physics 301", studentCount: 10, assignmentIds: [] },
-    ]);
 
     const StudentView = await loadStudentView();
     render(<StudentView />);
 
-    const user = userEvent.setup();
     await waitFor(() => {
-      expect(screen.getByText("No courses yet. Enter a course code above to get started.")).toBeInTheDocument();
-    });
-
-    await user.type(screen.getByLabelText("Course Code"), "VALID-CODE");
-    await user.click(screen.getByRole("button", { name: "Join" }));
-
-    await waitFor(() => {
-      expect(mockJoinCourseByCode).toHaveBeenCalledWith("VALID-CODE");
-      expect(mockToastSuccess).toHaveBeenCalledWith("Successfully joined the course!");
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText("Physics 301")).toBeInTheDocument();
+      expect(
+        screen.getByText("2 in progress, 1 submitted, 1 graded.")
+      ).toBeInTheDocument();
     });
   });
 
-  it("shows info toast for already-enrolled and refreshes course list", async () => {
-    mockListCourses.mockResolvedValueOnce([
-      { id: 5, name: "Physics 301", studentCount: 10, assignmentIds: [] },
-    ]);
-    mockJoinCourseByCode.mockResolvedValueOnce({
-      message: "Already enrolled",
-      courseId: 5,
-      alreadyEnrolled: true,
-    });
-    mockListCourses.mockResolvedValueOnce([
-      { id: 5, name: "Physics 301", studentCount: 10, assignmentIds: [] },
-    ]);
-
-    const StudentView = await loadStudentView();
-    render(<StudentView />);
-
-    const user = userEvent.setup();
-    await waitFor(() => {
-      expect(screen.getByText("Physics 301")).toBeInTheDocument();
-    });
-
-    await user.type(screen.getByLabelText("Course Code"), "DUPE-CODE");
-    await user.click(screen.getByRole("button", { name: "Join" }));
-
-    await waitFor(() => {
-      expect(mockToastInfo).toHaveBeenCalledWith("You are already enrolled in this course.");
-    });
-
-    expect(mockListCourses).toHaveBeenCalledTimes(2);
-  });
-
-  it("shows inline error for invalid course code", async () => {
+  it("shows empty submission state", async () => {
     mockListCourses.mockResolvedValueOnce([]);
-    mockJoinCourseByCode.mockRejectedValueOnce({
-      response: { data: { detail: "Invalid or expired code." } },
-    });
+    mockListMySubmissions.mockResolvedValueOnce({ results: [] });
 
     const StudentView = await loadStudentView();
     render(<StudentView />);
 
-    const user = userEvent.setup();
     await waitFor(() => {
-      expect(screen.getByLabelText("Course Code")).toBeInTheDocument();
+      expect(
+        screen.getByText("No submissions yet. Start an assignment from your course page.")
+      ).toBeInTheDocument();
     });
-
-    await user.type(screen.getByLabelText("Course Code"), "BAD-CODE");
-    await user.click(screen.getByRole("button", { name: "Join" }));
-
-    await waitFor(() => {
-      expect(screen.getByText("Invalid or expired code.")).toBeInTheDocument();
-    });
-
-    expect(mockToastSuccess).not.toHaveBeenCalled();
-    expect(mockToastInfo).not.toHaveBeenCalled();
   });
 
-  it("shows validation error when submitting empty code", async () => {
+  it("renders navigation links to courses and submissions", async () => {
     mockListCourses.mockResolvedValueOnce([]);
+    mockListMySubmissions.mockResolvedValueOnce({ results: [] });
 
     const StudentView = await loadStudentView();
     render(<StudentView />);
 
-    const user = userEvent.setup();
     await waitFor(() => {
-      expect(screen.getByLabelText("Course Code")).toBeInTheDocument();
+      expect(screen.getByText("Open My Courses")).toBeInTheDocument();
+      expect(screen.getByText("Open My Submissions")).toBeInTheDocument();
     });
+  });
 
-    await user.click(screen.getByRole("button", { name: "Join" }));
+  it("handles array response from listMySubmissions", async () => {
+    mockListCourses.mockResolvedValueOnce([]);
+    mockListMySubmissions.mockResolvedValueOnce([
+      { id: 1, assignmentId: 1, submittedAt: null, score: null, status: "IN_PROGRESS" },
+    ]);
+
+    const StudentView = await loadStudentView();
+    render(<StudentView />);
 
     await waitFor(() => {
-      expect(screen.getByText("Course code is required")).toBeInTheDocument();
+      expect(
+        screen.getByText("1 in progress, 0 submitted, 0 graded.")
+      ).toBeInTheDocument();
     });
-
-    expect(mockJoinCourseByCode).not.toHaveBeenCalled();
   });
 });
