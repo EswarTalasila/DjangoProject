@@ -47,6 +47,7 @@ import {
   validateWorkspace,
   type WorkspaceStatus,
 } from '@/lib/package-api';
+import { toErrorMessage, triggerBrowserDownload } from '@/lib/utils';
 
 type PackageEditorProps = {
   workspaceId: number;
@@ -107,24 +108,6 @@ function buildChildrenMap(nodes: PackageNode[]) {
     map.set(key, bucket);
   }
   return map;
-}
-
-function toErrorMessage(error: unknown) {
-  return (
-    (error as { response?: { data?: { detail?: string } } })?.response?.data
-      ?.detail ?? 'Unexpected error.'
-  );
-}
-
-function triggerBrowserDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
 }
 
 /* ---------------------------------------------------------------------------
@@ -195,9 +178,13 @@ export default function PackageEditor({
 
   async function loadCourses() {
     if (coursesLoaded) return;
-    const list = await listCourses();
-    setCourses(list);
-    setCoursesLoaded(true);
+    try {
+      const list = await listCourses();
+      setCourses(list);
+      setCoursesLoaded(true);
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    }
   }
 
   function seedWorkspace(next: PackageWorkspace) {
@@ -364,34 +351,30 @@ export default function PackageEditor({
     setAddCursor(null);
   }
 
-  function updateSiblingOrder(
-    _nodes: PackageNode[],
+  async function updateSiblingOrder(
     nodeA: PackageNode,
     nodeB: PackageNode,
   ) {
     if (!workspace) return;
     setIsSavingNode(true);
-    Promise.resolve()
-      .then(() =>
-        Promise.all([
-          updateNode(workspace.id, nodeA.id, {
-            orderIndex: nodeB.orderIndex,
-            parentId: nodeA.parentId,
-          }),
-          updateNode(workspace.id, nodeB.id, {
-            orderIndex: nodeA.orderIndex,
-            parentId: nodeB.parentId,
-          }),
-        ]),
-      )
-      .then(() => refreshWorkspace())
-      .then(() => toast.success('Order updated.'))
-      .catch((error) => {
-        toast.error(toErrorMessage(error));
-      })
-      .finally(() => {
-        setIsSavingNode(false);
-      });
+    try {
+      await Promise.all([
+        updateNode(workspace.id, nodeA.id, {
+          orderIndex: nodeB.orderIndex,
+          parentId: nodeA.parentId,
+        }),
+        updateNode(workspace.id, nodeB.id, {
+          orderIndex: nodeA.orderIndex,
+          parentId: nodeB.parentId,
+        }),
+      ]);
+      await refreshWorkspace();
+      toast.success('Order updated.');
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    } finally {
+      setIsSavingNode(false);
+    }
   }
 
   async function handleMoveNode(node: PackageNode, direction: -1 | 1) {
@@ -405,7 +388,7 @@ export default function PackageEditor({
     const targetIndex = index + direction;
     if (index < 0 || targetIndex < 0 || targetIndex >= siblings.length) return;
     const target = siblings[targetIndex];
-    await updateSiblingOrder(siblings, node, target);
+    await updateSiblingOrder(node, target);
   }
 
   async function handleDeleteNode(node: PackageNode) {

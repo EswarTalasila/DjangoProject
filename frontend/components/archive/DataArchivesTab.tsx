@@ -31,15 +31,7 @@ import {
   restoreAssignment,
   purgeAssignment,
 } from '@/lib/lifecycle-api';
-
-// ── Helpers ──
-
-function toErrorMessage(error: unknown) {
-  return (
-    (error as { response?: { data?: { detail?: string } } })?.response?.data
-      ?.detail ?? 'Unexpected error.'
-  );
-}
+import { toErrorMessage } from '@/lib/utils';
 
 // ── Props ──
 
@@ -49,7 +41,8 @@ type DataArchivesTabProps = {
 
 // ── Component ──
 
-export default function DataArchivesTab({ role: _role }: DataArchivesTabProps) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- reserved for admin-only purge gating
+export default function DataArchivesTab({ role }: DataArchivesTabProps) {
   // -- Courses state --
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [loadingCourses, setLoadingCourses] = useState(true);
@@ -336,11 +329,11 @@ export default function DataArchivesTab({ role: _role }: DataArchivesTabProps) {
                       <td className="py-2 pr-4">{course.studentCount}</td>
                       <td className="py-2 pr-4">
                         {isArchived ? (
-                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600">
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800/40 dark:text-gray-400">
                             Archived
                           </span>
                         ) : (
-                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800">
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
                             Active
                           </span>
                         )}
@@ -459,11 +452,11 @@ export default function DataArchivesTab({ role: _role }: DataArchivesTabProps) {
                       <td className="py-2 pr-4">{assessment.category ?? '-'}</td>
                       <td className="py-2 pr-4">
                         {isArchived ? (
-                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600">
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800/40 dark:text-gray-400">
                             Archived
                           </span>
                         ) : (
-                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800">
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
                             Active
                           </span>
                         )}
@@ -586,11 +579,11 @@ export default function DataArchivesTab({ role: _role }: DataArchivesTabProps) {
                       </td>
                       <td className="py-2 pr-4">
                         {isArchived ? (
-                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600">
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800/40 dark:text-gray-400">
                             Archived
                           </span>
                         ) : (
-                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800">
+                          <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
                             Active
                           </span>
                         )}

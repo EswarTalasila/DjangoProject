@@ -1,56 +1,18 @@
-import api from '@/lib/api';
-import type { CourseSummary } from '@/lib/course-api';
-import type { Assessment } from '@/lib/assessment-api';
-import type { Assignment } from '@/lib/assignment-api';
-
-// -- Lifecycle state type --
+/**
+ * Centralized re-exports for lifecycle operations (archive / restore / purge).
+ *
+ * The canonical implementations live in each domain API file.
+ * This module exists so DataArchivesTab can import all lifecycle
+ * functions from a single location without reaching into three files.
+ */
 
 export type LifecycleStatus = 'ACTIVE' | 'ARCHIVED';
 
 // -- Course lifecycle --
-
-export async function archiveCourse(courseId: number): Promise<CourseSummary> {
-  const { data } = await api.post<CourseSummary>(`/courses/${courseId}/archive`, {});
-  return data;
-}
-
-export async function restoreCourse(courseId: number): Promise<CourseSummary> {
-  const { data } = await api.post<CourseSummary>(`/courses/${courseId}/restore`, {});
-  return data;
-}
-
-export async function purgeCourse(courseId: number): Promise<void> {
-  await api.delete(`/courses/${courseId}`);
-}
+export { archiveCourse, restoreCourse, deleteCourse as purgeCourse } from '@/lib/course-api';
 
 // -- Assessment lifecycle --
-
-export async function archiveAssessment(assessmentId: number): Promise<Assessment> {
-  const { data } = await api.post<Assessment>(`/assessments/${assessmentId}/archive`, {});
-  return data;
-}
-
-export async function restoreAssessment(assessmentId: number): Promise<Assessment> {
-  const { data } = await api.post<Assessment>(`/assessments/${assessmentId}/restore`, {});
-  return data;
-}
-
-export async function purgeAssessment(assessmentId: number): Promise<void> {
-  await api.delete(`/assessments/${assessmentId}`);
-}
+export { archiveAssessment, restoreAssessment, deleteAssessment as purgeAssessment } from '@/lib/assessment-api';
 
 // -- Assignment lifecycle --
-
-export async function archiveAssignment(assignmentId: number): Promise<Assignment> {
-  const { data } = await api.post<Assignment>(`/assignments/${assignmentId}/archive`, {});
-  return data;
-}
-
-export async function restoreAssignment(assignmentId: number): Promise<Assignment> {
-  const { data } = await api.post<Assignment>(`/assignments/${assignmentId}/restore`, {});
-  return data;
-}
-
-export async function purgeAssignment(assignmentId: number): Promise<void> {
-  await api.delete(`/assignments/${assignmentId}`);
-}
+export { archiveAssignment, restoreAssignment, deleteAssignment as purgeAssignment } from '@/lib/assignment-api';

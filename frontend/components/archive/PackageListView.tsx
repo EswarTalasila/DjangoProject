@@ -20,6 +20,7 @@ import {
   listWorkspaces,
   type PackageWorkspace,
 } from '@/lib/package-api';
+import { toErrorMessage } from '@/lib/utils';
 
 type PackageListViewProps = {
   role: 'TEACHER' | 'RESEARCHER' | 'ADMIN';
@@ -28,13 +29,6 @@ type PackageListViewProps = {
 };
 
 const NO_COURSE = '__NONE__';
-
-function toErrorMessage(error: unknown) {
-  return (
-    (error as { response?: { data?: { detail?: string } } })?.response?.data
-      ?.detail ?? 'Unexpected error.'
-  );
-}
 
 function statusLabel(status: string): { text: string; className: string } {
   switch (status) {
