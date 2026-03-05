@@ -54,7 +54,7 @@ describe("Login page", () => {
 
     const link = screen.getByRole("link", { name: "Admin? Open Django Admin" });
     expect(link).toBeInTheDocument();
-    expect(link).toHaveAttribute("href", "http://localhost:8000/admin/");
+    expect(link).toHaveAttribute("href", "/admin/");
   });
 
   it("submits local login and stores display-name cookie", async () => {
@@ -105,7 +105,7 @@ describe("Login page", () => {
     expect(await screen.findByText("Use Django Admin")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Django Admin" })).toHaveAttribute(
       "href",
-      "http://localhost:8000/admin/",
+      "/admin/",
     );
   });
 

@@ -32,16 +32,7 @@ type LoginSuccessPayload = {
 };
 type DetailError = { detail?: unknown };
 const loginFieldNames = new Set<keyof LoginForm>(["identifier", "password"]);
-const backendOrigin = (() => {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
-  if (!apiUrl) return "";
-  try {
-    return new URL(apiUrl).origin;
-  } catch {
-    return "";
-  }
-})();
-const adminConsoleHref = backendOrigin ? `${backendOrigin}/admin/` : "/admin/";
+const adminConsoleHref = "/admin/";
 
 function LoginPageContent() {
   const router = useRouter();
