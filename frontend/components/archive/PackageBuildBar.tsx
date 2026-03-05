@@ -18,8 +18,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { HelpTip } from '@/components/ui/help-tip';
 import type { BuildJob, ValidationResult } from '@/lib/package-api';
 
@@ -29,8 +27,6 @@ type PackageBuildBarProps = {
   /* State */
   strictMode: boolean;
   onStrictModeChange: (value: boolean) => void;
-  snapshotIdText: string;
-  onSnapshotIdChange: (value: string) => void;
   validationResult: ValidationResult | null;
   buildResult: BuildJob | null;
   /* Loading flags */
@@ -48,8 +44,6 @@ export default function PackageBuildBar({
   role,
   strictMode,
   onStrictModeChange,
-  snapshotIdText,
-  onSnapshotIdChange,
   validationResult,
   buildResult,
   isValidating,
@@ -152,18 +146,9 @@ export default function PackageBuildBar({
               Strict mode
               <HelpTip text="Stop validation on the first problem found instead of collecting all issues." />
             </label>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm text-muted-foreground whitespace-nowrap">
-                Snapshot ID
-                <HelpTip text="Use a specific data snapshot instead of current data. Leave blank for live data." />
-              </Label>
-              <Input
-                value={snapshotIdText}
-                onChange={(event) => onSnapshotIdChange(event.target.value)}
-                placeholder="Live data"
-                className="h-8 w-32"
-              />
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Live data is automatically snapshotted at build start.
+            </p>
           </div>
         </CollapsibleContent>
       </Collapsible>

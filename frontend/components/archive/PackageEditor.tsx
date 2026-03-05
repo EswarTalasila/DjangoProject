@@ -179,7 +179,6 @@ export default function PackageEditor({
   });
 
   const [strictMode, setStrictMode] = useState(true);
-  const [snapshotIdText, setSnapshotIdText] = useState('');
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [buildResult, setBuildResult] = useState<BuildJob | null>(null);
 
@@ -561,7 +560,6 @@ export default function PackageEditor({
     setIsValidating(true);
     validateWorkspace(workspace.id, {
       strictMode,
-      snapshotId: snapshotIdText ? Number(snapshotIdText) : undefined,
     })
       .then((result) => {
         setValidationResult(result);
@@ -593,9 +591,11 @@ export default function PackageEditor({
     if (!workspace) return;
     setIsBuilding(true);
     try {
+      toast.info(
+        'Live data sources will be snapshotted automatically at build start.',
+      );
       const job = await buildWorkspace(workspace.id, {
         strictMode,
-        snapshotId: snapshotIdText ? Number(snapshotIdText) : undefined,
       });
       setBuildResult(job);
       if (job.status === 'COMPLETED') {
@@ -1136,8 +1136,6 @@ export default function PackageEditor({
               className="flex-1 overflow-y-auto px-3 pb-3"
             >
               <DataCatalog
-                workspaceId={workspace.id}
-                canExportIdentifiable={canExportIdentifiable}
                 onAddItem={handleAddFromCatalog}
               />
             </TabsContent>
@@ -1353,8 +1351,6 @@ export default function PackageEditor({
         role={role}
         strictMode={strictMode}
         onStrictModeChange={setStrictMode}
-        snapshotIdText={snapshotIdText}
-        onSnapshotIdChange={setSnapshotIdText}
         validationResult={validationResult}
         buildResult={buildResult}
         isValidating={isValidating}

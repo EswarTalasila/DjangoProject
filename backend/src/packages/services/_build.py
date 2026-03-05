@@ -25,12 +25,15 @@ from exports.services import (
 
 from ..models import (
     BuildStatus,
+    DataSnapshot,
     DatasetBinding,
+    NodeSourceType,
     NodeType,
     PackageArtifact,
     PackageBuildJob,
     PackageWorkspace,
 )
+from ._snapshots import create_snapshot
 from ._validation import (
     ValidationResult,
     compute_node_path,
@@ -84,6 +87,41 @@ def execute_build(job: PackageBuildJob) -> PackageBuildJob:
         file_contents: dict[str, bytes] = {}
         checksums: dict[str, str] = {}
         warnings: list[dict[str, Any]] = list(vr.warnings)
+        auto_live_snapshots: dict[int, DataSnapshot] = {}
+
+        # 2a. Automatically snapshot all LIVE file nodes so users do not
+        # need to manage snapshot IDs manually.
+        for node in file_nodes:
+            if node.source_type != NodeSourceType.LIVE:
+                continue
+            try:
+                snapshot = create_snapshot(
+                    user,
+                    workspace,
+                    dataset_binding=node.dataset_binding,
+                    scope_course_id=node.binding_course_id,
+                    filters=node.filters,
+                    include_answers=node.include_answers,
+                    identifiable=node.identifiable,
+                )
+                snapshot.metadata = {
+                    **(snapshot.metadata or {}),
+                    "buildJobId": job.id,
+                    "nodeId": node.id,
+                    "autoSnapshot": True,
+                }
+                snapshot.save(update_fields=["metadata", "updated_at"])
+                auto_live_snapshots[node.id] = snapshot
+            except Exception as exc:
+                if job.strict_mode:
+                    raise
+                warnings.append(
+                    {
+                        "nodeId": node.id,
+                        "code": "AUTO_SNAPSHOT_FAILED",
+                        "message": str(exc),
+                    }
+                )
 
         for node in file_nodes:
             path = compute_node_path(node, node_map)
@@ -92,7 +130,15 @@ def execute_build(job: PackageBuildJob) -> PackageBuildJob:
                 path = path + ".csv"
 
             try:
-                data = _materialize_node(node, user)
+                if node.source_type == NodeSourceType.LIVE:
+                    auto_snapshot = auto_live_snapshots.get(node.id)
+                    if auto_snapshot is None:
+                        raise ValueError(
+                            f"Node {node.id} has no automatic snapshot available for this build."
+                        )
+                    data = _read_snapshot_bytes(auto_snapshot)
+                else:
+                    data = _materialize_node(node, user)
                 file_contents[path] = data
                 checksums[path] = hashlib.sha256(data).hexdigest()
             except Exception as exc:
@@ -107,7 +153,14 @@ def execute_build(job: PackageBuildJob) -> PackageBuildJob:
                 )
 
         # 3. Generate manifest
-        manifest = _build_manifest(workspace, job, file_contents, checksums, warnings)
+        manifest = _build_manifest(
+            workspace,
+            job,
+            file_contents,
+            checksums,
+            warnings,
+            auto_live_snapshots=auto_live_snapshots,
+        )
         manifest_bytes = json.dumps(manifest, indent=2, default=str).encode("utf-8")
 
         # 4. Generate checksums file
@@ -160,33 +213,14 @@ def _materialize_node(node, user) -> bytes:
     If node.source_type is SNAPSHOT, read pre-materialized bytes from disk.
     Otherwise, query live data via export functions.
     """
-    from ..models import NodeSourceType, SnapshotStatus
+    from ..models import NodeSourceType
 
     # ── Snapshot path: read from disk ──
     if node.source_type == NodeSourceType.SNAPSHOT:
         snapshot = node.snapshot
         if snapshot is None:
             raise ValueError(f"Node {node.id} has source_type=SNAPSHOT but no snapshot linked")
-        if snapshot.expires_at and snapshot.expires_at < timezone.now():
-            snapshot.status = SnapshotStatus.EXPIRED
-            snapshot.save(update_fields=["status", "updated_at"])
-            raise ValueError(
-                f"Snapshot {snapshot.id} has expired (expired at {snapshot.expires_at})"
-            )
-        if snapshot.status == SnapshotStatus.EXPIRED:
-            raise ValueError(
-                f"Snapshot {snapshot.id} has expired (expired at {snapshot.expires_at})"
-            )
-        if snapshot.status == SnapshotStatus.FAILED:
-            raise ValueError(f"Snapshot {snapshot.id} failed: {snapshot.error_message}")
-        if snapshot.status != SnapshotStatus.READY:
-            raise ValueError(f"Snapshot {snapshot.id} is not ready (status={snapshot.status})")
-        if not snapshot.storage_key or not os.path.exists(snapshot.storage_key):
-            raise ValueError(
-                f"Snapshot {snapshot.id} file missing at {snapshot.storage_key}"
-            )
-        with open(snapshot.storage_key, "rb") as f:
-            return f.read()
+        return _read_snapshot_bytes(snapshot)
 
     # ── Live path: query current data ──
     is_identifiable, _ = resolve_anonymization(user, node.identifiable or False)
@@ -238,6 +272,7 @@ def _build_manifest(
     file_contents: dict[str, bytes],
     checksums: dict[str, str],
     warnings: list[dict],
+    auto_live_snapshots: dict[int, DataSnapshot] | None = None,
 ) -> dict[str, Any]:
     from ..models import NodeSourceType
 
@@ -258,6 +293,20 @@ def _build_manifest(
                 "filters": snap.filters,
                 "datasetBinding": snap.dataset_binding,
                 "rowCount": snap.row_count,
+                "sourceType": "SNAPSHOT",
+            }
+
+    if auto_live_snapshots:
+        for node_id, snap in auto_live_snapshots.items():
+            snapshot_info[node_id] = {
+                "snapshotId": snap.id,
+                "capturedAt": snap.metadata.get("capturedAt", ""),
+                "expiresAt": snap.expires_at.isoformat() if snap.expires_at else None,
+                "sha256": snap.checksum_sha256,
+                "filters": snap.filters,
+                "datasetBinding": snap.dataset_binding,
+                "rowCount": snap.row_count,
+                "sourceType": "LIVE_AUTO",
             }
 
     return {
@@ -268,6 +317,7 @@ def _build_manifest(
         "mode": job.mode,
         "snapshotId": job.snapshot_id,
         "strictMode": job.strict_mode,
+        "liveCaptureStartedAt": job.started_at.isoformat() if job.started_at else None,
         "generatedAt": timezone.now().isoformat(),
         "files": [
             {"path": path, "sizeBytes": len(data), "sha256": checksums.get(path, "")}
@@ -276,3 +326,28 @@ def _build_manifest(
         "snapshots": snapshot_info if snapshot_info else None,
         "warnings": warnings,
     }
+
+
+def _read_snapshot_bytes(snapshot: DataSnapshot) -> bytes:
+    from ..models import SnapshotStatus
+
+    if snapshot.expires_at and snapshot.expires_at < timezone.now():
+        snapshot.status = SnapshotStatus.EXPIRED
+        snapshot.save(update_fields=["status", "updated_at"])
+        raise ValueError(
+            f"Snapshot {snapshot.id} has expired (expired at {snapshot.expires_at})"
+        )
+    if snapshot.status == SnapshotStatus.EXPIRED:
+        raise ValueError(
+            f"Snapshot {snapshot.id} has expired (expired at {snapshot.expires_at})"
+        )
+    if snapshot.status == SnapshotStatus.FAILED:
+        raise ValueError(f"Snapshot {snapshot.id} failed: {snapshot.error_message}")
+    if snapshot.status != SnapshotStatus.READY:
+        raise ValueError(f"Snapshot {snapshot.id} is not ready (status={snapshot.status})")
+    if not snapshot.storage_key or not os.path.exists(snapshot.storage_key):
+        raise ValueError(
+            f"Snapshot {snapshot.id} file missing at {snapshot.storage_key}"
+        )
+    with open(snapshot.storage_key, "rb") as file_obj:
+        return file_obj.read()

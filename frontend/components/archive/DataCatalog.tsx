@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Camera,
   ChevronDown,
   ChevronRight,
   Files,
@@ -26,44 +25,29 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { listAssessments, type Assessment } from '@/lib/assessment-api';
 import { listCourses, type CourseSummary } from '@/lib/course-api';
 import {
-  createSnapshot,
-  listSnapshots,
-  type DataSnapshot,
   type DatasetBinding,
-  type NodeSourceType,
 } from '@/lib/package-api';
 import { listRubrics, type Rubric } from '@/lib/rubric-api';
 import { toErrorMessage } from '@/lib/utils';
 
 type DataCatalogProps = {
-  workspaceId: number;
-  canExportIdentifiable: boolean;
   onAddItem: (config: {
     label: string;
     datasetBinding: DatasetBinding;
     bindingCourseId: number | null;
-    sourceType?: NodeSourceType;
-    snapshotId?: number | null;
   }) => void;
 };
 
-export default function DataCatalog({
-  workspaceId,
-  canExportIdentifiable,
-  onAddItem,
-}: DataCatalogProps) {
+export default function DataCatalog({ onAddItem }: DataCatalogProps) {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [rubrics, setRubrics] = useState<Rubric[]>([]);
-  const [snapshots, setSnapshots] = useState<DataSnapshot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
   const [filterText, setFilterText] = useState('');
 
   /* Collapsible section state */
   const [globalOpen, setGlobalOpen] = useState(true);
   const [coursesOpen, setCoursesOpen] = useState(true);
-  const [snapshotsOpen, setSnapshotsOpen] = useState(true);
   const [assessmentsOpen, setAssessmentsOpen] = useState(true);
   const [rubricsOpen, setRubricsOpen] = useState(true);
   /* Per-course expansion within the courses section */
@@ -83,11 +67,9 @@ export default function DataCatalog({
         listAssessments(),
         listRubrics(),
       ]);
-      const snapshotList = await listSnapshots(workspaceId);
       setCourses(courseList);
       setAssessments(assessmentList);
       setRubrics(rubricList);
-      setSnapshots(snapshotList);
     } catch (error) {
       toast.error(toErrorMessage(error));
     } finally {
@@ -121,34 +103,11 @@ export default function DataCatalog({
     [rubrics, lowerFilter],
   );
 
-  const filteredSnapshots = useMemo(() => {
-    return snapshots.filter((snapshot) => {
-      const name = String(
-        snapshot.metadata?.courseName ?? snapshot.datasetBinding,
-      ).toLowerCase();
-      return name.includes(lowerFilter);
-    });
-  }, [snapshots, lowerFilter]);
-
   const showCrossCourse =
     lowerFilter.length === 0 ||
     'cross-course submissions'.includes(lowerFilter) ||
     'cross course submissions'.includes(lowerFilter) ||
     'global data'.includes(lowerFilter);
-
-  function bindingLabel(binding: DatasetBinding) {
-    if (binding === 'ROSTER') return 'Roster';
-    if (binding === 'COURSE_SUBMISSIONS') return 'Course Submissions';
-    return 'Cross-Course Submissions';
-  }
-
-  function snapshotDisplayName(snapshot: DataSnapshot) {
-    const courseName = snapshot.metadata?.courseName;
-    if (typeof courseName === 'string' && courseName.trim()) {
-      return `${courseName} — ${bindingLabel(snapshot.datasetBinding)}`;
-    }
-    return bindingLabel(snapshot.datasetBinding);
-  }
 
   function toggleCourse(courseId: number) {
     setExpandedCourses((prev) => {
@@ -159,42 +118,6 @@ export default function DataCatalog({
         next.add(courseId);
       }
       return next;
-    });
-  }
-
-  async function handleTakeSnapshot(config: {
-    datasetBinding: DatasetBinding;
-    scopeCourseId: number | null;
-    label: string;
-    includeAnswers?: boolean;
-  }) {
-    setIsCreatingSnapshot(true);
-    try {
-      const snapshot = await createSnapshot(workspaceId, {
-        datasetBinding: config.datasetBinding,
-        scopeCourseId: config.scopeCourseId,
-        includeAnswers: config.includeAnswers ?? false,
-        identifiable: canExportIdentifiable ? undefined : false,
-      });
-      setSnapshots((prev) => [snapshot, ...prev]);
-      toast.success(`${config.label} snapshot created.`);
-    } catch (error) {
-      toast.error(toErrorMessage(error));
-    } finally {
-      setIsCreatingSnapshot(false);
-    }
-  }
-
-  function addSnapshotToPackage(snapshot: DataSnapshot) {
-    const baseName =
-      (snapshot.metadata?.courseName as string | undefined) ??
-      snapshot.datasetBinding.replaceAll('_', ' ');
-    onAddItem({
-      label: `${baseName} — Snapshot.csv`,
-      datasetBinding: snapshot.datasetBinding,
-      bindingCourseId: snapshot.scopeCourseId,
-      sourceType: 'SNAPSHOT',
-      snapshotId: snapshot.id,
     });
   }
 
@@ -219,8 +142,8 @@ export default function DataCatalog({
         />
       </div>
       <p className="px-1 text-xs text-muted-foreground">
-        Camera icons create snapshots. Plus icons add either live or snapshot
-        data directly into the explorer.
+        Add data sources to the explorer. Live data is automatically snapshotted
+        when you build the package.
       </p>
 
       {/* Courses section */}
@@ -248,24 +171,6 @@ export default function DataCatalog({
                   variant="ghost"
                   size="sm"
                   className="ml-auto h-6 w-6 p-0"
-                  title="Take snapshot of cross-course submissions"
-                  disabled={isCreatingSnapshot}
-                  onClick={() =>
-                    void handleTakeSnapshot({
-                      datasetBinding: 'CROSS_COURSE_SUBMISSIONS',
-                      scopeCourseId: null,
-                      label: 'Cross-course submissions',
-                      includeAnswers: false,
-                    })
-                  }
-                >
-                  <Camera className="size-3.5" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0"
                   title="Add Cross-Course Submissions to package"
                   onClick={() =>
                     onAddItem({
@@ -279,7 +184,7 @@ export default function DataCatalog({
                 </Button>
               </div>
               <p className="px-2 pb-0.5 text-xs text-muted-foreground">
-                Snapshot available here. No need to use Quick Export first.
+                Captured automatically at build time.
               </p>
             </>
           ) : (
@@ -352,23 +257,6 @@ export default function DataCatalog({
                           variant="ghost"
                           size="sm"
                           className="ml-auto h-6 w-6 p-0"
-                          title="Take snapshot of roster"
-                          disabled={isCreatingSnapshot}
-                          onClick={() =>
-                            void handleTakeSnapshot({
-                              datasetBinding: 'ROSTER',
-                              scopeCourseId: course.id,
-                              label: `${course.name} roster`,
-                            })
-                          }
-                        >
-                          <Camera className="size-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0"
                           title="Add Roster to package"
                           onClick={() =>
                             onAddItem({
@@ -390,24 +278,6 @@ export default function DataCatalog({
                           variant="ghost"
                           size="sm"
                           className="ml-auto h-6 w-6 p-0"
-                          title="Take snapshot of submissions"
-                          disabled={isCreatingSnapshot}
-                          onClick={() =>
-                            void handleTakeSnapshot({
-                              datasetBinding: 'COURSE_SUBMISSIONS',
-                              scopeCourseId: course.id,
-                              label: `${course.name} submissions`,
-                              includeAnswers: false,
-                            })
-                          }
-                        >
-                          <Camera className="size-3.5" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0"
                           title="Add Submissions to package"
                           onClick={() =>
                             onAddItem({
@@ -422,62 +292,6 @@ export default function DataCatalog({
                       </div>
                     </div>
                   )}
-                </div>
-              );
-            })
-          )}
-        </CollapsibleContent>
-      </Collapsible>
-
-      {/* Snapshots section */}
-      <Collapsible open={snapshotsOpen} onOpenChange={setSnapshotsOpen}>
-        <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold text-foreground hover:bg-accent/30">
-          {snapshotsOpen ? (
-            <ChevronDown className="size-4" />
-          ) : (
-            <ChevronRight className="size-4" />
-          )}
-          <Camera className="size-4" />
-          Snapshots
-          <span className="ml-auto text-xs text-muted-foreground">
-            {filteredSnapshots.length}
-          </span>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="space-y-0.5 pl-2">
-          {filteredSnapshots.length === 0 ? (
-            <p className="px-2 py-1 text-xs text-muted-foreground">
-              No snapshots yet. Use the camera buttons in Courses to create one.
-            </p>
-          ) : (
-            filteredSnapshots.map((snapshot) => {
-              const capturedAt =
-                typeof snapshot.metadata?.capturedAt === 'string'
-                  ? snapshot.metadata.capturedAt
-                  : snapshot.createdAt;
-              return (
-                <div key={snapshot.id} className="rounded-md px-2 py-1.5">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <FileSpreadsheet className="size-3.5 shrink-0 text-amber-600" />
-                    <span className="truncate font-medium text-foreground">
-                      {snapshotDisplayName(snapshot)}
-                    </span>
-                    <StatusBadge status={snapshot.status} className="shrink-0" />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="ml-auto h-6 w-6 p-0"
-                      title="Add snapshot to package"
-                      onClick={() => addSnapshotToPackage(snapshot)}
-                      disabled={snapshot.status !== 'READY'}
-                    >
-                      <Plus className="size-3.5" />
-                    </Button>
-                  </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Captured {new Date(capturedAt).toLocaleString()} · {snapshot.rowCount}{' '}
-                    rows
-                  </p>
                 </div>
               );
             })
