@@ -11,8 +11,12 @@ urlpatterns = [
     path("workspaces/<int:workspace_id>", views.workspace_detail, name="pkg-workspace-detail"),
     # PKG-UC-02: Add node
     path("workspaces/<int:workspace_id>/nodes", views.add_node_view, name="pkg-node-add"),
+    # Node reorder (must come before nodes/<int:node_id>)
+    path("workspaces/<int:workspace_id>/nodes/reorder", views.reorder_node_view, name="pkg-node-reorder"),
     # PKG-UC-02: Update/delete node
     path("workspaces/<int:workspace_id>/nodes/<int:node_id>", views.node_detail, name="pkg-node-detail"),
+    # Snapshots
+    path("workspaces/<int:workspace_id>/snapshots", views.snapshot_list_create_view, name="pkg-snapshot-list-create"),
     # PKG-UC-03: Validate
     path("workspaces/<int:workspace_id>/validate", views.validate_workspace_view, name="pkg-validate"),
     # PKG-UC-04: Build

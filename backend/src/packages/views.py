@@ -38,7 +38,9 @@ from .models import (
 from .serializers import (
     AddNodeSerializer,
     BuildWorkspaceSerializer,
+    CreateSnapshotSerializer,
     CreateWorkspaceSerializer,
+    ReorderNodeSerializer,
     UpdateNodeSerializer,
     UpdateWorkspaceSerializer,
     ValidateWorkspaceSerializer,
@@ -114,6 +116,8 @@ def _node_to_dict(node):
         "filters": node.filters,
         "identifiable": node.identifiable,
         "includeAnswers": node.include_answers,
+        "sourceType": node.source_type,
+        "snapshotId": node.snapshot_id,
     }
 
 
@@ -142,6 +146,28 @@ def _job_to_dict(job):
         except PackageArtifact.DoesNotExist:
             pass
     return d
+
+
+def _snapshot_to_dict(snapshot):
+    return {
+        "id": snapshot.id,
+        "workspaceId": snapshot.workspace_id,
+        "datasetBinding": snapshot.dataset_binding,
+        "scopeCourseId": snapshot.scope_course_id,
+        "filters": snapshot.filters,
+        "includeAnswers": snapshot.include_answers,
+        "identifiable": snapshot.identifiable,
+        "storageKey": snapshot.storage_key,
+        "rowCount": snapshot.row_count,
+        "fileSize": snapshot.file_size,
+        "checksumSha256": snapshot.checksum_sha256,
+        "status": snapshot.status,
+        "errorMessage": snapshot.error_message,
+        "metadata": snapshot.metadata,
+        "expiresAt": snapshot.expires_at.isoformat() if snapshot.expires_at else None,
+        "createdAt": snapshot.created_at.isoformat(),
+        "createdBy": snapshot.created_by_id,
+    }
 
 
 # ── PKG-UC-01: Create / Get workspace ───────────────────────────────
@@ -246,6 +272,120 @@ def node_detail(request, workspace_id, node_id):
     ser.is_valid(raise_exception=True)
     node = update_node(request.user, node, ser.validated_data)
     return Response(_node_to_dict(node))
+
+
+# ── Snapshots ────────────────────────────────────────────────────────
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsTeacherOrAbove])
+def snapshot_list_create_view(request, workspace_id):
+    """GET/POST /api/v1/packages/workspaces/{workspaceId}/snapshots"""
+    ws = PackageWorkspace.objects.filter(id=workspace_id).first()
+    if not ws:
+        return Response({"detail": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    access_err = _check_workspace_access(request.user, ws)
+    if access_err:
+        return access_err
+
+    if request.method == "GET":
+        from .services import list_snapshots
+        snapshots = list_snapshots(ws)
+        return Response([_snapshot_to_dict(s) for s in snapshots])
+
+    # POST — create snapshot
+    ser = CreateSnapshotSerializer(data=request.data)
+    ser.is_valid(raise_exception=True)
+
+    from .services import create_snapshot
+    try:
+        snapshot = create_snapshot(
+            request.user,
+            ws,
+            dataset_binding=ser.validated_data["datasetBinding"],
+            scope_course_id=ser.validated_data.get("scopeCourseId"),
+            filters=ser.validated_data.get("filters"),
+            include_answers=ser.validated_data.get("includeAnswers", False),
+            identifiable=ser.validated_data.get("identifiable", False),
+        )
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    except Exception as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response(_snapshot_to_dict(snapshot), status=status.HTTP_201_CREATED)
+
+
+# ── Node Reorder ─────────────────────────────────────────────────────
+
+
+@api_view(["POST"])
+@permission_classes([IsTeacherOrAbove])
+def reorder_node_view(request, workspace_id):
+    """POST /api/v1/packages/workspaces/{workspaceId}/nodes/reorder"""
+    ws = PackageWorkspace.objects.filter(id=workspace_id).first()
+    if not ws:
+        return Response({"detail": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    access_err = _check_workspace_access(request.user, ws)
+    if access_err:
+        return access_err
+
+    ser = ReorderNodeSerializer(data=request.data)
+    ser.is_valid(raise_exception=True)
+
+    moved_node_id = ser.validated_data["movedNodeId"]
+    target_parent_id = ser.validated_data.get("targetParentId")
+    target_order_index = ser.validated_data["targetOrderIndex"]
+
+    # Validate moved node exists
+    moved_node = ws.nodes.filter(id=moved_node_id).first()
+    if not moved_node:
+        return Response({"detail": "Moved node not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Validate target parent
+    if target_parent_id is not None:
+        target_parent = ws.nodes.filter(id=target_parent_id).first()
+        if not target_parent:
+            return Response(
+                {"detail": "Target parent not found"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if target_parent.node_type != "FOLDER":
+            return Response(
+                {"detail": "Target parent must be a folder"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Check for cyclic move — can't move a folder into its own descendant
+        if moved_node.node_type == "FOLDER":
+            if _is_descendant_of(target_parent_id, moved_node_id, ws):
+                return Response(
+                    {"detail": "Cannot move folder into its own descendant"},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+    from .services import reorder_node
+    reorder_node(
+        request.user,
+        ws,
+        moved_node=moved_node,
+        target_parent_id=target_parent_id,
+        target_order_index=target_order_index,
+    )
+
+    return Response(_workspace_to_dict(ws))
+
+
+def _is_descendant_of(node_id: int, ancestor_id: int, workspace) -> bool:
+    """Check if node_id is a descendant of ancestor_id in the workspace tree."""
+    nodes = {n.id: n for n in workspace.nodes.all()}
+    current = nodes.get(node_id)
+    while current:
+        if current.id == ancestor_id:
+            return True
+        current = nodes.get(current.parent_id)
+    return False
 
 
 # ── PKG-UC-03: Validate ─────────────────────────────────────────────
