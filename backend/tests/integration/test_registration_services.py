@@ -35,7 +35,7 @@ from tests.factories import RegistrationCodeFactory, SudoGrantFactory
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_registration_code_hash_empty_input_returns_empty_string():
     """Hash helper returns empty digest for empty/whitespace code."""
 
@@ -44,9 +44,9 @@ def test_registration_code_hash_empty_input_returns_empty_string():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 @override_settings(SECRET_KEY="primary", SECRET_KEY_FALLBACKS=["old"])
-def test_registration_code_hash_lookup_works_after_key_rotation():
+def test_REG_CN_22_hash_lookup_works_after_key_rotation():
     """Lookup supports fallback secret hashes during key rotation."""
 
     creator = User.objects.create_user(username="creator", name="Creator", password="StartPass123!")
@@ -62,8 +62,8 @@ def test_registration_code_hash_lookup_works_after_key_rotation():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
-def test_generate_student_username_managed_format_edge_cases():
+@pytest.mark.integration
+def test_REG_CN_16_generate_student_username_managed_format_edge_cases():
     """Managed username format is fixed-width and index-suffixed."""
 
     assert generate_student_username("") == "user0000"
@@ -72,7 +72,7 @@ def test_generate_student_username_managed_format_edge_cases():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_get_role_value_accepts_legacy_prefix_and_rejects_invalid():
     """Role normalization accepts ROLE_ prefix and rejects unknown values."""
 
@@ -82,7 +82,7 @@ def test_get_role_value_accepts_legacy_prefix_and_rejects_invalid():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_role_from_registration_code_type_mapping():
     """Code type to role mapping returns expected role values."""
 
@@ -92,7 +92,7 @@ def test_role_from_registration_code_type_mapping():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def testidentifier_in_use_respects_exclusion_filter():
     """Identifier collision check ignores excluded user id."""
 
@@ -109,8 +109,8 @@ def testidentifier_in_use_respects_exclusion_filter():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
-def test_redeem_student_join_course_rejects_non_student_user():
+@pytest.mark.integration
+def test_REG_UC_01a_E2_redeem_student_join_course_rejects_non_student_user():
     """Only student-role users can redeem student course join codes."""
 
     teacher = User.objects.create_user(
@@ -134,7 +134,7 @@ def test_redeem_student_join_course_rejects_non_student_user():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_redeem_student_invite_requires_split_name_fields():
     """Student invite redemption enforces firstName/lastName for username generation."""
 
@@ -158,8 +158,8 @@ def test_redeem_student_invite_requires_split_name_fields():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
-def test_create_registration_codes_student_requires_course_id():
+@pytest.mark.integration
+def test_REG_UC_02_E3_create_registration_codes_student_requires_course_id():
     """Student code generation requires courseId."""
 
     teacher = User.objects.create_user(
@@ -180,8 +180,8 @@ def test_create_registration_codes_student_requires_course_id():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
-def test_create_registration_codes_metadata_rules_enforced():
+@pytest.mark.integration
+def test_REG_UC_02_E4_create_registration_codes_metadata_rules_enforced():
     """Metadata allowed only for single teacher code generation."""
 
     researcher = User.objects.create_user(
@@ -201,7 +201,7 @@ def test_create_registration_codes_metadata_rules_enforced():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_create_registration_codes_researcher_requires_sudo_for_researcher_codes():
     """Researcher code generation requires ISSUE_RESEARCHER_REG_CODE sudo permission."""
 
@@ -223,7 +223,7 @@ def test_create_registration_codes_researcher_requires_sudo_for_researcher_codes
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_create_registration_codes_researcher_with_permission_can_generate_researcher_codes():
     """Researcher with ISSUE_RESEARCHER_REG_CODE can generate researcher invite codes."""
 
@@ -260,8 +260,8 @@ def test_create_registration_codes_researcher_with_permission_can_generate_resea
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
-def test_transition_registration_code_status_rejects_invalid_current_state():
+@pytest.mark.integration
+def test_REG_UC_03_E2_transition_registration_code_status_rejects_invalid_current_state():
     """Cannot revoke exhausted/non-active code states."""
 
     admin = User.objects.create_user(username="admin-c", name="Admin", password="StartPass123!")
@@ -285,7 +285,7 @@ def test_transition_registration_code_status_rejects_invalid_current_state():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_redeem_non_student_oauth_invite_rejects_existing_subject_link():
     """OAuth invite redemption blocks already-linked OAuth subjects."""
 
@@ -331,7 +331,7 @@ def test_redeem_non_student_oauth_invite_rejects_existing_subject_link():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_registration_code_hashes_for_lookup_empty_returns_empty():
     """Empty/whitespace code returns no hashes."""
 
@@ -342,7 +342,7 @@ def test_registration_code_hashes_for_lookup_empty_returns_empty():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 @override_settings(SECRET_KEY="primary", SECRET_KEY_FALLBACKS=["", "primary", "fallback"])
 def test_registration_code_hashes_deduplicates_and_skips_empty():
     """Lookup deduplicates primary/fallback keys and skips empty."""
@@ -355,7 +355,7 @@ def test_registration_code_hashes_deduplicates_and_skips_empty():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_get_role_value_none_defaults_to_student():
     """None input returns STUDENT as default."""
 
@@ -363,7 +363,7 @@ def test_get_role_value_none_defaults_to_student():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_unique_username_from_base_collision_loop():
     """Username generation appends numeric suffix when base is taken."""
 
@@ -379,8 +379,8 @@ def test_unique_username_from_base_collision_loop():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
-def test_generate_student_username_collision_loop():
+@pytest.mark.integration
+def test_REG_CN_16_generate_student_username_collision_loop():
     """Managed username generator uses fixed width and collision index suffix."""
 
     from accounts.services import generate_student_username
@@ -395,7 +395,7 @@ def test_generate_student_username_collision_loop():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def testidentifier_in_use_empty_returns_false():
     """Empty identifier is never in use."""
 
@@ -404,8 +404,8 @@ def testidentifier_in_use_empty_returns_false():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
-def test_redeem_non_student_local_invite_happy_path_and_exhaustion():
+@pytest.mark.integration
+def test_REG_UC_01_redeem_non_student_local_invite_happy_path_and_exhaustion():
     """Non-student local invite creates user and exhausts code at max uses."""
 
     from accounts.models import RegistrationCode
@@ -449,7 +449,7 @@ def test_redeem_non_student_local_invite_happy_path_and_exhaustion():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_redeem_non_student_local_invite_rejects_student_code():
     """Student codes cannot be redeemed via non-student local flow."""
 
@@ -484,8 +484,8 @@ def test_redeem_non_student_local_invite_rejects_student_code():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
-def test_redeem_non_student_local_invite_missing_split_name():
+@pytest.mark.integration
+def test_REG_UC_01_E3_redeem_non_student_local_invite_missing_split_name():
     """Missing first/last name fields are rejected for non-student registration."""
 
     from accounts.services import redeem_non_student_local_invite
@@ -519,8 +519,8 @@ def test_redeem_non_student_local_invite_missing_split_name():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
-def test_redeem_non_student_local_invite_missing_email():
+@pytest.mark.integration
+def test_REG_UC_01_E3_redeem_non_student_local_invite_missing_email():
     """Missing email rejected for non-student registration."""
 
     from accounts.services import redeem_non_student_local_invite
@@ -555,7 +555,7 @@ def test_redeem_non_student_local_invite_missing_email():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_redeem_non_student_local_invite_username_taken():
     """Generated username collision resolves via numeric index."""
 
@@ -594,8 +594,8 @@ def test_redeem_non_student_local_invite_username_taken():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
-def test_redeem_non_student_local_invite_email_taken():
+@pytest.mark.integration
+def test_REG_UC_01_E2_redeem_non_student_local_invite_email_taken():
     """Taken email blocks non-student registration."""
 
     from accounts.services import redeem_non_student_local_invite
@@ -638,8 +638,8 @@ def test_redeem_non_student_local_invite_email_taken():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
-def test_registration_code_scope_queryset_teacher_scope():
+@pytest.mark.integration
+def test_REG_CN_04_registration_code_scope_queryset_teacher_scope():
     """Teacher queryset scoped to own student codes only."""
 
     from accounts.services import registration_code_scope_queryset
@@ -660,8 +660,8 @@ def test_registration_code_scope_queryset_teacher_scope():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
-def test_registration_code_scope_queryset_student_gets_nothing():
+@pytest.mark.integration
+def test_REG_CN_04_registration_code_scope_queryset_student_gets_nothing():
     """Student role returns empty queryset for code listing."""
 
     from accounts.services import registration_code_scope_queryset
@@ -674,8 +674,8 @@ def test_registration_code_scope_queryset_student_gets_nothing():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
-def test_validate_registration_code_various_invalid_states():
+@pytest.mark.integration
+def test_REG_UC_01_E1_validate_registration_code_various_invalid_states():
     """Validation rejects archived, inactive, expired, and exhausted codes."""
 
     from accounts.services import validate_registration_code

@@ -38,7 +38,7 @@ def _mk_user(*, username: str, role: str, staff: bool = False):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_create_user_role_matrix():
     """Role matrix for create-user permissions is enforced."""
 
@@ -54,7 +54,7 @@ def test_can_create_user_role_matrix():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_teacher_owns_student_true_and_false(admin_user):
     """Teacher ownership depends on enrollment relationship."""
 
@@ -84,7 +84,7 @@ def test_teacher_owns_student_true_and_false(admin_user):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_edit_and_delete_user_teacher_scope(admin_user):
     """Teacher can edit/delete only owned students."""
 
@@ -112,7 +112,7 @@ def test_can_edit_and_delete_user_teacher_scope(admin_user):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_grant_permissions_escalation_protection():
     """Researcher granter cannot delegate permissions they do not hold."""
 
@@ -134,7 +134,7 @@ def test_can_grant_permissions_escalation_protection():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_grant_sudo_to_researcher_create_and_update_paths():
     """Grant call creates new record, then updates existing one."""
 
@@ -150,7 +150,7 @@ def test_grant_sudo_to_researcher_create_and_update_paths():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_revoke_sudo_grant_authorization_rules():
     """Admin can revoke any; non-creator non-admin is denied."""
 
@@ -174,7 +174,7 @@ def test_revoke_sudo_grant_authorization_rules():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_create_user_researcher_with_create_teacher_sudo():
     """Researcher with CREATE_TEACHER sudo can create teachers."""
 
@@ -191,7 +191,7 @@ def test_can_create_user_researcher_with_create_teacher_sudo():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_create_user_researcher_with_create_student_sudo():
     """Researcher with CREATE_STUDENT sudo can create students."""
 
@@ -208,7 +208,7 @@ def test_can_create_user_researcher_with_create_student_sudo():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_teacher_owns_student_non_teacher_returns_false(admin_user):
     """Non-teacher user never owns a student."""
 
@@ -226,7 +226,7 @@ def test_teacher_owns_student_non_teacher_returns_false(admin_user):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_teacher_owns_student_non_student_returns_false():
     """Teacher checking ownership of non-student returns False."""
 
@@ -237,7 +237,7 @@ def test_teacher_owns_student_non_student_returns_false():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_teacher_owns_student_missing_profile_returns_false(admin_user):
     """Student user without StudentProfile returns False."""
 
@@ -255,7 +255,7 @@ def test_teacher_owns_student_missing_profile_returns_false(admin_user):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_edit_user_researcher_with_sudo(admin_user):
     """Researcher with EDIT_USER sudo can edit teachers and students."""
 
@@ -281,7 +281,7 @@ def test_can_edit_user_researcher_with_sudo(admin_user):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_edit_user_staff_target_always_false():
     """Staff/admin accounts cannot be edited through role flows."""
 
@@ -292,7 +292,7 @@ def test_can_edit_user_staff_target_always_false():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_edit_user_invalid_role_returns_false():
     """Invalid requested role returns False."""
 
@@ -303,7 +303,7 @@ def test_can_edit_user_invalid_role_returns_false():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_edit_user_student_requester_returns_false(admin_user):
     """Student users cannot edit anyone."""
 
@@ -321,7 +321,7 @@ def test_can_edit_user_student_requester_returns_false(admin_user):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_delete_user_researcher_with_sudo():
     """Researcher with DELETE_USER sudo can delete teachers and students."""
 
@@ -338,7 +338,7 @@ def test_can_delete_user_researcher_with_sudo():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_delete_user_admin_cannot_delete_student(admin_user):
     """Admin cannot delete student (only researchers and teachers)."""
 
@@ -356,7 +356,7 @@ def test_can_delete_user_admin_cannot_delete_student(admin_user):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_delete_user_student_requester_returns_false(admin_user):
     """Student users cannot delete anyone."""
 
@@ -374,7 +374,7 @@ def test_can_delete_user_student_requester_returns_false(admin_user):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_grant_permissions_no_sudo_grant():
     """Researcher without any sudo grant cannot grant permissions."""
 
@@ -386,7 +386,7 @@ def test_can_grant_permissions_no_sudo_grant():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_grant_permissions_cannot_grant_sudo_flag():
     """Researcher cannot enable can_grant_sudo (admin only)."""
 
@@ -405,7 +405,7 @@ def test_can_grant_permissions_cannot_grant_sudo_flag():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_grant_permissions_non_delegable_researcher_code_permission():
     """Researchers cannot delegate ISSUE_RESEARCHER_REG_CODE even if they hold it."""
 

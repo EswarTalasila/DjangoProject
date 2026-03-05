@@ -40,7 +40,7 @@ def _make_user(
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_password_strength_errors_reports_expected_violations():
     """Weak password returns all missing policy dimensions."""
 
@@ -52,7 +52,7 @@ def test_password_strength_errors_reports_expected_violations():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_normalize_identifier_helpers():
     """Identifier/code normalization trims and normalizes case."""
 
@@ -61,7 +61,7 @@ def test_normalize_identifier_helpers():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_find_user_by_identifier_username_and_email_paths():
     """Lookup works for username, email, and rejects empty."""
 
@@ -73,7 +73,7 @@ def test_find_user_by_identifier_username_and_email_paths():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_identifier_allowed_for_user_student_username_only(admin_user):
     """Students may authenticate only by username; non-students may use email."""
 
@@ -101,7 +101,7 @@ def test_identifier_allowed_for_user_student_username_only(admin_user):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_authenticate_user_success_and_failure():
     """Authentication returns user on valid credentials and None otherwise."""
 
@@ -119,7 +119,7 @@ def test_authenticate_user_success_and_failure():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_build_user_response_refresh_optional():
     """Response payload includes role/id without JWT token fields."""
 
@@ -135,7 +135,19 @@ def test_build_user_response_refresh_optional():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
+def test_build_user_response_returns_admin_role_for_staff(admin_user):
+    """Staff users resolve to ADMIN role in login payload construction."""
+
+    payload = build_user_response(admin_user)
+
+    assert payload["role"] == "ADMIN"
+    assert payload["id"] == str(admin_user.id)
+    assert payload["username"] == admin_user.username
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
 def test_blacklist_refresh_token_invalid_token_returns_false():
     """Invalid refresh token strings fail gracefully."""
 
@@ -143,7 +155,7 @@ def test_blacklist_refresh_token_invalid_token_returns_false():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_invalidate_user_sessions_blacklists_outstanding_tokens():
     """Outstanding refresh tokens are blacklisted and counted once."""
 
@@ -160,7 +172,7 @@ def test_invalidate_user_sessions_blacklists_outstanding_tokens():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_identifier_throttle_lifecycle():
     """Throttle counter increments and clears by identifier scope."""
 
@@ -178,7 +190,7 @@ def test_identifier_throttle_lifecycle():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_identifier_allowed_for_user_empty_identifier_returns_false():
     """Empty identifier is rejected for any user."""
 
@@ -190,7 +202,7 @@ def test_identifier_allowed_for_user_empty_identifier_returns_false():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_identifier_allowed_for_user_no_email_returns_false():
     """Non-student user without email rejects email-style identifier."""
 
@@ -205,7 +217,7 @@ def test_identifier_allowed_for_user_no_email_returns_false():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_password_strength_errors_missing_lowercase():
     """Password missing only lowercase is flagged."""
 
@@ -215,7 +227,7 @@ def test_password_strength_errors_missing_lowercase():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_authenticate_user_empty_identifier_returns_none():
     """Empty identifier short-circuits to None."""
 
@@ -223,7 +235,7 @@ def test_authenticate_user_empty_identifier_returns_none():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_authenticate_user_nonexistent_user_returns_none():
     """Identifier that resolves to no user returns None."""
 

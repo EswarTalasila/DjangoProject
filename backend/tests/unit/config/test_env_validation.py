@@ -1,0 +1,549 @@
+"""Unit tests for config.env EnvSettings validation logic.
+
+Tests focus on:
+- Production-mode validation guards (validate_runtime_contract)
+- Profile-driven property defaults (debug, otel, cookies, etc.)
+- Parsed list properties (allowed_hosts, cors_origins)
+
+These tests do NOT touch the database and do NOT rely on the .env file.
+
+Note: Fields with ``validation_alias`` (django_debug, otel_enabled) cannot be
+set via the constructor -- only via environment variables. Tests that need to
+override those fields use ``monkeypatch.setenv`` to set the env var before
+constructing the settings instance.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from config.env import EnvSettings
+
+pytestmark = pytest.mark.unit
+
+
+
+# ---------------------------------------------------------------------------
+# Production Validator Helpers
+# ---------------------------------------------------------------------------
+
+# Baseline kwargs forming a *valid* production configuration.
+# Individual tests override one field at a time to trigger specific errors.
+# Note: otel_enabled has a validation_alias so it is excluded here;
+# it must be set via OTEL_ENABLED env var.
+VALID_PROD_BASE = dict(  # noqa: C408
+    environment="production",
+    django_secret_key="a-very-long-production-secret-key-that-is-safe-1234",
+    django_allowed_hosts="app.example.com",
+    django_cors_allowed_origins="https://app.example.com",
+    database_url="postgres://prod_user:strong_pw@db.example.com:5432/prod_db",
+    google_client_id="real-client-id",
+    google_client_secret="real-client-secret",
+    admin_email="admin@real-domain.com",
+    admin_password="super-secure-password-12",
+    otel_exporter_otlp_endpoint="",
+    otel_trace_file="",
+)
+
+
+def _make_prod(monkeypatch=None, **overrides):
+    """Build an EnvSettings for production with targeted overrides.
+
+    If ``monkeypatch`` is provided, aliased fields (OTEL_ENABLED, DJANGO_DEBUG)
+    are set as environment variables instead of passed to the constructor.
+    """
+    kwargs = {**VALID_PROD_BASE, **overrides}
+
+    # Handle aliased fields through env vars
+    if monkeypatch is not None:
+        otel_val = kwargs.pop("otel_enabled", None)
+        debug_val = kwargs.pop("django_debug", None)
+        if otel_val is not None:
+            monkeypatch.setenv("OTEL_ENABLED", str(otel_val).lower())
+        else:
+            monkeypatch.delenv("OTEL_ENABLED", raising=False)
+        if debug_val is not None:
+            monkeypatch.setenv("DJANGO_DEBUG", str(debug_val).lower())
+        else:
+            monkeypatch.delenv("DJANGO_DEBUG", raising=False)
+    else:
+        # Without monkeypatch, remove aliased fields -- they only work via env vars
+        kwargs.pop("otel_enabled", None)
+        kwargs.pop("django_debug", None)
+
+    return EnvSettings(**kwargs)
+
+
+# ============================================================================
+# Profile property tests (non-production)
+# ============================================================================
+
+
+class TestProfileProperties:
+    """Tests for profile-driven computed properties."""
+
+    def test_is_development_default(self):
+        """Default environment is development."""
+        s = EnvSettings(environment="development")
+        assert s.is_development is True
+        assert s.is_testing is False
+        assert s.is_production is False
+
+    def test_is_testing(self):
+        """Testing environment flag is set correctly."""
+        s = EnvSettings(environment="testing")
+        assert s.is_testing is True
+
+    def test_is_production(self):
+        """Production environment flag is set correctly."""
+        s = _make_prod()
+        assert s.is_production is True
+
+    def test_debug_defaults_true_in_development(self, monkeypatch):
+        """Debug defaults to True in development when DJANGO_DEBUG is unset."""
+        monkeypatch.delenv("DJANGO_DEBUG", raising=False)
+        s = EnvSettings(environment="development")
+        assert s.debug is True
+
+    def test_debug_respects_override_in_development(self, monkeypatch):
+        """Debug can be overridden to False in development."""
+        monkeypatch.setenv("DJANGO_DEBUG", "false")
+        s = EnvSettings(environment="development")
+        assert s.debug is False
+
+    def test_debug_always_false_in_testing(self, monkeypatch):
+        """Debug is always False in testing regardless of override."""
+        monkeypatch.setenv("DJANGO_DEBUG", "true")
+        s = EnvSettings(environment="testing")
+        assert s.debug is False
+
+    def test_debug_always_false_in_production(self, monkeypatch):
+        """Debug is always False in production (ignores the override)."""
+        monkeypatch.delenv("DJANGO_DEBUG", raising=False)
+        s = _make_prod()
+        assert s.debug is False
+
+    def test_api_docs_enabled_in_dev_and_test(self):
+        """API docs are enabled in development and testing."""
+        assert EnvSettings(environment="development").api_docs_enabled is True
+        assert EnvSettings(environment="testing").api_docs_enabled is True
+
+    def test_api_docs_disabled_in_production(self):
+        """API docs are disabled in production."""
+        s = _make_prod()
+        assert s.api_docs_enabled is False
+
+    def test_debug_toolbar_enabled_in_dev_with_default_debug(self, monkeypatch):
+        """Debug toolbar is enabled when development env has default debug=True."""
+        monkeypatch.delenv("DJANGO_DEBUG", raising=False)
+        s = EnvSettings(environment="development")
+        assert s.debug_toolbar_enabled is True
+
+    def test_debug_toolbar_disabled_when_debug_off(self, monkeypatch):
+        """Debug toolbar is disabled when debug is explicitly False."""
+        monkeypatch.setenv("DJANGO_DEBUG", "false")
+        s = EnvSettings(environment="development")
+        assert s.debug_toolbar_enabled is False
+
+    def test_debug_toolbar_disabled_in_testing(self):
+        """Debug toolbar is disabled in testing environment."""
+        s = EnvSettings(environment="testing")
+        assert s.debug_toolbar_enabled is False
+
+    def test_seed_on_startup_only_in_testing(self):
+        """Auto-seed is enabled only in testing environment."""
+        assert EnvSettings(environment="testing").seed_on_startup is True
+        assert EnvSettings(environment="development").seed_on_startup is False
+
+    def test_manual_seed_blocked_in_production(self):
+        """Manual seeding is not allowed in production."""
+        s = _make_prod()
+        assert s.manual_seed_allowed is False
+        assert EnvSettings(environment="development").manual_seed_allowed is True
+
+    def test_ssl_redirect_only_in_production(self):
+        """SSL redirect is enabled only in production."""
+        s = _make_prod()
+        assert s.ssl_redirect_enabled is True
+        assert EnvSettings(environment="development").ssl_redirect_enabled is False
+
+    def test_session_cookie_secure_in_testing_and_production(self):
+        """Session cookie secure flag is set in testing and production."""
+        assert EnvSettings(environment="testing").session_cookie_secure is True
+        s = _make_prod()
+        assert s.session_cookie_secure is True
+        assert EnvSettings(environment="development").session_cookie_secure is False
+
+    def test_csrf_cookie_secure_in_testing_and_production(self):
+        """CSRF cookie secure flag is set in testing and production."""
+        assert EnvSettings(environment="testing").csrf_cookie_secure is True
+        s = _make_prod()
+        assert s.csrf_cookie_secure is True
+        assert EnvSettings(environment="development").csrf_cookie_secure is False
+
+
+# ============================================================================
+# OTel effective_otel_enabled
+# ============================================================================
+
+
+class TestEffectiveOtelEnabled:
+    """Tests for the computed effective_otel_enabled property."""
+
+    def test_development_defaults_true(self, monkeypatch):
+        """OTel defaults to enabled in development when env var is unset."""
+        monkeypatch.delenv("OTEL_ENABLED", raising=False)
+        s = EnvSettings(environment="development")
+        assert s.effective_otel_enabled is True
+
+    def test_development_respects_override(self, monkeypatch):
+        """OTel can be disabled in development via OTEL_ENABLED=false."""
+        monkeypatch.setenv("OTEL_ENABLED", "false")
+        s = EnvSettings(environment="development")
+        assert s.effective_otel_enabled is False
+
+    def test_testing_defaults_true(self, monkeypatch):
+        """OTel defaults to enabled in testing when env var is unset."""
+        monkeypatch.delenv("OTEL_ENABLED", raising=False)
+        s = EnvSettings(environment="testing")
+        assert s.effective_otel_enabled is True
+
+    def test_testing_respects_override(self, monkeypatch):
+        """OTel can be disabled in testing via OTEL_ENABLED=false."""
+        monkeypatch.setenv("OTEL_ENABLED", "false")
+        s = EnvSettings(environment="testing")
+        assert s.effective_otel_enabled is False
+
+    def test_production_defaults_false(self, monkeypatch):
+        """OTel defaults to disabled in production (opt-in only)."""
+        monkeypatch.delenv("OTEL_ENABLED", raising=False)
+        s = _make_prod()
+        assert s.effective_otel_enabled is False
+
+    def test_production_opt_in(self, monkeypatch):
+        """OTel can be enabled in production via OTEL_ENABLED=true."""
+        s = _make_prod(
+            monkeypatch=monkeypatch,
+            otel_enabled=True,
+            otel_exporter_otlp_endpoint="https://collector.example.com/v1/traces",
+            otel_trace_file="",
+        )
+        assert s.effective_otel_enabled is True
+
+
+# ============================================================================
+# Parsed list properties
+# ============================================================================
+
+
+class TestParsedListProperties:
+    """Tests for allowed_hosts_list and cors_origins_list parsing."""
+
+    def test_allowed_hosts_parsing(self):
+        """Comma-separated hosts are split and trimmed."""
+        s = EnvSettings(django_allowed_hosts="  example.com , app.example.com  ")
+        assert s.allowed_hosts_list == ["example.com", "app.example.com"]
+
+    def test_allowed_hosts_skips_empty(self):
+        """Empty segments from trailing commas are filtered out."""
+        s = EnvSettings(django_allowed_hosts="example.com,,")
+        assert s.allowed_hosts_list == ["example.com"]
+
+    def test_cors_origins_parsing(self):
+        """Comma-separated origins are split and trimmed."""
+        s = EnvSettings(django_cors_allowed_origins="http://a.com , http://b.com")
+        assert s.cors_origins_list == ["http://a.com", "http://b.com"]
+
+    def test_cors_origins_skips_empty(self):
+        """Empty segments from trailing commas are filtered out."""
+        s = EnvSettings(django_cors_allowed_origins="http://a.com,,,")
+        assert s.cors_origins_list == ["http://a.com"]
+
+
+# ============================================================================
+# Production validation: _validate_secret_key
+# ============================================================================
+
+
+class TestValidateSecretKey:
+    """Tests for production secret key validation."""
+
+    def test_default_key_rejected(self):
+        """Default insecure key is rejected in production."""
+        with pytest.raises(ValueError, match="DJANGO_SECRET_KEY"):
+            _make_prod(django_secret_key="django-insecure-local-dev-only-change-in-production")
+
+    def test_empty_key_rejected(self):
+        """Empty secret key is rejected in production."""
+        with pytest.raises(ValueError, match="DJANGO_SECRET_KEY"):
+            _make_prod(django_secret_key="")
+
+    def test_change_me_key_rejected(self):
+        """'change-me-to-a-secure-random-string' is rejected."""
+        with pytest.raises(ValueError, match="DJANGO_SECRET_KEY"):
+            _make_prod(django_secret_key="change-me-to-a-secure-random-string")
+
+    def test_strong_key_accepted(self):
+        """A strong, unique key passes production validation."""
+        s = _make_prod(django_secret_key="my-super-strong-unique-production-key-9876")
+        assert s.django_secret_key == "my-super-strong-unique-production-key-9876"
+
+
+# ============================================================================
+# Production validation: _validate_debug_override
+# ============================================================================
+
+
+class TestValidateDebugOverride:
+    """Tests for production debug override validation."""
+
+    def test_debug_true_rejected(self, monkeypatch):
+        """Explicit DJANGO_DEBUG=true is rejected in production."""
+        with pytest.raises(ValueError, match="DJANGO_DEBUG"):
+            _make_prod(monkeypatch=monkeypatch, django_debug=True)
+
+    def test_debug_none_accepted(self, monkeypatch):
+        """Unset debug (None) is accepted in production."""
+        monkeypatch.delenv("DJANGO_DEBUG", raising=False)
+        s = _make_prod()
+        assert s.debug is False
+
+    def test_debug_false_accepted(self, monkeypatch):
+        """Explicit DJANGO_DEBUG=false is accepted in production."""
+        s = _make_prod(monkeypatch=monkeypatch, django_debug=False)
+        assert s.debug is False
+
+
+# ============================================================================
+# Production validation: _validate_admin_bootstrap
+# ============================================================================
+
+
+class TestValidateAdminBootstrap:
+    """Tests for production admin credential validation."""
+
+    def test_default_email_rejected(self):
+        """Default admin email is rejected in production."""
+        with pytest.raises(ValueError, match="ADMIN_EMAIL"):
+            _make_prod(admin_email="admin@example.com")
+
+    def test_admin_only_email_rejected(self):
+        """Single-word 'admin' email is rejected in production."""
+        with pytest.raises(ValueError, match="ADMIN_EMAIL"):
+            _make_prod(admin_email="admin")
+
+    def test_default_password_rejected(self):
+        """Default 'change-me' password is rejected in production."""
+        with pytest.raises(ValueError, match="ADMIN_PASSWORD"):
+            _make_prod(admin_password="change-me")
+
+    def test_short_password_rejected(self):
+        """Password shorter than 12 characters is rejected."""
+        with pytest.raises(ValueError, match="ADMIN_PASSWORD"):
+            _make_prod(admin_password="short")
+
+    def test_common_passwords_rejected(self):
+        """Common weak passwords are rejected."""
+        for pw in ("admin", "admin123", "password"):
+            with pytest.raises(ValueError, match="ADMIN_PASSWORD"):
+                _make_prod(admin_password=pw)
+
+    def test_strong_credentials_accepted(self):
+        """Strong email and password pass validation."""
+        s = _make_prod(admin_email="admin@real-domain.com", admin_password="super-secure-password-12")
+        assert s.admin_email == "admin@real-domain.com"
+
+
+# ============================================================================
+# Production validation: _validate_allowed_hosts
+# ============================================================================
+
+
+class TestValidateAllowedHosts:
+    """Tests for production allowed hosts validation."""
+
+    def test_empty_hosts_rejected(self):
+        """Empty hosts list is rejected in production."""
+        with pytest.raises(ValueError, match="DJANGO_ALLOWED_HOSTS"):
+            _make_prod(django_allowed_hosts="")
+
+    def test_localhost_rejected(self):
+        """localhost is rejected in production hosts."""
+        with pytest.raises(ValueError, match="DJANGO_ALLOWED_HOSTS"):
+            _make_prod(django_allowed_hosts="localhost")
+
+    def test_127_0_0_1_rejected(self):
+        """127.0.0.1 is rejected in production hosts."""
+        with pytest.raises(ValueError, match="DJANGO_ALLOWED_HOSTS"):
+            _make_prod(django_allowed_hosts="127.0.0.1")
+
+    def test_mixed_with_localhost_rejected(self):
+        """Valid host mixed with localhost is still rejected."""
+        with pytest.raises(ValueError, match="DJANGO_ALLOWED_HOSTS"):
+            _make_prod(django_allowed_hosts="app.example.com,localhost")
+
+    def test_valid_hosts_accepted(self):
+        """Valid production hosts pass validation."""
+        s = _make_prod(django_allowed_hosts="app.example.com,api.example.com")
+        assert s.allowed_hosts_list == ["app.example.com", "api.example.com"]
+
+
+# ============================================================================
+# Production validation: _validate_cors
+# ============================================================================
+
+
+class TestValidateCors:
+    """Tests for production CORS origin validation."""
+
+    def test_empty_cors_rejected(self):
+        """Empty CORS origins are rejected in production."""
+        with pytest.raises(ValueError, match="DJANGO_CORS_ALLOWED_ORIGINS"):
+            _make_prod(django_cors_allowed_origins="")
+
+    def test_wildcard_rejected(self):
+        """Wildcard origin is rejected in production."""
+        with pytest.raises(ValueError, match="DJANGO_CORS_ALLOWED_ORIGINS"):
+            _make_prod(django_cors_allowed_origins="*")
+
+    def test_localhost_origin_rejected(self):
+        """localhost origin is rejected in production."""
+        with pytest.raises(ValueError, match="DJANGO_CORS_ALLOWED_ORIGINS"):
+            _make_prod(django_cors_allowed_origins="http://localhost:3000")
+
+    def test_127_origin_rejected(self):
+        """127.0.0.1 origin is rejected in production."""
+        with pytest.raises(ValueError, match="DJANGO_CORS_ALLOWED_ORIGINS"):
+            _make_prod(django_cors_allowed_origins="http://127.0.0.1:3000")
+
+    def test_valid_origins_accepted(self):
+        """Valid production origins pass validation."""
+        s = _make_prod(django_cors_allowed_origins="https://app.example.com")
+        assert s.cors_origins_list == ["https://app.example.com"]
+
+
+# ============================================================================
+# Production validation: _validate_database_url
+# ============================================================================
+
+
+class TestValidateDatabaseUrl:
+    """Tests for production database URL validation."""
+
+    def test_default_url_rejected(self):
+        """Default local database URL is rejected in production."""
+        with pytest.raises(ValueError, match="DATABASE_URL"):
+            _make_prod(database_url="postgres://datadash:change-me@localhost:5432/datadash")
+
+    def test_change_me_in_url_rejected(self):
+        """URL containing 'change-me' is rejected."""
+        with pytest.raises(ValueError, match="DATABASE_URL"):
+            _make_prod(database_url="postgres://user:change-me@db.example.com:5432/mydb")
+
+    def test_localhost_in_url_rejected(self):
+        """URL containing 'localhost' is rejected."""
+        with pytest.raises(ValueError, match="DATABASE_URL"):
+            _make_prod(database_url="postgres://user:pw@localhost:5432/mydb")
+
+    def test_valid_url_accepted(self):
+        """Valid production database URL passes validation."""
+        s = _make_prod(database_url="postgres://prod_user:strong_pw@db.example.com:5432/prod_db")
+        assert "prod_user" in s.database_url
+
+
+# ============================================================================
+# Production validation: _validate_oauth
+# ============================================================================
+
+
+class TestValidateOAuth:
+    """Tests for production OAuth credential validation."""
+
+    def test_empty_client_id_rejected(self):
+        """Empty Google client ID is rejected in production."""
+        with pytest.raises(ValueError, match="OAuth"):
+            _make_prod(google_client_id="")
+
+    def test_empty_client_secret_rejected(self):
+        """Empty Google client secret is rejected in production."""
+        with pytest.raises(ValueError, match="OAuth"):
+            _make_prod(google_client_secret="")
+
+    def test_valid_oauth_accepted(self):
+        """Valid OAuth credentials pass validation."""
+        s = _make_prod(google_client_id="real-id", google_client_secret="real-secret")
+        assert s.google_client_id == "real-id"
+
+
+# ============================================================================
+# Production validation: _validate_otel_export_policy (lines 257-264)
+# ============================================================================
+
+
+class TestValidateOtelExportPolicy:
+    """Tests for the OTel export policy validation in production."""
+
+    def test_otel_disabled_skips_validation(self, monkeypatch):
+        """When OTel is disabled, no endpoint or file checks run."""
+        monkeypatch.delenv("OTEL_ENABLED", raising=False)
+        s = _make_prod(
+            otel_exporter_otlp_endpoint="",
+            otel_trace_file="",
+        )
+        # effective_otel_enabled defaults to False in production
+        assert s.effective_otel_enabled is False
+
+    def test_otel_enabled_without_endpoint_rejected(self, monkeypatch):
+        """OTel enabled without OTLP endpoint is rejected in production."""
+        with pytest.raises(ValueError, match="OTLP endpoint"):
+            _make_prod(
+                monkeypatch=monkeypatch,
+                otel_enabled=True,
+                otel_exporter_otlp_endpoint="",
+                otel_trace_file="",
+            )
+
+    def test_otel_enabled_with_trace_file_rejected(self, monkeypatch):
+        """OTel enabled with local trace file is rejected in production."""
+        with pytest.raises(ValueError, match="local trace file"):
+            _make_prod(
+                monkeypatch=monkeypatch,
+                otel_enabled=True,
+                otel_exporter_otlp_endpoint="https://collector.example.com/v1/traces",
+                otel_trace_file="/tmp/traces.jsonl",  # noqa: S108
+            )
+
+    def test_otel_enabled_with_endpoint_no_file_accepted(self, monkeypatch):
+        """OTel enabled with endpoint and no trace file passes validation."""
+        s = _make_prod(
+            monkeypatch=monkeypatch,
+            otel_enabled=True,
+            otel_exporter_otlp_endpoint="https://collector.example.com/v1/traces",
+            otel_trace_file="",
+        )
+        assert s.effective_otel_enabled is True
+
+
+# ============================================================================
+# Non-production skips validation
+# ============================================================================
+
+
+class TestNonProductionSkipsValidation:
+    """Verify that non-production environments skip all production checks."""
+
+    def test_development_accepts_insecure_defaults(self, monkeypatch):
+        """Development environment accepts insecure values without production validation."""
+        monkeypatch.setenv("DJANGO_SECRET_KEY", "change-me-to-a-secure-random-string")
+        monkeypatch.setenv("ADMIN_EMAIL", "admin@example.com")
+        monkeypatch.setenv("ADMIN_PASSWORD", "change-me")
+        s = EnvSettings(environment="development")
+        assert s.django_secret_key == "change-me-to-a-secure-random-string"
+        assert s.admin_email == "admin@example.com"
+        assert s.admin_password == "change-me"
+
+    def test_testing_accepts_insecure_defaults(self):
+        """Testing environment accepts all default/insecure values."""
+        s = EnvSettings(environment="testing")
+        assert s.admin_password == "change-me"
+        assert s.google_client_id == ""

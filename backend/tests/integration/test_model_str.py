@@ -22,7 +22,7 @@ from tests.factories import (
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_model_str_representations():
     """Core account-domain models return readable __str__ values."""
 

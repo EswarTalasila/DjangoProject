@@ -13,7 +13,7 @@ from accounts.models import Role, User
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_seed_e2e_blocked_in_production(monkeypatch):
     """Seed command is blocked when runtime is production."""
 
@@ -27,7 +27,7 @@ def test_seed_e2e_blocked_in_production(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_seed_e2e_creates_baseline_users(monkeypatch):
     """Creates admin, teacher, and student users with expected roles/profiles."""
 
@@ -59,7 +59,7 @@ def test_seed_e2e_creates_baseline_users(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_seed_e2e_idempotent(monkeypatch):
     """Repeated runs do not duplicate users."""
 
@@ -77,7 +77,7 @@ def test_seed_e2e_idempotent(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_seed_e2e_force_password_updates_existing(monkeypatch):
     """--force-password updates existing account passwords."""
 
@@ -101,7 +101,7 @@ def test_seed_e2e_force_password_updates_existing(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_seed_e2e_ensure_admin_updates_name_and_staff(monkeypatch):
     """Existing admin user with wrong name/staff flags gets reconciled."""
 
@@ -132,7 +132,7 @@ def test_seed_e2e_ensure_admin_updates_name_and_staff(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_seed_e2e_ensure_user_updates_name(monkeypatch):
     """Existing role user with different name gets name updated."""
 
@@ -158,7 +158,7 @@ def test_seed_e2e_ensure_user_updates_name(monkeypatch):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_seed_e2e_no_force_password_skips_password_update(monkeypatch):
     """Without --force-password, existing user password is not changed."""
 

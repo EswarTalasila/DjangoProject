@@ -15,6 +15,9 @@ from accounts.models import (
 from courses.models import Course, Enrollment, EnrollmentStatus
 from tests.factories import UserFactory
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestAuthResetIssuance:

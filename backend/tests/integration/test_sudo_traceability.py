@@ -5,14 +5,18 @@ from __future__ import annotations
 import pytest
 
 from accounts.models import ResearcherProfile, Role, SudoPermission, UserRole
+from core.permissions import primary_role
 from tests.factories import SudoGrantFactory, UserFactory
 from tests.integration import test_accounts_error_paths as account_error_tests
 from tests.integration import test_accounts_routes as account_route_tests
 from tests.integration import test_admin_api as admin_tests
+from tests.integration import test_permission_services as permission_tests
 from tests.integration import test_researcher_api as researcher_tests
+from tests.integration import test_sudo_constraints as sudo_constraint_tests
 from tests.security import test_authz_security as authz_security_tests
-from tests.unit.constraints import test_sudo_constraints as sudo_constraint_tests
-from tests.unit.services import test_permission_services as permission_tests
+
+pytestmark = pytest.mark.integration
+
 
 
 @pytest.mark.django_db
@@ -21,17 +25,84 @@ class TestSudoTraceability:
 
     # --- SUDO CNs ---
 
+    def test_SUDO_CN_01(self, admin_user, researcher_user, teacher_user, student_user):
+        """SUDO-CN-01: role hierarchy resolves ADMIN > RESEARCHER > TEACHER > STUDENT."""
+        assert primary_role(admin_user) == "ADMIN"
+        assert primary_role(researcher_user) == Role.RESEARCHER
+        assert primary_role(teacher_user) == Role.TEACHER
+        assert primary_role(student_user) == Role.STUDENT
+
+    def test_SUDO_CN_02(self):
+        """SUDO-CN-02: researchers are default-deny for sudo grants/elevated permissions."""
+        permission_tests.test_can_grant_permissions_no_sudo_grant()
+        sudo_constraint_tests.TestSudoConstraints().test_SUDO_CN_02_empty_permissions_allowed()
+
+    def test_SUDO_CN_03(self):
+        """SUDO-CN-03: researchers cannot delegate permissions they do not hold."""
+        permission_tests.test_can_grant_permissions_escalation_protection()
+
+    def test_SUDO_CN_04(self):
+        """SUDO-CN-04: admin/staff targets are blocked in role-assignment edit flows."""
+        permission_tests.test_can_edit_user_staff_target_always_false()
+
     def test_SUDO_CN_05(self):
         """SUDO-CN-05: can_grant_sudo is admin-only."""
         permission_tests.test_can_grant_permissions_cannot_grant_sudo_flag()
 
     def test_SUDO_CN_06(self, api_client, admin_user):
         """SUDO-CN-06: invalid permission values are rejected."""
-        sudo_constraint_tests.TestSudoConstraints().test_SUDO_CN_02_E1()
+        sudo_constraint_tests.TestSudoConstraints().test_SUDO_CN_06_E1_invalid_permission_rejected()
 
     def test_SUDO_CN_08(self):
         """SUDO-CN-08: grant updates existing record semantics."""
         permission_tests.test_grant_sudo_to_researcher_create_and_update_paths()
+
+    def test_SUDO_CN_07(self):
+        """SUDO-CN-07: one researcher has at most one SudoGrant record."""
+        permission_tests.test_grant_sudo_to_researcher_create_and_update_paths()
+
+    def test_SUDO_CN_09(self, api_client, admin_user, researcher_user, teacher_user, student_user):
+        """SUDO-CN-09: permissions map to intended create/edit/delete/reset capabilities."""
+        permission_tests.test_can_create_user_researcher_with_create_teacher_sudo()
+        permission_tests.test_can_create_user_researcher_with_create_student_sudo()
+        permission_tests.test_can_edit_user_researcher_with_sudo(admin_user)
+        permission_tests.test_can_delete_user_researcher_with_sudo()
+        researcher_tests.TestResearcherSudoPermissions().test_RESEARCHER_UC_20(
+            SudoPermission.ISSUE_STUDENT_RESET_CODE.value
+        )
+        researcher_tests.TestResearcherSudoPermissions().test_RESEARCHER_UC_20(
+            SudoPermission.ISSUE_RESEARCHER_RESET_CODE.value
+        )
+
+    def test_SUDO_CN_10(self):
+        """SUDO-CN-10: revoke scope is admin-any or researcher-own grants only."""
+        permission_tests.test_revoke_sudo_grant_authorization_rules()
+
+    def test_SUDO_CN_11(self, admin_user):
+        """SUDO-CN-11: teacher ownership is enforced through enrollments."""
+        permission_tests.test_teacher_owns_student_true_and_false(admin_user)
+        permission_tests.test_can_edit_and_delete_user_teacher_scope(admin_user)
+
+    def test_SUDO_CN_12(self, api_client, admin_user):
+        """SUDO-CN-12: admin accounts cannot be created via user-management API."""
+        api_client.force_authenticate(user=admin_user)
+        response = api_client.post(
+            "/api/v1/users",
+            {"name": "Bad Admin", "email": "bad-admin@example.com", "role": "ADMIN", "password": "StartPass123!"},
+            format="json",
+        )
+        assert response.status_code == 400
+        body = response.json()
+        if "detail" in body:
+            assert "Invalid role" in body["detail"]
+        else:
+            assert "role" in body
+
+    def test_SUDO_CN_13(self):
+        """SUDO-CN-13: reset-code self-issuance is always blocked."""
+        from tests.integration import test_password_reset_services as reset_tests
+
+        reset_tests.test_issue_password_reset_code_blocks_self_issuance_for_all_roles()
 
     # --- SUDO-UC-01 Grant sudo ---
 
@@ -90,7 +161,7 @@ class TestSudoTraceability:
 
     def test_SUDO_UC_01_E7(self, api_client, admin_user):
         """Invalid permission value payload is rejected."""
-        sudo_constraint_tests.TestSudoConstraints().test_SUDO_CN_02_E1()
+        sudo_constraint_tests.TestSudoConstraints().test_SUDO_CN_06_E1_invalid_permission_rejected()
 
     def test_SUDO_UC_01_E8(self, api_client, teacher_user, researcher_user):
         """SUDO-UC-01-E8 role without grant authority rejected."""

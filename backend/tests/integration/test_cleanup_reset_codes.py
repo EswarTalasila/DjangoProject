@@ -9,7 +9,7 @@ from django.core.management import call_command
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_cleanup_reset_codes_command_prints_summary(monkeypatch):
     """Command prints service summary output with success style."""
 

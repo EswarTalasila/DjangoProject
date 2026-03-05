@@ -88,7 +88,7 @@ class TestJWTConfiguration:
         assert settings.SIMPLE_JWT["BLACKLIST_AFTER_ROTATION"] is True
 
     def test_jwt_access_token_lifetime(self):
-        """ACCESS_TOKEN_LIFETIME must be 15 minutes per FR-01 AUTH-CN-02 policy (updated from 1h in 3e36971)."""
+        """ACCESS_TOKEN_LIFETIME must be 15 minutes per FR-01 AUTH-CN-02 policy."""
         assert settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"] == timedelta(minutes=15)
 
     def test_jwt_refresh_token_lifetime(self):

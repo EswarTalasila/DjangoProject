@@ -1,11 +1,8 @@
 """
 Constraint tests for SUDO feature domain.
 
-Tests for SudoGrant model validation constraints.
-
-SUDO-CN-01: Permissions field must be a list
-SUDO-CN-02: Permissions must be valid SudoPermission enum values
-SUDO-CN-03: Empty permissions list is valid (opt-in semantics)
+SUDO-CN-02: Default-deny / opt-in permission semantics
+SUDO-CN-06: Permission enum payload validation
 """
 
 import pytest
@@ -13,6 +10,9 @@ from django.core.exceptions import ValidationError
 
 from accounts.models import SudoPermission
 from tests.factories import SudoGrantFactory
+
+pytestmark = pytest.mark.integration
+
 
 
 @pytest.mark.django_db
@@ -24,10 +24,10 @@ class TestSudoConstraints:
     """
 
     # =========================================================================
-    # SUDO-CN-01: Permissions field must be a list
+    # SUDO-CN-06: Permission enum payload validation
     # =========================================================================
 
-    def test_SUDO_CN_01(self):
+    def test_SUDO_CN_06_permissions_must_be_list(self):
         """Non-list permissions are rejected with ValidationError."""
         grant = SudoGrantFactory.build(permissions="not_a_list")
         with pytest.raises(ValidationError) as exc_info:
@@ -36,10 +36,10 @@ class TestSudoConstraints:
         assert "must be a list" in str(exc_info.value)
 
     # =========================================================================
-    # SUDO-CN-02: Permissions must be valid SudoPermission enum values
+    # SUDO-CN-06: Permission enum payload validation
     # =========================================================================
 
-    def test_SUDO_CN_02(self):
+    def test_SUDO_CN_06_valid_permissions_accepted(self):
         """Valid SudoPermission values are accepted."""
         grant = SudoGrantFactory.build(
             permissions=[
@@ -49,7 +49,7 @@ class TestSudoConstraints:
         )
         grant.clean()  # Should not raise
 
-    def test_SUDO_CN_02_E1(self):
+    def test_SUDO_CN_06_E1_invalid_permission_rejected(self):
         """Invalid permission values are rejected with ValidationError."""
         grant = SudoGrantFactory.build(permissions=["INVALID_PERMISSION"])
         with pytest.raises(ValidationError) as exc_info:
@@ -58,10 +58,10 @@ class TestSudoConstraints:
         assert "Invalid permissions" in str(exc_info.value)
 
     # =========================================================================
-    # SUDO-CN-03: Empty permissions list is valid (opt-in semantics)
+    # SUDO-CN-02: Empty permissions list is valid (opt-in semantics)
     # =========================================================================
 
-    def test_SUDO_CN_03(self):
+    def test_SUDO_CN_02_empty_permissions_allowed(self):
         """Empty permissions list is valid (opt-in semantics)."""
         grant = SudoGrantFactory.build(permissions=[])
         grant.clean()  # Should not raise

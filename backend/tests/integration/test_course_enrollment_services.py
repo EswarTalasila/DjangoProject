@@ -6,11 +6,20 @@ import pytest
 
 from accounts.models import Role, TeacherProfile, User, UserRole
 from courses.models import Course, Enrollment
-from courses.services import create_student_in_course
+from courses.services import bulk_create_students, create_student_in_course
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
+def test_create_student_in_course_requires_course_id(teacher_user):
+    """Missing courseId is rejected early in student creation flow."""
+
+    with pytest.raises(ValueError, match="courseId is required"):
+        create_student_in_course(teacher_user, {"name": "Student"})
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
 def test_create_student_in_course_rejects_client_username_override(teacher_user):
     """Client-supplied username is rejected; usernames are system-managed."""
 
@@ -28,7 +37,7 @@ def test_create_student_in_course_rejects_client_username_override(teacher_user)
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_create_student_in_course_raises_when_profile_missing(monkeypatch, teacher_user):
     """Profile-missing branch returns domain error when student profile absent."""
 
@@ -58,7 +67,35 @@ def test_create_student_in_course_raises_when_profile_missing(monkeypatch, teach
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
+def test_bulk_create_students_counts_only_successes(teacher_user, monkeypatch):
+    """Bulk create continues on exceptions and returns successful count."""
+
+    calls = {"i": 0}
+
+    def fake_create(_request_user, payload):
+        calls["i"] += 1
+        if payload.get("name") == "bad":
+            raise ValueError("bad payload")
+        return object()
+
+    monkeypatch.setattr("courses.services.create_student_in_course", fake_create)
+
+    created = bulk_create_students(
+        teacher_user,
+        [
+            {"name": "ok-1"},
+            {"name": "bad"},
+            {"name": "ok-2"},
+        ],
+    )
+
+    assert calls["i"] == 3
+    assert created == 2
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
 def test_create_student_in_course_creates_profile_and_enrollment(teacher_user):
     """Happy path creates new student account and active enrollment."""
 
@@ -85,7 +122,7 @@ def test_create_student_in_course_creates_profile_and_enrollment(teacher_user):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_course_owner_null_teacher_profile():
     """Course with no teacher_profile returns None owner."""
 
@@ -98,7 +135,7 @@ def test_course_owner_null_teacher_profile():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_view_course_admin_and_researcher(teacher_user):
     """Admin and researcher can view any course."""
 
@@ -131,7 +168,7 @@ def test_can_view_course_admin_and_researcher(teacher_user):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_view_course_other_teacher_denied(teacher_user):
     """Other teacher cannot view another teacher's course."""
 
@@ -154,7 +191,7 @@ def test_can_view_course_other_teacher_denied(teacher_user):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_list_courses_for_user_admin_and_researcher(teacher_user):
     """Admin and researcher see all courses."""
 
@@ -187,7 +224,7 @@ def test_list_courses_for_user_admin_and_researcher(teacher_user):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_remove_student_from_course_missing_profile(teacher_user):
     """Removing student with no profile raises ValueError."""
 
@@ -202,7 +239,7 @@ def test_remove_student_from_course_missing_profile(teacher_user):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_create_student_in_course_avoids_non_student_identifier_collisions(teacher_user):
     """Student username generation avoids collisions with existing non-student accounts."""
 
@@ -229,7 +266,7 @@ def test_create_student_in_course_avoids_non_student_identifier_collisions(teach
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_create_submissions_for_student_with_assignments(teacher_user):
     """Enrollment triggers submission creation for existing course assignments."""
 
@@ -300,7 +337,7 @@ def test_create_submissions_for_student_with_assignments(teacher_user):
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_answer_type_from_question_mapping():
     """Answer type mapper returns correct types for all question kinds."""
 
@@ -326,7 +363,7 @@ def test_answer_type_from_question_mapping():
 
 
 @pytest.mark.django_db
-@pytest.mark.unit
+@pytest.mark.integration
 def test_can_manage_course_owner_only(teacher_user):
     """Only course owner can manage (edit/delete) a course."""
 

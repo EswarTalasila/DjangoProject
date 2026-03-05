@@ -70,6 +70,9 @@ def _seed_course(teacher_user, *, n_students=3, n_graded=2, score=80.0, admin_us
 # VIZ-UC-01 — Dashboard
 # ===========================================================================
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestVizDashboard:

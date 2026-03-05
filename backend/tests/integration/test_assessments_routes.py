@@ -10,6 +10,9 @@ from assessments.models import Assessment, GradingMode, ScoringPolicy
 from assignments.models import Assignment
 from courses.models import Course
 
+pytestmark = pytest.mark.integration
+
+
 
 # ---------------------------------------------------------------------------
 # Helpers

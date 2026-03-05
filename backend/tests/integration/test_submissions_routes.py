@@ -179,6 +179,9 @@ def _grant_researcher_submission_access(researcher_user, admin_user):
 # SUB-UC-01 — Save Draft
 # ---------------------------------------------------------------------------
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestSaveDraft:

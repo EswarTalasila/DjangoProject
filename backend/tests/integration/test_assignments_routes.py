@@ -63,6 +63,9 @@ def _second_teacher():
 # ASGN-UC-01 — Create Assignment
 # ===========================================================================
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestCreateAssignment:
