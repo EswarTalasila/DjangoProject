@@ -1,11 +1,22 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Download } from 'lucide-react';
+import {
+  Building,
+  CalendarDays,
+  ClipboardList,
+  Download,
+  Files,
+  FileText,
+  TableProperties,
+  Users,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
+import { ExportCard } from '@/components/archive/ExportCard';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { HelpTip } from '@/components/ui/help-tip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -199,218 +210,132 @@ export default function QuickExportTab({ role, canExportIdentifiable }: QuickExp
 
   /* ---- render ---- */
   return (
-    <div className="space-y-6">
-      {/* ── Section 1: Course Roster ── */}
-      <section className="rounded-sm border border-border bg-card p-4 space-y-4">
-        <h2 className="text-lg font-semibold text-foreground">Course Roster</h2>
-        <p className="text-xs text-muted-foreground">
-          Download a list of students enrolled in a course.
-        </p>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          {/* Course selector */}
-          <div className="space-y-1">
-            <Label>Course</Label>
-            <Select
-              value={rosterCourseId}
-              onValueChange={setRosterCourseId}
-              disabled={loadingCourses}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select course" />
-              </SelectTrigger>
-              <SelectContent>
-                {courseOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Status filter */}
-          <div className="space-y-1">
-            <Label>Status</Label>
-            <Select value={rosterStatus} onValueChange={setRosterStatus}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ROSTER_STATUS_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Identifiable checkbox */}
-          {canExportIdentifiable && (
-            <div className="flex items-end">
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Checkbox
-                  checked={rosterIdentifiable}
-                  onCheckedChange={(checked) => setRosterIdentifiable(checked === true)}
-                />
-                Include names &amp; emails
-              </label>
+    <div className="space-y-4">
+      {/* ── Card 1: Course Roster ── */}
+      <ExportCard
+        icon={<Users className="size-5" />}
+        title="Course Roster"
+        description="Download a list of students enrolled in a course."
+        helpText="Export enrollment data for a single course as a CSV file."
+        defaultOpen
+      >
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            {/* Course selector */}
+            <div className="space-y-1">
+              <Label>Course <HelpTip text="Select which course to export data from." /></Label>
+              <Select
+                value={rosterCourseId}
+                onValueChange={setRosterCourseId}
+                disabled={loadingCourses}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select course" />
+                </SelectTrigger>
+                <SelectContent>
+                  {courseOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          )}
-        </div>
 
-        <Button
-          onClick={() => void handleRosterDownload()}
-          disabled={downloadingRoster || !rosterCourseId}
-        >
-          <Download className="mr-2 h-4 w-4" />
-          {downloadingRoster ? 'Downloading...' : 'Download Roster'}
-        </Button>
-      </section>
+            {/* Status filter */}
+            <div className="space-y-1">
+              <Label>Status <HelpTip text="Filter students by enrollment status." /></Label>
+              <Select value={rosterStatus} onValueChange={setRosterStatus}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROSTER_STATUS_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-      {/* ── Section 2: Course Submissions ── */}
-      <section className="rounded-sm border border-border bg-card p-4 space-y-4">
-        <h2 className="text-lg font-semibold text-foreground">Course Submissions</h2>
-        <p className="text-xs text-muted-foreground">
-          Download submission records for a single course, with optional date and category filters.
-        </p>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          {/* Course selector */}
-          <div className="space-y-1">
-            <Label>Course</Label>
-            <Select
-              value={subsCourseId}
-              onValueChange={setSubsCourseId}
-              disabled={loadingCourses}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select course" />
-              </SelectTrigger>
-              <SelectContent>
-                {courseOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Date range */}
-          <div className="space-y-1">
-            <Label>From</Label>
-            <Input
-              type="date"
-              value={subsStartDate}
-              onChange={(e) => setSubsStartDate(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label>To</Label>
-            <Input
-              type="date"
-              value={subsEndDate}
-              onChange={(e) => setSubsEndDate(e.target.value)}
-            />
-          </div>
-
-          {/* Category filter */}
-          <div className="space-y-1">
-            <Label>Category</Label>
-            <Select value={subsCategory} onValueChange={setSubsCategory}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CATEGORY_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Status filter */}
-          <div className="space-y-1">
-            <Label>Status</Label>
-            <Select value={subsStatus} onValueChange={setSubsStatus}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SUBMISSION_STATUS_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Checkboxes */}
-          <div className="flex flex-col justify-end gap-3">
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Checkbox
-                checked={subsIncludeAnswers}
-                onCheckedChange={(checked) => setSubsIncludeAnswers(checked === true)}
-              />
-              Include student answers
-            </label>
+            {/* Identifiable checkbox */}
             {canExportIdentifiable && (
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Checkbox
-                  checked={subsIdentifiable}
-                  onCheckedChange={(checked) => setSubsIdentifiable(checked === true)}
-                />
-                Include names &amp; emails
-              </label>
+              <div className="flex items-end">
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Checkbox
+                    checked={rosterIdentifiable}
+                    onCheckedChange={(checked) => setRosterIdentifiable(checked === true)}
+                  />
+                  Include names &amp; emails
+                  <HelpTip text="Include student names and email addresses. Requires EXPORT_IDENTIFIABLE permission." />
+                </label>
+              </div>
             )}
           </div>
+
+          <Button
+            onClick={() => void handleRosterDownload()}
+            disabled={downloadingRoster || !rosterCourseId}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            {downloadingRoster ? 'Downloading...' : 'Download Roster'}
+          </Button>
         </div>
+      </ExportCard>
 
-        <Button
-          onClick={() => void handleSubsDownload()}
-          disabled={downloadingSubs || !subsCourseId}
-        >
-          <Download className="mr-2 h-4 w-4" />
-          {downloadingSubs ? 'Downloading...' : 'Download Submissions'}
-        </Button>
-      </section>
-
-      {/* ── Section 3: All Submissions (cross-course, hidden for TEACHER) ── */}
-      {canUseCrossCourse && (
-        <section className="rounded-sm border border-border bg-card p-4 space-y-4">
-          <h2 className="text-lg font-semibold text-foreground">All Submissions</h2>
-          <p className="text-xs text-muted-foreground">
-            Download submission records across all courses. A date range is required.
-          </p>
-
+      {/* ── Card 2: Course Submissions ── */}
+      <ExportCard
+        icon={<FileText className="size-5" />}
+        title="Course Submissions"
+        description="Download submission records for a single course, with optional date and category filters."
+        helpText="Export submission data for a specific course as a CSV file."
+      >
+        <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
-            {/* Date range (required) */}
+            {/* Course selector */}
             <div className="space-y-1">
-              <Label>From</Label>
+              <Label>Course <HelpTip text="Select which course to export data from." /></Label>
+              <Select
+                value={subsCourseId}
+                onValueChange={setSubsCourseId}
+                disabled={loadingCourses}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select course" />
+                </SelectTrigger>
+                <SelectContent>
+                  {courseOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Date range */}
+            <div className="space-y-1">
+              <Label>From <HelpTip text="Filter to submissions within this date range." /></Label>
               <Input
                 type="date"
-                value={crossStartDate}
-                onChange={(e) => setCrossStartDate(e.target.value)}
+                value={subsStartDate}
+                onChange={(e) => setSubsStartDate(e.target.value)}
               />
             </div>
             <div className="space-y-1">
-              <Label>To</Label>
+              <Label>To <HelpTip text="Filter to submissions within this date range." /></Label>
               <Input
                 type="date"
-                value={crossEndDate}
-                onChange={(e) => setCrossEndDate(e.target.value)}
+                value={subsEndDate}
+                onChange={(e) => setSubsEndDate(e.target.value)}
               />
             </div>
 
             {/* Category filter */}
             <div className="space-y-1">
-              <Label>Category</Label>
-              <Select value={crossCategory} onValueChange={setCrossCategory}>
+              <Label>Category <HelpTip text="Filter by assignment category (Quiz, Exam, Homework, etc.)." /></Label>
+              <Select value={subsCategory} onValueChange={setSubsCategory}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -426,8 +351,8 @@ export default function QuickExportTab({ role, canExportIdentifiable }: QuickExp
 
             {/* Status filter */}
             <div className="space-y-1">
-              <Label>Status</Label>
-              <Select value={crossStatus} onValueChange={setCrossStatus}>
+              <Label>Status <HelpTip text="Filter by submission status." /></Label>
+              <Select value={subsStatus} onValueChange={setSubsStatus}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -445,32 +370,175 @@ export default function QuickExportTab({ role, canExportIdentifiable }: QuickExp
             <div className="flex flex-col justify-end gap-3">
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Checkbox
-                  checked={crossIncludeAnswers}
-                  onCheckedChange={(checked) => setCrossIncludeAnswers(checked === true)}
+                  checked={subsIncludeAnswers}
+                  onCheckedChange={(checked) => setSubsIncludeAnswers(checked === true)}
                 />
                 Include student answers
+                <HelpTip text="Include the full text of student responses in the export." />
               </label>
               {canExportIdentifiable && (
                 <label className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Checkbox
-                    checked={crossIdentifiable}
-                    onCheckedChange={(checked) => setCrossIdentifiable(checked === true)}
+                    checked={subsIdentifiable}
+                    onCheckedChange={(checked) => setSubsIdentifiable(checked === true)}
                   />
                   Include names &amp; emails
+                  <HelpTip text="Include student names and email addresses. Requires EXPORT_IDENTIFIABLE permission." />
                 </label>
               )}
             </div>
           </div>
 
           <Button
-            onClick={() => void handleCrossDownload()}
-            disabled={downloadingCross || !crossStartDate || !crossEndDate}
+            onClick={() => void handleSubsDownload()}
+            disabled={downloadingSubs || !subsCourseId}
           >
             <Download className="mr-2 h-4 w-4" />
-            {downloadingCross ? 'Downloading...' : 'Download All Submissions'}
+            {downloadingSubs ? 'Downloading...' : 'Download Submissions'}
           </Button>
-        </section>
+        </div>
+      </ExportCard>
+
+      {/* ── Card 3: All Submissions (cross-course, hidden for TEACHER) ── */}
+      {canUseCrossCourse && (
+        <ExportCard
+          icon={<Files className="size-5" />}
+          title="All Submissions"
+          description="Download submission records across all courses. A date range is required."
+          helpText="Export submission data across every course as a single CSV file."
+        >
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              {/* Date range (required) */}
+              <div className="space-y-1">
+                <Label>From <HelpTip text="Filter to submissions within this date range." /></Label>
+                <Input
+                  type="date"
+                  value={crossStartDate}
+                  onChange={(e) => setCrossStartDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>To <HelpTip text="Filter to submissions within this date range." /></Label>
+                <Input
+                  type="date"
+                  value={crossEndDate}
+                  onChange={(e) => setCrossEndDate(e.target.value)}
+                />
+              </div>
+
+              {/* Category filter */}
+              <div className="space-y-1">
+                <Label>Category <HelpTip text="Filter by assignment category (Quiz, Exam, Homework, etc.)." /></Label>
+                <Select value={crossCategory} onValueChange={setCrossCategory}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORY_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Status filter */}
+              <div className="space-y-1">
+                <Label>Status <HelpTip text="Filter by submission status." /></Label>
+                <Select value={crossStatus} onValueChange={setCrossStatus}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SUBMISSION_STATUS_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Checkboxes */}
+              <div className="flex flex-col justify-end gap-3">
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Checkbox
+                    checked={crossIncludeAnswers}
+                    onCheckedChange={(checked) => setCrossIncludeAnswers(checked === true)}
+                  />
+                  Include student answers
+                  <HelpTip text="Include the full text of student responses in the export." />
+                </label>
+                {canExportIdentifiable && (
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Checkbox
+                      checked={crossIdentifiable}
+                      onCheckedChange={(checked) => setCrossIdentifiable(checked === true)}
+                    />
+                    Include names &amp; emails
+                    <HelpTip text="Include student names and email addresses. Requires EXPORT_IDENTIFIABLE permission." />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            <Button
+              onClick={() => void handleCrossDownload()}
+              disabled={downloadingCross || !crossStartDate || !crossEndDate}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              {downloadingCross ? 'Downloading...' : 'Download All Submissions'}
+            </Button>
+          </div>
+        </ExportCard>
       )}
+
+      {/* ── Placeholder Cards (future export types) ── */}
+      <ExportCard
+        icon={<ClipboardList className="size-5" />}
+        title="Assessment Templates"
+        description="Export assessment definitions and question banks."
+        helpText="Download assessment templates as structured data for backup or transfer."
+      >
+        <p className="text-sm text-muted-foreground">
+          Coming soon. This export type requires a backend endpoint that has not yet been implemented.
+        </p>
+      </ExportCard>
+
+      <ExportCard
+        icon={<CalendarDays className="size-5" />}
+        title="Assignment Configurations"
+        description="Export assignment settings, schedules, and scoring rules."
+        helpText="Download assignment configurations including due dates and grading policies."
+      >
+        <p className="text-sm text-muted-foreground">
+          Coming soon. This export type requires a backend endpoint that has not yet been implemented.
+        </p>
+      </ExportCard>
+
+      <ExportCard
+        icon={<TableProperties className="size-5" />}
+        title="Rubric Definitions"
+        description="Export rubric criteria and scoring scales."
+        helpText="Download rubric definitions for archival or reuse in other courses."
+      >
+        <p className="text-sm text-muted-foreground">
+          Coming soon. This export type requires a backend endpoint that has not yet been implemented.
+        </p>
+      </ExportCard>
+
+      <ExportCard
+        icon={<Building className="size-5" />}
+        title="Course Metadata"
+        description="Export course settings, enrollment rules, and configuration."
+        helpText="Download course-level metadata for institutional records."
+      >
+        <p className="text-sm text-muted-foreground">
+          Coming soon. This export type requires a backend endpoint that has not yet been implemented.
+        </p>
+      </ExportCard>
 
       {/* ── Permission notice for researchers without identifiable access ── */}
       {!canExportIdentifiable && role === 'RESEARCHER' && (
