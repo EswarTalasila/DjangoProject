@@ -16,6 +16,8 @@ export type PackageNode = {
   filters: Record<string, unknown> | null;
   identifiable: boolean;
   includeAnswers: boolean;
+  sourceType: NodeSourceType;
+  snapshotId: number | null;
 };
 
 export type PackageWorkspace = {
@@ -59,6 +61,43 @@ export type BuildJob = {
   warnings?: ValidationIssue[];
   errorMessage?: string;
   artifactId?: number;
+};
+
+export type SnapshotStatus = 'QUEUED' | 'READY' | 'FAILED' | 'EXPIRED';
+export type NodeSourceType = 'LIVE' | 'SNAPSHOT';
+
+export type DataSnapshot = {
+  id: number;
+  workspaceId: number;
+  datasetBinding: DatasetBinding;
+  scopeCourseId: number | null;
+  filters: Record<string, unknown> | null;
+  includeAnswers: boolean;
+  identifiable: boolean;
+  storageKey: string;
+  rowCount: number;
+  fileSize: number;
+  checksumSha256: string;
+  status: SnapshotStatus;
+  errorMessage: string;
+  metadata: Record<string, unknown>;
+  expiresAt: string | null;
+  createdAt: string;
+  createdBy: number;
+};
+
+export type CreateSnapshotPayload = {
+  datasetBinding: DatasetBinding;
+  scopeCourseId?: number | null;
+  filters?: Record<string, unknown> | null;
+  includeAnswers?: boolean;
+  identifiable?: boolean;
+};
+
+export type ReorderNodePayload = {
+  movedNodeId: number;
+  targetParentId: number | null;
+  targetOrderIndex: number;
 };
 
 export type WorkspaceSummary = {
@@ -187,5 +226,34 @@ export async function downloadArtifact(artifactId: number): Promise<{ blob: Blob
     blob: response.data as Blob,
     filename: filenameMatch?.[1] || `package-artifact-${artifactId}.zip`,
   };
+}
+
+export async function createSnapshot(
+  workspaceId: number,
+  payload: CreateSnapshotPayload,
+): Promise<DataSnapshot> {
+  const { data } = await api.post<DataSnapshot>(
+    `/packages/workspaces/${workspaceId}/snapshots`,
+    payload,
+  );
+  return data;
+}
+
+export async function listSnapshots(workspaceId: number): Promise<DataSnapshot[]> {
+  const { data } = await api.get<DataSnapshot[]>(
+    `/packages/workspaces/${workspaceId}/snapshots`,
+  );
+  return data;
+}
+
+export async function reorderNode(
+  workspaceId: number,
+  payload: ReorderNodePayload,
+): Promise<PackageWorkspace> {
+  const { data } = await api.post<PackageWorkspace>(
+    `/packages/workspaces/${workspaceId}/nodes/reorder`,
+    payload,
+  );
+  return data;
 }
 

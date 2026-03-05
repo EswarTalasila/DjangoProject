@@ -10,7 +10,7 @@ import {
   FileText,
   CheckSquare,
   KeyRound,
-  Download,
+  LibraryBig,
   Shield,
   Users,
   TrendingUp,
@@ -26,7 +26,7 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
   "Assignments & Grading": CheckSquare,
   Registration: KeyRound,
   Analytics: TrendingUp,
-  Exports: Download,
+  Exports: LibraryBig,
   Users: Users,
   Delegation: Shield,
 };
