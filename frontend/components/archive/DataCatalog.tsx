@@ -5,6 +5,7 @@ import {
   Camera,
   ChevronDown,
   ChevronRight,
+  Files,
   FileSpreadsheet,
   GraduationCap,
   Layers,
@@ -60,6 +61,7 @@ export default function DataCatalog({
   const [filterText, setFilterText] = useState('');
 
   /* Collapsible section state */
+  const [globalOpen, setGlobalOpen] = useState(true);
   const [coursesOpen, setCoursesOpen] = useState(true);
   const [snapshotsOpen, setSnapshotsOpen] = useState(true);
   const [assessmentsOpen, setAssessmentsOpen] = useState(true);
@@ -127,6 +129,12 @@ export default function DataCatalog({
       return name.includes(lowerFilter);
     });
   }, [snapshots, lowerFilter]);
+
+  const showCrossCourse =
+    lowerFilter.length === 0 ||
+    'cross-course submissions'.includes(lowerFilter) ||
+    'cross course submissions'.includes(lowerFilter) ||
+    'global data'.includes(lowerFilter);
 
   function bindingLabel(binding: DatasetBinding) {
     if (binding === 'ROSTER') return 'Roster';
@@ -210,6 +218,77 @@ export default function DataCatalog({
           className="pl-9"
         />
       </div>
+      <p className="px-1 text-xs text-muted-foreground">
+        Camera icons create snapshots. Plus icons add either live or snapshot
+        data directly into the explorer.
+      </p>
+
+      {/* Courses section */}
+      <Collapsible open={globalOpen} onOpenChange={setGlobalOpen}>
+        <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold text-foreground hover:bg-accent/30">
+          {globalOpen ? (
+            <ChevronDown className="size-4" />
+          ) : (
+            <ChevronRight className="size-4" />
+          )}
+          <Files className="size-4" />
+          Global Data
+          <span className="ml-auto text-xs text-muted-foreground">
+            {showCrossCourse ? 1 : 0}
+          </span>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-0.5 pl-2">
+          {showCrossCourse ? (
+            <>
+              <div className="flex items-center gap-2 rounded-md px-2 py-1 text-sm text-muted-foreground hover:bg-accent/30">
+                <FileSpreadsheet className="size-3.5 text-purple-500" />
+                <span className="truncate">Cross-Course Submissions</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto h-6 w-6 p-0"
+                  title="Take snapshot of cross-course submissions"
+                  disabled={isCreatingSnapshot}
+                  onClick={() =>
+                    void handleTakeSnapshot({
+                      datasetBinding: 'CROSS_COURSE_SUBMISSIONS',
+                      scopeCourseId: null,
+                      label: 'Cross-course submissions',
+                      includeAnswers: false,
+                    })
+                  }
+                >
+                  <Camera className="size-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  title="Add Cross-Course Submissions to package"
+                  onClick={() =>
+                    onAddItem({
+                      label: 'Cross-Course Submissions.csv',
+                      datasetBinding: 'CROSS_COURSE_SUBMISSIONS',
+                      bindingCourseId: null,
+                    })
+                  }
+                >
+                  <Plus className="size-3.5" />
+                </Button>
+              </div>
+              <p className="px-2 pb-0.5 text-xs text-muted-foreground">
+                Snapshot available here. No need to use Quick Export first.
+              </p>
+            </>
+          ) : (
+            <p className="px-2 py-1 text-xs text-muted-foreground">
+              No global datasets found.
+            </p>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Courses section */}
       <Collapsible open={coursesOpen} onOpenChange={setCoursesOpen}>
