@@ -25,6 +25,16 @@ import { toast } from 'sonner';
 
 import DataCatalog from '@/components/archive/DataCatalog';
 import PackageBuildBar from '@/components/archive/PackageBuildBar';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { HelpTip } from '@/components/ui/help-tip';
@@ -213,6 +223,9 @@ export default function PackageEditor({
   /* Drag-and-drop state */
   const [draggedNodeId, setDraggedNodeId] = useState<number | null>(null);
   const [dropTargetId, setDropTargetId] = useState<number | 'ROOT' | null>(null);
+  const [deleteTargetNode, setDeleteTargetNode] = useState<PackageNode | null>(
+    null,
+  );
 
   const childrenMap = useMemo(
     () => buildChildrenMap(workspace?.nodes ?? []),
@@ -503,11 +516,11 @@ export default function PackageEditor({
 
   async function handleDeleteNode(node: PackageNode) {
     if (!workspace) return;
-    if (!window.confirm(`Delete "${node.label}" and all contents?`)) return;
     setIsSavingNode(true);
     try {
       await deleteNode(workspace.id, node.id);
       setSelectedNodeId((prev) => (prev === node.id ? null : prev));
+      setDeleteTargetNode(null);
       await refreshWorkspace();
       toast.success('Deleted.');
     } catch (error) {
@@ -889,7 +902,7 @@ export default function PackageEditor({
               className="rounded p-1 text-destructive hover:bg-accent"
               onClick={(event) => {
                 event.stopPropagation();
-                void handleDeleteNode(node);
+                setDeleteTargetNode(node);
               }}
               title="Delete"
             >
@@ -1360,7 +1373,7 @@ export default function PackageEditor({
                     <Button
                       type="button"
                       variant="destructive"
-                      onClick={() => void handleDeleteNode(selectedNode)}
+                      onClick={() => setDeleteTargetNode(selectedNode)}
                     >
                       <Trash2 className="mr-2 size-4" />
                       Delete
@@ -1388,6 +1401,35 @@ export default function PackageEditor({
         onBuild={() => void handleBuildWorkspace()}
         onDownload={() => void handleDownloadArtifact()}
       />
+
+      <AlertDialog
+        open={deleteTargetNode != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTargetNode(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Item</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete &ldquo;{deleteTargetNode?.label}&rdquo; and all nested
+              contents? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSavingNode}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                deleteTargetNode ? void handleDeleteNode(deleteTargetNode) : undefined
+              }
+              disabled={isSavingNode}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isSavingNode ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
