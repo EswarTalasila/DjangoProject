@@ -11,13 +11,14 @@ export function HelpTip({ text }: { text: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
-          type="button"
+        <span
+          tabIndex={0}
+          role="button"
           className="ml-1 inline-flex items-center text-muted-foreground hover:text-foreground"
           aria-label="Show help"
         >
           <CircleHelp className="h-3.5 w-3.5" />
-        </button>
+        </span>
       </TooltipTrigger>
       <TooltipContent sideOffset={6} className="max-w-xs whitespace-pre-line">
         {text}

@@ -113,8 +113,8 @@ export default function PackageBuildBar({
           >
             <Hammer className="mr-2 size-4" />
             {isBuilding ? 'Building...' : 'Build Package'}
-            <HelpTip text="Create a downloadable package from the current tree structure." />
           </Button>
+          <HelpTip text="Create a downloadable package from the current tree structure." />
           {buildResult?.artifactId && buildResult.status === 'COMPLETED' && (
             <Button
               type="button"
