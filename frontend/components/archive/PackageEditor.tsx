@@ -5,9 +5,11 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronRight,
-  Download,
+  ChevronsDownUp,
+  ChevronsUpDown,
   File,
   FilePlus,
+  FileText,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -16,11 +18,15 @@ import {
   Pencil,
   Save,
   Trash2,
+  Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import DataCatalog from '@/components/archive/DataCatalog';
+import PackageBuildBar from '@/components/archive/PackageBuildBar';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { HelpTip } from '@/components/ui/help-tip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -30,6 +36,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { listCourses, type CourseSummary } from '@/lib/course-api';
 import {
   addNode,
@@ -79,7 +87,7 @@ const DATA_SOURCES: Array<{ value: DatasetBinding; label: string }> = [
 const NONE_SELECT = '__ROOT__';
 
 /* ---------------------------------------------------------------------------
- * Utility helpers (preserved from monolith)
+ * Utility helpers (preserved from original)
  * --------------------------------------------------------------------------- */
 
 function parseFilters(raw: string): Record<string, unknown> | null {
@@ -108,6 +116,29 @@ function buildChildrenMap(nodes: PackageNode[]) {
     map.set(key, bucket);
   }
   return map;
+}
+
+/* ---------------------------------------------------------------------------
+ * File icon helper — colors icon based on datasetBinding
+ * --------------------------------------------------------------------------- */
+
+function FileIcon({
+  node,
+}: {
+  node: PackageNode;
+}) {
+  if (node.nodeType === 'FOLDER') {
+    return null; // handled separately in renderNode
+  }
+  switch (node.datasetBinding) {
+    case 'ROSTER':
+      return <Users className="size-4 text-green-500" />;
+    case 'COURSE_SUBMISSIONS':
+    case 'CROSS_COURSE_SUBMISSIONS':
+      return <FileText className="size-4 text-purple-500" />;
+    default:
+      return <File className="size-4 text-sky-500" />;
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -274,6 +305,18 @@ export default function PackageEditor({
       }
       return next;
     });
+  }
+
+  function expandAll() {
+    if (!workspace) return;
+    const folderIds = workspace.nodes
+      .filter((node) => node.nodeType === 'FOLDER')
+      .map((node) => node.id);
+    setExpandedFolders(new Set(folderIds));
+  }
+
+  function collapseAll() {
+    setExpandedFolders(new Set());
   }
 
   function startRename(node: PackageNode) {
@@ -536,6 +579,47 @@ export default function PackageEditor({
     }
   }
 
+  /* --- Catalog add handler --- */
+
+  async function handleAddFromCatalog(config: {
+    label: string;
+    datasetBinding: DatasetBinding;
+    bindingCourseId: number | null;
+  }) {
+    if (!workspace) return;
+    setIsSavingNode(true);
+    try {
+      /* Determine parent: use currently-selected folder, or root */
+      const parentFolder =
+        selectedNode?.nodeType === 'FOLDER' ? selectedNode.id : null;
+      const siblings = workspace.nodes.filter(
+        (candidate) => candidate.parentId === parentFolder,
+      );
+      const orderIndex = siblings.length;
+      await addNode(workspace.id, {
+        parentId: parentFolder,
+        nodeType: 'FILE',
+        label: config.label,
+        orderIndex,
+        datasetBinding: config.datasetBinding,
+        bindingCourseId: config.bindingCourseId,
+        filters: null,
+        identifiable: false,
+        includeAnswers: false,
+      });
+      await refreshWorkspace();
+      /* Auto-expand the parent folder so the new file is visible */
+      if (parentFolder != null) {
+        setExpandedFolders((prev) => new Set(prev).add(parentFolder));
+      }
+      toast.success('File added from catalog.');
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    } finally {
+      setIsSavingNode(false);
+    }
+  }
+
   /* --- Tree renderer --- */
 
   function renderNode(node: PackageNode, depth: number) {
@@ -592,7 +676,7 @@ export default function PackageEditor({
                 <Folder className="size-4 text-amber-500" />
               )
             ) : (
-              <File className="size-4 text-sky-500" />
+              <FileIcon node={node} />
             )}
             <button
               type="button"
@@ -700,7 +784,7 @@ export default function PackageEditor({
         </div>
 
         {isFolder && isExpanded ? (
-          <div className="space-y-1 pl-5">
+          <div className="ml-3 border-l border-border pl-3 space-y-1">
             {children.length === 0 ? (
               <p className="px-2 py-1 text-xs text-muted-foreground">
                 Empty folder
@@ -787,138 +871,133 @@ export default function PackageEditor({
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header with back button */}
-      <div>
+    <div className="flex h-full flex-col">
+      {/* ---- Compact header ---- */}
+      <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-3">
         <Button type="button" variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeft className="mr-2 size-4" />
-          Back to packages
+          <ArrowLeft className="size-4" />
         </Button>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-foreground">
-          Edit Package
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Package &mdash; {workspace.name}
-        </p>
-      </div>
-
-      {/* Package metadata */}
-      <section className="rounded-sm border border-border bg-card p-4">
-        <div className="mb-3 flex justify-between items-center">
-          <div>
-            <p className="text-xs text-muted-foreground">
-              Updated {new Date(workspace.updatedAt).toLocaleString()}
-            </p>
-          </div>
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <Input
+            value={workspaceName}
+            onChange={(event) => setWorkspaceName(event.target.value)}
+            className="h-8 max-w-xs font-semibold"
+          />
+          <StatusBadge status={workspaceStatus} />
+          <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">
+            Updated {new Date(workspace.updatedAt).toLocaleString()}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select
+            value={workspaceStatus}
+            onValueChange={(value) =>
+              setWorkspaceStatus(value as WorkspaceStatus)
+            }
+          >
+            <SelectTrigger className="h-8 w-28">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="DRAFT">Draft</SelectItem>
+              <SelectItem value="SEALED">Ready</SelectItem>
+            </SelectContent>
+          </Select>
           <Button
             type="button"
+            size="sm"
             onClick={() => void handleSaveWorkspace()}
             disabled={isSavingWorkspace}
           >
             <Save className="mr-2 size-4" />
-            {isSavingWorkspace ? 'Saving...' : 'Save details'}
+            {isSavingWorkspace ? 'Saving...' : 'Save'}
           </Button>
         </div>
-        <div className="grid gap-3 md:grid-cols-4">
-          <div className="space-y-1">
-            <Label>Name</Label>
-            <Input
-              value={workspaceName}
-              onChange={(event) => setWorkspaceName(event.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label>Status</Label>
-            <Select
-              value={workspaceStatus}
-              onValueChange={(value) =>
-                setWorkspaceStatus(value as WorkspaceStatus)
-              }
+      </div>
+
+      {/* ---- Two-pane main area ---- */}
+      <div className="flex-1 overflow-hidden grid grid-cols-1 xl:grid-cols-[1fr_1.2fr] gap-4 p-4">
+        {/* Left pane: Explorer tree */}
+        <section className="flex flex-col rounded-sm border border-border bg-card overflow-hidden">
+          {/* Toolbar */}
+          <div className="flex items-center gap-1 border-b border-border px-3 py-2">
+            <span className="text-sm font-semibold text-foreground mr-auto">
+              Explorer
+            </span>
+            <button
+              type="button"
+              className="rounded p-1.5 text-muted-foreground hover:bg-accent"
+              onClick={() => startAdd('ROOT', 'FOLDER')}
+              title="New folder at root"
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="DRAFT">Draft</SelectItem>
-                <SelectItem value="SEALED">Ready</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label>Associated Course</Label>
-            <Input
-              value={workspace.scopeCourseId ?? 'All courses'}
-              readOnly
-            />
-          </div>
-          <div className="space-y-1">
-            <Label>Description</Label>
-            <Input
-              value={workspaceDescription}
-              onChange={(event) =>
-                setWorkspaceDescription(event.target.value)
-              }
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Explorer + Properties panel */}
-      <div className="grid gap-4 xl:grid-cols-[1fr_1.15fr]">
-        {/* Explorer tree */}
-        <section className="rounded-sm border border-border bg-card p-4">
-          <div className="mb-3 flex justify-between items-center">
-            <h2 className="text-lg font-semibold text-foreground">Explorer</h2>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => startAdd('ROOT', 'FOLDER')}
-              >
-                <FolderPlus className="mr-2 size-4" />
-                Folder
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => startAdd('ROOT', 'FILE')}
-              >
-                <FilePlus className="mr-2 size-4" />
-                File
-              </Button>
-            </div>
+              <FolderPlus className="size-4" />
+            </button>
+            <button
+              type="button"
+              className="rounded p-1.5 text-muted-foreground hover:bg-accent"
+              onClick={() => startAdd('ROOT', 'FILE')}
+              title="New file at root"
+            >
+              <FilePlus className="size-4" />
+            </button>
+            <button
+              type="button"
+              className="rounded p-1.5 text-muted-foreground hover:bg-accent"
+              onClick={expandAll}
+              title="Expand all"
+            >
+              <ChevronsUpDown className="size-4" />
+            </button>
+            <button
+              type="button"
+              className="rounded p-1.5 text-muted-foreground hover:bg-accent"
+              onClick={collapseAll}
+              title="Collapse all"
+            >
+              <ChevronsDownUp className="size-4" />
+            </button>
           </div>
 
-          {addCursor && addCursor.parentId === 'ROOT' ? (
-            <div className="mb-3 flex gap-2">
-              <Input
-                value={addCursor.label}
-                onChange={(event) =>
-                  setAddCursor((prev) =>
-                    prev ? { ...prev, label: event.target.value } : prev,
-                  )
-                }
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') void handleAddNode();
-                  if (event.key === 'Escape') cancelAdd();
-                }}
-                placeholder={`New ${addCursor.kind.toLowerCase()} at root`}
-              />
-              <Button type="button" onClick={() => void handleAddNode()}>
-                Add
-              </Button>
-              <Button type="button" variant="outline" onClick={cancelAdd}>
-                Cancel
-              </Button>
-            </div>
-          ) : null}
+          {/* Tree content */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-1">
+            {addCursor && addCursor.parentId === 'ROOT' ? (
+              <div className="mb-3 flex gap-2">
+                <Input
+                  value={addCursor.label}
+                  onChange={(event) =>
+                    setAddCursor((prev) =>
+                      prev ? { ...prev, label: event.target.value } : prev,
+                    )
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void handleAddNode();
+                    if (event.key === 'Escape') cancelAdd();
+                  }}
+                  placeholder={`New ${addCursor.kind.toLowerCase()} at root`}
+                  className="h-7"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => void handleAddNode()}
+                >
+                  Add
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={cancelAdd}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : null}
 
-          <div className="space-y-1">
-            {rootNodes.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No files or folders yet. Add some above.
+            {rootNodes.length === 0 && !addCursor ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                Your package is empty. Add folders and files, then bind data
+                from the catalog.
               </p>
             ) : (
               rootNodes.map((node) => renderNode(node, 0))
@@ -926,286 +1005,244 @@ export default function PackageEditor({
           </div>
         </section>
 
-        {/* Right column: properties + validate/build */}
-        <section className="space-y-4">
-          {/* Selected item properties */}
-          <div className="rounded-sm border border-border bg-card p-4 space-y-3">
-            <h2 className="text-lg font-semibold text-foreground">
-              Selected Item
-            </h2>
-            {!selectedNode ? (
-              <p className="text-sm text-muted-foreground">
-                Select any item in the tree to edit its data source, parent,
-                and order.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="space-y-1 md:col-span-2">
-                    <Label>Label</Label>
-                    <Input
-                      value={nodeLabel}
-                      onChange={(event) => setNodeLabel(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Order</Label>
-                    <Input
-                      value={nodeOrderIndex}
-                      onChange={(event) =>
-                        setNodeOrderIndex(event.target.value)
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Parent</Label>
-                    <Select value={nodeParentId} onValueChange={setNodeParentId}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NONE_SELECT}>Root</SelectItem>
-                        {workspace.nodes
-                          .filter(
-                            (candidate) =>
-                              candidate.id !== selectedNode.id &&
-                              candidate.nodeType === 'FOLDER',
-                          )
-                          .map((candidate) => (
-                            <SelectItem
-                              key={candidate.id}
-                              value={String(candidate.id)}
-                            >
-                              {candidate.label}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+        {/* Right pane: Catalog + Properties tabs */}
+        <section className="flex flex-col rounded-sm border border-border bg-card overflow-hidden">
+          <Tabs defaultValue="catalog" className="flex flex-col flex-1 overflow-hidden">
+            <TabsList className="mx-3 mt-2 w-fit">
+              <TabsTrigger value="catalog">Catalog</TabsTrigger>
+              <TabsTrigger value="properties">Properties</TabsTrigger>
+            </TabsList>
 
-                {selectedNode.nodeType === 'FILE' ? (
-                  <div className="space-y-3 border border-border p-3 rounded-sm">
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="space-y-1">
-                        <Label>Data Source</Label>
-                        <Select
-                          value={nodeBinding.datasetBinding}
-                          onValueChange={(value) =>
-                            setNodeBinding((prev) => ({
-                              ...prev,
-                              datasetBinding: value as DatasetBinding,
-                            }))
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {DATA_SOURCES.map((binding) => (
+            {/* Catalog tab */}
+            <TabsContent
+              value="catalog"
+              className="flex-1 overflow-y-auto px-3 pb-3"
+            >
+              <DataCatalog onAddItem={handleAddFromCatalog} />
+            </TabsContent>
+
+            {/* Properties tab */}
+            <TabsContent
+              value="properties"
+              className="flex-1 overflow-y-auto px-3 pb-3"
+            >
+              {!selectedNode ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">
+                  Select an item in the tree to view its properties.
+                </p>
+              ) : (
+                <div className="space-y-3 pt-1">
+                  {/* Common fields: label, parent, order */}
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="space-y-1 md:col-span-2">
+                      <Label className="flex items-center gap-1">
+                        Label
+                        <HelpTip text="A descriptive name for this item in the package tree." />
+                      </Label>
+                      <Input
+                        value={nodeLabel}
+                        onChange={(event) => setNodeLabel(event.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="flex items-center gap-1">
+                        Order
+                        <HelpTip text="Position within sibling items. Lower numbers appear first." />
+                      </Label>
+                      <Input
+                        value={nodeOrderIndex}
+                        onChange={(event) =>
+                          setNodeOrderIndex(event.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="flex items-center gap-1">
+                        Parent
+                        <HelpTip text="The folder this item belongs to." />
+                      </Label>
+                      <Select value={nodeParentId} onValueChange={setNodeParentId}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NONE_SELECT}>Root</SelectItem>
+                          {workspace.nodes
+                            .filter(
+                              (candidate) =>
+                                candidate.id !== selectedNode.id &&
+                                candidate.nodeType === 'FOLDER',
+                            )
+                            .map((candidate) => (
                               <SelectItem
-                                key={binding.value}
-                                value={binding.value}
+                                key={candidate.id}
+                                value={String(candidate.id)}
                               >
-                                {binding.label}
+                                {candidate.label}
                               </SelectItem>
                             ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label>From Course</Label>
-                        <Select
-                          value={nodeBinding.bindingCourseId}
-                          onValueChange={(value) =>
-                            setNodeBinding((prev) => ({
-                              ...prev,
-                              bindingCourseId: value,
-                            }))
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select course" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={NONE_SELECT}>None</SelectItem>
-                            {courses.map((course) => (
-                              <SelectItem
-                                key={course.id}
-                                value={String(course.id)}
-                              >
-                                {course.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1 md:col-span-2">
-                        <Label>Advanced Filters (JSON)</Label>
-                        <Input
-                          value={nodeBinding.filtersText}
-                          onChange={(event) =>
-                            setNodeBinding((prev) => ({
-                              ...prev,
-                              filtersText: event.target.value,
-                            }))
-                          }
-                          placeholder='e.g. {"assignmentId": 5}'
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Optional JSON object to narrow down the exported data.
-                        </p>
-                      </div>
-                      <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Checkbox
-                          checked={nodeBinding.identifiable}
-                          disabled={!canExportIdentifiable}
-                          onCheckedChange={(checked) =>
-                            setNodeBinding((prev) => ({
-                              ...prev,
-                              identifiable: checked === true,
-                            }))
-                          }
-                        />
-                        Include names &amp; emails
-                      </label>
-                      <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Checkbox
-                          checked={nodeBinding.includeAnswers}
-                          onCheckedChange={(checked) =>
-                            setNodeBinding((prev) => ({
-                              ...prev,
-                              includeAnswers: checked === true,
-                            }))
-                          }
-                        />
-                        Include student answers
-                      </label>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Data source settings are only available for files.
-                  </p>
-                )}
 
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    onClick={() => void handleSaveNodeProperties()}
-                    disabled={isSavingNode}
-                  >
-                    <Save className="mr-2 size-4" />
-                    {isSavingNode ? 'Saving...' : 'Save'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    onClick={() => void handleDeleteNode(selectedNode)}
-                  >
-                    <Trash2 className="mr-2 size-4" />
-                    Delete
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
+                  {/* File-specific fields */}
+                  {selectedNode.nodeType === 'FILE' ? (
+                    <div className="space-y-3 border border-border p-3 rounded-sm">
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label className="flex items-center gap-1">
+                            Data source
+                            <HelpTip text="The type of data this file will contain when the package is built." />
+                          </Label>
+                          <Select
+                            value={nodeBinding.datasetBinding}
+                            onValueChange={(value) =>
+                              setNodeBinding((prev) => ({
+                                ...prev,
+                                datasetBinding: value as DatasetBinding,
+                              }))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {DATA_SOURCES.map((binding) => (
+                                <SelectItem
+                                  key={binding.value}
+                                  value={binding.value}
+                                >
+                                  {binding.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="flex items-center gap-1">
+                            From Course
+                            <HelpTip text="Select which course's data this file should contain." />
+                          </Label>
+                          <Select
+                            value={nodeBinding.bindingCourseId}
+                            onValueChange={(value) =>
+                              setNodeBinding((prev) => ({
+                                ...prev,
+                                bindingCourseId: value,
+                              }))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select course" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={NONE_SELECT}>None</SelectItem>
+                              {courses.map((course) => (
+                                <SelectItem
+                                  key={course.id}
+                                  value={String(course.id)}
+                                >
+                                  {course.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1 md:col-span-2">
+                          <Label className="flex items-center gap-1">
+                            Filters (JSON)
+                            <HelpTip text='Optional JSON object to narrow exported rows. Example: {"assignmentId": 5}' />
+                          </Label>
+                          <Input
+                            value={nodeBinding.filtersText}
+                            onChange={(event) =>
+                              setNodeBinding((prev) => ({
+                                ...prev,
+                                filtersText: event.target.value,
+                              }))
+                            }
+                            placeholder='e.g. {"assignmentId": 5}'
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Checkbox
+                            checked={nodeBinding.identifiable}
+                            disabled={!canExportIdentifiable}
+                            onCheckedChange={(checked) =>
+                              setNodeBinding((prev) => ({
+                                ...prev,
+                                identifiable: checked === true,
+                              }))
+                            }
+                          />
+                          Identifiable
+                          <HelpTip text="Include student names and email addresses. Requires EXPORT_IDENTIFIABLE permission." />
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Checkbox
+                            checked={nodeBinding.includeAnswers}
+                            onCheckedChange={(checked) =>
+                              setNodeBinding((prev) => ({
+                                ...prev,
+                                includeAnswers: checked === true,
+                              }))
+                            }
+                          />
+                          Include answers
+                          <HelpTip text="Include the full text of student responses in the export." />
+                        </label>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Data source settings are only available for files.
+                    </p>
+                  )}
 
-          {/* Check & Create Package */}
-          <section className="rounded-sm border border-border bg-card p-4 space-y-4">
-            <h2 className="text-lg font-semibold text-foreground">
-              Check &amp; Create Package
-            </h2>
-            <div className="grid gap-3 md:grid-cols-3">
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Checkbox
-                  checked={strictMode}
-                  onCheckedChange={(checked) =>
-                    setStrictMode(checked === true)
-                  }
-                />
-                Stop on first problem
-              </label>
-              <div className="space-y-1">
-                <Label>Data Snapshot</Label>
-                <Input
-                  value={snapshotIdText}
-                  onChange={(event) => setSnapshotIdText(event.target.value)}
-                  placeholder="Use current data"
-                />
-              </div>
-              <div className="flex gap-2 items-end">
-                <Button
-                  type="button"
-                  onClick={() => handleValidateWorkspace()}
-                  disabled={isValidating}
-                >
-                  {isValidating ? 'Checking...' : 'Check for Issues'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void handleBuildWorkspace()}
-                  disabled={isBuilding}
-                >
-                  {isBuilding ? 'Creating...' : 'Create Package'}
-                </Button>
-              </div>
-            </div>
-            {validationResult && (
-              <div className="rounded-sm border border-border p-3 text-sm space-y-2">
-                <p className="font-medium text-foreground">
-                  Check result:{' '}
-                  {validationResult.valid ? 'passed' : 'issues found'} &middot;{' '}
-                  Files {validationResult.fileCount} &middot; Estimated rows{' '}
-                  {validationResult.estimatedRows}
-                </p>
-                {validationResult.violations.length > 0 && (
-                  <div>
-                    <p className="font-medium text-destructive">Issues</p>
-                    <ul className="list-disc pl-5 text-muted-foreground">
-                      {validationResult.violations.map((issue, index) => (
-                        <li key={`${issue.code}-${index}`}>
-                          [{issue.code}] {issue.message}
-                        </li>
-                      ))}
-                    </ul>
+                  {/* Save and Delete buttons */}
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      onClick={() => void handleSaveNodeProperties()}
+                      disabled={isSavingNode}
+                    >
+                      <Save className="mr-2 size-4" />
+                      {isSavingNode ? 'Saving...' : 'Save'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => void handleDeleteNode(selectedNode)}
+                    >
+                      <Trash2 className="mr-2 size-4" />
+                      Delete
+                    </Button>
                   </div>
-                )}
-              </div>
-            )}
-            {buildResult && (
-              <div className="rounded-sm border border-border p-3 text-sm space-y-2">
-                <p className="font-medium text-foreground">
-                  Package #{buildResult.id}: {buildResult.status}
-                </p>
-                {buildResult.errorMessage && (
-                  <p className="text-destructive">{buildResult.errorMessage}</p>
-                )}
-                {buildResult.artifactId && buildResult.status === 'COMPLETED' && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => void handleDownloadArtifact()}
-                    disabled={isDownloadingArtifact}
-                  >
-                    <Download className="mr-2 size-4" />
-                    {isDownloadingArtifact
-                      ? 'Downloading...'
-                      : 'Download Package'}
-                  </Button>
-                )}
-              </div>
-            )}
-            {!canExportIdentifiable && role === 'RESEARCHER' ? (
-              <p className="text-xs text-muted-foreground">
-                Including names and emails is disabled for your account. An
-                admin can enable this in your capabilities settings.
-              </p>
-            ) : null}
-          </section>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </section>
       </div>
+
+      {/* ---- Footer: PackageBuildBar ---- */}
+      <PackageBuildBar
+        canExportIdentifiable={canExportIdentifiable}
+        role={role}
+        strictMode={strictMode}
+        onStrictModeChange={setStrictMode}
+        snapshotIdText={snapshotIdText}
+        onSnapshotIdChange={setSnapshotIdText}
+        validationResult={validationResult}
+        buildResult={buildResult}
+        isValidating={isValidating}
+        isBuilding={isBuilding}
+        isDownloadingArtifact={isDownloadingArtifact}
+        onValidate={handleValidateWorkspace}
+        onBuild={() => void handleBuildWorkspace()}
+        onDownload={() => void handleDownloadArtifact()}
+      />
     </div>
   );
 }
