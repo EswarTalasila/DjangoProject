@@ -68,28 +68,17 @@ export type AssignmentSummaryDTO = {
   distribution: DistributionBin[];
 };
 
-export type Quadrant = {
-  label: string;
-  count: number;
-  pct: number;
-};
-
-export type MoodMeterDTO = {
-  generatedAt: string;
-  assignmentId?: number;
-  totalResponses: number;
-  quadrants: Quadrant[];
-};
-
 // ---------------------------------------------------------------------------
 // API calls
 // ---------------------------------------------------------------------------
 
+/** GET /visualizations/dashboard — Fetch the teacher dashboard overview with per-course stats. */
 export async function fetchDashboard(): Promise<DashboardDTO> {
   const { data } = await api.get('/visualizations/dashboard');
   return data;
 }
 
+/** GET /visualizations/courses/:id/summary — Fetch per-assignment completion and score stats for a course. */
 export async function fetchCourseSummary(
   courseId: number,
   params?: { startDate?: string; endDate?: string; category?: string; assessmentId?: number },
@@ -98,6 +87,7 @@ export async function fetchCourseSummary(
   return data;
 }
 
+/** GET /visualizations/assignments/:id/summary — Fetch detailed stats and score distribution for an assignment. */
 export async function fetchAssignmentSummary(
   assignmentId: number,
   params?: { startDate?: string; endDate?: string },
@@ -108,7 +98,3 @@ export async function fetchAssignmentSummary(
   return data;
 }
 
-export async function fetchMoodMeter(assignmentId: number): Promise<MoodMeterDTO> {
-  const { data } = await api.get(`/visualizations/assignments/${assignmentId}/mood-meter`);
-  return data;
-}
