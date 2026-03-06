@@ -40,7 +40,16 @@ from ._validation import (
 )
 
 ARTIFACT_DIR = os.path.join(
-    getattr(settings, "MEDIA_ROOT", tempfile.gettempdir()), "package_artifacts"
+    (
+        os.path.join(
+            tempfile.gettempdir(),
+            "eel-package-builds",
+            os.getenv("PYTEST_XDIST_WORKER", "main"),
+        )
+        if getattr(settings, "ENVIRONMENT", "").lower() == "testing"
+        else getattr(settings, "MEDIA_ROOT", tempfile.gettempdir())
+    ),
+    "package_artifacts",
 )
 ARTIFACT_RETENTION_HOURS = 72
 

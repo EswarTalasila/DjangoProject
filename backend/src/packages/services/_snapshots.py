@@ -34,7 +34,16 @@ if TYPE_CHECKING:
     from ..models import PackageWorkspace
 
 SNAPSHOT_DIR = os.path.join(
-    getattr(settings, "MEDIA_ROOT", tempfile.gettempdir()), "snapshots"
+    (
+        os.path.join(
+            tempfile.gettempdir(),
+            "eel-package-builds",
+            os.getenv("PYTEST_XDIST_WORKER", "main"),
+        )
+        if getattr(settings, "ENVIRONMENT", "").lower() == "testing"
+        else getattr(settings, "MEDIA_ROOT", tempfile.gettempdir())
+    ),
+    "snapshots",
 )
 SNAPSHOT_RETENTION_HOURS = 24
 
