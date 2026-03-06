@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -21,6 +22,7 @@ export default function VizCourseSummaryView({
   courseId: number;
   role: string;
 }) {
+  const router = useRouter();
   const [data, setData] = useState<CourseSummaryDTO | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -105,10 +107,28 @@ export default function VizCourseSummaryView({
                   </TableHeader>
                   <TableBody>
                     {data.assignments.map((a, i) => {
-                      const row = (
+                      const isNavigable = a.assignmentId != null;
+                      return (
                         <TableRow
                           key={a.assignmentId ?? i}
-                          className="even:bg-muted/50 hover:bg-accent transition-colors cursor-pointer"
+                          className={`even:bg-muted/50 transition-colors ${
+                            isNavigable ? 'cursor-pointer hover:bg-accent' : ''
+                          }`}
+                          onClick={() => {
+                            if (a.assignmentId != null) {
+                              router.push(`/dashboard/visualizations/assignments/${a.assignmentId}`);
+                            }
+                          }}
+                          onKeyDown={(event) => {
+                            if (a.assignmentId == null) return;
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              router.push(`/dashboard/visualizations/assignments/${a.assignmentId}`);
+                            }
+                          }}
+                          role={isNavigable ? 'link' : undefined}
+                          tabIndex={isNavigable ? 0 : undefined}
+                          aria-label={isNavigable ? `Open assignment ${a.assignmentId}` : undefined}
                         >
                           {a.assessmentTitle !== undefined && (
                             <TableCell className="font-medium text-sm">
@@ -137,18 +157,6 @@ export default function VizCourseSummaryView({
                             )}
                           </TableCell>
                         </TableRow>
-                      );
-
-                      return a.assignmentId != null ? (
-                        <Link
-                          key={a.assignmentId}
-                          href={`/dashboard/visualizations/assignments/${a.assignmentId}`}
-                          legacyBehavior
-                        >
-                          {row}
-                        </Link>
-                      ) : (
-                        row
                       );
                     })}
                   </TableBody>

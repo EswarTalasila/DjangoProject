@@ -110,8 +110,6 @@
 - `test_OBS_UC_01` (tracing configured with OTEL_ENABLED=true)
 - `test_OBS_UC_01_disabled` (noop when OTEL_ENABLED=false)
 - `test_OBS_UC_01_idempotent` (_CONFIGURED guard prevents double initialization)
-- `test_OBS_UC_01_E1` (graceful degradation when collector unreachable)
-- `test_OBS_CN_01` (idempotent configuration)
 - `test_OBS_CN_02` (W3C propagator registered)
 - `test_OBS_CN_04` (environment toggle respects profile defaults)
 
@@ -143,7 +141,6 @@
 
 **Tests (representative):**
 - `test_OBS_UC_02` (OTLP exporter added when endpoint configured)
-- `test_OBS_UC_02_E1` (graceful handling when collector missing)
 - `test_OBS_CN_05` (dual export: both OTLP and file active simultaneously)
 
 ---
@@ -174,7 +171,6 @@
 - `test_OBS_UC_03` (LoggingInstrumentor configured)
 - `test_OBS_UC_03_trace_id_injection` (`otelTraceID` present in log records during traced requests)
 - `test_OBS_UC_03_no_trace_context` (empty trace IDs outside trace context)
-- `test_OBS_UC_03_E1` (log entries lack trace IDs when instrumentor missing)
 
 ---
 

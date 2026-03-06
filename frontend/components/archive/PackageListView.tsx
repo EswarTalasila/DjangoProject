@@ -18,6 +18,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -154,6 +155,9 @@ export default function PackageListView({
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Create a New Package</DialogTitle>
+                <DialogDescription>
+                  Define a package workspace and optional course scope.
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-1">

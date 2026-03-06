@@ -495,7 +495,7 @@ Exhausted / Expired / Revoked → Archived (visibility-only)
 
 ## 8) Test Strategy by Layer
 
-**Naming Convention:** `test_REG_UC_##[_ROLE|_E#]`, `test_REG_CN_##`, `ST-REG-UC-##`
+**Naming Convention:** `test_REG_UC_nn[_ROLE|_En]`, `test_REG_CN_nn`, `ST-REG-UC-nn`
 
 ### Backend Unit
 - test_REG_UC_01 (aggregator)
@@ -525,7 +525,7 @@ Exhausted / Expired / Revoked → Archived (visibility-only)
 - test_REG_UC_03_TEACHER
 - test_REG_UC_03_E1
 - test_REG_UC_03_E2
-- test_REG_CN_01 (code entropy)
+- REG-CN-01 code entropy _(no backend unit test yet)_
 - test_REG_CN_03 (atomic transaction)
 - test_REG_CN_04 (scope)
 - test_REG_CN_05 (lifecycle states)

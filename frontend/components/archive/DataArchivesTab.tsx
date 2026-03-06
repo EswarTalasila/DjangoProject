@@ -822,12 +822,12 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedAssignments().map((assignment) => {
+                  {sortedAssignments().map((assignment, index) => {
                     const isArchived = assignment.status === 'ARCHIVED';
                     const isBusy = busyAssignmentId === assignment.id;
                     return (
                       <tr
-                        key={assignment.id}
+                        key={`${assignment.courseId ?? 'none'}-${assignment.id}-${index}`}
                         className="border-b border-border hover:bg-accent/30 transition-colors"
                       >
                         <td className="py-2 pr-4">{assignment.title}</td>

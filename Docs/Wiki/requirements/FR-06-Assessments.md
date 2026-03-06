@@ -107,8 +107,8 @@
 **Tests (representative):**
 - `test_ASMT_UC_01_RESEARCHER`
 - `test_ASMT_UC_01_ADMIN`
-- `test_ASMT_UC_01_E2`
-- `test_ASMT_UC_01_E3`
+- `test_ASMT_UC_01_E2_STUDENT`
+- `test_ASMT_UC_01_E2_TEACHER`
 
 ---
 
@@ -180,8 +180,7 @@
 
 **Tests (representative):**
 - `test_ASMT_UC_04_RESEARCHER`
-- `test_ASMT_UC_04_E2`
-- `test_ASMT_UC_04_E3`
+- `test_ASMT_UC_04_E2_TEACHER`
 
 ---
 
@@ -205,8 +204,7 @@
 
 **Tests (representative):**
 - `test_ASMT_UC_05_RESEARCHER`
-- `test_ASMT_UC_05_E2`
-- `test_ASMT_UC_05_E3`
+- `test_ASMT_UC_05_E2_TEACHER`
 - `test_ASMT_CN_05_unreferenced_delete_succeeds`
 
 ---
@@ -234,11 +232,7 @@
 - `ASMT-UC-06-E2`: Caller is not RESEARCHER or ADMIN.
 - `ASMT-UC-06-E3`: Assessment is already archived.
 
-**Tests (representative):**
-- `test_ASMT_UC_06_RESEARCHER`
-- `test_ASMT_UC_06_E2`
-- `test_ASMT_UC_06_E3`
-- `test_ASMT_CN_13_archived_blocks_new_assignments`
+**Tests (representative):** _(no backend unit tests for archive — not yet implemented)_
 
 ---
 

@@ -126,8 +126,6 @@
 - `test_VIZ_UC_01_RESEARCHER`
 - `test_VIZ_UC_01_RESEARCHER_anonymized`
 - `test_VIZ_UC_01_TEACHER`
-- `test_VIZ_UC_01_E1`
-- `test_VIZ_UC_01_E2`
 - `test_VIZ_CN_01_anonymization`
 
 ---
@@ -193,14 +191,10 @@
 
 **Tests (representative):**
 - `test_VIZ_UC_02_ADMIN`
-- `test_VIZ_UC_02_RESEARCHER`
 - `test_VIZ_UC_02_RESEARCHER_anonymized`
 - `test_VIZ_UC_02_TEACHER`
 - `test_VIZ_UC_02_TEACHER_filter_by_category`
 - `test_VIZ_UC_02_TEACHER_filter_by_date_range`
-- `test_VIZ_UC_02_E1`
-- `test_VIZ_UC_02_E2`
-- `test_VIZ_UC_02_E3`
 
 ---
 
@@ -268,13 +262,9 @@
 
 **Tests (representative):**
 - `test_VIZ_UC_03_ADMIN`
-- `test_VIZ_UC_03_RESEARCHER`
 - `test_VIZ_UC_03_RESEARCHER_anonymized`
 - `test_VIZ_UC_03_TEACHER`
 - `test_VIZ_UC_03_TEACHER_filter_by_date_range`
-- `test_VIZ_UC_03_E1`
-- `test_VIZ_UC_03_E2`
-- `test_VIZ_UC_03_E3`
 - `test_VIZ_CN_02_distribution_bins`
 - `test_VIZ_CN_02_null_scores`
 
@@ -330,10 +320,6 @@
 - `test_VIZ_UC_04_ADMIN`
 - `test_VIZ_UC_04_RESEARCHER`
 - `test_VIZ_UC_04_TEACHER`
-- `test_VIZ_UC_04_E1`
-- `test_VIZ_UC_04_E2`
-- `test_VIZ_UC_04_E3`
-- `test_VIZ_UC_04_E4`
 - `test_VIZ_CN_04_non_mood_meter_409`
 
 ---

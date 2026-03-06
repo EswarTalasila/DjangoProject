@@ -247,7 +247,7 @@
 
 ## 8) Test Strategy by Layer
 
-**Naming Convention:** `test_USER_UC_##[_ROLE|_E#]`, `test_USER_CN_##`, `ST-USER-UC-##`
+**Naming Convention:** `test_USER_UC_nn[_ROLE|_En]`, `test_USER_CN_nn`, `ST-USER-UC-nn`
 
 ### Backend Unit
 - Permission matrix and ownership logic:

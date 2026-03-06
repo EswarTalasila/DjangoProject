@@ -45,6 +45,11 @@ ARTIFACT_DIR = os.path.join(
 ARTIFACT_RETENTION_HOURS = 72
 
 
+def _sha256_file(path: str) -> str:
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
 def execute_build(
     job: PackageBuildJob,
     *,
@@ -195,7 +200,7 @@ def execute_build(
             build_job=job,
             file_path=zip_path,
             file_size=file_size,
-            checksum_sha256=hashlib.sha256(open(zip_path, "rb").read()).hexdigest(),
+            checksum_sha256=_sha256_file(zip_path),
             manifest=manifest,
             expires_at=timezone.now() + timedelta(hours=ARTIFACT_RETENTION_HOURS),
         )

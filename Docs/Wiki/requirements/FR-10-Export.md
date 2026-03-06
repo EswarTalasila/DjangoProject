@@ -124,7 +124,6 @@ consent, enrollmentStatus, enrolledAt
 - `test_EXP_UC_01_E2`
 - `test_EXP_UC_01_E3`
 - `test_EXP_UC_01_E5`
-- `test_EXP_UC_01_E6`
 - `test_EXP_CN_01_anonymization`
 
 ---
@@ -199,7 +198,6 @@ answers
 - `test_EXP_UC_02_E2`
 - `test_EXP_UC_02_E5`
 - `test_EXP_UC_02_E6`
-- `test_EXP_UC_02_E7`
 
 ---
 
@@ -247,15 +245,7 @@ With `includeAnswers=true`, append `answers` column (`questionPrompt` omitted).
 - `EXP-UC-03-E5`: `identifiable=true` but caller lacks `EXPORT_IDENTIFIABLE` sudo (`403 Forbidden`).
 - `EXP-UC-03-E6`: Row count exceeds 5,000 (`422 Unprocessable Entity`; response: `{"detail": "Export too large. Narrow date range or apply additional filters."}`).
 
-**Tests (representative):**
-- `test_EXP_UC_03_ADMIN`
-- `test_EXP_UC_03_RESEARCHER`
-- `test_EXP_UC_03_RESEARCHER_anonymized`
-- `test_EXP_UC_03_RESEARCHER_identifiable`
-- `test_EXP_UC_03_E1_teacher_blocked`
-- `test_EXP_UC_03_E2_missing_date_range`
-- `test_EXP_UC_03_E5_no_sudo`
-- `test_EXP_UC_03_E6_row_cap`
+**Tests (representative):** _(EXP-UC-03 cross-course export endpoint removed; see `test_EXP_UC_03_removed_endpoint_returns_404`)_
 
 ---
 

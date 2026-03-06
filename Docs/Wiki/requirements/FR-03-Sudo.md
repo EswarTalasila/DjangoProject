@@ -600,7 +600,7 @@ No wireframes have been created for FR-03 sudo management. The grant and revoke 
 
 ## 8) Test Strategy by Layer
 
-**Naming Convention:** `test_SUDO_UC_##[_ROLE|_E#]`, `test_SUDO_CN_##`, `ST-SUDO-UC-##`
+**Naming Convention:** `test_SUDO_UC_nn[_ROLE|_En]`, `test_SUDO_CN_nn`, `ST-SUDO-UC-nn`
 
 ### Backend Unit
 

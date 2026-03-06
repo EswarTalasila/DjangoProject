@@ -107,10 +107,6 @@
 
 **Tests (representative):**
 - `test_SUB_UC_01_STUDENT`
-- `test_SUB_UC_01_E2`
-- `test_SUB_UC_01_E5`
-- `test_SUB_UC_01_E6`
-- `test_SUB_CN_10_draft_replaces_answers`
 
 ---
 
@@ -143,11 +139,6 @@
 
 **Tests (representative):**
 - `test_SUB_UC_02_STUDENT`
-- `test_SUB_UC_02_E2`
-- `test_SUB_UC_02_E4`
-- `test_SUB_UC_02_E5`
-- `test_SUB_CN_03_auto_grade_on_submit`
-- `test_SUB_CN_04_mood_meter_creates_new`
 
 ---
 
@@ -180,10 +171,6 @@
 **Tests (representative):**
 - `test_SUB_UC_03_TEACHER`
 - `test_SUB_UC_03_ADMIN`
-- `test_SUB_UC_03_E2`
-- `test_SUB_UC_03_E4`
-- `test_SUB_CN_05_score_calculation`
-- `test_SUB_CN_05_hybrid_mode_scoring`
 
 ---
 
@@ -211,8 +198,6 @@
 - `test_SUB_UC_04_RESEARCHER`
 - `test_SUB_UC_04_TEACHER`
 - `test_SUB_UC_04_STUDENT`
-- `test_SUB_UC_04_E2`
-- `test_SUB_UC_04_E3`
 
 ---
 
@@ -240,8 +225,7 @@
 - `test_SUB_UC_05_ADMIN`
 - `test_SUB_UC_05_TEACHER`
 - `test_SUB_UC_05_STUDENT`
-- `test_SUB_UC_05_E2`
-- `test_SUB_UC_05_E3`
+- `test_SUB_UC_05_RESEARCHER`
 
 ---
 
@@ -268,8 +252,6 @@
 - `test_SUB_UC_06_ADMIN`
 - `test_SUB_UC_06_RESEARCHER`
 - `test_SUB_UC_06_TEACHER`
-- `test_SUB_UC_06_E2`
-- `test_SUB_UC_06_E3`
 
 ---
 
@@ -294,7 +276,6 @@
 - `test_SUB_UC_07_ADMIN`
 - `test_SUB_UC_07_TEACHER`
 - `test_SUB_UC_07_STUDENT`
-- `test_SUB_UC_07_E2`
 
 ---
 

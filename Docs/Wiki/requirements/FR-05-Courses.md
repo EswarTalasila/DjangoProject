@@ -92,7 +92,6 @@
 **Tests (representative):**
 - `test_CRS_UC_01_TEACHER`
 - `test_CRS_UC_01_E2`
-- `test_CRS_UC_01_E3`
 
 ---
 
@@ -112,7 +111,6 @@
 - `CRS-UC-02-E1`: Unauthorized role.
 
 **Tests (representative):**
-- `test_CRS_UC_02_ADMIN`
 - `test_CRS_UC_02_RESEARCHER`
 - `test_CRS_UC_02_TEACHER`
 
@@ -133,10 +131,8 @@
 - `CRS-UC-03-E2`: Forbidden by visibility matrix.
 
 **Tests (representative):**
-- `test_CRS_UC_03_ADMIN`
-- `test_CRS_UC_03_RESEARCHER`
-- `test_CRS_UC_03_TEACHER_OWNER`
-- `test_CRS_UC_03_E2`
+- `test_CRS_UC_03_TEACHER`
+- `test_CRS_UC_03_E1`
 
 ---
 
@@ -157,8 +153,8 @@
 - `CRS-UC-04-E3`: Invalid name payload.
 
 **Tests (representative):**
-- `test_CRS_UC_04_TEACHER_OWNER`
-- `test_CRS_UC_04_E2`
+- `test_CRS_UC_04_TEACHER`
+- `test_CRS_UC_04_E1`
 
 ---
 
@@ -186,9 +182,8 @@
 - `CRS-UC-05-E3`: Deletion blocked because archival capability is unavailable.
 
 **Tests (representative):**
-- `test_CRS_UC_05_TEACHER_OWNER`
-- `test_CRS_UC_05_E2`
-- `test_CRS_CN_05_course_delete_does_not_delete_student_users`
+- `test_CRS_UC_05_TEACHER`
+- `test_CRS_CN_05`
 
 ---
 
@@ -208,10 +203,8 @@
 - `CRS-UC-06-E2`: Forbidden by visibility matrix.
 
 **Tests (representative):**
-- `test_CRS_UC_06_ADMIN`
-- `test_CRS_UC_06_RESEARCHER`
-- `test_CRS_UC_06_TEACHER_OWNER`
-- `test_CRS_CN_04_roster_excludes_dropped_by_default`
+- `test_CRS_UC_06_TEACHER`
+- `test_CRS_CN_04`
 
 ---
 
@@ -236,9 +229,9 @@
 - `CRS-UC-07-E5`: Client attempts to set username.
 
 **Tests (representative):**
-- `test_CRS_UC_07_TEACHER_OWNER`
-- `test_CRS_UC_07_E5`
-- `test_CRS_CN_10_system_managed_username`
+- `test_CRS_UC_07_TEACHER`
+- `test_CRS_UC_07_E1`
+- `test_CRS_CN_09`
 
 ---
 
@@ -261,9 +254,9 @@
 - `CRS-UC-08-E3`: Forbidden (not owner).
 
 **Tests (representative):**
-- `test_CRS_UC_08_TEACHER_OWNER`
+- `test_CRS_UC_08_TEACHER`
 - `test_CRS_UC_08_E2`
-- `test_CRS_CN_06_multi_course_membership_safe`
+- `test_CRS_CN_06`
 
 ---
 

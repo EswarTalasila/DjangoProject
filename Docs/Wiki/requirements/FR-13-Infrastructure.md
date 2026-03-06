@@ -112,8 +112,8 @@
 
 **Tests:**
 **Backend Unit:**
-- test_INFRA_UC_01 (startup command sequence executes in correct order)
-- test_INFRA_UC_01_E4 (profile guard detects mismatched profile)
+- test_INFRA_UC_01_startup_sequence (startup command sequence executes in correct order)
+- test_INFRA_UC_01_E4_hint_for_admin_email (profile guard detects mismatched profile)
 
 **Backend Integration:**
 - test_INFRA_UC_01_stack_boot (database, backend, frontend accessible after startup)
@@ -202,8 +202,7 @@
 - Behavior: Taskfile exits with descriptive precondition error message
 
 **Tests:**
-**Backend Unit:**
-- test_INFRA_UC_03 (precondition checks detect missing services)
+**Backend Unit:** _(no backend unit test for precondition checks — covered by system tests)_
 
 **System Tests (Black Box):**
 - ST-INFRA-UC-03 (task commands execute correctly against running stack)
@@ -452,10 +451,10 @@ INFRA errors are operational. They manifest as Docker Compose failures, Taskfile
 
 ### Naming Convention
 
-- Domain aggregator: `test_INFRA_UC_##`
-- Role test: `test_INFRA_UC_##_ALL` (infrastructure-level; no role-specific variants)
-- Error test: `test_INFRA_UC_##_E#`
-- Constraint test: `test_INFRA_CN_##`
+- Domain aggregator: `test_INFRA_UC_nn`
+- Role test: `test_INFRA_UC_nn_ALL` (infrastructure-level; no role-specific variants)
+- Error test: `test_INFRA_UC_nn_En`
+- Constraint test: `test_INFRA_CN_nn`
 - System tests: `ST-INFRA-UC-##` and `ST-INFRA-UC-##-E#`
 
 ### Backend Unit

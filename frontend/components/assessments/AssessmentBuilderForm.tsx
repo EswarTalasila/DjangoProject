@@ -264,7 +264,11 @@ export default function AssessmentBuilderForm({
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const stored = window.localStorage.getItem('assessmentBuilderShowTips');
+    const storage = window.localStorage as
+      | { getItem?: (key: string) => string | null }
+      | undefined;
+    if (!storage || typeof storage.getItem !== 'function') return;
+    const stored = storage.getItem('assessmentBuilderShowTips');
     if (stored != null) {
       setShowTips(stored === '1');
     }
@@ -272,7 +276,11 @@ export default function AssessmentBuilderForm({
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem('assessmentBuilderShowTips', showTips ? '1' : '0');
+    const storage = window.localStorage as
+      | { setItem?: (key: string, value: string) => void }
+      | undefined;
+    if (!storage || typeof storage.setItem !== 'function') return;
+    storage.setItem('assessmentBuilderShowTips', showTips ? '1' : '0');
   }, [showTips]);
 
   useEffect(() => {

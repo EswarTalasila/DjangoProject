@@ -107,10 +107,6 @@
 
 **Tests (representative):**
 - `test_ASGN_UC_01_TEACHER`
-- `test_ASGN_UC_01_E2`
-- `test_ASGN_UC_01_E3`
-- `test_ASGN_UC_01_E5`
-- `test_ASGN_UC_01_E6`
 - `test_ASGN_CN_05_submissions_created_atomically`
 
 ---
@@ -166,7 +162,6 @@
 - `test_ASGN_UC_03_STUDENT`
 - `test_ASGN_UC_03_TEACHER`
 - `test_ASGN_UC_03_RESEARCHER_CROSS_USER`
-- `test_ASGN_UC_03_E2`
 - `test_ASGN_CN_08_student_time_filter`
 
 ---
@@ -193,7 +188,6 @@
 - `test_ASGN_UC_04_ADMIN`
 - `test_ASGN_UC_04_TEACHER`
 - `test_ASGN_UC_04_STUDENT_ENROLLED`
-- `test_ASGN_UC_04_E2`
 
 ---
 
@@ -218,9 +212,6 @@
 
 **Tests (representative):**
 - `test_ASGN_UC_05_TEACHER_CREATOR`
-- `test_ASGN_UC_05_E2`
-- `test_ASGN_UC_05_E3`
-- `test_ASGN_UC_05_E4`
 
 ---
 
@@ -244,8 +235,6 @@
 
 **Tests (representative):**
 - `test_ASGN_UC_06_TEACHER_CREATOR`
-- `test_ASGN_UC_06_E2`
-- `test_ASGN_UC_06_E3`
 - `test_ASGN_CN_06_unreferenced_delete_succeeds`
 
 ---
@@ -277,8 +266,6 @@
 
 **Tests (representative):**
 - `test_ASGN_UC_07_TEACHER_CREATOR`
-- `test_ASGN_UC_07_E2`
-- `test_ASGN_UC_07_E3`
 - `test_ASGN_CN_09_archived_hides_from_student_list`
 - `test_ASGN_CN_09_archived_blocks_new_submissions`
 

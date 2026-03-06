@@ -342,6 +342,110 @@ class TestCreateAssignment:
         assert result is fake_assignment
         mock_create_subs.assert_called_once_with(fake_assignment)
 
+    def test_raises_when_open_at_after_due_at(self):
+        """Raises ValueError when openAt >= dueAt."""
+        from assignments.services._mutations import create_assignment
+
+        with pytest.raises(ValueError, match="openAt must be before dueAt"):
+            create_assignment(
+                SimpleNamespace(id=1),
+                {
+                    "assessmentId": 1,
+                    "audienceType": AudienceType.COURSE,
+                    "courseId": 10,
+                    "openAt": datetime(2025, 6, 2, tzinfo=UTC),
+                    "dueAt": datetime(2025, 6, 1, tzinfo=UTC),
+                },
+            )
+
+    @patch("assignments.services._mutations.Assessment")
+    def test_raises_when_assessment_not_found(self, mock_assessment):
+        """Raises ValueError when assessment doesn't exist."""
+        from assignments.services._mutations import create_assignment
+
+        mock_assessment.objects.filter.return_value.first.return_value = None
+
+        with pytest.raises(ValueError, match="Assessment not found"):
+            create_assignment(
+                SimpleNamespace(id=1),
+                {
+                    "assessmentId": 999,
+                    "audienceType": AudienceType.COURSE,
+                    "courseId": 10,
+                    "openAt": datetime(2025, 1, 1, tzinfo=UTC),
+                },
+            )
+
+    @patch("assignments.services._mutations.Assessment")
+    def test_raises_when_assessment_archived(self, mock_assessment):
+        """Raises ConflictError when assessment is archived."""
+        from assignments.services._mutations import ConflictError, create_assignment
+        from assessments.models import AssessmentStatus
+
+        mock_assessment.objects.filter.return_value.first.return_value = SimpleNamespace(
+            id=1, status=AssessmentStatus.ARCHIVED
+        )
+
+        with pytest.raises(ConflictError, match="archived assessment"):
+            create_assignment(
+                SimpleNamespace(id=1),
+                {
+                    "assessmentId": 1,
+                    "audienceType": AudienceType.COURSE,
+                    "courseId": 10,
+                    "openAt": datetime(2025, 1, 1, tzinfo=UTC),
+                },
+            )
+
+    @patch("assignments.services._mutations.can_manage_course", return_value=False)
+    @patch("assignments.services._mutations.Course")
+    @patch("assignments.services._mutations.Assessment")
+    def test_raises_when_not_course_owner(self, mock_assessment, mock_course, mock_manage):
+        """Raises ForbiddenError when user doesn't own the course."""
+        from assignments.services._mutations import ForbiddenError, create_assignment
+        from assessments.models import AssessmentStatus
+
+        mock_assessment.objects.filter.return_value.first.return_value = SimpleNamespace(
+            id=1, status=AssessmentStatus.ACTIVE
+        )
+        mock_course.objects.filter.return_value.first.return_value = SimpleNamespace(
+            id=10, status="ACTIVE"
+        )
+
+        with pytest.raises(ForbiddenError, match="do not own"):
+            create_assignment(
+                SimpleNamespace(id=1),
+                {
+                    "assessmentId": 1,
+                    "audienceType": AudienceType.COURSE,
+                    "courseId": 10,
+                    "openAt": datetime(2025, 1, 1, tzinfo=UTC),
+                },
+            )
+
+    @patch("assignments.services._mutations.Course")
+    @patch("assignments.services._mutations.Assessment")
+    def test_raises_when_course_not_found(self, mock_assessment, mock_course):
+        """Raises ValueError when course doesn't exist."""
+        from assignments.services._mutations import create_assignment
+        from assessments.models import AssessmentStatus
+
+        mock_assessment.objects.filter.return_value.first.return_value = SimpleNamespace(
+            id=1, status=AssessmentStatus.ACTIVE
+        )
+        mock_course.objects.filter.return_value.first.return_value = None
+
+        with pytest.raises(ValueError, match="Course not found"):
+            create_assignment(
+                SimpleNamespace(id=1),
+                {
+                    "assessmentId": 1,
+                    "audienceType": AudienceType.COURSE,
+                    "courseId": 999,
+                    "openAt": datetime(2025, 1, 1, tzinfo=UTC),
+                },
+            )
+
 
 # ---------------------------------------------------------------------------
 # delete_assignment (mutation)
@@ -490,3 +594,349 @@ class TestCreateSubmissionsForCourse(_NoopAtomicMixin):
         _create_submissions_for_course(assignment)
 
         mock_submission_model.objects.create.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# update_assignment (mutation)
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateAssignment:
+    """Tests for update_assignment mutation."""
+
+    def test_raises_when_not_creator(self):
+        """Raises ForbiddenError when caller is not the creator."""
+        from assignments.services._mutations import ForbiddenError, update_assignment
+
+        assignment = MagicMock()
+        assignment.created_by_id = 1
+
+        with pytest.raises(ForbiddenError, match="Only the assignment creator"):
+            update_assignment(assignment, SimpleNamespace(id=2), {"title": "New"})
+
+    def test_raises_when_archived(self):
+        """Raises ConflictError when assignment is archived."""
+        from assignments.services._mutations import ConflictError, update_assignment
+        from assignments.models import AssignmentStatus
+
+        assignment = MagicMock()
+        assignment.created_by_id = 1
+        assignment.status = AssignmentStatus.ARCHIVED
+
+        with pytest.raises(ConflictError, match="archived assignment"):
+            update_assignment(assignment, SimpleNamespace(id=1), {"title": "New"})
+
+    def test_raises_when_open_at_after_due_at(self):
+        """Raises ValueError when scheduling is invalid."""
+        from assignments.services._mutations import update_assignment
+
+        assignment = MagicMock()
+        assignment.created_by_id = 1
+        assignment.status = "ACTIVE"
+        assignment.open_at = datetime(2025, 6, 1, tzinfo=UTC)
+        assignment.due_at = datetime(2025, 7, 1, tzinfo=UTC)
+
+        with pytest.raises(ValueError, match="openAt must be before dueAt"):
+            update_assignment(
+                assignment,
+                SimpleNamespace(id=1),
+                {
+                    "openAt": datetime(2025, 8, 1, tzinfo=UTC),
+                    "dueAt": datetime(2025, 7, 1, tzinfo=UTC),
+                },
+            )
+
+    def test_updates_title(self):
+        """Updates assignment title."""
+        from assignments.services._mutations import update_assignment
+
+        assignment = MagicMock()
+        assignment.created_by_id = 1
+        assignment.status = "ACTIVE"
+        assignment.open_at = datetime(2025, 1, 1, tzinfo=UTC)
+        assignment.due_at = None
+
+        result = update_assignment(
+            assignment, SimpleNamespace(id=1), {"title": "New Title"}
+        )
+
+        assert result.title == "New Title"
+        assignment.save.assert_called_once()
+
+    def test_raises_on_empty_title(self):
+        """Raises ValueError when title is empty."""
+        from assignments.services._mutations import update_assignment
+
+        assignment = MagicMock()
+        assignment.created_by_id = 1
+        assignment.status = "ACTIVE"
+        assignment.open_at = datetime(2025, 1, 1, tzinfo=UTC)
+        assignment.due_at = None
+
+        with pytest.raises(ValueError, match="title cannot be empty"):
+            update_assignment(
+                assignment, SimpleNamespace(id=1), {"title": "   "}
+            )
+
+    def test_handles_explicit_null_due_at(self):
+        """Handles explicit null for dueAt."""
+        from assignments.services._mutations import update_assignment
+
+        assignment = MagicMock()
+        assignment.created_by_id = 1
+        assignment.status = "ACTIVE"
+        assignment.open_at = datetime(2025, 1, 1, tzinfo=UTC)
+        assignment.due_at = datetime(2025, 7, 1, tzinfo=UTC)
+
+        result = update_assignment(
+            assignment, SimpleNamespace(id=1), {"dueAt": None}
+        )
+
+        assert result.due_at is None
+
+
+# ---------------------------------------------------------------------------
+# archive_assignment (mutation)
+# ---------------------------------------------------------------------------
+
+
+class TestArchiveAssignment(_NoopAtomicMixin):
+    """Tests for archive_assignment mutation."""
+
+    @patch("assignments.services._mutations.timezone")
+    def test_archives_active_assignment(self, mock_tz):
+        """Archives an active assignment and sets status to ARCHIVED."""
+        from assignments.services._mutations import archive_assignment
+
+        mock_tz.now.return_value = "2025-01-01"
+        assignment = MagicMock()
+        assignment.status = "ACTIVE"
+        assignment.created_by_id = 1
+
+        user = SimpleNamespace(id=1, is_staff=False)
+        result = archive_assignment(user, assignment)
+
+        assert result.status == "ARCHIVED"
+        assignment.save.assert_called_once()
+
+    def test_raises_when_not_creator_or_admin(self):
+        """Raises PermissionError when non-creator non-admin tries to archive."""
+        from assignments.services._mutations import archive_assignment
+
+        assignment = MagicMock()
+        assignment.created_by_id = 1
+
+        user = SimpleNamespace(id=2, is_staff=False)
+        with pytest.raises(PermissionError, match="Only the assignment creator"):
+            archive_assignment(user, assignment)
+
+    def test_raises_when_already_archived(self):
+        """Raises ConflictError when assignment is already archived."""
+        from assignments.services._mutations import ConflictError, archive_assignment
+        from assignments.models import AssignmentStatus
+
+        assignment = MagicMock()
+        assignment.status = AssignmentStatus.ARCHIVED
+        assignment.created_by_id = 1
+
+        user = SimpleNamespace(id=1, is_staff=False)
+        with pytest.raises(ConflictError, match="already archived"):
+            archive_assignment(user, assignment)
+
+    @patch("assignments.services._mutations.timezone")
+    def test_admin_can_archive(self, mock_tz):
+        """Allows admin to archive an assignment they did not create."""
+        from assignments.services._mutations import archive_assignment
+
+        mock_tz.now.return_value = "2025-01-01"
+        assignment = MagicMock()
+        assignment.status = "ACTIVE"
+        assignment.created_by_id = 99
+
+        user = SimpleNamespace(id=1, is_staff=True)
+        result = archive_assignment(user, assignment)
+
+        assert result.status == "ARCHIVED"
+
+
+# ---------------------------------------------------------------------------
+# restore_assignment (mutation)
+# ---------------------------------------------------------------------------
+
+
+class TestRestoreAssignment(_NoopAtomicMixin):
+    """Tests for restore_assignment mutation."""
+
+    def test_raises_when_not_creator_or_admin(self):
+        """Raises PermissionError when non-creator non-admin tries to restore."""
+        from assignments.services._mutations import restore_assignment
+        from assignments.models import AssignmentStatus
+
+        assignment = MagicMock()
+        assignment.created_by_id = 1
+        assignment.status = AssignmentStatus.ARCHIVED
+
+        user = SimpleNamespace(id=2, is_staff=False)
+        with pytest.raises(PermissionError):
+            restore_assignment(user, assignment)
+
+    def test_raises_when_not_archived(self):
+        """Raises ConflictError when restoring an assignment that is not archived."""
+        from assignments.services._mutations import ConflictError, restore_assignment
+
+        assignment = MagicMock()
+        assignment.created_by_id = 1
+        assignment.status = "ACTIVE"
+
+        user = SimpleNamespace(id=1, is_staff=False)
+        with pytest.raises(ConflictError, match="not archived"):
+            restore_assignment(user, assignment)
+
+    @patch("assignments.services._mutations.timezone")
+    def test_restores_archived_assignment(self, mock_tz):
+        """Restores an archived assignment back to ACTIVE status."""
+        from assignments.services._mutations import restore_assignment
+        from assignments.models import AssignmentStatus
+        from assessments.models import AssessmentStatus
+
+        mock_tz.now.return_value = "2025-06-01"
+
+        assignment = MagicMock()
+        assignment.created_by_id = 1
+        assignment.status = AssignmentStatus.ARCHIVED
+        assignment.course_id = None
+        assignment.assessment.status = AssessmentStatus.ACTIVE
+
+        user = SimpleNamespace(id=1, is_staff=False)
+        result = restore_assignment(user, assignment)
+
+        assert result.status == "ACTIVE"
+        assert result.archived_at is None
+
+    @patch("assignments.services._mutations.timezone")
+    def test_raises_when_course_archived(self, mock_tz):
+        """Raises ConflictError when restoring an assignment whose course is archived."""
+        from assignments.services._mutations import ConflictError, restore_assignment
+        from assignments.models import AssignmentStatus
+
+        assignment = MagicMock()
+        assignment.created_by_id = 1
+        assignment.status = AssignmentStatus.ARCHIVED
+        assignment.course_id = 10
+        assignment.course.status = "ARCHIVED"
+
+        user = SimpleNamespace(id=1, is_staff=False)
+        with pytest.raises(ConflictError, match="course is archived"):
+            restore_assignment(user, assignment)
+
+    @patch("assignments.services._mutations.timezone")
+    def test_raises_when_assessment_archived(self, mock_tz):
+        """Raises ConflictError when restoring an assignment whose assessment is archived."""
+        from assignments.services._mutations import ConflictError, restore_assignment
+        from assignments.models import AssignmentStatus
+        from assessments.models import AssessmentStatus
+
+        assignment = MagicMock()
+        assignment.created_by_id = 1
+        assignment.status = AssignmentStatus.ARCHIVED
+        assignment.course_id = None
+        assignment.assessment.status = AssessmentStatus.ARCHIVED
+
+        user = SimpleNamespace(id=1, is_staff=False)
+        with pytest.raises(ConflictError, match="assessment is archived"):
+            restore_assignment(user, assignment)
+
+
+# ---------------------------------------------------------------------------
+# purge_assignment (mutation)
+# ---------------------------------------------------------------------------
+
+
+class TestPurgeAssignment(_NoopAtomicMixin):
+    """Tests for purge_assignment mutation."""
+
+    def test_raises_when_not_archived(self):
+        """Raises ConflictError when purging an assignment that is not archived."""
+        from assignments.services._mutations import ConflictError, purge_assignment
+
+        assignment = MagicMock()
+        assignment.status = "ACTIVE"
+
+        with pytest.raises(ConflictError, match="Only archived"):
+            purge_assignment(assignment)
+
+    @patch("assignments.services._mutations.Submission")
+    def test_raises_when_progressed_submissions(self, mock_sub):
+        """Raises ConflictError when assignment has progressed submissions."""
+        from assignments.services._mutations import ConflictError, purge_assignment
+        from assignments.models import AssignmentStatus
+
+        assignment = MagicMock()
+        assignment.status = AssignmentStatus.ARCHIVED
+        mock_sub.objects.filter.return_value.exclude.return_value.exists.return_value = True
+
+        with pytest.raises(ConflictError, match="progressed"):
+            purge_assignment(assignment)
+
+    @patch("submissions.image_services.cleanup_images_for_submission")
+    @patch("assignments.services._mutations.Submission")
+    def test_purges_successfully(self, mock_sub, mock_cleanup):
+        """Permanently deletes an archived assignment and cleans up submission images."""
+        from assignments.services._mutations import purge_assignment
+        from assignments.models import AssignmentStatus
+
+        assignment = MagicMock()
+        assignment.status = AssignmentStatus.ARCHIVED
+        mock_sub.objects.filter.return_value.exclude.return_value.exists.return_value = False
+
+        sub1 = MagicMock(id=1)
+        sub2 = MagicMock(id=2)
+        assignment.submissions.all.return_value = [sub1, sub2]
+
+        purge_assignment(assignment)
+
+        assert mock_cleanup.call_count == 2
+        assignment.delete.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# delete_assignment - additional edge cases
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteAssignmentEdgeCases(_NoopAtomicMixin):
+
+    @patch("assignments.services._mutations.Submission")
+    def test_raises_when_not_creator(self, mock_sub):
+        """Raises ForbiddenError when non-creator tries to delete."""
+        from assignments.services._mutations import ForbiddenError, delete_assignment
+
+        assignment = MagicMock()
+        assignment.created_by_id = 1
+
+        with pytest.raises(ForbiddenError, match="Only the assignment creator"):
+            delete_assignment(assignment, SimpleNamespace(id=2))
+
+    @patch("assignments.services._mutations.Submission")
+    def test_raises_when_progressed_submissions(self, mock_sub):
+        """Raises ConflictError when assignment has progressed submissions on delete."""
+        from assignments.services._mutations import ConflictError, delete_assignment
+
+        assignment = MagicMock()
+        assignment.created_by_id = 1
+        mock_sub.objects.filter.return_value.exclude.return_value.exists.return_value = True
+
+        with pytest.raises(ConflictError, match="progressed"):
+            delete_assignment(assignment, SimpleNamespace(id=1))
+
+    @patch("assignments.services._mutations.Submission")
+    def test_allows_delete_without_caller(self, mock_sub):
+        """Allows deletion when caller_user is None (system-initiated)."""
+        from assignments.services._mutations import delete_assignment
+
+        assignment = MagicMock()
+        mock_sub.objects.filter.return_value.exclude.return_value.exists.return_value = False
+
+        delete_assignment(assignment, caller_user=None)
+
+        assignment.delete.assert_called_once()

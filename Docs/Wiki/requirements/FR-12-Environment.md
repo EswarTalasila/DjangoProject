@@ -81,9 +81,10 @@
 
 **Tests:**
 **Backend Unit:**
-- test_ENV_UC_01
-- test_ENV_UC_01_E1
-- test_ENV_CN_01
+- test_ENV_UC_01_accepts_valid_profiles
+- test_ENV_UC_01_default_profile_is_development
+- test_ENV_UC_01_E1_rejects_invalid_profile
+- test_ENV_CN_01_environment_controls_profile_properties
 
 **Backend Integration:**
 - test_ENV_UC_01_runtime_profile_wiring
@@ -123,11 +124,13 @@
 
 **Tests:**
 **Backend Unit:**
-- test_ENV_UC_02
-- test_ENV_UC_02_E1
-- test_ENV_UC_02_E2
-- test_ENV_CN_02
-- test_ENV_CN_10
+- test_ENV_UC_02_dev_testing_skip_validation
+- test_ENV_UC_02_production_passes_with_valid_config
+- test_ENV_UC_02_E1_debug_enabled
+- test_ENV_UC_02_E1_weak_secret_key
+- test_ENV_UC_02_E2_aggregates_all_violations
+- test_ENV_CN_02_all_violations_aggregated_in_one_pass
+- test_ENV_CN_10_missing_client_id_blocks_production
 
 **Backend Integration:**
 - test_ENV_UC_02_production_boot_guard
@@ -170,11 +173,11 @@
 
 **Tests:**
 **Backend Unit:**
-- test_ENV_UC_03_ADMIN
-- test_ENV_UC_03_E1
-- test_ENV_UC_03_E2
-- test_ENV_CN_04
-- test_ENV_CN_05
+- test_ENV_UC_03_ADMIN_creates_admin_with_django_flags
+- test_ENV_UC_03_E1_production_default_credentials_rejected
+- test_ENV_UC_03_E2_password_policy_failure
+- test_ENV_CN_04_production_password_denylist
+- test_ENV_CN_05_idempotent_ensure_admin
 
 **Backend Integration:**
 - test_ENV_UC_03_idempotent_bootstrap
@@ -212,9 +215,9 @@
 
 **Tests:**
 **Backend Unit:**
-- test_ENV_UC_04_ADMIN
-- test_ENV_UC_04_E1
-- test_ENV_CN_06
+- test_ENV_UC_04_ADMIN_seed_runs_in_dev
+- test_ENV_UC_04_E1_production_seed_blocked
+- test_ENV_CN_06_weak_secret_blocked_in_production
 
 **Backend Integration:**
 - test_ENV_UC_04_testing_auto_seed
@@ -251,9 +254,10 @@
 
 **Tests:**
 **Backend Unit:**
-- test_ENV_UC_05
-- test_ENV_UC_05_E1
-- test_ENV_CN_07
+- test_ENV_UC_05_api_docs_enabled_in_development
+- test_ENV_UC_05_debug_toolbar_only_in_development
+- test_ENV_UC_05_E1_api_docs_disabled_in_production
+- test_ENV_CN_07_seed_production_blocked
 
 **Backend Integration:**
 - test_ENV_UC_05_route_gating_by_profile
@@ -295,11 +299,11 @@
 
 **Tests:**
 **Backend Unit:**
-- test_ENV_UC_06_ADMIN
-- test_ENV_UC_06_E1
-- test_ENV_UC_06_E2
-- test_ENV_CN_08
-- test_ENV_CN_09
+- test_ENV_UC_06_ADMIN_tracing_defaults_by_profile
+- test_ENV_UC_06_E1_missing_oauth_blocks_production
+- test_ENV_UC_06_E2_otel_enabled_without_endpoint
+- test_ENV_CN_08_production_session_security
+- test_ENV_CN_09_default_admin_email_blocked
 
 **Backend Integration:**
 - test_ENV_UC_06_tracing_mode_by_profile
@@ -513,10 +517,10 @@ All ENV errors are deterministic configuration violations detected before the ap
 
 Use v5 naming from `Requirements-Index.md` and `Testing-Index.md`:
 
-- Domain aggregator: `test_ENV_UC_##`
-- Role test: `test_ENV_UC_##_ADMIN` (or `_ALL` split by relevant role in implementation)
-- Error test: `test_ENV_UC_##_E#`
-- Constraint test: `test_ENV_CN_##`
+- Domain aggregator: `test_ENV_UC_nn`
+- Role test: `test_ENV_UC_nn_ADMIN` (or `_ALL` split by relevant role in implementation)
+- Error test: `test_ENV_UC_nn_En`
+- Constraint test: `test_ENV_CN_nn`
 - System tests: `ST-ENV-UC-##` and `ST-ENV-UC-##-E#`
 
 ### Backend Unit

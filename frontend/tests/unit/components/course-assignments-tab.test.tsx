@@ -1,0 +1,203 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mockPush = vi.fn();
+const mockListByCourse = vi.fn();
+const mockListForUser = vi.fn();
+
+function setupModuleMocks() {
+  vi.doMock("next/navigation", () => ({
+    useRouter: () => ({ push: mockPush }),
+    useSearchParams: () => new URLSearchParams(),
+    usePathname: () => "/dashboard/courses/1",
+  }));
+  vi.doMock("@/lib/assignment-api", () => ({
+    listAssignmentsByCourse: mockListByCourse,
+    listAssignmentsForUser: mockListForUser,
+  }));
+}
+
+async function loadComponent() {
+  vi.resetModules();
+  setupModuleMocks();
+  const imported = await import(
+    "@/components/courses/CourseAssignmentsTab"
+  );
+  return imported.default;
+}
+
+const mockAssignments = [
+  {
+    id: 1,
+    title: "Homework 1",
+    assessmentId: 10,
+    assessmentTitle: "SEL Check-in",
+    audienceType: "COURSE" as const,
+    courseId: 1,
+    targetTeacherId: null,
+    openAt: "2026-02-01T00:00:00Z",
+    dueAt: "2026-02-15T00:00:00Z",
+    status: "ACTIVE" as const,
+  },
+  {
+    id: 2,
+    title: "Homework 2",
+    assessmentId: 11,
+    assessmentTitle: null,
+    audienceType: "COURSE" as const,
+    courseId: 1,
+    targetTeacherId: null,
+    openAt: null,
+    dueAt: null,
+    status: "ARCHIVED" as const,
+  },
+];
+
+describe("CourseAssignmentsTab", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows loading state initially", async () => {
+    mockListByCourse.mockReturnValue(new Promise(() => {})); // never resolves
+    const Component = await loadComponent();
+    render(<Component courseId={1} userRole="TEACHER" userId={1} />);
+    expect(screen.getByText("Loading assignments...")).toBeInTheDocument();
+  });
+
+  it("renders assignment table for TEACHER", async () => {
+    mockListByCourse.mockResolvedValue(mockAssignments);
+    const Component = await loadComponent();
+    render(<Component courseId={1} userRole="TEACHER" userId={1} />);
+    await waitFor(() => {
+      expect(screen.getByText("Homework 1")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Homework 2")).toBeInTheDocument();
+    expect(screen.getByText("SEL Check-in")).toBeInTheDocument();
+    expect(screen.getByText("Template unavailable")).toBeInTheDocument();
+  });
+
+  it("shows Create Assignment button for TEACHER", async () => {
+    mockListByCourse.mockResolvedValue([]);
+    const Component = await loadComponent();
+    render(<Component courseId={1} userRole="TEACHER" userId={1} />);
+    await waitFor(() => {
+      expect(screen.getByText("Create Assignment")).toBeInTheDocument();
+    });
+  });
+
+  it("hides Create Assignment button for STUDENT", async () => {
+    mockListForUser.mockResolvedValue([]);
+    const Component = await loadComponent();
+    render(<Component courseId={1} userRole="STUDENT" userId={5} />);
+    await waitFor(() => {
+      expect(screen.queryByText("Create Assignment")).toBeNull();
+    });
+  });
+
+  it("hides Create Assignment button for RESEARCHER", async () => {
+    mockListByCourse.mockResolvedValue([]);
+    const Component = await loadComponent();
+    render(<Component courseId={1} userRole="RESEARCHER" userId={5} />);
+    await waitFor(() => {
+      expect(screen.queryByText("Create Assignment")).toBeNull();
+    });
+  });
+
+  it("shows empty state when no assignments", async () => {
+    mockListByCourse.mockResolvedValue([]);
+    const Component = await loadComponent();
+    render(<Component courseId={1} userRole="TEACHER" userId={1} />);
+    await waitFor(() => {
+      expect(
+        screen.getByText("No assignments for this course yet."),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows error state when API fails", async () => {
+    mockListByCourse.mockRejectedValue(new Error("Network error"));
+    const Component = await loadComponent();
+    render(<Component courseId={1} userRole="TEACHER" userId={1} />);
+    await waitFor(() => {
+      expect(
+        screen.getByText("Failed to load assignments for this course."),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows API error detail when available", async () => {
+    mockListByCourse.mockRejectedValue({
+      response: { data: { detail: "Custom API error" } },
+    });
+    const Component = await loadComponent();
+    render(<Component courseId={1} userRole="TEACHER" userId={1} />);
+    await waitFor(() => {
+      expect(screen.getByText("Custom API error")).toBeInTheDocument();
+    });
+  });
+
+  it("navigates to assignment detail on row click", async () => {
+    const user = userEvent.setup();
+    mockListByCourse.mockResolvedValue(mockAssignments);
+    const Component = await loadComponent();
+    render(<Component courseId={1} userRole="TEACHER" userId={1} />);
+    await waitFor(() => {
+      expect(screen.getByText("Homework 1")).toBeInTheDocument();
+    });
+    await user.click(screen.getByText("Homework 1"));
+    expect(mockPush).toHaveBeenCalledWith("/dashboard/assignments/1");
+  });
+
+  it("navigates to create assignment page on button click", async () => {
+    const user = userEvent.setup();
+    mockListByCourse.mockResolvedValue([]);
+    const Component = await loadComponent();
+    render(<Component courseId={1} userRole="TEACHER" userId={1} />);
+    await waitFor(() => {
+      expect(screen.getByText("Create Assignment")).toBeInTheDocument();
+    });
+    await user.click(screen.getByText("Create Assignment"));
+    expect(mockPush).toHaveBeenCalledWith(
+      "/dashboard/assignments/new?courseId=1",
+    );
+  });
+
+  it("uses listAssignmentsForUser for STUDENT and filters by courseId", async () => {
+    const allAssignments = [
+      ...mockAssignments,
+      {
+        id: 3,
+        title: "Other course HW",
+        assessmentId: 12,
+        assessmentTitle: "Other",
+        audienceType: "COURSE" as const,
+        courseId: 99,
+        targetTeacherId: null,
+        openAt: null,
+        dueAt: null,
+        status: "ACTIVE" as const,
+      },
+    ];
+    mockListForUser.mockResolvedValue(allAssignments);
+    const Component = await loadComponent();
+    render(<Component courseId={1} userRole="STUDENT" userId={5} />);
+    await waitFor(() => {
+      expect(screen.getByText("Homework 1")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Other course HW")).toBeNull();
+  });
+
+  it("formats dates correctly, showing - for null dates", async () => {
+    mockListByCourse.mockResolvedValue(mockAssignments);
+    const Component = await loadComponent();
+    render(<Component courseId={1} userRole="TEACHER" userId={1} />);
+    await waitFor(() => {
+      expect(screen.getByText("Homework 2")).toBeInTheDocument();
+    });
+    // Homework 2 has null dates, should show "-"
+    const dashes = screen.getAllByText("-");
+    expect(dashes.length).toBeGreaterThanOrEqual(2);
+  });
+});

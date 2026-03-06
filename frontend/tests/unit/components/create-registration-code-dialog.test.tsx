@@ -47,10 +47,12 @@ describe('CreateRegistrationCodeDialog', () => {
       />,
     );
 
-    expect(screen.getByLabelText('Code type')).toBeInTheDocument();
-    expect(screen.getByLabelText('Number of codes')).toBeInTheDocument();
-    expect(screen.getByLabelText('Uses per code')).toBeInTheDocument();
-    expect(screen.getByLabelText('Expires at')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Code type')).toBeInTheDocument();
+      expect(screen.getByLabelText('Number of codes')).toBeInTheDocument();
+      expect(screen.getByLabelText('Uses per code')).toBeInTheDocument();
+      expect(screen.getByLabelText('Expires at')).toBeInTheDocument();
+    });
   });
 
   it('always shows code type selector even with single type', async () => {
@@ -68,9 +70,11 @@ describe('CreateRegistrationCodeDialog', () => {
       />,
     );
 
-    expect(screen.getByLabelText('Code type')).toBeInTheDocument();
-    expect(screen.getByLabelText('Code type')).toBeDisabled();
-    expect(screen.getByLabelText('Number of codes')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Code type')).toBeInTheDocument();
+      expect(screen.getByLabelText('Code type')).toBeDisabled();
+      expect(screen.getByLabelText('Number of codes')).toBeInTheDocument();
+    });
   });
 
   it('submits with correct payload including count and courseId', async () => {

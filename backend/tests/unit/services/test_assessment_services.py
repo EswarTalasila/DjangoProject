@@ -658,3 +658,228 @@ class TestCreateQuestion:
 
         create_call = mock_q_model.objects.create.call_args
         assert create_call.kwargs["auto_gradable"] is False
+
+
+
+# ---------------------------------------------------------------------------
+# archive_assessment / restore_assessment / purge_assessment
+# ---------------------------------------------------------------------------
+
+
+class TestArchiveAssessment(_NoopAtomicMixin):
+    """Tests for archive_assessment service."""
+
+    @patch("assessments.services.timezone")
+    def test_archives_active_assessment(self, mock_tz):
+        """Archives an active assessment and sets status to ARCHIVED."""
+        from assessments.services import archive_assessment
+
+        mock_tz.now.return_value = "2025-01-01"
+        assessment = MagicMock()
+        assessment.status = "ACTIVE"
+        user = SimpleNamespace(id=1)
+
+        result = archive_assessment(user, assessment)
+
+        assert result.status == "ARCHIVED"
+        assessment.save.assert_called_once()
+
+    def test_raises_when_already_archived(self):
+        """Raises ConflictError when assessment is already archived."""
+        from assessments.services import archive_assessment
+        from assessments.models import AssessmentStatus
+        from core.lifecycle import ConflictError
+
+        assessment = MagicMock()
+        assessment.status = AssessmentStatus.ARCHIVED
+
+        with pytest.raises(ConflictError, match="already archived"):
+            archive_assessment(SimpleNamespace(id=1), assessment)
+
+
+class TestRestoreAssessment(_NoopAtomicMixin):
+    """Tests for restore_assessment service."""
+
+    @patch("assessments.services.timezone")
+    def test_restores_archived_assessment(self, mock_tz):
+        """Restores an archived assessment back to ACTIVE status."""
+        from assessments.services import restore_assessment
+        from assessments.models import AssessmentStatus
+
+        mock_tz.now.return_value = "2025-06-01"
+        assessment = MagicMock()
+        assessment.status = AssessmentStatus.ARCHIVED
+        user = SimpleNamespace(id=1)
+
+        result = restore_assessment(user, assessment)
+
+        assert result.status == "ACTIVE"
+        assert result.archived_at is None
+
+    def test_raises_when_not_archived(self):
+        """Raises ConflictError when restoring an assessment that is not archived."""
+        from assessments.services import restore_assessment
+        from core.lifecycle import ConflictError
+
+        assessment = MagicMock()
+        assessment.status = "ACTIVE"
+
+        with pytest.raises(ConflictError, match="not archived"):
+            restore_assessment(SimpleNamespace(id=1), assessment)
+
+
+class TestPurgeAssessment(_NoopAtomicMixin):
+    """Tests for purge_assessment service."""
+
+    def test_raises_when_not_archived(self):
+        """Raises ConflictError when purging an assessment that is not archived."""
+        from assessments.services import purge_assessment
+        from core.lifecycle import ConflictError
+
+        assessment = MagicMock()
+        assessment.status = "ACTIVE"
+
+        with pytest.raises(ConflictError, match="Only archived"):
+            purge_assessment(assessment)
+
+    @patch("assessments.services.Assignment")
+    def test_raises_when_has_assignments(self, mock_assignment):
+        """Raises ConflictError when assessment has associated assignments."""
+        from assessments.services import purge_assessment
+        from assessments.models import AssessmentStatus
+        from core.lifecycle import ConflictError
+
+        assessment = MagicMock()
+        assessment.status = AssessmentStatus.ARCHIVED
+        mock_assignment.objects.filter.return_value.exists.return_value = True
+
+        with pytest.raises(ConflictError, match="associated assignments"):
+            purge_assessment(assessment)
+
+    @patch("assessments.services.Assignment")
+    def test_purges_successfully(self, mock_assignment):
+        """Permanently deletes an archived assessment with no assignments."""
+        from assessments.services import purge_assessment
+        from assessments.models import AssessmentStatus
+
+        assessment = MagicMock()
+        assessment.status = AssessmentStatus.ARCHIVED
+        mock_assignment.objects.filter.return_value.exists.return_value = False
+
+        purge_assessment(assessment)
+
+        assessment.delete.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# _validate_rubric_rules
+# ---------------------------------------------------------------------------
+
+
+class TestValidateRubricRules:
+    """Tests for _validate_rubric_rules helper."""
+
+    def test_auto_mode_rejects_rubric(self):
+        """Raises ValueError when AUTO mode question has a rubric attached."""
+        from assessments.services import _validate_rubric_rules
+
+        assessment = MagicMock()
+        assessment.grading_mode = GradingMode.AUTO
+        q = MagicMock()
+        q.rubric_id = 1
+        q.question_group = None
+        q.grading_strategy = "AUTO"
+        assessment.questions.all.return_value = [q]
+
+        with pytest.raises(ValueError, match="AUTO mode does not allow"):
+            _validate_rubric_rules(assessment)
+
+    def test_manual_mode_requires_rubric(self):
+        """Raises ValueError when MANUAL mode question lacks a rubric."""
+        from assessments.services import _validate_rubric_rules
+
+        assessment = MagicMock()
+        assessment.grading_mode = "MANUAL"
+        q = MagicMock()
+        q.rubric_id = None
+        q.question_group = None
+        q.grading_strategy = "MANUAL"
+        q.prompt = "Test question prompt"
+        assessment.questions.all.return_value = [q]
+
+        with pytest.raises(ValueError, match="must have a rubric"):
+            _validate_rubric_rules(assessment)
+
+    def test_manual_mode_accepts_rubric(self):
+        """Passes validation when MANUAL mode question has a rubric."""
+        from assessments.services import _validate_rubric_rules
+
+        assessment = MagicMock()
+        assessment.grading_mode = "MANUAL"
+        q = MagicMock()
+        q.rubric_id = 1
+        q.question_group = None
+        q.grading_strategy = "MANUAL"
+        assessment.questions.all.return_value = [q]
+
+        _validate_rubric_rules(assessment)  # should not raise
+
+    def test_hybrid_manual_strategy_requires_rubric(self):
+        """Raises ValueError when HYBRID question with MANUAL strategy lacks a rubric."""
+        from assessments.services import _validate_rubric_rules
+
+        assessment = MagicMock()
+        assessment.grading_mode = "HYBRID"
+        q = MagicMock()
+        q.rubric_id = None
+        q.question_group = None
+        q.grading_strategy = "MANUAL"
+        q.prompt = "Test question"
+        assessment.questions.all.return_value = [q]
+
+        with pytest.raises(ValueError, match="MANUAL strategy must have a rubric"):
+            _validate_rubric_rules(assessment)
+
+    def test_hybrid_auto_strategy_rejects_rubric(self):
+        """Raises ValueError when HYBRID question with AUTO strategy has a rubric."""
+        from assessments.services import _validate_rubric_rules
+
+        assessment = MagicMock()
+        assessment.grading_mode = "HYBRID"
+        q = MagicMock()
+        q.rubric_id = 1
+        q.question_group = None
+        q.grading_strategy = "AUTO"
+        q.prompt = "Test question"
+        assessment.questions.all.return_value = [q]
+
+        with pytest.raises(ValueError, match="AUTO strategy must not have a rubric"):
+            _validate_rubric_rules(assessment)
+
+    def test_hybrid_auto_strategy_accepts_no_rubric(self):
+        """Passes validation when HYBRID question with AUTO strategy has no rubric."""
+        from assessments.services import _validate_rubric_rules
+
+        assessment = MagicMock()
+        assessment.grading_mode = "HYBRID"
+        q = MagicMock()
+        q.rubric_id = None
+        q.question_group = None
+        q.grading_strategy = "AUTO"
+        assessment.questions.all.return_value = [q]
+
+        _validate_rubric_rules(assessment)  # should not raise
+
+    def test_group_rubric_counts_as_has_rubric(self):
+        """Treats a rubric on the question group as satisfying the rubric requirement."""
+        from assessments.services import _validate_rubric_rules
+
+        assessment = MagicMock()
+        assessment.grading_mode = "MANUAL"
+        q = MagicMock()
+        q.rubric_id = None
+        q.question_group = MagicMock(rubric_id=5)
+        q.grading_strategy = "MANUAL"
+        assessment.questions.all.return_value = [q]
+
+        _validate_rubric_rules(assessment)  # should not raise (group rubric)

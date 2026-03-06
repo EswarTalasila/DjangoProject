@@ -212,7 +212,7 @@
 - Trigger: Missing/invalid token
 - Behavior: 401 response; frontend redirects to login
 
-**Tests (representative):** test_AUTH_UC_09, test_AUTH_UC_09_E1, test_AUTH_CN_14
+**Tests (representative):** _(no backend unit tests — session profile is tested via integration routes)_
 
 ---
 
@@ -338,7 +338,7 @@
 - Trigger: Code is outside TTL or already consumed
 - Behavior: Validation response indicates invalid
 
-**Tests (representative):** test_AUTH_UC_06, test_AUTH_UC_06_E1, test_AUTH_UC_06_E2
+**Tests (representative):** test_AUTH_UC_06, test_AUTH_UC_06_E2
 
 ---
 
@@ -602,10 +602,10 @@ Applies to all roles. Reset requests are removed; issuance always starts from an
 
 ### Naming Convention
 
-- Domain aggregator: `test_AUTH_UC_##`
-- Role test: `test_AUTH_UC_##_ROLE` (e.g., `test_AUTH_UC_01_STUDENT`)
-- Error test: `test_AUTH_UC_##_E#`
-- Constraint test: `test_AUTH_CN_##`
+- Domain aggregator: `test_AUTH_UC_nn`
+- Role test: `test_AUTH_UC_nn_ROLE` (e.g., `test_AUTH_UC_01_STUDENT`)
+- Error test: `test_AUTH_UC_nn_En`
+- Constraint test: `test_AUTH_CN_nn`
 - System tests: `ST-AUTH-UC-##` and `ST-AUTH-UC-##-E#`
 
 ### Backend Unit
