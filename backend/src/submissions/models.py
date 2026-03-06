@@ -378,7 +378,7 @@ class SubmissionImage(models.Model):
         ]
         constraints = [
             models.CheckConstraint(
-                check=models.Q(size_bytes__gt=0),
+                condition=models.Q(size_bytes__gt=0),
                 name="ck_subimg_size_positive",
             ),
             models.UniqueConstraint(

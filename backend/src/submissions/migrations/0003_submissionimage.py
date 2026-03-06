@@ -90,7 +90,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="submissionimage",
             constraint=models.CheckConstraint(
-                check=models.Q(("size_bytes__gt", 0)),
+                condition=models.Q(("size_bytes__gt", 0)),
                 name="ck_subimg_size_positive",
             ),
         ),

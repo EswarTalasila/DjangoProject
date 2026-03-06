@@ -52,7 +52,8 @@ class RubricCriterion(models.Model):
         unique_together = [("rubric", "order_index")]
         constraints = [
             models.CheckConstraint(
-                check=models.Q(weight__gt=0), name="rubric_criterion_weight_positive"
+                condition=models.Q(weight__gt=0),
+                name="rubric_criterion_weight_positive",
             )
         ]
 
@@ -74,7 +75,8 @@ class RubricLevel(models.Model):
         unique_together = [("criterion", "order_index")]
         constraints = [
             models.CheckConstraint(
-                check=models.Q(points__gte=0), name="rubric_level_points_non_negative"
+                condition=models.Q(points__gte=0),
+                name="rubric_level_points_non_negative",
             )
         ]
 
