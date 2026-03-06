@@ -75,6 +75,22 @@ def _seed_workspace_tree(client, ws_id, course_id):
     return root_id, file_node.json()["id"]
 
 
+def _assert_build_succeeded(build_resp):
+    """Assert build API response is successful and includes artifactId."""
+    body = build_resp.json()
+    assert build_resp.status_code == status.HTTP_202_ACCEPTED, (
+        f"Expected 202 from build endpoint, got {build_resp.status_code}. "
+        f"Response: {body}"
+    )
+    assert body.get("status") == "COMPLETED", (
+        f"Expected COMPLETED build status, got {body.get('status')}. "
+        f"Response: {body}"
+    )
+    artifact_id = body.get("artifactId")
+    assert artifact_id is not None, f"Missing artifactId in build response: {body}"
+    return artifact_id
+
+
 # ═════════════════════════════════════════════════════════════════════
 # PKG-UC-01 — Create & retrieve workspace
 # ═════════════════════════════════════════════════════════════════════
@@ -631,7 +647,7 @@ class TestPKG_CN_04:
         build_resp = api_client.post(
             f"{WS_URL}/{ws['id']}/build", {}, format="json"
         )
-        artifact_id = build_resp.json()["artifactId"]
+        artifact_id = _assert_build_succeeded(build_resp)
 
         # Download and inspect zip
         dl_resp = api_client.get(
@@ -675,7 +691,7 @@ class TestPKG_CN_04:
             {"includeMetadataFiles": False},
             format="json",
         )
-        artifact_id = build_resp.json()["artifactId"]
+        artifact_id = _assert_build_succeeded(build_resp)
 
         dl_resp = api_client.get(
             f"/api/v1/packages/artifacts/{artifact_id}/download"
@@ -738,7 +754,7 @@ class TestPKG_UC_05:
         build_resp = api_client.post(
             f"{WS_URL}/{ws['id']}/build", {}, format="json"
         )
-        return build_resp.json()["artifactId"], ws["id"]
+        return _assert_build_succeeded(build_resp), ws["id"]
 
     def test_PKG_UC_05_download(self, api_client, admin_user):
         """Download returns zip file."""
