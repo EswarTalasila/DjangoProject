@@ -508,7 +508,12 @@ tasks:
       - >
         sh -c 'workers="{{.TEST_WORKERS}}";
         case "$workers" in auto|[0-9]|[1-9][0-9]*) ;; *) echo "Invalid TEST_WORKERS: $workers (use auto or integer; 0 = sequential)."; exit 1 ;; esac;
-        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest tests/unit -v -n "$workers" --dist=loadscope;
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}}
+        python scripts/coverage/coverage_report.py
+        --gate none
+        --workers "$workers"
+        --no-summary
+        --pytest-target tests/unit;
         rc=$?;
         if [ "$rc" -eq 5 ]; then
           echo "SKIP: no backend unit tests collected.";
@@ -547,7 +552,11 @@ tasks:
       - >
         sh -c 'workers="{{.TEST_WORKERS}}";
         case "$workers" in auto|[0-9]|[1-9][0-9]*) ;; *) echo "Invalid TEST_WORKERS: $workers (use auto or integer; 0 = sequential)."; exit 1 ;; esac;
-        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -v -n "$workers" --dist=loadscope'
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}}
+        python scripts/coverage/coverage_report.py
+        --gate none
+        --workers "$workers"
+        --no-summary'
 
   test:coverage:
     desc: Run backend + frontend coverage reports
@@ -605,7 +614,12 @@ tasks:
       - >
         sh -c 'workers="{{.TEST_WORKERS}}";
         case "$workers" in auto|[0-9]|[1-9][0-9]*) ;; *) echo "Invalid TEST_WORKERS: $workers (use auto or integer; 0 = sequential)."; exit 1 ;; esac;
-        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest tests/integration -v -n "$workers" --dist=loadscope;
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}}
+        python scripts/coverage/coverage_report.py
+        --gate none
+        --workers "$workers"
+        --no-summary
+        --pytest-target tests/integration;
         rc=$?;
         if [ "$rc" -eq 5 ]; then
           echo "SKIP: no backend integration tests collected.";
@@ -642,7 +656,14 @@ tasks:
             exit 1
             ;;
         esac;
-        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest tests/integration -m "$marker" -v -n "$workers" --dist=loadscope;
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}}
+        python scripts/coverage/coverage_report.py
+        --gate none
+        --workers "$workers"
+        --no-summary
+        --pytest-target tests/integration
+        --pytest-target=-m
+        --pytest-target="$marker";
         rc=$?;
         if [ "$rc" -eq 5 ]; then
           echo "SKIP: no integration tests collected for role=$role (marker=$marker).";
@@ -659,7 +680,13 @@ tasks:
       - >
         sh -c 'workers="{{.TEST_WORKERS}}";
         case "$workers" in auto|[0-9]|[1-9][0-9]*) ;; *) echo "Invalid TEST_WORKERS: $workers (use auto or integer; 0 = sequential)."; exit 1 ;; esac;
-        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -m security -v -n "$workers" --dist=loadscope;
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}}
+        python scripts/coverage/coverage_report.py
+        --gate none
+        --workers "$workers"
+        --no-summary
+        --pytest-target=-m
+        --pytest-target=security;
         rc=$?;
         if [ "$rc" -eq 5 ]; then
           echo "SKIP: no security tests collected.";
@@ -687,7 +714,13 @@ tasks:
       - >
         sh -c 'workers="{{.TEST_WORKERS}}";
         case "$workers" in auto|[0-9]|[1-9][0-9]*) ;; *) echo "Invalid TEST_WORKERS: $workers (use auto or integer; 0 = sequential)."; exit 1 ;; esac;
-        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} pytest -m workflow -v -n "$workers" --dist=loadscope'
+        {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}}
+        python scripts/coverage/coverage_report.py
+        --gate none
+        --workers "$workers"
+        --no-summary
+        --pytest-target=-m
+        --pytest-target=workflow'
 
   test:frontend:
     desc: Run frontend unit tests (compatibility alias)

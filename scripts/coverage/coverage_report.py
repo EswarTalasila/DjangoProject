@@ -104,6 +104,9 @@ _PYTEST_RESULT_LINE_RE = re.compile(
 _PYTEST_XDIST_RESULT_LINE_RE = re.compile(
     r"^\[gw\d+\]\s+\[\s*\d+%\]\s+(?P<status>PASSED|FAILED|ERROR|SKIPPED|XFAIL|XPASS)\s+(?P<prefix>.+?)\s*$"
 )
+_PYTEST_ITEM_ONLY_LINE_RE = re.compile(
+    r"^(?:\[(?:gw\d+)\]\s+)?tests/.+::\S+(?:\s+-\s+.*)?\s*$"
+)
 _STATUS_COLORS = {
     "PASSED": "32",
     "FAILED": "31",
@@ -214,6 +217,14 @@ def _format_pytest_result_line(line: str, width: int) -> str | None:
     return f"{test_txt} | {desc_txt} | {status_colored}{newline}"
 
 
+def _is_unfinished_test_item_line(line: str) -> bool:
+    """Return True for pytest item-progress lines that have no final status yet."""
+    plain = _strip_ansi(line.rstrip())
+    if _PYTEST_RESULT_LINE_RE.match(plain) or _PYTEST_XDIST_RESULT_LINE_RE.match(plain):
+        return False
+    return bool(_PYTEST_ITEM_ONLY_LINE_RE.match(plain))
+
+
 def _bannerize_line(line: str, width: int) -> str | None:
     """Render selected summary lines as full-width centered banners."""
     newline = ""
@@ -304,6 +315,7 @@ def _run_pytest(
     workers: str | None,
     live_progress: bool,
     show_output: bool,
+    pytest_targets: list[str] | None = None,
 ) -> tuple[int, str]:
     """Run pytest with coverage and return (exit_code, captured_output)."""
     cmd = [
@@ -322,10 +334,13 @@ def _run_pytest(
     parallel_enabled = workers_normalized not in {"", "0", "off", "none"}
     if parallel_enabled:
         cmd.extend(["-n", workers_normalized, "--dist=loadscope"])
-    # Pass real terminal width so pytest right-justifies progress percentages.
+    if pytest_targets:
+        cmd.extend(pytest_targets)
+    # Use a wide virtual terminal for pytest so long test ids/descriptions
+    # don't hard-wrap before the trailing status token (which breaks formatting).
     env = os.environ.copy()
-    cols = str(shutil.get_terminal_size((120, 24)).columns)
-    env.setdefault("COLUMNS", cols)
+    cols = str(max(240, shutil.get_terminal_size((120, 24)).columns))
+    env["COLUMNS"] = cols
 
     proc = subprocess.Popen(
         cmd,
@@ -357,6 +372,12 @@ def _run_pytest(
                     display_line = formatted
                 else:
                     stripped = _strip_trailing_progress_token(line)
+                    if _is_unfinished_test_item_line(stripped):
+                        if progress_state is not None:
+                            _draw_bottom_progress(
+                                progress_percent, progress_state[0], progress_state[1]
+                            )
+                        continue
                     if parallel_enabled and _is_xdist_preface_line(stripped):
                         if progress_state is not None:
                             _draw_bottom_progress(
@@ -661,6 +682,27 @@ def main() -> int:
         dest="show_pytest_output",
         help="Suppress raw pytest output (except on failures).",
     )
+    parser.add_argument(
+        "--pytest-target",
+        action="append",
+        default=[],
+        help=(
+            "Optional pytest target (path/nodeid/expression). "
+            "Can be passed multiple times to scope which tests run."
+        ),
+    )
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        default=True,
+        help="Show coverage + FR summary tables and evaluate gate (default: on).",
+    )
+    parser.add_argument(
+        "--no-summary",
+        action="store_false",
+        dest="summary",
+        help="Skip coverage/FR summary tables and gate evaluation.",
+    )
     args = parser.parse_args()
 
     root = _repo_root()
@@ -678,7 +720,15 @@ def main() -> int:
         workers=args.workers,
         live_progress=args.live_progress,
         show_output=args.show_pytest_output,
+        pytest_targets=args.pytest_target,
     )
+
+    if not args.summary:
+        if pytest_rc != 0:
+            print(f"Result: pytest failed (exit={pytest_rc}).", file=sys.stderr)
+            return pytest_rc
+        print("\nResult: success.")
+        return 0
 
     if not coverage_json.exists():
         print(f"\nERROR: coverage json not found at {coverage_json}", file=sys.stderr)

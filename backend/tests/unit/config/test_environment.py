@@ -21,6 +21,12 @@ from config.env import EnvSettings
 # Helpers
 # ---------------------------------------------------------------------------
 
+
+@pytest.fixture(autouse=True)
+def _isolate_otel_enabled_env(monkeypatch):
+    """Prevent ambient OTEL_ENABLED env vars from changing unit-test defaults."""
+    monkeypatch.delenv("OTEL_ENABLED", raising=False)
+
 # Minimal valid production config — all validators pass.
 # otel_trace_file="" explicitly overrides any container env var.
 _VALID_PROD = dict(
