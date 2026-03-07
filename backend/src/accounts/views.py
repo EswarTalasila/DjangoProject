@@ -139,7 +139,7 @@ AUTH_COOKIE_SAMESITE: Literal["Lax"] = "Lax"
 
 
 def _cookie_secure() -> bool:
-    return bool(getattr(settings, "ENVIRONMENT", "") == "production")
+    return settings.ENVIRONMENT == "production"
 
 
 def _set_auth_cookies(

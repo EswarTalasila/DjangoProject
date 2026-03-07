@@ -371,7 +371,7 @@ class TestINFRA_CN_08:
 
 
 class TestINFRA_CN_09:
-    """Optional services use profiles; core services start without flags."""
+    """Compose services are explicitly grouped into development/testing/prod profiles."""
 
     def test_INFRA_CN_09_e2e_profile(self):
         """E2E service is gated behind the 'e2e' compose profile."""
@@ -385,12 +385,24 @@ class TestINFRA_CN_09:
         profiles = services["nginx"].get("profiles", [])
         assert "proxy" in profiles
 
-    def test_INFRA_CN_09_core_services_no_profile(self):
-        """Core services (database, backend, frontend, pgadmin) have no profile restrictions."""
+    def test_INFRA_CN_09_profile_grouping(self):
+        """Services are mapped to profile groups according to env architecture."""
         services = _compose_services()
-        for svc_name in ("database", "backend", "frontend", "pgadmin"):
-            profiles = services[svc_name].get("profiles", [])
-            assert not profiles, f"Core service {svc_name} must not have profiles"
+        assert services["database"].get("profiles", []) == []
+        assert sorted(services["backend"].get("profiles", [])) == [
+            "development",
+            "testing",
+        ]
+        assert sorted(services["frontend"].get("profiles", [])) == [
+            "development",
+            "testing",
+        ]
+        assert services["pgadmin"].get("profiles", []) == ["testing"]
+        assert services["otel-collector"].get("profiles", []) == ["testing"]
+        assert services["jaeger"].get("profiles", []) == ["testing"]
+        assert services["backend-prod"].get("profiles", []) == ["prod"]
+        assert services["frontend-prod"].get("profiles", []) == ["prod"]
+        assert services["nginx-prod"].get("profiles", []) == ["prod"]
 
 
 # ---------------------------------------------------------------------------

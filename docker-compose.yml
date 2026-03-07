@@ -16,24 +16,23 @@
 #   docker compose logs -f backend    # Follow backend logs
 #   docker compose exec backend pytest # Run backend tests
 #
-# OPTIONAL PROFILES:
-#   docker compose --profile e2e up   # Include E2E testing container
-#   docker compose --profile proxy up # Include Nginx reverse proxy
-#   task up:prod                      # Production stack (prod profile)
+# PROFILE SETS:
+#   --profile development : database + backend + frontend
+#   --profile testing     : database + backend + frontend + pgadmin + otel + jaeger
+#   --profile prod        : database + backend-prod + frontend-prod + nginx-prod
+#   --profile e2e         : Playwright runner (used with testing)
+#   --profile proxy       : Dev/testing reverse proxy overlay
 #
-# SERVICES (default / development):
-#   - database:       PostgreSQL 17 (internal only, access via docker compose exec)
-#   - backend:        Django REST API (port 8000)
-#   - frontend:       Next.js dev server (port 3000)
-#   - pgadmin:        Database management UI (port 5050)
-#   - otel-collector: OTel span receiver (ports 4317/4318)
-#   - jaeger:         Trace visualization UI (port 16686)
+# SERVICES:
+#   - database:       PostgreSQL 17 (shared across profiles)
+#   - backend:        Django dev/testing API (profiles: development/testing)
+#   - frontend:       Next.js dev server (profiles: development/testing)
+#   - pgadmin:        Database management UI (profile: testing)
+#   - otel-collector: OTel span receiver (profile: testing)
+#   - jaeger:         Trace visualization UI (profile: testing)
 #   - frontend-e2e:   Playwright E2E tests (profile: e2e)
-#   - nginx:          Reverse proxy (profile: proxy, port 80)
-#
-# SERVICES (prod profile — task up:prod):
-#   - database:       PostgreSQL 17 (shared with dev)
-#   - backend-prod:   Django + Gunicorn (no exposed port)
+#   - nginx:          Reverse proxy overlay (profile: proxy)
+#   - backend-prod:   Django + Gunicorn (profile: prod, no exposed port)
 #   - frontend-prod:  Next.js standalone build (no exposed port)
 #   - nginx-prod:     Reverse proxy (port 80)
 # =============================================================================
@@ -71,6 +70,8 @@ services:
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: eel-pgadmin
+    profiles:
+      - testing
     user: root
     ports:
       - "5050:80"
@@ -110,6 +111,9 @@ services:
       dockerfile: Dockerfile
     container_name: eel-backend
     restart: unless-stopped
+    profiles:
+      - development
+      - testing
     environment:
       - DATABASE_URL=postgres://${POSTGRES_USER:-datadash}:${POSTGRES_PASSWORD:-change-me}@database:5432/${POSTGRES_DB:-datadash}
       - ENVIRONMENT=${ENVIRONMENT:-development}
@@ -170,6 +174,9 @@ services:
       dockerfile: Dockerfile.dev
     container_name: eel-frontend
     restart: unless-stopped
+    profiles:
+      - development
+      - testing
     volumes:
       - ./frontend:/app:cached
       - frontend_node_modules:/app/node_modules
@@ -333,6 +340,8 @@ services:
     image: otel/opentelemetry-collector-contrib:0.120.0
     container_name: eel-otel-collector
     restart: unless-stopped
+    profiles:
+      - testing
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
     ports:
@@ -350,6 +359,8 @@ services:
     image: jaegertracing/all-in-one:1.76.0
     container_name: eel-jaeger
     restart: unless-stopped
+    profiles:
+      - testing
     ports:
       - "16686:16686"
     environment:

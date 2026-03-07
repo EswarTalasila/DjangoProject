@@ -6,6 +6,12 @@ version: "3"
 
 vars:
   DOCKER_COMPOSE: docker compose
+  ENV_FILE_DEV: env/.env.development
+  ENV_FILE_TEST: env/.env.testing
+  ENV_FILE_PROD: env/.env.production
+  DOCKER_COMPOSE_DEV: docker compose --env-file env/.env.development --profile development
+  DOCKER_COMPOSE_TEST: docker compose --env-file env/.env.testing --profile testing
+  DOCKER_COMPOSE_PROD: docker compose --env-file env/.env.production --profile prod
   BACKEND_CONTAINER: backend
   FRONTEND_CONTAINER: frontend
   DATABASE_CONTAINER: database
@@ -62,8 +68,13 @@ tasks:
         print_cmd "task up:dev" "development profile + diagnostics"
         print_cmd "task up:test" "testing profile + auto seed + diagnostics"
         print_cmd "task up:prod" "production profile + fail-fast diagnostics"
-        print_cmd "task up:prod:local" "production profile using local .env.prod"
-        print_cmd "task down" "stop stack"
+        print_cmd "task up:prod:local" "alias for up:prod"
+        print_cmd "task env:init" "create missing env files from templates"
+        print_cmd "task env:reset" "overwrite env files from templates"
+        print_cmd "task down" "stop all profiles"
+        print_cmd "task down:dev" "stop dev profile only"
+        print_cmd "task down:test" "stop test profile only"
+        print_cmd "task down:prod" "stop prod profile only"
         printf "\n"
 
         print_section "${C_YELLOW}" "Overlays (running stack)"
@@ -175,19 +186,26 @@ tasks:
       - sh: docker info > /dev/null 2>&1
         msg: "Docker is not running. Please start Docker Desktop or the Docker daemon."
 
-  _check:env:
+  _check:env-dev:
     internal: true
-    desc: Verify .env file exists
+    desc: Verify development env file exists
     preconditions:
-      - sh: test -f .env
-        msg: ".env file not found. Copy .env.template to .env and configure it."
+      - sh: test -f {{.ENV_FILE_DEV}}
+        msg: "Missing {{.ENV_FILE_DEV}}. Run 'task env:init'."
+
+  _check:env-test:
+    internal: true
+    desc: Verify testing env file exists
+    preconditions:
+      - sh: test -f {{.ENV_FILE_TEST}}
+        msg: "Missing {{.ENV_FILE_TEST}}. Run 'task env:init'."
 
   _check:env-prod:
     internal: true
-    desc: Verify .env.prod file exists
+    desc: Verify production env file exists
     preconditions:
-      - sh: test -f .env.prod
-        msg: ".env.prod file not found."
+      - sh: test -f {{.ENV_FILE_PROD}}
+        msg: "Missing {{.ENV_FILE_PROD}}. Run 'task env:init'."
 
   _check:backend-running:
     internal: true
@@ -202,6 +220,21 @@ tasks:
           done
           exit 1
         msg: "Backend container is not running. Run 'task up' first."
+
+  _check:backend-django-ready:
+    internal: true
+    desc: Verify backend Django app is ready before running tests
+    deps: [_check:backend-running]
+    preconditions:
+      - sh: |
+          for i in $(seq 1 45); do
+            if {{.DOCKER_COMPOSE}} exec -T {{.BACKEND_CONTAINER}} python src/manage.py check >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+        msg: "Backend Django app is not ready yet. Run 'task up:test' and wait for startup diagnostics."
 
   _check:frontend-running:
     internal: true
@@ -254,10 +287,24 @@ tasks:
 
   _check:testing-profile:
     internal: true
-    desc: Verify running backend is using testing profile
+    desc: Verify running backend is using testing profile and fully ready
     preconditions:
       - sh: "{{.DOCKER_COMPOSE}} exec -T {{.BACKEND_CONTAINER}} sh -c 'printenv ENVIRONMENT | grep -qx testing'"
         msg: "Testing commands require ENVIRONMENT=testing. Run 'task up:test' first."
+      - sh: |
+          for i in $(seq 1 30); do
+            if {{.DOCKER_COMPOSE}} exec -T {{.BACKEND_CONTAINER}} python src/manage.py env_report --profile testing >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+        msg: "Backend is not fully ready for tests. Run 'task up:test' and wait for startup diagnostics."
+
+  _check:testing-ready:
+    internal: true
+    desc: Wait until backend diagnostics pass in testing profile
+    deps: [_check:backend-django-ready, _check:testing-profile]
 
   _check:e2e-ready:
     internal: true
@@ -265,15 +312,35 @@ tasks:
     deps:
       [
         _check:docker,
-        _check:backend-running,
+        _check:testing-ready,
         _check:frontend-running,
-        _check:testing-profile,
       ]
 
   # ===========================================================================
   # Service Management
   # Start/stop the application stack
   # ===========================================================================
+  env:init:
+    desc: Create missing env files from templates under env/
+    cmds:
+      - mkdir -p env
+      - >
+        sh -c 'if [ ! -f {{.ENV_FILE_DEV}} ]; then cp env/.env.development.template {{.ENV_FILE_DEV}}; echo "Created {{.ENV_FILE_DEV}}"; fi'
+      - >
+        sh -c 'if [ ! -f {{.ENV_FILE_TEST}} ]; then cp env/.env.testing.template {{.ENV_FILE_TEST}}; echo "Created {{.ENV_FILE_TEST}}"; fi'
+      - >
+        sh -c 'if [ ! -f {{.ENV_FILE_PROD}} ]; then cp env/.env.production.template {{.ENV_FILE_PROD}}; echo "Created {{.ENV_FILE_PROD}}"; fi'
+      - 'echo "Environment files ready."'
+
+  env:reset:
+    desc: Overwrite runtime env files from templates under env/
+    cmds:
+      - mkdir -p env
+      - cp env/.env.development.template {{.ENV_FILE_DEV}}
+      - cp env/.env.testing.template {{.ENV_FILE_TEST}}
+      - cp env/.env.production.template {{.ENV_FILE_PROD}}
+      - 'echo "Environment files reset from templates."'
+
   up:
     desc: Start all services using development profile
     cmds:
@@ -281,40 +348,56 @@ tasks:
 
   up:dev:
     desc: Start all services with development profile
-    deps: [_check:docker, _check:env]
+    deps: [_check:docker, _check:env-dev]
     cmds:
-      - "ENVIRONMENT=development {{.DOCKER_COMPOSE}} up -d"
+      - "{{.DOCKER_COMPOSE_DEV}} up -d"
       - "./scripts/runtime/profile_guard.py --profile development --wait 10"
 
   up:test:
     desc: Start all services with testing profile (auto seeds E2E fixtures)
-    deps: [_check:docker, _check:env]
+    deps: [_check:docker, _check:env-test]
     cmds:
-      - "ENVIRONMENT=testing {{.DOCKER_COMPOSE}} up -d"
+      - "{{.DOCKER_COMPOSE_TEST}} up -d"
       - "./scripts/runtime/profile_guard.py --profile testing --wait 10"
 
   up:prod:
     desc: Start all services with production profile (strict fail-fast validation)
-    deps: [_check:docker, _check:env]
+    deps: [_check:docker, _check:env-prod]
     cmds:
-      - "ENVIRONMENT=production {{.DOCKER_COMPOSE}} --profile prod up -d database backend-prod frontend-prod nginx-prod"
+      - "{{.DOCKER_COMPOSE_PROD}} up -d"
       - "./scripts/runtime/profile_guard.py --profile production --service backend-prod --wait 20"
 
   up:prod:local:
-    desc: Start production stack using .env.prod (local demo)
-    deps: [_check:docker, _check:env-prod]
+    desc: Alias for up:prod
     cmds:
-      - "ENVIRONMENT=production {{.DOCKER_COMPOSE}} --env-file .env.prod --profile prod up -d database backend-prod frontend-prod nginx-prod"
-      - "./scripts/runtime/profile_guard.py --profile production --service backend-prod --wait 20"
+      - task up:prod
 
   down:
-    desc: Stop all services
+    desc: Stop all services across all profiles
     deps: [_check:docker]
     cmds:
-      - "{{.DOCKER_COMPOSE}} down"
+      - "{{.DOCKER_COMPOSE}} --profile development --profile testing --profile prod --profile proxy --profile e2e down --remove-orphans"
+
+  down:dev:
+    desc: Stop dev profile services only
+    deps: [_check:docker]
+    cmds:
+      - "{{.DOCKER_COMPOSE_DEV}} down"
+
+  down:test:
+    desc: Stop test profile services only
+    deps: [_check:docker]
+    cmds:
+      - "{{.DOCKER_COMPOSE_TEST}} down"
+
+  down:prod:
+    desc: Stop prod profile services only
+    deps: [_check:docker]
+    cmds:
+      - "{{.DOCKER_COMPOSE_PROD}} down"
 
   down:proxy:
-    desc: Stop all services, including the Nginx proxy container if running
+    desc: Stop proxy overlay only
     deps: [_check:docker]
     cmds:
       - "{{.DOCKER_COMPOSE}} --profile proxy down"
@@ -327,7 +410,15 @@ tasks:
         sh: "{{.DOCKER_COMPOSE}} exec -T {{.BACKEND_CONTAINER}} sh -c 'printenv ENVIRONMENT'"
     cmds:
       - mkdir -p {{.OTEL_TRACE_DIR}}
-      - "ENVIRONMENT={{.CURRENT_PROFILE}} OTEL_ENABLED=true {{.DOCKER_COMPOSE}} up -d --force-recreate {{.BACKEND_CONTAINER}}"
+      - >
+        sh -c 'profile="{{.CURRENT_PROFILE}}";
+        case "$profile" in
+          development) compose="{{.DOCKER_COMPOSE_DEV}}"; service="{{.BACKEND_CONTAINER}}" ;;
+          testing) compose="{{.DOCKER_COMPOSE_TEST}}"; service="{{.BACKEND_CONTAINER}}" ;;
+          production) compose="{{.DOCKER_COMPOSE_PROD}}"; service="backend-prod" ;;
+          *) echo "Unknown profile: $profile"; exit 1 ;;
+        esac;
+        OTEL_ENABLED=true $compose up -d --force-recreate "$service"'
       - "./scripts/runtime/profile_guard.py --profile {{.CURRENT_PROFILE}} --wait 10"
       - 'echo "OTEL enabled (profile: {{.CURRENT_PROFILE}}). Traces -> {{.OTEL_TRACE_DIR}}/traces.jsonl"'
 
@@ -338,7 +429,15 @@ tasks:
       CURRENT_PROFILE:
         sh: "{{.DOCKER_COMPOSE}} exec -T {{.BACKEND_CONTAINER}} sh -c 'printenv ENVIRONMENT'"
     cmds:
-      - "ENVIRONMENT={{.CURRENT_PROFILE}} OTEL_ENABLED= {{.DOCKER_COMPOSE}} up -d --force-recreate {{.BACKEND_CONTAINER}}"
+      - >
+        sh -c 'profile="{{.CURRENT_PROFILE}}";
+        case "$profile" in
+          development) compose="{{.DOCKER_COMPOSE_DEV}}"; service="{{.BACKEND_CONTAINER}}" ;;
+          testing) compose="{{.DOCKER_COMPOSE_TEST}}"; service="{{.BACKEND_CONTAINER}}" ;;
+          production) compose="{{.DOCKER_COMPOSE_PROD}}"; service="backend-prod" ;;
+          *) echo "Unknown profile: $profile"; exit 1 ;;
+        esac;
+        OTEL_ENABLED= $compose up -d --force-recreate "$service"'
       - "./scripts/runtime/profile_guard.py --profile {{.CURRENT_PROFILE}} --wait 10"
       - 'echo "OTEL disabled (profile: {{.CURRENT_PROFILE}})."'
 
@@ -355,7 +454,14 @@ tasks:
       CURRENT_PROFILE:
         sh: "{{.DOCKER_COMPOSE}} exec -T {{.BACKEND_CONTAINER}} sh -c 'printenv ENVIRONMENT'"
     cmds:
-      - "ENVIRONMENT={{.CURRENT_PROFILE}} {{.DOCKER_COMPOSE}} --profile proxy up -d --no-deps --force-recreate nginx"
+      - >
+        sh -c 'profile="{{.CURRENT_PROFILE}}";
+        case "$profile" in
+          development) {{.DOCKER_COMPOSE_DEV}} --profile proxy up -d --no-deps --force-recreate nginx ;;
+          testing) {{.DOCKER_COMPOSE_TEST}} --profile proxy up -d --no-deps --force-recreate nginx ;;
+          production) echo "Proxy overlay is not used in production profile (nginx-prod is already part of up:prod)."; exit 0 ;;
+          *) echo "Unknown profile: $profile"; exit 1 ;;
+        esac'
       - 'echo "Proxy running on http://localhost:80 (profile: {{.CURRENT_PROFILE}})."'
 
   proxy:off:
@@ -373,7 +479,13 @@ tasks:
         sh: "{{.DOCKER_COMPOSE}} exec -T {{.BACKEND_CONTAINER}} sh -c 'printenv ENVIRONMENT'"
     cmds:
       - "{{.DOCKER_COMPOSE}} stop {{.BACKEND_CONTAINER}}"
-      - "ENVIRONMENT={{.CURRENT_PROFILE}} {{.DOCKER_COMPOSE}} up {{.BACKEND_CONTAINER}}"
+      - >
+        sh -c 'profile="{{.CURRENT_PROFILE}}";
+        case "$profile" in
+          development) {{.DOCKER_COMPOSE_DEV}} up {{.BACKEND_CONTAINER}} ;;
+          testing) {{.DOCKER_COMPOSE_TEST}} up {{.BACKEND_CONTAINER}} ;;
+          *) echo "Debug task supports development/testing backend only."; exit 1 ;;
+        esac'
   # ===========================================================================
   # Docker: Container Management
   # ===========================================================================
@@ -381,14 +493,14 @@ tasks:
     desc: Remove project volumes (clears cached configs and database data)
     deps: [_check:docker]
     cmds:
-      - "{{.DOCKER_COMPOSE}} down -v"
+      - "{{.DOCKER_COMPOSE}} --profile development --profile testing --profile prod --profile proxy --profile e2e down -v --remove-orphans"
       - 'echo "Project volumes removed. Database data has been cleared."'
 
   docker:clean:
     desc: Full cleanup - remove containers, volumes, and orphaned containers
     deps: [_check:docker]
     cmds:
-      - "{{.DOCKER_COMPOSE}} down -v --remove-orphans"
+      - "{{.DOCKER_COMPOSE}} --profile development --profile testing --profile prod --profile proxy --profile e2e down -v --remove-orphans"
       - 'echo "Full cleanup complete. All project containers and volumes removed."'
 
   docker:rebuild-clean:
@@ -396,7 +508,7 @@ tasks:
     deps: [_check:docker, docker:clean]
     cmds:
       - "{{.DOCKER_COMPOSE}} build --no-cache"
-      - "ENVIRONMENT=development {{.DOCKER_COMPOSE}} up -d"
+      - "{{.DOCKER_COMPOSE_DEV}} up -d"
       - "./scripts/runtime/profile_guard.py --profile development --wait 10"
       - 'echo "Clean rebuild complete. All services started fresh."'
 
@@ -404,22 +516,22 @@ tasks:
     desc: Full rebuild - stop, remove volumes, rebuild images (no cache), and start
     deps: [_check:docker]
     cmds:
-      - "{{.DOCKER_COMPOSE}} down -v"
+      - "{{.DOCKER_COMPOSE}} --profile development --profile testing --profile prod --profile proxy --profile e2e down -v --remove-orphans"
       - "{{.DOCKER_COMPOSE}} build --no-cache"
-      - "ENVIRONMENT=development {{.DOCKER_COMPOSE}} up -d"
+      - "{{.DOCKER_COMPOSE_DEV}} up -d"
       - "./scripts/runtime/profile_guard.py --profile development --wait 10"
 
   docker:rebuild-backend:
     desc: Rebuild only the backend container
     deps: [_check:docker]
     cmds:
-      - "ENVIRONMENT=development {{.DOCKER_COMPOSE}} up -d --build {{.BACKEND_CONTAINER}}"
+      - "{{.DOCKER_COMPOSE_DEV}} up -d --build {{.BACKEND_CONTAINER}}"
 
   docker:rebuild-frontend:
     desc: Rebuild only the frontend container
     deps: [_check:docker]
     cmds:
-      - "ENVIRONMENT=development {{.DOCKER_COMPOSE}} up -d --build {{.FRONTEND_CONTAINER}}"
+      - "{{.DOCKER_COMPOSE_DEV}} up -d --build {{.FRONTEND_CONTAINER}}"
 
   docker:logs:
     desc: Follow logs for all services
@@ -501,7 +613,7 @@ tasks:
 
   test:unit:backend:
     desc: Run backend unit tests only
-    deps: [_check:docker, _check:backend-running]
+    deps: [_check:docker, _check:backend-django-ready]
     vars:
       TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
@@ -534,7 +646,7 @@ tasks:
 
   test:integration:
     desc: Run integration tests (backend; frontend deferred to E2E)
-    deps: [_check:docker, _check:testing-profile]
+    deps: [_check:docker, _check:testing-ready]
     vars:
       TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
@@ -545,7 +657,7 @@ tasks:
 
   test:verbose:
     desc: Run full backend pytest suite (compatibility command)
-    deps: [_check:docker, _check:backend-running]
+    deps: [_check:docker, _check:backend-django-ready]
     vars:
       TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
@@ -570,7 +682,7 @@ tasks:
 
   test:coverage:backend:
     desc: Compatibility alias for unified backend coverage report
-    deps: [_check:docker, _check:backend-running, _check:testing-profile]
+    deps: [_check:docker, _check:testing-ready]
     vars:
       TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
@@ -582,7 +694,7 @@ tasks:
 
   test:coverage:fr:
     desc: "Gate a specific FR progress row (usage: task test:coverage:fr -- FR-01 80)"
-    deps: [_check:docker, _check:backend-running, _check:testing-profile]
+    deps: [_check:docker, _check:testing-ready]
     cmds:
       - >
         sh -c 'set -- {{.CLI_ARGS}};
@@ -595,7 +707,7 @@ tasks:
 
   test:coverage-html:
     desc: Run tests with HTML coverage report
-    deps: [_check:docker, _check:backend-running]
+    deps: [_check:docker, _check:backend-django-ready]
     vars:
       TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
@@ -607,7 +719,7 @@ tasks:
 
   test:integration:backend:
     desc: Run backend integration tests only
-    deps: [_check:docker, _check:backend-running, _check:testing-profile]
+    deps: [_check:docker, _check:testing-ready]
     vars:
       TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
@@ -629,13 +741,13 @@ tasks:
 
   test:integration:frontend:
     desc: Frontend integration is deferred to Playwright E2E for async Server Components
-    deps: [_check:docker, _check:testing-profile]
+    deps: [_check:docker, _check:testing-ready]
     cmds:
       - 'echo "INFO: frontend integration remains E2E-first. Use task test:e2e."'
 
   test:integration:role:
     desc: "Run role-filtered backend integration tests (usage: task test:integration:role -- teacher)"
-    deps: [_check:docker, _check:backend-running, _check:testing-profile]
+    deps: [_check:docker, _check:testing-ready]
     cmds:
       - >
         sh -c 'role="{{.CLI_ARGS}}";
@@ -673,7 +785,7 @@ tasks:
 
   test:security:
     desc: Run backend security tests
-    deps: [_check:docker, _check:backend-running, _check:testing-profile]
+    deps: [_check:docker, _check:testing-ready]
     vars:
       TEST_WORKERS: '{{default "0" .CLI_ARGS}}'
     cmds:
@@ -707,7 +819,7 @@ tasks:
 
   test:workflow:
     desc: Run workflow-marked integration tests (compatibility command)
-    deps: [_check:docker, _check:backend-running, _check:testing-profile]
+    deps: [_check:docker, _check:testing-ready]
     vars:
       TEST_WORKERS: '{{default .TEST_WORKERS .CLI_ARGS}}'
     cmds:
@@ -737,16 +849,11 @@ tasks:
     desc: Run Playwright E2E tests (requires e2e profile)
     deps: [_check:e2e-ready, test:e2e:setup]
     cmds:
+      - "{{.DOCKER_COMPOSE_TEST}} up -d backend frontend database"
       - >
-        ENVIRONMENT=testing
-        NEXT_PUBLIC_API_URL=http://backend:8000/api/v1
-        DJANGO_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost,http://frontend:3000,http://eel-frontend:3000
-        {{.DOCKER_COMPOSE}} up -d backend frontend database
-      - >
-        ENVIRONMENT=testing
         E2E_BASE_URL=http://frontend:3000
         E2E_API_URL=http://backend:8000/api/v1
-        {{.DOCKER_COMPOSE}} --profile e2e run --rm frontend-e2e npx playwright test
+        {{.DOCKER_COMPOSE_TEST}} --profile e2e run --rm frontend-e2e npx playwright test
 
   test:e2e-record:
     desc: Record E2E tests with video by role (headed, slow-mo)

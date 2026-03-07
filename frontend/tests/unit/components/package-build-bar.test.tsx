@@ -153,8 +153,8 @@ describe("PackageBuildBar", () => {
     render(
       <PackageBuildBar {...defaultProps} validationResult={invalidResult} />
     );
-    expect(screen.getByText("Issues")).toBeInTheDocument();
-    expect(screen.getByText("[ERR_001] Missing binding")).toBeInTheDocument();
+    expect(screen.getByText("1 problem to fix before building")).toBeInTheDocument();
+    expect(screen.getByText("Missing binding")).toBeInTheDocument();
   });
 
   it("shows Download button when build completed with artifactId", async () => {

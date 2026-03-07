@@ -132,6 +132,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = "/static/"
 STATIC_ROOT = Path("/app/staticfiles") if env.is_production else BASE_DIR / "staticfiles"
+STATIC_ROOT.mkdir(parents=True, exist_ok=True)
 STORAGES = {
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
@@ -142,6 +143,23 @@ STORAGES = {
 
 # Media files (user uploads — FR-15 Image Upload)
 MEDIA_ROOT = Path(env.media_root) if env.media_root else BASE_DIR / "media"
+MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+
+# Package build storage — profile-driven base directory.
+# Testing uses /tmp so builds don't depend on bind-mounted MEDIA_ROOT permissions.
+import os as _os
+import tempfile as _tempfile
+
+if ENVIRONMENT == "testing":
+    _PKG_BASE = Path(_tempfile.gettempdir()) / "eel-package-builds" / _os.getenv("PYTEST_XDIST_WORKER", "main")
+else:
+    _PKG_BASE = MEDIA_ROOT
+PACKAGE_ARTIFACT_DIR = _PKG_BASE / "package_artifacts"
+PACKAGE_SNAPSHOT_DIR = _PKG_BASE / "snapshots"
+SUBMISSION_IMAGE_DIR = MEDIA_ROOT / "submissions"
+
+for directory in (PACKAGE_ARTIFACT_DIR, PACKAGE_SNAPSHOT_DIR, SUBMISSION_IMAGE_DIR):
+    directory.mkdir(parents=True, exist_ok=True)
 
 # Image upload constants (FR-15)
 IMG_ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}

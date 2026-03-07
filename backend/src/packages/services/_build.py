@@ -7,7 +7,6 @@ import hashlib
 import io
 import json
 import os
-import tempfile
 import zipfile
 from datetime import timedelta
 from typing import Any
@@ -39,18 +38,6 @@ from ._validation import (
     validate_workspace,
 )
 
-ARTIFACT_DIR = os.path.join(
-    (
-        os.path.join(
-            tempfile.gettempdir(),
-            "eel-package-builds",
-            os.getenv("PYTEST_XDIST_WORKER", "main"),
-        )
-        if getattr(settings, "ENVIRONMENT", "").lower() == "testing"
-        else getattr(settings, "MEDIA_ROOT", tempfile.gettempdir())
-    ),
-    "package_artifacts",
-)
 ARTIFACT_RETENTION_HOURS = 72
 
 
@@ -190,9 +177,10 @@ def execute_build(
             checksums_bytes = "\n".join(checksums_lines).encode("utf-8")
 
         # 5. Write zip
-        os.makedirs(ARTIFACT_DIR, exist_ok=True)
+        artifact_dir = str(settings.PACKAGE_ARTIFACT_DIR)
+        os.makedirs(artifact_dir, exist_ok=True)
         zip_filename = f"pkg-{workspace.id}-build-{job.id}.zip"
-        zip_path = os.path.join(ARTIFACT_DIR, zip_filename)
+        zip_path = os.path.join(artifact_dir, zip_filename)
 
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for path, data in sorted(file_contents.items()):

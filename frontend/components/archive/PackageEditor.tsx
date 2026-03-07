@@ -597,9 +597,12 @@ export default function PackageEditor({
       .then((result) => {
         setValidationResult(result);
         if (result.valid) {
-          toast.success('No issues found.');
+          toast.success('Package is ready to build!');
         } else {
-          toast.error('Some issues were found.');
+          const n = result.violations.length;
+          toast.error(
+            `Found ${n} ${n === 1 ? 'problem' : 'problems'} — see details below.`,
+          );
         }
       })
       .catch((error) => {

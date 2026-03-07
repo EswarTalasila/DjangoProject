@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -225,6 +226,45 @@ def _is_unfinished_test_item_line(line: str) -> bool:
     return bool(_PYTEST_ITEM_ONLY_LINE_RE.match(plain))
 
 
+_PYTEST_BANNER_RE = re.compile(r"^(=+)\s+(.*?)\s+(=+)$")
+
+
+def _reformat_pytest_banner(line: str, width: int) -> str | None:
+    """Reformat pytest's ``=== text ===`` banners to fit *width*."""
+    newline = ""
+    body = line
+    if line.endswith("\r\n"):
+        body = line[:-2]
+        newline = "\r\n"
+    elif line.endswith("\n"):
+        body = line[:-1]
+        newline = "\n"
+
+    plain = _strip_ansi(body)
+    match = _PYTEST_BANNER_RE.match(plain)
+    if match is None:
+        return None
+
+    text = match.group(2)
+    safe_width = max(40, width)
+    inner = f" {text} "
+    if len(inner) + 2 >= safe_width:
+        return f"={inner}={newline}"
+    left = (safe_width - len(inner)) // 2
+    right = safe_width - len(inner) - left
+    # Preserve pytest's green/red coloring if present
+    color = ""
+    reset = ""
+    if "\033[" in body:
+        if "passed" in text or "passed" in body:
+            color, reset = "\033[32m", "\033[0m"
+        elif "failed" in text.lower() or "error" in text.lower():
+            color, reset = "\033[31m", "\033[0m"
+        elif "warning" in text.lower():
+            color, reset = "\033[33m", "\033[0m"
+    return f"{color}{'=' * left}{inner}{'=' * right}{reset}{newline}"
+
+
 def _bannerize_line(line: str, width: int) -> str | None:
     """Render selected summary lines as full-width centered banners."""
     newline = ""
@@ -275,33 +315,43 @@ def _is_xdist_preface_line(line: str) -> bool:
     return True
 
 
-def _init_bottom_progress_line() -> tuple[int, int] | None:
+def _tty_size() -> tuple[int, int]:
+    """Return current (rows, cols) from the terminal, re-queried each call."""
+    size = shutil.get_terminal_size((120, 24))
+    return size.lines, size.columns
+
+
+def _init_bottom_progress_line() -> bool:
     """Reserve the terminal bottom line for progress using a scroll region."""
     if not sys.stdout.isatty():
-        return None
-    size = shutil.get_terminal_size((120, 24))
-    if size.lines < 3:
-        return None
-    rows = size.lines
-    cols = size.columns
+        return False
+    rows, cols = _tty_size()
+    if rows < 3:
+        return False
     sys.stdout.write(f"\033[1;{rows - 1}r")
     sys.stdout.write(f"\033[{rows};1H\033[2K")
     sys.stdout.write(_progress_bar_line(0, cols))
     sys.stdout.write(f"\033[{rows - 1};1H")
     sys.stdout.flush()
-    return rows, cols
+    return True
 
 
-def _draw_bottom_progress(percent: int, rows: int, cols: int) -> None:
-    """Update reserved bottom progress line and return cursor to output area."""
+def _draw_bottom_progress(percent: int) -> None:
+    """Update reserved bottom progress line, adapting to current terminal size."""
+    rows, cols = _tty_size()
+    if rows < 3:
+        return
+    # Re-set scroll region in case terminal was resized.
+    sys.stdout.write(f"\033[1;{rows - 1}r")
     sys.stdout.write(f"\033[{rows};1H\033[2K")
     sys.stdout.write(_progress_bar_line(percent, cols))
     sys.stdout.write(f"\033[{rows - 1};1H")
     sys.stdout.flush()
 
 
-def _teardown_bottom_progress_line(final_percent: int, rows: int, cols: int) -> None:
+def _teardown_bottom_progress_line() -> None:
     """Restore terminal scroll behavior and clear reserved progress line."""
+    rows, _cols = _tty_size()
     sys.stdout.write("\033[r")
     sys.stdout.write(f"\033[{rows};1H\033[2K")
     sys.stdout.write(f"\033[{rows};1H")
@@ -353,11 +403,11 @@ def _run_pytest(
     assert proc.stdout is not None
     captured_lines: list[str] = []
     progress_percent = 0
-    tty_cols = shutil.get_terminal_size((120, 24)).columns
-    progress_state: tuple[int, int] | None = None
+
+    progress_active = False
 
     if live_progress and sys.stdout.isatty():
-        progress_state = _init_bottom_progress_line()
+        progress_active = _init_bottom_progress_line()
 
     try:
         for line in proc.stdout:
@@ -366,46 +416,87 @@ def _run_pytest(
             if maybe_pct is not None:
                 progress_percent = max(progress_percent, maybe_pct)
 
+            cols = _tty_size()[1]
+
             if show_output:
-                formatted = _format_pytest_result_line(line, tty_cols)
+                # Reformat pytest's wide banners to actual terminal width.
+                pytest_banner = _reformat_pytest_banner(line, cols)
+                if pytest_banner is not None:
+                    print(pytest_banner, end="")
+                    if progress_active:
+                        _draw_bottom_progress(progress_percent)
+                    continue
+
+                formatted = _format_pytest_result_line(line, cols)
                 if formatted is not None:
                     display_line = formatted
                 else:
                     stripped = _strip_trailing_progress_token(line)
                     if _is_unfinished_test_item_line(stripped):
-                        if progress_state is not None:
-                            _draw_bottom_progress(
-                                progress_percent, progress_state[0], progress_state[1]
-                            )
+                        if progress_active:
+                            _draw_bottom_progress(progress_percent)
                         continue
                     if parallel_enabled and _is_xdist_preface_line(stripped):
-                        if progress_state is not None:
-                            _draw_bottom_progress(
-                                progress_percent, progress_state[0], progress_state[1]
-                            )
+                        if progress_active:
+                            _draw_bottom_progress(progress_percent)
                         continue
-                    banner = _bannerize_line(stripped, tty_cols)
+                    banner = _bannerize_line(stripped, cols)
                     display_line = banner if banner is not None else stripped
                 print(display_line, end="")
-            if progress_state is not None:
-                _draw_bottom_progress(
-                    progress_percent, progress_state[0], progress_state[1]
-                )
+            if progress_active:
+                _draw_bottom_progress(progress_percent)
     finally:
         proc.stdout.close()
 
     rc = proc.wait()
     output = "".join(captured_lines)
 
-    if progress_state is not None:
-        final_percent = 100 if rc == 0 else progress_percent
-        _teardown_bottom_progress_line(
-            final_percent, progress_state[0], progress_state[1]
-        )
+    if progress_active:
+        _teardown_bottom_progress_line()
 
     if not show_output and rc != 0 and output.strip():
         print(output, end="" if output.endswith("\n") else "\n")
     return rc, output
+
+
+def _wait_for_django_ready(timeout_seconds: int = 45) -> tuple[bool, str]:
+    """Wait until Django checks succeed before running pytest."""
+    deadline = time.monotonic() + max(1, timeout_seconds)
+    profile = (os.getenv("ENVIRONMENT") or "development").strip() or "development"
+    last_error = ""
+
+    while time.monotonic() < deadline:
+        check_cmd = ["python", "src/manage.py", "check"]
+        check_proc = subprocess.run(
+            check_cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if check_proc.returncode == 0:
+            if profile == "testing":
+                env_proc = subprocess.run(
+                    [
+                        "python",
+                        "src/manage.py",
+                        "env_report",
+                        "--profile",
+                        "testing",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if env_proc.returncode == 0:
+                    return True, ""
+                last_error = (env_proc.stderr or env_proc.stdout).strip()
+            else:
+                return True, ""
+        else:
+            last_error = (check_proc.stderr or check_proc.stdout).strip()
+        time.sleep(1)
+
+    return False, last_error
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -704,6 +795,20 @@ def main() -> int:
         help="Skip coverage/FR summary tables and gate evaluation.",
     )
     args = parser.parse_args()
+
+    ready, startup_error = _wait_for_django_ready()
+    if not ready:
+        print(
+            "ERROR: backend Django app is not ready; aborting test run.",
+            file=sys.stderr,
+        )
+        if startup_error:
+            print(startup_error, file=sys.stderr)
+        print(
+            "Hint: run 'task up:test' and wait for profile diagnostics to pass.",
+            file=sys.stderr,
+        )
+        return 2
 
     root = _repo_root()
     coverage_json = Path(args.coverage_json)

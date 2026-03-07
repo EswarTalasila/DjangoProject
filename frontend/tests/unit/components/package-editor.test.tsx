@@ -482,7 +482,7 @@ describe("PackageEditor", () => {
     });
     await user.click(screen.getByText("Validate"));
     await waitFor(() => {
-      expect(mockToastSuccess).toHaveBeenCalledWith("No issues found.");
+      expect(mockToastSuccess).toHaveBeenCalledWith("Package is ready to build!");
     });
   });
 
@@ -511,7 +511,7 @@ describe("PackageEditor", () => {
     await user.click(screen.getByText("Validate"));
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith(
-        "Some issues were found."
+        "Found 1 problem \u2014 see details below."
       );
     });
   });

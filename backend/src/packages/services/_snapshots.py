@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import tempfile
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -33,18 +32,6 @@ if TYPE_CHECKING:
     from accounts.models import User
     from ..models import PackageWorkspace
 
-SNAPSHOT_DIR = os.path.join(
-    (
-        os.path.join(
-            tempfile.gettempdir(),
-            "eel-package-builds",
-            os.getenv("PYTEST_XDIST_WORKER", "main"),
-        )
-        if getattr(settings, "ENVIRONMENT", "").lower() == "testing"
-        else getattr(settings, "MEDIA_ROOT", tempfile.gettempdir())
-    ),
-    "snapshots",
-)
 SNAPSHOT_RETENTION_HOURS = 24
 
 
@@ -94,8 +81,9 @@ def create_snapshot(
         )
 
         # Write to disk
-        os.makedirs(SNAPSHOT_DIR, exist_ok=True)
-        storage_key = os.path.join(SNAPSHOT_DIR, f"snap-{snapshot.id}.csv")
+        snap_dir = str(settings.PACKAGE_SNAPSHOT_DIR)
+        os.makedirs(snap_dir, exist_ok=True)
+        storage_key = os.path.join(snap_dir, f"snap-{snapshot.id}.csv")
         with open(storage_key, "wb") as f:
             f.write(csv_bytes)
 

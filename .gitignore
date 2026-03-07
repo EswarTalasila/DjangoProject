@@ -22,8 +22,6 @@ wheels/
 # Virtual environments
 .venv/
 venv/
-ENV/
-env/
 
 # Django
 *.log
@@ -43,6 +41,8 @@ backend/src/media/
 .env.production
 .env.*.local
 !.env.template
+env/.env.*
+!env/.env.*.template
 
 # IDE
 .idea/

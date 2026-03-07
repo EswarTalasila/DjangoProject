@@ -119,7 +119,7 @@ def main() -> int:
             print(f"  reason: {reason}")
             print(f"  hint: {hint_for_reason(reason, args.profile)}")
         else:
-            print("  hint: run 'docker compose logs --tail=120 backend' for details.")
+            print(f"  hint: run 'docker compose logs --tail=120 {args.service}' for details.")
         return 1
 
     strict_flag = "--strict" if args.profile == "production" else ""
@@ -143,7 +143,7 @@ def main() -> int:
         print(f"  reason: {reason}")
         print(f"  hint: {hint_for_reason(reason, args.profile)}")
     else:
-        print("  hint: run 'docker compose logs --tail=120 backend' for details.")
+        print(f"  hint: run 'docker compose logs --tail=120 {args.service}' for details.")
     return 1
 
 

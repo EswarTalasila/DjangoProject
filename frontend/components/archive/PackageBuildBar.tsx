@@ -19,7 +19,80 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { HelpTip } from '@/components/ui/help-tip';
-import type { BuildJob, ValidationResult } from '@/lib/package-api';
+import type { BuildJob, ValidationIssue, ValidationResult } from '@/lib/package-api';
+
+const FRIENDLY_MESSAGES: Record<string, { title: string; fix: string }> = {
+  EMPTY_TREE: {
+    title: 'Your package has no files yet',
+    fix: 'Add at least one file node to your workspace tree before validating.',
+  },
+  NO_ROOT: {
+    title: 'The folder structure is missing a root folder',
+    fix: 'Add a root folder to your workspace. All other items should be nested inside it.',
+  },
+  MULTIPLE_ROOTS: {
+    title: 'There are multiple root-level items',
+    fix: 'A package must have exactly one root folder. Move extra top-level items into a single root folder.',
+  },
+  MISSING_BINDING: {
+    title: 'A file is not connected to any data source',
+    fix: 'Select a dataset type (e.g. Roster or Course Submissions) for each file node.',
+  },
+  INVALID_BINDING: {
+    title: 'A file has an unrecognized data source type',
+    fix: 'Open the file node and pick a valid dataset type from the dropdown.',
+  },
+  MISSING_COURSE_ID: {
+    title: 'A file needs a course selected',
+    fix: 'This data source requires a course. Open the file node and choose which course to pull data from.',
+  },
+  COURSE_NOT_FOUND: {
+    title: 'The selected course no longer exists',
+    fix: 'Open the file node and pick a different course, or ask an admin to verify the course still exists.',
+  },
+  IDENTIFIABLE_DENIED: {
+    title: 'You don\u2019t have permission to export student names/emails',
+    fix: 'Uncheck "Include identifiable data" on the file, or ask an admin to grant you the Export Identifiable permission.',
+  },
+  SCOPE_DENIED: {
+    title: 'You can only include data from your own courses',
+    fix: 'Remove or change the file that references another teacher\u2019s course. You can only export data from courses you own.',
+  },
+  DUPLICATE_PATH: {
+    title: 'Two files would produce the same output name',
+    fix: 'Rename one of the conflicting file nodes so each has a unique name within its folder.',
+  },
+  MAX_FILE_COUNT_EXCEEDED: {
+    title: 'Too many files in this package',
+    fix: 'Remove some file nodes. The maximum is 200 files per package.',
+  },
+  INVALID_NODE_TYPE: {
+    title: 'An item in the tree has an invalid type',
+    fix: 'Delete the problematic node and re-add it as either a File or Folder.',
+  },
+  ORPHAN_NODE: {
+    title: 'An item is missing its parent folder',
+    fix: 'Move the orphaned item into an existing folder, or delete and re-create it.',
+  },
+  PARENT_NOT_FOLDER: {
+    title: 'A file is placed inside another file instead of a folder',
+    fix: 'Move the item so it sits inside a folder node, not a file node.',
+  },
+  CYCLE_DETECTED: {
+    title: 'The folder structure has a circular reference',
+    fix: 'Check for folders that reference each other as parents. Delete and recreate the misplaced folder.',
+  },
+  INVALID_SNAPSHOT: {
+    title: 'The selected data snapshot is invalid',
+    fix: 'Choose a different snapshot or switch the file back to live data.',
+  },
+};
+
+function friendlyViolation(issue: ValidationIssue): { title: string; fix: string } {
+  const friendly = FRIENDLY_MESSAGES[issue.code];
+  if (friendly) return friendly;
+  return { title: issue.message, fix: '' };
+}
 
 type PackageBuildBarProps = {
   canExportIdentifiable: boolean;
@@ -169,14 +242,22 @@ export default function PackageBuildBar({
 
       {/* Validation result details */}
       {validationResult && validationResult.violations.length > 0 && (
-        <div className="rounded-sm border border-border p-3 text-sm space-y-2">
-          <p className="font-medium text-destructive">Issues</p>
-          <ul className="list-disc pl-5 text-muted-foreground">
-            {validationResult.violations.map((issue, index) => (
-              <li key={`${issue.code}-${index}`}>
-                [{issue.code}] {issue.message}
-              </li>
-            ))}
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm space-y-3">
+          <p className="font-medium text-destructive">
+            {issueCount} {issueCount === 1 ? 'problem' : 'problems'} to fix before building
+          </p>
+          <ul className="space-y-2">
+            {validationResult.violations.map((issue, index) => {
+              const { title, fix } = friendlyViolation(issue);
+              return (
+                <li key={`${issue.code}-${index}`} className="flex flex-col gap-0.5">
+                  <span className="font-medium text-foreground">{title}</span>
+                  {fix && (
+                    <span className="text-muted-foreground">{fix}</span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
