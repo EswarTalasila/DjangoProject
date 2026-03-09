@@ -337,13 +337,13 @@ tasks:
           NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(grep "^NEXT_PUBLIC_GOOGLE_CLIENT_ID=" .env | cut -d= -f2-);
           for f in {{.ENV_FILE_DEV}} {{.ENV_FILE_TEST}} {{.ENV_FILE_PROD}}; do
             if [ -n "$GOOGLE_CLIENT_ID" ]; then
-              sed -i "s|^GOOGLE_CLIENT_ID=.*|GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID|" "$f";
+              perl -pi -e "s|^GOOGLE_CLIENT_ID=.*|GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID|" "$f";
             fi;
             if [ -n "$GOOGLE_CLIENT_SECRET" ]; then
-              sed -i "s|^GOOGLE_CLIENT_SECRET=.*|GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET|" "$f";
+              perl -pi -e "s|^GOOGLE_CLIENT_SECRET=.*|GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET|" "$f";
             fi;
             if [ -n "$NEXT_PUBLIC_GOOGLE_CLIENT_ID" ]; then
-              sed -i "s|^NEXT_PUBLIC_GOOGLE_CLIENT_ID=.*|NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID|" "$f";
+              perl -pi -e "s|^NEXT_PUBLIC_GOOGLE_CLIENT_ID=.*|NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID|" "$f";
             fi;
           done;
           echo "Populated OAuth credentials from .env";
@@ -364,13 +364,13 @@ tasks:
           NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(grep "^NEXT_PUBLIC_GOOGLE_CLIENT_ID=" .env | cut -d= -f2-);
           for f in {{.ENV_FILE_DEV}} {{.ENV_FILE_TEST}} {{.ENV_FILE_PROD}}; do
             if [ -n "$GOOGLE_CLIENT_ID" ]; then
-              sed -i "s|^GOOGLE_CLIENT_ID=.*|GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID|" "$f";
+              perl -pi -e "s|^GOOGLE_CLIENT_ID=.*|GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID|" "$f";
             fi;
             if [ -n "$GOOGLE_CLIENT_SECRET" ]; then
-              sed -i "s|^GOOGLE_CLIENT_SECRET=.*|GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET|" "$f";
+              perl -pi -e "s|^GOOGLE_CLIENT_SECRET=.*|GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET|" "$f";
             fi;
             if [ -n "$NEXT_PUBLIC_GOOGLE_CLIENT_ID" ]; then
-              sed -i "s|^NEXT_PUBLIC_GOOGLE_CLIENT_ID=.*|NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID|" "$f";
+              perl -pi -e "s|^NEXT_PUBLIC_GOOGLE_CLIENT_ID=.*|NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID|" "$f";
             fi;
           done;
           echo "Populated OAuth credentials from .env";
