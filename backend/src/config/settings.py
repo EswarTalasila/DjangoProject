@@ -7,6 +7,7 @@ Configuration is loaded via pydantic-settings for type safety and validation.
 
 from datetime import timedelta
 from pathlib import Path
+import logging
 
 import dj_database_url
 
@@ -132,7 +133,10 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = "/static/"
 STATIC_ROOT = Path("/app/staticfiles") if env.is_production else BASE_DIR / "staticfiles"
-STATIC_ROOT.mkdir(parents=True, exist_ok=True)
+try:
+    STATIC_ROOT.mkdir(parents=True, exist_ok=True)
+except PermissionError:
+    logging.warning("Could not create STATIC_ROOT at %s — ensure it exists and is writable", STATIC_ROOT)
 STORAGES = {
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
@@ -143,7 +147,10 @@ STORAGES = {
 
 # Media files (user uploads — FR-15 Image Upload)
 MEDIA_ROOT = Path(env.media_root) if env.media_root else BASE_DIR / "media"
-MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+try:
+    MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+except PermissionError:
+    logging.warning("Could not create MEDIA_ROOT at %s — ensure it exists and is writable", MEDIA_ROOT)
 
 # Package build storage — profile-driven base directory.
 # Testing uses /tmp so builds don't depend on bind-mounted MEDIA_ROOT permissions.
@@ -159,7 +166,10 @@ PACKAGE_SNAPSHOT_DIR = _PKG_BASE / "snapshots"
 SUBMISSION_IMAGE_DIR = MEDIA_ROOT / "submissions"
 
 for directory in (PACKAGE_ARTIFACT_DIR, PACKAGE_SNAPSHOT_DIR, SUBMISSION_IMAGE_DIR):
-    directory.mkdir(parents=True, exist_ok=True)
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        logging.warning("Could not create directory at %s — ensure it exists and is writable", directory)
 
 # Image upload constants (FR-15)
 IMG_ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
