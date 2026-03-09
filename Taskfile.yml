@@ -330,6 +330,24 @@ tasks:
         sh -c 'if [ ! -f {{.ENV_FILE_TEST}} ]; then cp env/.env.testing.template {{.ENV_FILE_TEST}}; echo "Created {{.ENV_FILE_TEST}}"; fi'
       - >
         sh -c 'if [ ! -f {{.ENV_FILE_PROD}} ]; then cp env/.env.production.template {{.ENV_FILE_PROD}}; echo "Created {{.ENV_FILE_PROD}}"; fi'
+      - >
+        sh -c 'if [ -f .env ]; then
+          GOOGLE_CLIENT_ID=$(grep "^GOOGLE_CLIENT_ID=" .env | cut -d= -f2-);
+          GOOGLE_CLIENT_SECRET=$(grep "^GOOGLE_CLIENT_SECRET=" .env | cut -d= -f2-);
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(grep "^NEXT_PUBLIC_GOOGLE_CLIENT_ID=" .env | cut -d= -f2-);
+          for f in {{.ENV_FILE_DEV}} {{.ENV_FILE_TEST}} {{.ENV_FILE_PROD}}; do
+            if [ -n "$GOOGLE_CLIENT_ID" ]; then
+              sed -i "s|^GOOGLE_CLIENT_ID=.*|GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID|" "$f";
+            fi;
+            if [ -n "$GOOGLE_CLIENT_SECRET" ]; then
+              sed -i "s|^GOOGLE_CLIENT_SECRET=.*|GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET|" "$f";
+            fi;
+            if [ -n "$NEXT_PUBLIC_GOOGLE_CLIENT_ID" ]; then
+              sed -i "s|^NEXT_PUBLIC_GOOGLE_CLIENT_ID=.*|NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID|" "$f";
+            fi;
+          done;
+          echo "Populated OAuth credentials from .env";
+        fi'
       - 'echo "Environment files ready."'
 
   env:reset:
@@ -339,6 +357,24 @@ tasks:
       - cp env/.env.development.template {{.ENV_FILE_DEV}}
       - cp env/.env.testing.template {{.ENV_FILE_TEST}}
       - cp env/.env.production.template {{.ENV_FILE_PROD}}
+      - >
+        sh -c 'if [ -f .env ]; then
+          GOOGLE_CLIENT_ID=$(grep "^GOOGLE_CLIENT_ID=" .env | cut -d= -f2-);
+          GOOGLE_CLIENT_SECRET=$(grep "^GOOGLE_CLIENT_SECRET=" .env | cut -d= -f2-);
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(grep "^NEXT_PUBLIC_GOOGLE_CLIENT_ID=" .env | cut -d= -f2-);
+          for f in {{.ENV_FILE_DEV}} {{.ENV_FILE_TEST}} {{.ENV_FILE_PROD}}; do
+            if [ -n "$GOOGLE_CLIENT_ID" ]; then
+              sed -i "s|^GOOGLE_CLIENT_ID=.*|GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID|" "$f";
+            fi;
+            if [ -n "$GOOGLE_CLIENT_SECRET" ]; then
+              sed -i "s|^GOOGLE_CLIENT_SECRET=.*|GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET|" "$f";
+            fi;
+            if [ -n "$NEXT_PUBLIC_GOOGLE_CLIENT_ID" ]; then
+              sed -i "s|^NEXT_PUBLIC_GOOGLE_CLIENT_ID=.*|NEXT_PUBLIC_GOOGLE_CLIENT_ID=$NEXT_PUBLIC_GOOGLE_CLIENT_ID|" "$f";
+            fi;
+          done;
+          echo "Populated OAuth credentials from .env";
+        fi'
       - 'echo "Environment files reset from templates."'
 
   up:
