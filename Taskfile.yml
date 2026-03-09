@@ -324,6 +324,7 @@ tasks:
     desc: Create missing env files from templates under env/
     cmds:
       - mkdir -p env
+      - git checkout -- env/.env.development.template env/.env.testing.template env/.env.production.template 2>/dev/null || true
       - >
         sh -c 'if [ ! -f {{.ENV_FILE_DEV}} ]; then cp env/.env.development.template {{.ENV_FILE_DEV}}; echo "Created {{.ENV_FILE_DEV}}"; fi'
       - >
@@ -354,6 +355,7 @@ tasks:
     desc: Overwrite runtime env files from templates under env/
     cmds:
       - mkdir -p env
+      - git checkout -- env/.env.development.template env/.env.testing.template env/.env.production.template 2>/dev/null || true
       - cp env/.env.development.template {{.ENV_FILE_DEV}}
       - cp env/.env.testing.template {{.ENV_FILE_TEST}}
       - cp env/.env.production.template {{.ENV_FILE_PROD}}
