@@ -15,6 +15,9 @@ from accounts.models import ResearcherProfile, Role, SudoGrant, SudoPermission, 
 from core.permissions import has_sudo_permission
 from tests.factories import SudoGrantFactory, UserFactory
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestResearcherSudoPermissions:
@@ -37,7 +40,7 @@ class TestResearcherSudoPermissions:
             SudoPermission.DELETE_USER.value,
             SudoPermission.ISSUE_STUDENT_RESET_CODE.value,
             SudoPermission.ISSUE_RESEARCHER_RESET_CODE.value,
-            SudoPermission.CREATE_RESEARCHER_CODES.value,
+            SudoPermission.ISSUE_RESEARCHER_REG_CODE.value,
         ],
     )
     def test_RESEARCHER_UC_20(self, permission):
@@ -259,13 +262,13 @@ class TestResearcherSudoDelegation:
         assert "must have RESEARCHER role" in response.data["detail"]
 
     def test_RESEARCHER_UC_21_E5_NON_DELEGABLE_PERMISSION(self, api_client):
-        """Researcher cannot delegate non-delegable CREATE_RESEARCHER_CODES permission."""
+        """Researcher cannot delegate non-delegable ISSUE_RESEARCHER_REG_CODE permission."""
         researcher1 = UserFactory()
         UserRole.objects.create(user=researcher1, role=Role.RESEARCHER)
         ResearcherProfile.objects.create(user=researcher1)
         SudoGrantFactory(
             user=researcher1,
-            permissions=[SudoPermission.CREATE_RESEARCHER_CODES.value],
+            permissions=[SudoPermission.ISSUE_RESEARCHER_REG_CODE.value],
             can_grant_sudo=True,
         )
 
@@ -278,7 +281,7 @@ class TestResearcherSudoDelegation:
             "/api/v1/sudo-grants",
             {
                 "user_id": researcher2.id,
-                "permissions": [SudoPermission.CREATE_RESEARCHER_CODES.value],
+                "permissions": [SudoPermission.ISSUE_RESEARCHER_REG_CODE.value],
             },
             format="json",
         )

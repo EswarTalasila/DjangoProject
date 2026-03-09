@@ -73,7 +73,7 @@ Define exact endpoint paths, methods, request bodies, and response shapes for pa
 | GET | /api/students/{id}/submissions | {} | [SubmissionDto] | Teacher | |
 | GET | /api/teachers/{id}/submissions | {} | [SubmissionDto] | Teacher | |
 | GET | /api/students/{id}/assignments/{id}/submission | {} | SubmissionDto | Teacher/Student | |
-| GET | /api/submissions/mine | {} | [SubmissionDto] | Student | |
+| GET | /api/submissions/me | {} | [SubmissionDto] | Student | |
 | PUT | /api/submissions | SubmissionDto | SubmissionDto | Teacher | Update grading |
 | PATCH | /api/submissions/{id}/override-score | [number] | SubmissionDto | Teacher/Admin | Persist override |
 

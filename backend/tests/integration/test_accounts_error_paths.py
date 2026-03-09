@@ -12,6 +12,9 @@ from accounts.services import registration_code_hash, registration_code_prefix
 from courses.models import Course
 from tests.factories import OAuthAccountFactory
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestAccountErrorPaths:
@@ -118,7 +121,7 @@ class TestAccountErrorPaths:
         assert account.email == "new-email@example.com"
 
     def test_create_user_rejects_taken_email(self, api_client):
-        """Create-user returns 400 when email is already in use."""
+        """Create-user returns 409 when email is already in use."""
 
         admin = User.objects.create_user(
             username="admin-create-email",
@@ -145,7 +148,7 @@ class TestAccountErrorPaths:
             },
             format="json",
         )
-        assert response.status_code == 400
+        assert response.status_code == 409
         assert response.data["detail"] == "Email already taken"
 
     def test_create_user_requires_email_for_non_student(self, api_client):
@@ -224,7 +227,7 @@ class TestAccountErrorPaths:
         assert "immutable" in str(response.data)
 
     def test_edit_user_rejects_taken_email(self, api_client):
-        """Edit-user rejects duplicate email collisions."""
+        """Edit-user rejects duplicate email collisions with 409."""
 
         admin = User.objects.create_user(
             username="admin-edit-email",
@@ -249,7 +252,7 @@ class TestAccountErrorPaths:
             format="json",
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 409
         assert response.data["detail"] == "Email already taken"
 
     def test_code_detail_patch_not_found(self, api_client):
@@ -272,7 +275,7 @@ class TestAccountErrorPaths:
         assert response.status_code == 404
 
     def test_logout_invalid_refresh_token(self, api_client, teacher_user):
-        """Logout returns 400 when refresh token is malformed/invalid."""
+        """Logout remains idempotent and clears cookies even with invalid refresh token."""
 
         api_client.force_authenticate(user=teacher_user)
         response = api_client.post(
@@ -280,7 +283,10 @@ class TestAccountErrorPaths:
             {"refreshToken": "not-a-valid-refresh"},
             format="json",
         )
-        assert response.status_code == 400
+        assert response.status_code == 200
+        assert response.json()["message"] == "Logged out."
+        assert "access_token" in response.cookies
+        assert "refresh_token" in response.cookies
 
     def test_registration_local_enforces_auth_cn01_password_policy(self, api_client):
         """Local registration rejects weak passwords per AUTH-CN-01."""
@@ -311,7 +317,7 @@ class TestAccountErrorPaths:
                 "password": "weakpass1!",
                 "confirmPassword": "weakpass1!",
                 "firstName": "Weak",
-                "lastName": "Password Student",
+                "lastName": "Passwordstudent",
             },
             format="json",
         )
@@ -632,7 +638,7 @@ class TestAccountErrorPaths:
                 "method": "LOCAL",
                 "code": "LOGIN-EMAIL-CODE",
                 "firstName": "Login",
-                "lastName": "Email Student",
+                "lastName": "Emailstudent",
                 "password": "ValidPass123!",
                 "confirmPassword": "ValidPass123!",
             },

@@ -34,21 +34,23 @@ urlpatterns: list[URLPattern | URLResolver] = [
     # Top-level resources (moved from nested paths)
     path("api/v1/enrollments", account_views.join_course_with_code),
     path("api/v1/sudo-grants/me", account_views.my_sudo_grant),
-    path("api/v1/sudo-grants", account_views.grant_sudo),
+    path("api/v1/sudo-grants", account_views.sudo_grants_collection),
     path("api/v1/sudo-grants/<int:grant_id>", account_views.revoke_sudo),
     path("api/v1/codes", account_views.codes_collection),
     path("api/v1/codes/", include("accounts.urls_codes")),
     path("api/v1/courses/", include("courses.urls")),
     path("api/v1/assessments/", include("assessments.urls")),
+    path("api/v1/rubrics/", include("rubrics.urls")),
     path("api/v1/assignments/", include("assignments.urls")),
     path("api/v1/submissions/", include("submissions.urls")),
     path("api/v1/students/", include("courses.urls_students")),
     path("api/v1/teachers/", include("accounts.urls_teachers")),
-    path("api/v1/visualization/", include("visualizations.urls")),
-    path("api/v1/export/", include("exports.urls")),
+    path("api/v1/visualizations/", include("visualizations.urls")),
+    path("api/v1/exports/", include("exports.urls")),
+    path("api/v1/packages/", include("packages.urls")),
 ]
 
-if settings.DEBUG or getattr(settings, "ENVIRONMENT", "development") in ("development", "testing"):
+if settings.ENVIRONMENT != "production":  # ENV-UC-05, ENV-CN-07
     urlpatterns += [
         # OpenAPI schema and documentation
         path("api/schema/", SpectacularAPIView.as_view(), name="schema"),

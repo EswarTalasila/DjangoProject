@@ -35,6 +35,62 @@ describe("registration code api", () => {
     expect(code).toBe("REG-ABC-123");
   });
 
+  it("joins course by code and returns enrollment response", async () => {
+    server.use(
+      http.post(`${API_BASE}/enrollments`, async ({ request }) => {
+        const body = (await request.json()) as { code?: string };
+        if (body.code !== "JOIN-CODE-1") {
+          return HttpResponse.json({ detail: "Invalid code" }, { status: 400 });
+        }
+        return HttpResponse.json(
+          {
+            message: "Invite redeemed",
+            courseId: 7,
+            alreadyEnrolled: false,
+          },
+          { status: 201 },
+        );
+      }),
+    );
+
+    const { joinCourseByCode } = await loadRegistrationCodeApi();
+    const result = await joinCourseByCode("JOIN-CODE-1");
+
+    expect(result.courseId).toBe(7);
+    expect(result.alreadyEnrolled).toBe(false);
+  });
+
+  it("returns alreadyEnrolled true for idempotent join", async () => {
+    server.use(
+      http.post(`${API_BASE}/enrollments`, () =>
+        HttpResponse.json(
+          {
+            message: "Already enrolled",
+            courseId: 7,
+            alreadyEnrolled: true,
+          },
+          { status: 201 },
+        ),
+      ),
+    );
+
+    const { joinCourseByCode } = await loadRegistrationCodeApi();
+    const result = await joinCourseByCode("JOIN-CODE-1");
+
+    expect(result.alreadyEnrolled).toBe(true);
+  });
+
+  it("propagates API error for invalid course code", async () => {
+    server.use(
+      http.post(`${API_BASE}/enrollments`, () =>
+        HttpResponse.json({ detail: "Invalid or expired code." }, { status: 400 }),
+      ),
+    );
+
+    const { joinCourseByCode } = await loadRegistrationCodeApi();
+    await expect(joinCourseByCode("BAD-CODE")).rejects.toThrow();
+  });
+
   it("throws when backend does not return plaintext code", async () => {
     server.use(
       http.post(`${API_BASE}/codes`, () =>

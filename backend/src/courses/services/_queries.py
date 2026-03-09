@@ -2,12 +2,12 @@
 Course and student domain queries — read-only helpers and DTOs.
 """
 
-from accounts.models import Role, TeacherProfile, User
+from accounts.models import Role, StudentProfile, TeacherProfile, User
 from assignments.models import Assignment
 from core.dtos import CourseDTO, EnrollmentStudentDTO
 from core.permissions import has_role
 
-from ..models import Course, Enrollment
+from ..models import Course, Enrollment, EnrollmentStatus
 
 
 def _teacher_profile_for(user: User) -> TeacherProfile | None:
@@ -28,12 +28,20 @@ def can_view_course(request_user: User, course: Course) -> bool:
 
     Admins (is_staff) can view all courses.
     Researchers can view all courses (for data oversight).
+    Students can view courses they are actively enrolled in.
     Teachers can only view their own courses.
     """
     if request_user.is_staff:
         return True
     if has_role(request_user, Role.RESEARCHER):
         return True
+    if has_role(request_user, Role.STUDENT):
+        profile = StudentProfile.objects.filter(user=request_user).first()
+        if not profile:
+            return False
+        return Enrollment.objects.filter(
+            course=course, student_profile=profile, status=EnrollmentStatus.ACTIVE
+        ).exists()
     owner = _course_owner(course)
     return owner is not None and owner.id == request_user.id
 
@@ -45,15 +53,11 @@ def can_manage_course(request_user: User, course: Course) -> bool:
 
 
 def course_to_dto(course: Course) -> CourseDTO:
-    """
-    Convert a Course to a DTO with enrolled students and assignment IDs.
-
-    Returns:
-        CourseDTO with id, name, students, studentCount, assignmentIds, teacherId
-    """
-    enrollments = Enrollment.objects.filter(course=course)
+    """Convert a Course to a DTO with enrolled students and assignment IDs."""
+    enrollments = Enrollment.objects.filter(course=course, status=EnrollmentStatus.ACTIVE)
     students = [enrollment_to_student_dto(e) for e in enrollments]
     assignment_ids = list(Assignment.objects.filter(course=course).values_list("id", flat=True))
+    teacher_user = course.teacher_profile.user if course.teacher_profile else None
     return CourseDTO(
         id=course.id,
         name=course.name,
@@ -61,6 +65,8 @@ def course_to_dto(course: Course) -> CourseDTO:
         studentCount=len(students),
         assignmentIds=assignment_ids,
         teacherId=course.teacher_profile_id,
+        teacherName=teacher_user.name if teacher_user else None,
+        createdAt=course.created_at,
     )
 
 
@@ -75,25 +81,46 @@ def enrollment_to_student_dto(enrollment: Enrollment) -> EnrollmentStudentDTO:
         role="STUDENT",
         consent=bool(student_profile.consent) if student_profile else False,
         courseId=enrollment.course_id,
+        enrolledAt=enrollment.enrolled_at,
     )
 
 
-def list_courses_for_user(user: User) -> list[Course]:
+def list_courses_for_user(user: User, include_archived: bool = False) -> list[Course]:
     """
     List courses accessible to a user.
 
     Admins (is_staff) see all courses.
     Researchers see all courses (for data oversight).
     Teachers see only their own courses.
+    Students see only courses they are enrolled in.
+
+    ARCH-CN-06: By default only ACTIVE courses are returned.
+    Pass include_archived=True to include ARCHIVED courses.
     """
+    from ..models import CourseStatus
+
+    base_qs = Course.objects.all()
+    if not include_archived:
+        base_qs = base_qs.filter(status=CourseStatus.ACTIVE)
+
     if user.is_staff:
-        return list(Course.objects.all())
+        return list(base_qs)
     if has_role(user, Role.RESEARCHER):
-        return list(Course.objects.all())
-    return list(Course.objects.filter(teacher_profile__user=user))
+        return list(base_qs)
+    if has_role(user, Role.STUDENT):
+        profile = StudentProfile.objects.filter(user=user).first()
+        if not profile:
+            return []
+        return list(
+            base_qs.filter(
+                enrollments__student_profile=profile,
+                enrollments__status=EnrollmentStatus.ACTIVE,
+            ).distinct()
+        )
+    return list(base_qs.filter(teacher_profile__user=user))
 
 
 def list_students_in_course(course: Course) -> list[EnrollmentStudentDTO]:
     """Return all students enrolled in a course as DTOs."""
-    enrollments = Enrollment.objects.filter(course=course)
+    enrollments = Enrollment.objects.filter(course=course, status=EnrollmentStatus.ACTIVE)
     return [enrollment_to_student_dto(e) for e in enrollments]

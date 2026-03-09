@@ -22,8 +22,6 @@ wheels/
 # Virtual environments
 .venv/
 venv/
-ENV/
-env/
 
 # Django
 *.log
@@ -34,12 +32,17 @@ db.sqlite3-journal
 *.pyc
 staticfiles/
 mediafiles/
+backend/src/media/
 
 # Environment variables
 .env
 .env.local
+.env.prod
+.env.production
 .env.*.local
 !.env.template
+env/.env.*
+!env/.env.*.template
 
 # IDE
 .idea/

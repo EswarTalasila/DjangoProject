@@ -66,13 +66,13 @@ class TestCookieSecurity:
 
     def test_csrf_cookie_secure_in_production(self):
         """CSRF_COOKIE_SECURE must be True in testing and production (False only in development)."""
-        # env.csrf_cookie_secure returns True for testing and production
-        assert settings.CSRF_COOKIE_SECURE is True
+        expected = settings.ENVIRONMENT in ("testing", "production")
+        assert settings.CSRF_COOKIE_SECURE is expected
 
     def test_session_cookie_secure_in_production(self):
         """SESSION_COOKIE_SECURE must be True in testing and production (False only in development)."""
-        # env.session_cookie_secure returns True for testing and production
-        assert settings.SESSION_COOKIE_SECURE is True
+        expected = settings.ENVIRONMENT in ("testing", "production")
+        assert settings.SESSION_COOKIE_SECURE is expected
 
 
 @pytest.mark.security
@@ -88,8 +88,8 @@ class TestJWTConfiguration:
         assert settings.SIMPLE_JWT["BLACKLIST_AFTER_ROTATION"] is True
 
     def test_jwt_access_token_lifetime(self):
-        """ACCESS_TOKEN_LIFETIME must be 1 hour to limit the exposure window of bearer tokens."""
-        assert settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"] == timedelta(hours=1)
+        """ACCESS_TOKEN_LIFETIME must be 15 minutes per FR-01 AUTH-CN-02 policy."""
+        assert settings.SIMPLE_JWT["ACCESS_TOKEN_LIFETIME"] == timedelta(minutes=15)
 
     def test_jwt_refresh_token_lifetime(self):
         """REFRESH_TOKEN_LIFETIME must be 24 hours to limit the refresh window without forcing daily re-login."""

@@ -1,19 +1,39 @@
 import api from '@/lib/api';
 
-type CreatedCode = {
-  id?: number;
-  code?: string | null;
-  codeType?: 'STUDENT' | 'TEACHER' | 'RESEARCHER';
-  maxUses?: number;
-  expiresAt?: string;
+export type RegistrationCodeType = 'STUDENT' | 'TEACHER' | 'RESEARCHER';
+
+export type RegistrationCodeStatus = 'ACTIVE' | 'EXHAUSTED' | 'EXPIRED' | 'REVOKED' | 'ARCHIVED';
+
+export type RegistrationCode = {
+  id: number;
+  code: string | null;
+  codePrefix: string;
+  codeType: RegistrationCodeType;
+  status: RegistrationCodeStatus;
+  maxUses: number;
+  timesUsed: number;
+  usesRemaining: number;
+  expiresAt: string;
+  isActive: boolean;
+  courseId: number | null;
+  courseName: string | null;
+  metadata: Record<string, unknown> | null;
+  createdByUserId: number;
+  createdAt: string;
+  archivedAt: string | null;
+};
+
+export type RegistrationCodeListResponse = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: RegistrationCode[];
 };
 
 type CreateCodesResponse = {
   count: number;
-  codes: CreatedCode[];
+  codes: RegistrationCode[];
 };
-
-export type RegistrationCodeType = 'STUDENT' | 'TEACHER' | 'RESEARCHER';
 
 export type CreateRegistrationCodeInput = {
   codeType: RegistrationCodeType;
@@ -36,6 +56,17 @@ export async function createRegistrationCodes(
   return response.data;
 }
 
+export type JoinCourseResponse = {
+  message: string;
+  courseId: number;
+  alreadyEnrolled: boolean;
+};
+
+export async function joinCourseByCode(code: string): Promise<JoinCourseResponse> {
+  const response = await api.post<JoinCourseResponse>('/enrollments', { code });
+  return response.data;
+}
+
 export async function createStudentRegistrationCode(
   courseId: number,
   options?: { usesPerCode?: number; expiresAt?: string },
@@ -53,4 +84,31 @@ export async function createStudentRegistrationCode(
     throw new Error('Registration code was not returned by the server.');
   }
   return code;
+}
+
+export async function listRegistrationCodes(params?: {
+  status?: RegistrationCodeStatus;
+  codeType?: RegistrationCodeType;
+  includeArchived?: boolean;
+}): Promise<RegistrationCodeListResponse> {
+  const query = new URLSearchParams();
+  if (params?.status) query.set('status', params.status);
+  if (params?.codeType) query.set('codeType', params.codeType);
+  if (params?.includeArchived) query.set('includeArchived', 'true');
+  const qs = query.toString();
+  const response = await api.get<RegistrationCodeListResponse>(`/codes${qs ? `?${qs}` : ''}`);
+  return response.data;
+}
+
+export async function getRegistrationCode(id: number): Promise<RegistrationCode> {
+  const response = await api.get<RegistrationCode>(`/codes/${id}`);
+  return response.data;
+}
+
+export async function updateRegistrationCodeStatus(
+  id: number,
+  status: 'REVOKED' | 'ARCHIVED',
+): Promise<RegistrationCode> {
+  const response = await api.patch<RegistrationCode>(`/codes/${id}`, { status });
+  return response.data;
 }

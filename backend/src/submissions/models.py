@@ -11,8 +11,7 @@ Model Hierarchy:
             ├── MultipleChoiceAnswer (1:1 extension)
             │   └── MultipleChoiceSelected (1:N selected choices)
             ├── ShortAnswerAnswer (1:1 extension)
-            ├── NumberScaleAnswer (1:1 extension)
-            └── MoodMeterAnswer (1:1 extension)
+            └── NumberScaleAnswer (1:1 extension)
 
     Response (legacy survey-style response, may be deprecated)
 
@@ -21,12 +20,14 @@ Submission Lifecycle:
 
 Database Tables:
     submissions, answer, multiple_choice_answer, multiple_choice_selected,
-    short_answer_answer, number_scale_answer, mood_meter_answer, response
+    short_answer_answer, number_scale_answer, response
 
 Note:
     Submissions are pre-created when assignments are made. Students cannot
     create their own submissions - they can only update existing ones.
 """
+
+import uuid
 
 from django.db import models
 
@@ -133,13 +134,11 @@ class AnswerType(models.TextChoices):
         MULTIPLE_CHOICE: Selection from options (MultipleChoiceAnswer)
         SHORT_ANSWER: Free-text response (ShortAnswerAnswer)
         NUMBER_SCALE: Numeric rating (NumberScaleAnswer)
-        MOOD_METER: Grid position (MoodMeterAnswer)
     """
 
     MULTIPLE_CHOICE = "MULTIPLE_CHOICE", "Multiple Choice"
     SHORT_ANSWER = "SHORT_ANSWER", "Short Answer"
     NUMBER_SCALE = "NUMBER_SCALE", "Number Scale"
-    MOOD_METER = "MOOD_METER", "Mood Meter"
 
 
 class Answer(models.Model):
@@ -160,7 +159,6 @@ class Answer(models.Model):
         multiple_choice: MultipleChoiceAnswer (if answer_type=MULTIPLE_CHOICE)
         short_answer: ShortAnswerAnswer (if answer_type=SHORT_ANSWER)
         number_scale: NumberScaleAnswer (if answer_type=NUMBER_SCALE)
-        mood_meter: MoodMeterAnswer (if answer_type=MOOD_METER)
     """
 
     # Discriminator for which extension model to use
@@ -331,48 +329,67 @@ class NumberScaleAnswer(models.Model):
         return f"NumberScaleAnswer({self.answer_id})"
 
 
-class MoodMeterAnswer(models.Model):
-    """
-    Extension model for MOOD_METER responses.
+class ImageStatus(models.TextChoices):
+    """Status lifecycle for submission images (FR-15 IMG)."""
 
-    Contains the grid position (row/column) where the student clicked
-    on the mood meter to indicate their emotional state.
+    PENDING_SCAN = "PENDING_SCAN", "Pending Scan"
+    READY = "READY", "Ready"
+    REJECTED = "REJECTED", "Rejected"
+    DELETED = "DELETED", "Deleted"
 
-    Grid Layout (example):
-        row 0: High energy
-        row 1: Low energy
-        col 0: Negative pleasantness
-        col 1: Positive pleasantness
 
-    Attributes:
-        answer: One-to-one link to base Answer (also primary key)
-        row: Y-position on the mood meter grid (energy axis)
-        col: X-position on the mood meter grid (pleasantness axis)
-    """
+class SubmissionImage(models.Model):
+    """Image attached to a submission (FR-15 IMG)."""
 
-    # Link to base answer (shares the same primary key)
-    answer = models.OneToOneField(
-        Answer,
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    submission = models.ForeignKey(
+        Submission,
         on_delete=models.CASCADE,
-        primary_key=True,
-        db_column="id",
-        related_name="mood_meter",
+        db_column="submission_id",
+        related_name="images",
     )
-
-    # Y-position on the grid (energy level)
-    row = models.IntegerField()
-
-    # X-position on the grid (pleasantness level)
-    col = models.IntegerField()
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        db_column="uploaded_by_user_id",
+        related_name="uploaded_images",
+    )
+    submission_owner = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        db_column="submission_owner_user_id",
+        related_name="owned_submission_images",
+    )
+    storage_key = models.CharField(max_length=512, unique=True)
+    original_filename = models.CharField(max_length=255)
+    mime_type = models.CharField(max_length=64)
+    size_bytes = models.PositiveIntegerField()
+    sha256_hash = models.CharField(max_length=64)
+    status = models.CharField(max_length=16, choices=ImageStatus.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        """Database table configuration for MoodMeterAnswer."""
-
-        db_table = "mood_meter_answer"
+        db_table = "submission_image"
+        indexes = [
+            models.Index(fields=["submission", "status"], name="idx_subimg_sub_status"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(size_bytes__gt=0),
+                name="ck_subimg_size_positive",
+            ),
+            models.UniqueConstraint(
+                fields=["submission", "sha256_hash"],
+                condition=~models.Q(status="DELETED"),
+                name="uq_subimg_hash_active",
+            ),
+        ]
 
     def __str__(self):
-        """Return a readable string representation."""
-        return f"MoodMeterAnswer({self.answer_id})"
+        return f"SubmissionImage({self.id})"
 
 
 class Response(models.Model):

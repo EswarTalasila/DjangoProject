@@ -66,11 +66,12 @@ def create_student(
     resolved_password = password or "studentpass"
     payload = {
         "name": name,
-        "courseId": course_id,
         "consent": consent,
         "password": resolved_password,
     }
-    response = teacher_client.post("/api/v1/students/", payload, format="json")
+    response = teacher_client.post(
+        f"/api/v1/courses/{course_id}/students", payload, format="json"
+    )
     assert response.status_code == 201
     return response.json()["id"], response.json()["username"]
 
@@ -137,14 +138,10 @@ class TestExtendedWorkflows:
         assert students_response.status_code == 200
         assert not students_response.json()["results"]
 
-        step("Teacher deletes course")
+        step("Teacher attempts to delete course (409 archival gate)")
         delete_response = teacher_client.delete(f"/api/v1/courses/{course_id}")
-        assert delete_response.status_code == 204
-
-        step("Teacher verifies course missing")
-        missing_response = teacher_client.get(f"/api/v1/courses/{course_id}")
-        assert missing_response.status_code == 404
-        assert b"Course not found" in missing_response.content
+        assert delete_response.status_code == 409
+        assert "archive" in delete_response.json()["detail"].lower()
 
     @pytest.mark.integration
     @pytest.mark.workflow
@@ -229,9 +226,17 @@ class TestExtendedWorkflows:
         forbidden_delete = teacher_client.delete(f"/api/v1/assessments/{assessment_id}")
         assert forbidden_delete.status_code == 403
 
-        step("Admin deletes assessment")
+        step("Admin plain delete blocked by lifecycle policy")
         delete_response = admin_client.delete(f"/api/v1/assessments/{assessment_id}")
-        assert delete_response.status_code == 204
+        assert delete_response.status_code == 409
+
+        step("Admin archives assessment")
+        archive_response = admin_client.post(f"/api/v1/assessments/{assessment_id}/archive")
+        assert archive_response.status_code == 200
+
+        step("Admin purges archived assessment")
+        purge_response = admin_client.delete(f"/api/v1/assessments/{assessment_id}?purge=true")
+        assert purge_response.status_code == 204
 
         step("Admin confirms assessment removed")
         missing_response = admin_client.get(f"/api/v1/assessments/{assessment_id}")
@@ -374,9 +379,9 @@ class TestExtendedWorkflows:
         submission_id = submit_response.json()["id"]
 
         step("Student lists own submissions")
-        list_mine = student_client.get(f"/api/v1/submissions/mine?userId={student_id}")
-        assert list_mine.status_code == 200
-        assert any(item["id"] == submission_id for item in list_mine.json()["results"])
+        list_me = student_client.get("/api/v1/submissions/me")
+        assert list_me.status_code == 200
+        assert any(item["id"] == submission_id for item in list_me.json()["results"])
 
         step("Teacher reviews submissions")
         review_response = teacher_client.get(f"/api/v1/assignments/{assignment_id}/submissions")
@@ -399,20 +404,6 @@ class TestExtendedWorkflows:
             format="json",
         )
         assert forbidden_override.status_code == 403
-
-        step("Teacher-self assess workflow")
-        teacher_self_assess = teacher_client.post(
-            f"/api/v1/assessments/{assessment_id}/teacher-self-assess",
-            [
-                {
-                    "questionId": question_id,
-                    "type": "SHORT_ANSWER",
-                    "data": {"text": "Self"},
-                }
-            ],
-            format="json",
-        )
-        assert teacher_self_assess.status_code == 201
 
         step("Invalid assignment returns 404")
         missing = student_client.patch(

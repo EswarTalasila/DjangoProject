@@ -41,6 +41,7 @@ services:
     image: eel-backend:dev
     container_name: eel-backend
     environment:
+      - ENVIRONMENT=production
       - DATABASE_URL=postgres://REPLACE_ME_USER:REPLACE_ME_PASS@database:5432/REPLACE_ME_DB
       - DJANGO_SECRET_KEY=REPLACE_ME_SECRET
       - DJANGO_ALLOWED_HOSTS=REPLACE_ME_HOST
@@ -65,7 +66,7 @@ services:
       - app-net
 
   database:
-    image: postgres:15
+    image: postgres:17-alpine
     container_name: eel-db
     environment:
       - POSTGRES_DB=REPLACE_ME_DB

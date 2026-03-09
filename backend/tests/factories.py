@@ -31,9 +31,11 @@ from assessments.models import (
     MultipleChoiceQuestion,
     Question,
     QuestionKind,
+    ScoringPolicy,
 )
-from assignments.models import Assignment, AudienceType
+from assignments.models import Assignment, AssignmentStatus, AudienceType
 from courses.models import Course, Enrollment, EnrollmentStatus
+from submissions.models import Answer, AnswerType, Submission, SubmissionStatus
 
 
 class UserFactory(factory.django.DjangoModelFactory):
@@ -84,6 +86,7 @@ class AssessmentFactory(factory.django.DjangoModelFactory):
 
     title = factory.Sequence(lambda n: f"Assessment {n}")
     grading_mode = GradingMode.AUTO
+    scoring_policy = ScoringPolicy.STANDARD
     created_by_admin = factory.SubFactory(UserFactory)
     category = "General"
 
@@ -115,6 +118,7 @@ class AssignmentFactory(factory.django.DjangoModelFactory):
     created_by = factory.SubFactory(UserFactory)
     open_at = factory.LazyFunction(timezone.now)
     due_at = None
+    status = AssignmentStatus.ACTIVE
 
 
 class QuestionFactory(factory.django.DjangoModelFactory):
@@ -225,3 +229,25 @@ class OAuthAccountFactory(factory.django.DjangoModelFactory):
     email = factory.Sequence(lambda n: f"oauth{n}@example.com")
     email_verified = True
     picture_url = None
+
+
+class SubmissionFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Submission
+
+    assignment = factory.SubFactory(AssignmentFactory)
+    student = factory.SubFactory(UserFactory)
+    status = SubmissionStatus.NOT_STARTED
+    score = None
+    submitted_at = None
+
+
+class AnswerFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = Answer
+
+    submission = factory.SubFactory(SubmissionFactory)
+    question = factory.SubFactory(QuestionFactory)
+    answer_type = AnswerType.SHORT_ANSWER
+    score = None
+    skipped = False

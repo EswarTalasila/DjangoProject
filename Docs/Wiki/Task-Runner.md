@@ -31,14 +31,17 @@ This is a contract/spec page for cleanup work; it is not a line-by-line mirror o
 | `task up:prod` | production | Start production-like stack with strict guards |
 
 Rules:
-- Each profile command must explicitly set `ENVIRONMENT`.
-- Implicit profile startup without `ENVIRONMENT` is non-compliant with FR-12.
+- Each profile command must bind to an explicit env file:
+  - `env/.env.development`
+  - `env/.env.testing`
+  - `env/.env.production`
+- Implicit profile startup without env-file selection is non-compliant with FR-12.
 
 ### Profile teardown
 
 | Command | Intent |
 |---|---|
-| `task down` | Stop running services for current profile |
+| `task down` | Stop running services across all profiles |
 | `task down:proxy` | Stop services including proxy profile containers |
 
 ---

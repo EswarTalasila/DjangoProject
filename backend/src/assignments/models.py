@@ -36,15 +36,20 @@ class AudienceType(models.TextChoices):
     """
     Enumeration identifying the target audience for an assignment.
 
-    Determines who receives submissions when an assignment is created.
-
     Values:
         COURSE: All students in the specified course receive submissions
-        TEACHER: Only the creating teacher receives a submission (self-assessment)
+        TEACHER: Deprecated — rejected at creation with 400. Removal target: next release.
     """
 
     COURSE = "COURSE", "Course"
     TEACHER = "TEACHER", "Teacher"
+
+
+class AssignmentStatus(models.TextChoices):
+    """Assignment lifecycle status."""
+
+    ACTIVE = "ACTIVE", "Active"
+    ARCHIVED = "ARCHIVED", "Archived"
 
 
 class Assignment(models.Model):
@@ -79,6 +84,9 @@ class Assignment(models.Model):
         Assessment, on_delete=models.CASCADE, db_column="assessment_id", related_name="assignments"
     )
 
+    # Editable assignment title shown to end users; defaults to assessment title at creation.
+    title = models.CharField(max_length=255, null=True, blank=True)
+
     # Who the assignment is for (COURSE = students, TEACHER = self-assessment)
     audience_type = models.CharField(max_length=255, choices=AudienceType.choices)
 
@@ -101,6 +109,29 @@ class Assignment(models.Model):
     # Optional deadline (null means no deadline)
     due_at = models.DateTimeField(null=True, blank=True)
 
+    # Assignment lifecycle status (ACTIVE or ARCHIVED)
+    status = models.CharField(
+        max_length=16,
+        choices=AssignmentStatus.choices,
+        default=AssignmentStatus.ACTIVE,
+    )
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="archived_assignments",
+    )
+    restored_at = models.DateTimeField(null=True, blank=True)
+    restored_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="restored_assignments",
+    )
+
     # For TEACHER type: the teacher completing self-assessment
     teacher = models.ForeignKey(
         User,
@@ -115,6 +146,9 @@ class Assignment(models.Model):
         """Database table configuration for Assignment."""
 
         db_table = "assignments"
+        indexes = [
+            models.Index(fields=["status"], name="idx_assignment_status"),
+        ]
 
     def __str__(self):
         """Return a readable string representation."""

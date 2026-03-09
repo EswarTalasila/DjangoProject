@@ -29,6 +29,8 @@ Endpoints:
     PATCH /api/v1/users/{id}            - Update user (teacher/admin, sudoed researcher)
     DELETE /api/v1/users/{id}           - Delete user (teacher/admin, sudoed researcher)
     GET /api/v1/users/staff             - List staff (researcher/admin)
+    GET /api/v1/users/students          - List students (researcher/admin)
+    GET /api/v1/sudo-grants             - List sudo grants (own grants for researcher, all for admin)
     POST /api/v1/sudo-grants            - Grant sudo permissions
     DELETE /api/v1/sudo-grants/{id}     - Revoke sudo grant
 """
@@ -49,6 +51,11 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from django.db.models import Exists, OuterRef, Prefetch, Q
+
+from core.audit import complete_audit, get_client_ip, log_audit
+from core.errors import error_response
+from core.models import AuditAction, AuditOutcome
 from core.pagination import paginate
 from core.permissions import (
     IsResearcherOrAdmin,
@@ -56,6 +63,8 @@ from core.permissions import (
     primary_role,
 )
 from core.throttles import AnonAuthThrottle, AnonBurstThrottle
+
+from courses.models import Enrollment, EnrollmentStatus
 
 from .models import (
     OAuthAccount,
@@ -79,6 +88,7 @@ from .serializers import (
     RegistrationOAuthSerializer,
     StudentInviteRegisterSerializer,
     StudentJoinCourseSerializer,
+    StudentListSerializer,
     UserInputSerializer,
     UserOutputSerializer,
 )
@@ -129,7 +139,7 @@ AUTH_COOKIE_SAMESITE: Literal["Lax"] = "Lax"
 
 
 def _cookie_secure() -> bool:
-    return bool(getattr(settings, "ENVIRONMENT", "") == "production")
+    return settings.ENVIRONMENT == "production"
 
 
 def _set_auth_cookies(
@@ -531,6 +541,8 @@ def code_detail(request, code_id: int):
         message = str(exc)
         if message == "Registration code not found.":
             return Response({"detail": message}, status=status.HTTP_404_NOT_FOUND)
+        if message.startswith("Only "):
+            return Response({"detail": message}, status=status.HTTP_409_CONFLICT)
         return Response({"detail": message}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response(_serialize_registration_code(updated), status=status.HTTP_200_OK)
@@ -621,7 +633,7 @@ def refresh(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def logout(request):
-    """Invalidate a refresh token and end the current session."""
+    """End the current session and clear auth cookies (idempotent)."""
     refresh_token = _extract_refresh_token(request)
     if not refresh_token:
         serializer = RefreshTokenSerializer(data=request.data)
@@ -629,7 +641,10 @@ def logout(request):
         refresh_token = serializer.validated_data["refreshToken"]
 
     if not blacklist_refresh_token(refresh_token):
-        return Response({"detail": "Invalid refresh token."}, status=status.HTTP_400_BAD_REQUEST)
+        # Logout should remain idempotent from the client's perspective.
+        # Even with malformed/expired refresh tokens, clear local auth cookies.
+        response = Response({"message": "Logged out."}, status=status.HTTP_200_OK)
+        return _clear_auth_cookies(response)
     response = Response({"message": "Logged out."}, status=status.HTTP_200_OK)
     return _clear_auth_cookies(response)
 
@@ -794,6 +809,17 @@ def issue_password_reset_code_view(request):
     serializer = PasswordResetCodeIssueSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     target_user_id = serializer.validated_data["targetUserId"]
+    target_user = User.objects.filter(id=target_user_id).first()
+    ip = get_client_ip(request)
+
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.PASSWORD_RESET,
+        target_user=target_user,
+        old_value={"password": "changed"},
+        new_value={"password": "changed"},
+        ip_address=ip,
+    )
 
     try:
         reset_request, reset_code = issue_password_reset_code(
@@ -801,14 +827,17 @@ def issue_password_reset_code_view(request):
             target_user_id=target_user_id,
         )
     except ValueError as exc:
+        complete_audit(audit_id, AuditOutcome.FAILURE)
         detail = str(exc)
         status_code: int = status.HTTP_404_NOT_FOUND
         if "not found" not in detail.lower():
             status_code = status.HTTP_400_BAD_REQUEST
         return Response({"detail": detail}, status=status_code)
     except PermissionError as exc:
+        complete_audit(audit_id, AuditOutcome.DENIED)
         return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
 
+    complete_audit(audit_id, AuditOutcome.SUCCESS)
     return Response(
         {
             "requestId": reset_request.id,
@@ -917,7 +946,7 @@ def create_user(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
     if payload.get("email") and identifier_in_use(payload.get("email")):
-        return Response({"detail": "Email already taken"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": "Email already taken"}, status=status.HTTP_409_CONFLICT)
     create_payload = dict(payload)
     create_payload["username"] = generate_managed_username(name=payload["name"])
     try:
@@ -958,7 +987,8 @@ def _edit_user(request, user_id: int):
         return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     requested_role = payload.get("role") or primary_role(user)
     if not can_edit_user(request.user, user, requested_role):
-        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        # Mask authorization scope checks as not-found to avoid target enumeration.
+        return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     next_email = user.email
 
     if payload.get("name"):
@@ -974,7 +1004,7 @@ def _edit_user(request, user_id: int):
         incoming_email = payload.get("email")
         normalized_email = normalize_username_identifier(incoming_email) if incoming_email else None
         if normalized_email and identifier_in_use(normalized_email, exclude_user_id=user_id):
-            return Response({"detail": "Email already taken"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Email already taken"}, status=status.HTTP_409_CONFLICT)
         next_email = normalized_email
         user.email = normalized_email
 
@@ -984,12 +1014,30 @@ def _edit_user(request, user_id: int):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # Audit ROLE_CHANGE only when role is actually changing
+    old_role = primary_role(user)
+    role_changing = payload.get("role") and str(payload["role"]) != str(old_role)
+    audit_id = None
+    if role_changing:
+        audit_id = log_audit(
+            actor=request.user,
+            action=AuditAction.ROLE_CHANGE,
+            target_user=user,
+            old_value={"role": str(old_role)},
+            new_value={"role": str(payload["role"])},
+            ip_address=get_client_ip(request),
+        )
+
     if payload.get("password"):
         user.set_password(payload["password"])
     user.save()
     if payload.get("role"):
         set_single_role(user, payload["role"])
         ensure_profiles_for_role(user, payload["role"], creator=request.user)
+
+    if audit_id is not None:
+        complete_audit(audit_id, AuditOutcome.SUCCESS)
+
     user.refresh_from_db()
     return Response(UserOutputSerializer(user).data, status=status.HTTP_200_OK)
 
@@ -1001,7 +1049,15 @@ def _delete_user(request, user_id: int):
         return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     if not can_delete_user(request.user, user):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.USER_DELETE,
+        target_user=user,
+        old_value={"username": user.username, "role": str(primary_role(user))},
+        ip_address=get_client_ip(request),
+    )
     user.delete()
+    complete_audit(audit_id, AuditOutcome.SUCCESS)
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -1032,6 +1088,82 @@ def list_staff(request):
         .order_by("id")
     )
     return paginate(users, request, transform_fn=lambda u: UserOutputSerializer(u).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsResearcherOrAdmin])
+def list_students(request):
+    """
+    List student users with their active course enrollments.
+
+    Supports search filtering via ``q`` (name/username icontains) and
+    course filtering via ``courseId`` (numeric course ID).
+
+    Returns:
+        200: Paginated list of students with active enrollments.
+        400: If courseId is present but non-numeric.
+    """
+    # Validate courseId early — must be a positive integer if provided
+    course_id_param = request.query_params.get("courseId")
+    if course_id_param is not None:
+        try:
+            course_id = int(course_id_param)
+            if course_id < 1:
+                raise ValueError
+        except (ValueError, TypeError):
+            return error_response("courseId must be a positive integer", status_code=400)
+    else:
+        course_id = None
+
+    # Active enrollments subquery — only include students who have at least one
+    active_enrollment_exists = Enrollment.objects.filter(
+        student_profile__user=OuterRef("pk"),
+        status=EnrollmentStatus.ACTIVE,
+    )
+
+    # Base queryset: STUDENT-role users with at least one ACTIVE enrollment
+    users = (
+        User.objects.filter(roles__role=Role.STUDENT)
+        .filter(Exists(active_enrollment_exists))
+        .prefetch_related(
+            Prefetch(
+                "student_profile__enrollments",
+                queryset=Enrollment.objects.filter(
+                    status=EnrollmentStatus.ACTIVE,
+                ).select_related("course"),
+                to_attr="active_enrollments",
+            ),
+        )
+        .distinct()
+        .order_by("id")
+    )
+
+    # Search filter: name or username icontains
+    search = request.query_params.get("q", "").strip()
+    if search:
+        users = users.filter(Q(name__icontains=search) | Q(username__icontains=search))
+
+    # Course filter
+    if course_id is not None:
+        users = users.filter(
+            student_profile__enrollments__course_id=course_id,
+            student_profile__enrollments__status=EnrollmentStatus.ACTIVE,
+        )
+
+    def transform(user):
+        enrollments = getattr(user.student_profile, "active_enrollments", [])
+        return StudentListSerializer(
+            {
+                "id": user.id,
+                "name": user.name,
+                "username": user.username,
+                "courses": [
+                    {"id": e.course.id, "name": e.course.name} for e in enrollments
+                ],
+            }
+        ).data
+
+    return paginate(users, request, transform_fn=transform)
 
 
 @api_view(["GET"])
@@ -1077,9 +1209,42 @@ def my_sudo_grant(request):
     )
 
 
-@api_view(["POST"])
+def _list_sudo_grants(request):
+    """Return sudo grants visible to the current user."""
+    if request.user.is_staff:
+        grants = SudoGrant.objects.select_related("user", "granted_by").all()
+    else:
+        grants = SudoGrant.objects.select_related("user", "granted_by").filter(
+            granted_by=request.user
+        )
+
+    results = [
+        {
+            "id": g.id,
+            "user": {
+                "id": g.user.id,
+                "username": g.user.username,
+                "name": g.user.name or g.user.username,
+            },
+            "permissions": g.permissions,
+            "canGrantSudo": g.can_grant_sudo,
+            "grantedAt": g.granted_at.isoformat(),
+        }
+        for g in grants
+    ]
+    return Response(results, status=status.HTTP_200_OK)
+
+
+@api_view(["GET", "POST"])
 @permission_classes([IsResearcherOrAdmin])
-def grant_sudo(request):
+def sudo_grants_collection(request):
+    """Dispatch GET (list) and POST (grant) for sudo grants."""
+    if request.method == "GET":
+        return _list_sudo_grants(request)
+    return _grant_sudo(request)
+
+
+def _grant_sudo(request):
     """
     Grant sudo permissions to a researcher.
 
@@ -1115,6 +1280,14 @@ def grant_sudo(request):
     if not grantee:
         return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.SUDO_GRANT,
+        target_user=grantee,
+        new_value={"permissions": permissions, "can_grant_sudo": can_grant_sudo_flag},
+        ip_address=get_client_ip(request),
+    )
+
     try:
         grant = grant_sudo_to_researcher(
             granter=request.user,
@@ -1122,12 +1295,15 @@ def grant_sudo(request):
             permissions=permissions,
             can_grant_sudo=can_grant_sudo_flag,
         )
+        complete_audit(audit_id, AuditOutcome.SUCCESS)
         return Response(
             {"message": "Sudo granted", "grant_id": grant.id}, status=status.HTTP_201_CREATED
         )
     except ValueError as e:
+        complete_audit(audit_id, AuditOutcome.FAILURE)
         return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except PermissionError as e:
+        complete_audit(audit_id, AuditOutcome.DENIED)
         return Response({"detail": str(e)}, status=status.HTTP_403_FORBIDDEN)
 
 
@@ -1152,10 +1328,23 @@ def revoke_sudo(request, grant_id: int):
         - Admin (is_staff): Can revoke any grant
         - Researcher: Can revoke grants they created
     """
+    grant = SudoGrant.objects.filter(id=grant_id).select_related("user").first()
+    target_user = grant.user if grant else None
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.SUDO_REVOKE,
+        target_user=target_user,
+        old_value={"grant_id": grant_id},
+        ip_address=get_client_ip(request),
+    )
+
     try:
         revoke_sudo_grant(revoker=request.user, grant_id=grant_id)
+        complete_audit(audit_id, AuditOutcome.SUCCESS)
         return Response(status=status.HTTP_204_NO_CONTENT)
     except ValueError as e:
+        complete_audit(audit_id, AuditOutcome.FAILURE)
         return Response({"detail": str(e)}, status=status.HTTP_404_NOT_FOUND)
     except PermissionError as e:
+        complete_audit(audit_id, AuditOutcome.DENIED)
         return Response({"detail": str(e)}, status=status.HTTP_403_FORBIDDEN)

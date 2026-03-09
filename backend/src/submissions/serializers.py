@@ -12,8 +12,7 @@ Serializer Hierarchy:
 The 'data' field in AnswerSerializer contains the actual response:
     MULTIPLE_CHOICE: {"selected": [0, 2]}  (indices of selected choices)
     SHORT_ANSWER: {"text": "answer"}
-    NUMBER_SCALE: {"value": 4}
-    MOOD_METER: {"row": 1, "col": 2}
+    NUMBER_SCALE: {"val": 4}
 """
 
 from rest_framework import serializers
@@ -34,9 +33,7 @@ class AnswerSerializer(serializers.Serializer):
     """
 
     questionId = serializers.IntegerField()
-    type = serializers.ChoiceField(
-        choices=["MULTIPLE_CHOICE", "SHORT_ANSWER", "NUMBER_SCALE", "MOOD_METER"]
-    )
+    type = serializers.ChoiceField(choices=["MULTIPLE_CHOICE", "SHORT_ANSWER", "NUMBER_SCALE"])
     data = serializers.DictField()  # type: ignore[assignment]
     score = serializers.FloatField(required=False, allow_null=True)
 

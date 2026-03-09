@@ -59,7 +59,7 @@ Document exactly which Angular services call which API endpoints for parity veri
 - listByStudent() -> GET /api/students/{id}/submissions
 - listByTeacher() -> GET /api/teachers/{id}/submissions
 - getByStudentAssignment() -> GET /api/students/{id}/assignments/{id}/submission
-- listMine() -> GET /api/submissions/mine
+- listMine() -> GET /api/submissions/me
 - updateSubmission() -> PUT /api/submissions
 - overrideScore() -> PATCH /api/submissions/{id}/override-score
 

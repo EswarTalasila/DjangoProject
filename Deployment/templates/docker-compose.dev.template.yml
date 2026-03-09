@@ -41,6 +41,7 @@ services:
     working_dir: /app
     command: ["bash", "-lc", "python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt && python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]
     environment:
+      - ENVIRONMENT=development
       - DATABASE_URL=postgres://REPLACE_ME_USER:REPLACE_ME_PASS@database:5432/REPLACE_ME_DB
       - DJANGO_SECRET_KEY=REPLACE_ME_SECRET
       - DJANGO_ALLOWED_HOSTS=REPLACE_ME_HOST,backend,eel-backend,eel-frontend
@@ -68,7 +69,7 @@ services:
       - app-net
 
   database:
-    image: postgres:15
+    image: postgres:17-alpine
     container_name: eel-db-dev
     environment:
       - POSTGRES_DB=REPLACE_ME_DB

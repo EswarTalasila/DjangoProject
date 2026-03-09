@@ -78,7 +78,7 @@ export function ResetCodeDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} aria-label="Close dialog">
             Close
           </Button>
           <Button onClick={handleCopy} disabled={!code}>

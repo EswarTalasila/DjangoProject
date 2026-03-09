@@ -6,8 +6,6 @@ from .models import (
     Assessment,
     McqChoice,
     McqCorrectAnswer,
-    MoodMeterLabel,
-    MoodMeterQuestion,
     MultipleChoiceQuestion,
     NumberScaleQuestion,
     Question,
@@ -36,7 +34,5 @@ class QuestionAdmin(admin.ModelAdmin):
 admin.site.register(MultipleChoiceQuestion)
 admin.site.register(ShortAnswerQuestion)
 admin.site.register(NumberScaleQuestion)
-admin.site.register(MoodMeterQuestion)
 admin.site.register(McqChoice)
 admin.site.register(McqCorrectAnswer)
-admin.site.register(MoodMeterLabel)

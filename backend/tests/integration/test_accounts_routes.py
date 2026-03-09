@@ -15,6 +15,7 @@ from accounts.models import (
     RegistrationCodeType,
     ResearcherProfile,
     Role,
+    StudentProfile,
     SudoGrant,
     SudoPermission,
     TeacherProfile,
@@ -22,7 +23,10 @@ from accounts.models import (
     UserRole,
 )
 from accounts.services import registration_code_hash, registration_code_prefix
-from courses.models import Course, Enrollment
+from courses.models import Course, Enrollment, EnrollmentStatus
+
+pytestmark = pytest.mark.integration
+
 
 
 @pytest.mark.django_db
@@ -373,6 +377,16 @@ class TestAccountRoutes:
         assert payload["code_type"] == RegistrationCodeType.STUDENT
         assert payload["context"]["course_name"] == "Biology"
 
+    def test_REG_UC_01_E1_CODE_VALIDATION(self, api_client):
+        """Validate-code returns generic invalid response for bad/expired codes."""
+        response = api_client.post(
+            "/api/v1/registration/code-validations",
+            {"code": "REG-UC01-E1-INVALID"},
+            format="json",
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Invalid or expired code"
+
     def test_REG_UC_01a_STUDENT(self, api_client, teacher_user):
         """Authenticated student can redeem another code to join an additional course."""
         first_code = self._student_code(teacher_user, code="INVITE-FIRST", course_name="Math")
@@ -402,7 +416,12 @@ class TestAccountRoutes:
             format="json",
         )
         assert redeem_res.status_code == 201
-        assert redeem_res.json()["alreadyEnrolled"] is False
+        redeem_payload = redeem_res.json()
+        assert redeem_payload["alreadyEnrolled"] is False
+        assert redeem_payload["createdNewUser"] is False
+        assert redeem_payload["message"] == "Invite redeemed"
+        assert redeem_payload["username"] == username
+        assert redeem_payload["courseId"] == second_code.course_id
 
         enrollment_count = Enrollment.objects.filter(student_profile=user.student_profile).count()
         assert enrollment_count == 2
@@ -585,7 +604,7 @@ class TestAccountRoutes:
         SudoGrant.objects.create(
             user=researcher_user,
             granted_by=admin_user,
-            permissions=[SudoPermission.CREATE_STUDENT],
+            permissions=[SudoPermission.ISSUE_STUDENT_REG_CODE],
         )
 
         allowed = api_client.post(
@@ -640,6 +659,12 @@ class TestAccountRoutes:
         listed_code = next(entry for entry in listed_payload if entry["id"] == code.id)
         assert listed_code["code"] is None
         assert listed_code["codePrefix"] == registration_code_prefix("LIFE-ONE")
+
+        detail_response = api_client.get(f"/api/v1/codes/{code.id}")
+        assert detail_response.status_code == 200
+        detail_payload = detail_response.json()
+        assert detail_payload["code"] is None
+        assert detail_payload["codePrefix"] == registration_code_prefix("LIFE-ONE")
 
         revoke_response = api_client.patch(
             f"/api/v1/codes/{code.id}",
@@ -871,7 +896,7 @@ class TestAccountRoutes:
                 "method": "LOCAL",
                 "code": "RESET-CODE-2",
                 "firstName": "Blocked",
-                "lastName": "Student Reset Request",
+                "lastName": "Blockedrequest",
                 "password": "StartPass123!",
                 "confirmPassword": "StartPass123!",
             },
@@ -1033,13 +1058,14 @@ class TestAccountRoutes:
         assert student.username == original_username
 
     def test_USER_UC_02_E1(self, api_client, teacher_user, admin_user):
-        """Teacher edit is denied for a non-owned target user."""
+        """Teacher edit outside scope is masked as not found."""
         api_client.force_authenticate(user=teacher_user)
         payload = {
             "name": "Admin Updated",
         }
         response = api_client.patch(f"/api/v1/users/{admin_user.id}", payload, format="json")
-        assert response.status_code == 403
+        assert response.status_code == 404
+        assert response.json()["detail"] == "User not found"
 
     def test_USER_UC_04_ADMIN(self, api_client, admin_user, teacher_user):
         """Staff listing returns teacher and researcher users with plain role strings."""
@@ -1053,11 +1079,80 @@ class TestAccountRoutes:
             assert entry["role"] in (Role.TEACHER, Role.RESEARCHER)
             assert not entry["role"].startswith("ROLE_")
 
+    def test_USER_UC_04_E1(self, api_client, teacher_user):
+        """Staff listing is forbidden for non-admin/non-researcher callers."""
+        api_client.force_authenticate(user=teacher_user)
+        response = api_client.get("/api/v1/users/staff")
+        assert response.status_code == 403
+
     def test_USER_UC_03_E1(self, api_client, admin_user, teacher_user):
-        """Non-admin user deletion attempts are forbidden."""
+        """Delete outside scope returns 403 Forbidden."""
         api_client.force_authenticate(user=teacher_user)
         response = api_client.delete(f"/api/v1/users/{admin_user.id}")
         assert response.status_code == 403
+        assert response.json()["detail"] == "Forbidden"
+
+    def test_USER_UC_03_E2(self, api_client, admin_user):
+        """Delete request returns 404 when target user does not exist."""
+        api_client.force_authenticate(user=admin_user)
+        response = api_client.delete("/api/v1/users/99999999")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "User not found"
+
+    def test_USER_UC_03_ADMIN(self, api_client, admin_user):
+        """Admin can delete a teacher account; returns 204."""
+        target = User.objects.create_user(
+            username="del-target",
+            email="del-target@example.com",
+            name="Delete Target",
+            password="StartPass123!",
+        )
+        UserRole.objects.create(user=target, role=Role.TEACHER)
+        TeacherProfile.objects.create(user=target)
+        target_id = target.id
+
+        api_client.force_authenticate(user=admin_user)
+        response = api_client.delete(f"/api/v1/users/{target_id}")
+        assert response.status_code == 204
+        assert not User.objects.filter(id=target_id).exists()
+
+    def test_USER_UC_03_E2(self, api_client, admin_user):
+        """Delete for non-existent user returns 404."""
+        api_client.force_authenticate(user=admin_user)
+        response = api_client.delete("/api/v1/users/999999")
+        assert response.status_code == 404
+
+    def test_USER_UC_04_RESEARCHER(self, api_client, researcher_user, teacher_user):
+        """Researcher can access staff listing."""
+        api_client.force_authenticate(user=researcher_user)
+        response = api_client.get("/api/v1/users/staff")
+        assert response.status_code == 200
+        results = response.json()["results"]
+        usernames = {entry["username"] for entry in results}
+        assert teacher_user.username in usernames
+
+    def test_USER_UC_04_E1(self, api_client, teacher_user):
+        """Non-admin/non-researcher is denied access to staff listing."""
+        api_client.force_authenticate(user=teacher_user)
+        response = api_client.get("/api/v1/users/staff")
+        assert response.status_code == 403
+
+    def test_USER_UC_02_E2(self, api_client, admin_user):
+        """Staff-target user cannot be edited; masked as 404."""
+        staff_target = User.objects.create_user(
+            username="staff-target",
+            email="staff-target@example.com",
+            name="Staff Target",
+            password="StartPass123!",
+            is_staff=True,
+        )
+        api_client.force_authenticate(user=admin_user)
+        response = api_client.patch(
+            f"/api/v1/users/{staff_target.id}",
+            {"name": "Hacked Name"},
+            format="json",
+        )
+        assert response.status_code == 404
 
     def test_USER_UC_01(self, api_client, admin_user):
         """Created user is assigned exactly one role; response returns user object."""
@@ -1469,7 +1564,7 @@ class TestAccountRoutes:
             {
                 "method": "LOCAL",
                 "code": "CN06-STUDENT",
-                "firstName": "CN06",
+                "firstName": "Cnsix",
                 "lastName": "Student",
                 "password": "StartPass123!",
                 "confirmPassword": "StartPass123!",
@@ -1705,7 +1800,7 @@ class TestAccountRoutes:
             {
                 "method": "LOCAL",
                 "code": "UC07-STUDENT",
-                "firstName": "UC07",
+                "firstName": "Ucseven",
                 "lastName": "Student",
                 "password": "StartPass123!",
                 "confirmPassword": "StartPass123!",
@@ -1743,7 +1838,7 @@ class TestAccountRoutes:
                 "method": "LOCAL",
                 "code": "UC07-T-STU",
                 "firstName": "Teacher",
-                "lastName": "Reset Student",
+                "lastName": "Resetstudent",
                 "password": "StartPass123!",
                 "confirmPassword": "StartPass123!",
             },
@@ -1759,3 +1854,159 @@ class TestAccountRoutes:
         assert payload["targetRole"] == Role.STUDENT
         assert payload["resetCode"].startswith("RESET-")
         assert "expiresAt" in payload
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+class TestListStudents:
+    """USER-UC-05: List students endpoint for staff management."""
+
+    URL = "/api/v1/users/students"
+
+    @staticmethod
+    def _enroll_student(student_user, teacher_user, course_name="Test Course", status_val=None):
+        """Create a course and enroll the student with the given status (default ACTIVE)."""
+        tp = TeacherProfile.objects.get(user=teacher_user)
+        course = Course.objects.create(name=course_name, teacher_profile=tp)
+        sp = student_user.student_profile
+        enrollment_status = status_val if status_val is not None else EnrollmentStatus.ACTIVE
+        Enrollment.objects.create(course=course, student_profile=sp, status=enrollment_status)
+        return course
+
+    def test_USER_UC_05_RESEARCHER(self, api_client, researcher_user, teacher_user, student_user):
+        """Researcher can list students; response has count + results with student id."""
+        self._enroll_student(student_user, teacher_user, course_name="Researcher List Course")
+        api_client.force_authenticate(user=researcher_user)
+        response = api_client.get(self.URL)
+        assert response.status_code == 200
+        payload = response.json()
+        assert "count" in payload
+        assert "results" in payload
+        student_ids = {entry["id"] for entry in payload["results"]}
+        assert student_user.id in student_ids
+
+    def test_USER_UC_05_ADMIN(self, api_client, admin_user, teacher_user, student_user):
+        """Admin can list students."""
+        self._enroll_student(student_user, teacher_user, course_name="Admin List Course")
+        api_client.force_authenticate(user=admin_user)
+        response = api_client.get(self.URL)
+        assert response.status_code == 200
+        payload = response.json()
+        assert "count" in payload
+        assert "results" in payload
+        student_ids = {entry["id"] for entry in payload["results"]}
+        assert student_user.id in student_ids
+
+    def test_USER_UC_05_E1(self, api_client, teacher_user, student_user):
+        """Teacher gets 403 when attempting to list students."""
+        self._enroll_student(student_user, teacher_user, course_name="Forbidden Course")
+        api_client.force_authenticate(user=teacher_user)
+        response = api_client.get(self.URL)
+        assert response.status_code == 403
+
+    def test_USER_UC_05_search(self, api_client, researcher_user, teacher_user, student_user):
+        """q param filters student list by name/username substring."""
+        self._enroll_student(student_user, teacher_user, course_name="Search Course")
+        api_client.force_authenticate(user=researcher_user)
+
+        # Search by a substring of the student's name
+        name_fragment = student_user.name[:3]
+        response = api_client.get(self.URL, {"q": name_fragment})
+        assert response.status_code == 200
+        student_ids = {entry["id"] for entry in response.json()["results"]}
+        assert student_user.id in student_ids
+
+        # Search by a nonsense string returns no results
+        response_empty = api_client.get(self.URL, {"q": "zzzznonexistentzzzz"})
+        assert response_empty.status_code == 200
+        assert response_empty.json()["count"] == 0
+
+    def test_USER_UC_05_course_filter(
+        self, api_client, researcher_user, teacher_user, student_user, admin_user
+    ):
+        """courseId param returns only students enrolled in that course."""
+        course_a = self._enroll_student(
+            student_user, teacher_user, course_name="Filter Course A"
+        )
+
+        # Create a second student NOT in course_a
+        other_student = User.objects.create_user(
+            username="other-student-filter",
+            name="Other Filter Student",
+            password="StartPass123!",
+        )
+        UserRole.objects.create(user=other_student, role=Role.STUDENT)
+        StudentProfile.objects.create(user=other_student, created_by=admin_user, consent=False)
+        tp = TeacherProfile.objects.get(user=teacher_user)
+        course_b = Course.objects.create(name="Filter Course B", teacher_profile=tp)
+        sp_other = other_student.student_profile
+        Enrollment.objects.create(
+            course=course_b, student_profile=sp_other, status=EnrollmentStatus.ACTIVE
+        )
+
+        api_client.force_authenticate(user=researcher_user)
+        response = api_client.get(self.URL, {"courseId": course_a.id})
+        assert response.status_code == 200
+        result_ids = {entry["id"] for entry in response.json()["results"]}
+        assert student_user.id in result_ids
+        assert other_student.id not in result_ids
+
+    def test_USER_UC_05_courses_in_response(
+        self, api_client, researcher_user, teacher_user, student_user
+    ):
+        """Each student result includes their active course enrollments as courses: [{id, name}]."""
+        course = self._enroll_student(
+            student_user, teacher_user, course_name="Enrollment Courses Test"
+        )
+        api_client.force_authenticate(user=researcher_user)
+        response = api_client.get(self.URL)
+        assert response.status_code == 200
+        results = response.json()["results"]
+        student_entry = next(
+            (entry for entry in results if entry["id"] == student_user.id), None
+        )
+        assert student_entry is not None
+        assert "courses" in student_entry
+        course_entries = student_entry["courses"]
+        assert len(course_entries) >= 1
+        course_ids = {c["id"] for c in course_entries}
+        assert course.id in course_ids
+        # Verify shape: each course has id and name
+        for c in course_entries:
+            assert "id" in c
+            assert "name" in c
+
+    def test_USER_UC_05_dropped_excluded(
+        self, api_client, researcher_user, teacher_user, admin_user
+    ):
+        """Students with ONLY DROPPED enrollments do not appear in results."""
+        # Create a student with ONLY a DROPPED enrollment
+        dropped_student = User.objects.create_user(
+            username="dropped-only-student",
+            name="Dropped Only Student",
+            password="StartPass123!",
+        )
+        UserRole.objects.create(user=dropped_student, role=Role.STUDENT)
+        StudentProfile.objects.create(
+            user=dropped_student, created_by=admin_user, consent=False
+        )
+        tp = TeacherProfile.objects.get(user=teacher_user)
+        course = Course.objects.create(name="Dropped Course", teacher_profile=tp)
+        sp = dropped_student.student_profile
+        Enrollment.objects.create(
+            course=course, student_profile=sp, status=EnrollmentStatus.DROPPED
+        )
+
+        api_client.force_authenticate(user=researcher_user)
+
+        # Default listing: dropped-only student should not appear
+        response = api_client.get(self.URL)
+        assert response.status_code == 200
+        result_ids = {entry["id"] for entry in response.json()["results"]}
+        assert dropped_student.id not in result_ids
+
+        # courseId filter: dropped-only student should not appear either
+        response_filtered = api_client.get(self.URL, {"courseId": course.id})
+        assert response_filtered.status_code == 200
+        filtered_ids = {entry["id"] for entry in response_filtered.json()["results"]}
+        assert dropped_student.id not in filtered_ids

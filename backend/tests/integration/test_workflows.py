@@ -97,12 +97,13 @@ class TestWorkflows:
 
         student_payload = {
             "name": "Student",
-            "courseId": course_id,
             "consent": True,
             "password": "studentpass",
         }
         step("Teacher creates student")
-        student_response = teacher_client.post("/api/v1/students/", student_payload, format="json")
+        student_response = teacher_client.post(
+            f"/api/v1/courses/{course_id}/students", student_payload, format="json"
+        )
         assert student_response.status_code == 201
         student_id = student_response.json()["id"]
         student_username = student_response.json()["username"]

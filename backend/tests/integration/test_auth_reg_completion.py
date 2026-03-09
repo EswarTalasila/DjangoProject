@@ -30,6 +30,9 @@ from accounts.services import (
 )
 from courses.models import Course, Enrollment, EnrollmentStatus
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestAuthRegCompletion:
@@ -823,7 +826,7 @@ class TestAuthRegCompletion:
                 "method": "LOCAL",
                 "code": "REG-UC01-E1-INVALID",
                 "firstName": "Bad",
-                "lastName": "Code User",
+                "lastName": "Codeuser",
                 "password": "StartPass123!",
                 "confirmPassword": "StartPass123!",
             },
@@ -926,7 +929,7 @@ class TestAuthRegCompletion:
                 "method": "LOCAL",
                 "code": "REG-CN03-REGISTER",
                 "firstName": "Atomic",
-                "lastName": "Failure Student",
+                "lastName": "Failurestudent",
                 "password": "StartPass123!",
                 "confirmPassword": "StartPass123!",
             },
@@ -956,7 +959,7 @@ class TestAuthRegCompletion:
             {
                 "method": "LOCAL",
                 "code": "REG-CN13-PRIMARY",
-                "firstName": "CN13",
+                "firstName": "Cnthirteen",
                 "lastName": "Student",
                 "password": "StartPass123!",
                 "confirmPassword": "StartPass123!",
@@ -1081,7 +1084,7 @@ class TestAuthRegCompletion:
         assert response.json()["count"] == 2
 
     def test_REG_UC_02_RESEARCHER_WITH_PERMISSION(self, api_client):
-        """Researcher with CREATE_RESEARCHER_CODES can generate researcher codes."""
+        """Researcher with ISSUE_RESEARCHER_REG_CODE can generate researcher codes."""
         admin = self._make_user(
             role="ADMIN",
             username="reg-uc02-admin-grant@example.com",
@@ -1095,7 +1098,7 @@ class TestAuthRegCompletion:
         SudoGrant.objects.create(
             user=researcher,
             granted_by=admin,
-            permissions=[SudoPermission.CREATE_RESEARCHER_CODES.value],
+            permissions=[SudoPermission.ISSUE_RESEARCHER_REG_CODE.value],
             can_grant_sudo=False,
         )
         api_client.force_authenticate(user=researcher)
@@ -1347,7 +1350,7 @@ class TestAuthRegCompletion:
             {"status": "ARCHIVED"},
             format="json",
         )
-        assert response.status_code == 400
+        assert response.status_code == 409
         assert "Only EXHAUSTED, EXPIRED, or REVOKED" in response.json()["detail"]
 
     def test_REG_CN_04(self, api_client, teacher_user):
@@ -1432,8 +1435,8 @@ class TestAuthRegCompletion:
             {
                 "method": "LOCAL",
                 "code": "REG-CN15-CODE",
-                "firstName": "CN15",
-                "lastName": "Existing Student",
+                "firstName": "Cnfifteen",
+                "lastName": "Existingstudent",
                 "password": "StartPass123!",
                 "confirmPassword": "StartPass123!",
             },
@@ -1457,8 +1460,8 @@ class TestAuthRegCompletion:
             {
                 "method": "LOCAL",
                 "code": "REG-CN15-CODE",
-                "firstName": "CN15",
-                "lastName": "Blocked Student",
+                "firstName": "Cnfifteen",
+                "lastName": "Blockedstudent",
                 "password": "StartPass123!",
                 "confirmPassword": "StartPass123!",
             },

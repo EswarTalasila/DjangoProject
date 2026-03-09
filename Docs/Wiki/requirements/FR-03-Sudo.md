@@ -7,6 +7,7 @@
 | **Domain** | SUDO |
 | **Applies To** | ADMIN (system role), RESEARCHER |
 | **Related Issues** | #28 (role hierarchy/sudo) |
+| **Dependencies** | FR-12 ENV (admin bootstrap for is_staff) |
 
 ---
 
@@ -18,7 +19,7 @@
 - SudoGrant lifecycle: grant, update, revoke elevated permissions for researchers
 - Permission evaluation: role-based + sudo-based authorization checks across all user management operations
 - Escalation prevention: subset-only delegation, admin-only `can_grant_sudo`, no cross-space escalation
-- Permission enum: CREATE_TEACHER, CREATE_STUDENT, CREATE_RESEARCHER_CODES, EDIT_USER, DELETE_USER, ISSUE_STUDENT_RESET_CODE, ISSUE_RESEARCHER_RESET_CODE
+- Permission enum: CREATE_TEACHER, CREATE_STUDENT, CREATE_RESEARCHER_CODES, EDIT_USER, DELETE_USER, ISSUE_STUDENT_RESET_CODE, ISSUE_RESEARCHER_RESET_CODE, VIEW_IDENTIFIABLE_VIZ, EXPORT_IDENTIFIABLE
 - Issuer-based reset authority expansion for researchers via sudo flags (no reset-request workflow)
 - Researcher capabilities without sudo (read-only data oversight)
 
@@ -28,6 +29,11 @@
 - Grant expiration / time-bounded sudo (future enhancement)
 - System-wide grant listing endpoint for admin dashboard (future enhancement)
 - Delegation chain tracking / grant ancestry (future enhancement)
+
+### Core Intent
+- Define explicit role hierarchy with admin as a system role separate from user roles.
+- Enable fine-grained permission delegation via SudoGrant without full admin access.
+- Prevent privilege escalation through subset-only delegation and non-transitive can_grant_sudo.
 
 ---
 
@@ -134,45 +140,7 @@
 - Trigger: Teacher or student calls grant endpoint
 - Behavior: 403 from `IsResearcherOrAdmin` permission class
 
-**Tests:**
-
-**Backend Unit:**
-- test_SUDO_UC_01 (aggregator)
-- test_SUDO_UC_01_ADMIN
-- test_SUDO_UC_01_RESEARCHER
-- test_SUDO_UC_01_E1
-- test_SUDO_UC_01_E2
-- test_SUDO_UC_01_E3
-- test_SUDO_UC_01_E4
-- test_SUDO_UC_01_E5
-- test_SUDO_UC_01_E6
-- test_SUDO_UC_01_E7
-- test_SUDO_UC_01_E8
-- test_SUDO_CN_03 (escalation prevention)
-- test_SUDO_CN_05 (admin-only can_grant_sudo)
-- test_SUDO_CN_06 (permission enum validation)
-- test_SUDO_CN_08 (update-on-regranting)
-
-**Frontend Unit:**
-- N/A (backend-only domain behavior)
-
-**Backend Integration:**
-- test_SUDO_UC_01_admin_grant_flow
-- test_SUDO_UC_01_researcher_delegate_flow
-- test_SUDO_UC_01_escalation_blocked
-
-**Frontend Integration:**
-- N/A (no dedicated FR-03 UI flow yet)
-
-**Security:**
-- test_SUDO_UC_01_non_admin_cannot_grant_sudo
-
-**E2E (Playwright):**
-- N/A (no dedicated FR-03 wireframes/pages yet)
-
-**System Tests (Black Box):**
-- ST-SUDO-UC-01
-- ST-SUDO-UC-01-E2
+**Tests (representative):** test_SUDO_UC_01, test_SUDO_UC_01_ADMIN, test_SUDO_UC_01_RESEARCHER, test_SUDO_UC_01_E1–E8, test_SUDO_CN_03, test_SUDO_CN_05, test_SUDO_CN_06, test_SUDO_CN_08; ST-SUDO-UC-01, ST-SUDO-UC-01-E2
 
 ---
 
@@ -214,35 +182,7 @@
 - Trigger: Teacher or student calls revoke endpoint
 - Behavior: 403 from `IsResearcherOrAdmin` permission class
 
-**Tests:**
-
-**Backend Unit:**
-- test_SUDO_UC_02 (aggregator)
-- test_SUDO_UC_02_ADMIN
-- test_SUDO_UC_02_RESEARCHER
-- test_SUDO_UC_02_E1
-- test_SUDO_UC_02_E2
-- test_SUDO_UC_02_E3
-
-**Frontend Unit:**
-- N/A (backend-only domain behavior)
-
-**Backend Integration:**
-- test_SUDO_UC_02_admin_revoke_flow
-- test_SUDO_UC_02_researcher_revoke_own
-- test_SUDO_UC_02_researcher_revoke_other_blocked
-
-**Frontend Integration:**
-- N/A (no dedicated FR-03 UI flow yet)
-
-**Security:**
-- N/A (covered by backend role/ownership tests for this UC)
-
-**E2E (Playwright):**
-- N/A (no dedicated FR-03 wireframes/pages yet)
-
-**System Tests (Black Box):**
-- ST-SUDO-UC-02
+**Tests (representative):** test_SUDO_UC_02, test_SUDO_UC_02_ADMIN, test_SUDO_UC_02_RESEARCHER, test_SUDO_UC_02_E1–E3; ST-SUDO-UC-02
 
 ---
 
@@ -287,34 +227,7 @@
 - Trigger: Creator lacks the necessary role or sudo permission for the requested target role
 - Behavior: 403 Forbidden
 
-**Tests:**
-
-**Backend Unit:**
-- test_SUDO_UC_03 (aggregator — role matrix)
-- test_SUDO_UC_03_ADMIN
-- test_SUDO_UC_03_RESEARCHER (no sudo)
-- test_SUDO_UC_03_RESEARCHER_CREATE_TEACHER
-- test_SUDO_UC_03_RESEARCHER_CREATE_STUDENT
-- test_SUDO_UC_03_TEACHER
-- test_SUDO_UC_03_E1
-
-**Frontend Unit:**
-- N/A (backend-only authorization matrix)
-
-**Backend Integration:**
-- N/A (covered by user-creation integration tests in FR-04 domain)
-
-**Frontend Integration:**
-- N/A (no dedicated FR-03 UI flow yet)
-
-**Security:**
-- N/A (covered by backend role/sudo gate tests for this UC)
-
-**E2E (Playwright):**
-- N/A (no dedicated FR-03 wireframes/pages yet)
-
-**System Tests (Black Box):**
-- ST-SUDO-UC-03
+**Tests (representative):** test_SUDO_UC_03, test_SUDO_UC_03_ADMIN, test_SUDO_UC_03_RESEARCHER, test_SUDO_UC_03_RESEARCHER_CREATE_TEACHER, test_SUDO_UC_03_RESEARCHER_CREATE_STUDENT, test_SUDO_UC_03_TEACHER, test_SUDO_UC_03_E1; ST-SUDO-UC-03
 
 ---
 
@@ -364,33 +277,7 @@
 - Behavior: 403 Forbidden
 - Constraint: SUDO-CN-04
 
-**Tests:**
-
-**Backend Unit:**
-- test_SUDO_UC_04 (aggregator — role matrix)
-- test_SUDO_UC_04_ADMIN
-- test_SUDO_UC_04_RESEARCHER_EDIT_USER
-- test_SUDO_UC_04_TEACHER (own students)
-- test_SUDO_UC_04_E1
-- test_SUDO_UC_04_E2
-
-**Frontend Unit:**
-- N/A (backend-only authorization matrix)
-
-**Backend Integration:**
-- N/A (covered by user-edit integration tests in FR-04 domain)
-
-**Frontend Integration:**
-- N/A (no dedicated FR-03 UI flow yet)
-
-**Security:**
-- N/A (covered by backend role/sudo gate tests for this UC)
-
-**E2E (Playwright):**
-- N/A (no dedicated FR-03 wireframes/pages yet)
-
-**System Tests (Black Box):**
-- ST-SUDO-UC-04
+**Tests (representative):** test_SUDO_UC_04, test_SUDO_UC_04_ADMIN, test_SUDO_UC_04_RESEARCHER_EDIT_USER, test_SUDO_UC_04_TEACHER, test_SUDO_UC_04_E1, test_SUDO_UC_04_E2; ST-SUDO-UC-04
 
 ---
 
@@ -430,32 +317,7 @@
 - Trigger: Deleter lacks the necessary role or sudo permission for the target user
 - Behavior: 403 Forbidden
 
-**Tests:**
-
-**Backend Unit:**
-- test_SUDO_UC_05 (aggregator — role matrix)
-- test_SUDO_UC_05_ADMIN
-- test_SUDO_UC_05_RESEARCHER_DELETE_USER
-- test_SUDO_UC_05_TEACHER (own students)
-- test_SUDO_UC_05_E1
-
-**Frontend Unit:**
-- N/A (backend-only authorization matrix)
-
-**Backend Integration:**
-- N/A (covered by user-delete integration tests in FR-04 domain)
-
-**Frontend Integration:**
-- N/A (no dedicated FR-03 UI flow yet)
-
-**Security:**
-- N/A (covered by backend role/sudo gate tests for this UC)
-
-**E2E (Playwright):**
-- N/A (no dedicated FR-03 wireframes/pages yet)
-
-**System Tests (Black Box):**
-- ST-SUDO-UC-05
+**Tests (representative):** test_SUDO_UC_05, test_SUDO_UC_05_ADMIN, test_SUDO_UC_05_RESEARCHER_DELETE_USER, test_SUDO_UC_05_TEACHER, test_SUDO_UC_05_E1; ST-SUDO-UC-05
 
 ---
 
@@ -528,6 +390,8 @@
 | `DELETE_USER` | Delete teacher and student accounts | `DELETE /api/v1/users/{user_id}` |
 | `ISSUE_STUDENT_RESET_CODE` | Allow researcher to issue reset codes for students (outside teacher-owned course flow) | `POST /api/v1/auth/password-reset-codes` (target role STUDENT) |
 | `ISSUE_RESEARCHER_RESET_CODE` | Allow researcher to issue reset codes for other researchers | `POST /api/v1/auth/password-reset-codes` (target role RESEARCHER) |
+| `VIEW_IDENTIFIABLE_VIZ` | Allow researcher to view identifiable fields (courseId, courseName, assignmentId, assessmentTitle) in visualization responses | `GET /api/v1/visualizations/*` (FR-09 VIZ-CN-01) |
+| `EXPORT_IDENTIFIABLE` | Allow researcher to export identifiable fields (studentId, studentName, courseId, etc.) in CSV exports when `identifiable=true` query param is set | `GET /api/v1/exports/*` (FR-10 EXP-CN-01) |
 
 - Default role behavior (no sudo permission required): researcher can issue teacher reset codes; teacher can issue student reset codes in owned courses.
 - **Applies to:** SUDO-UC-03, SUDO-UC-04, SUDO-UC-05
@@ -560,50 +424,11 @@
 
 ---
 
-## 6) Permission Check Flow
+## 6) Infrastructure Contract
 
-### Evaluation Order
+### 6.1 Endpoint Contract
 
-```
-1. Is user.is_staff?
-   → Yes: Admin-level access (within admin scope; cannot target other admins)
-   → No: Continue
-
-2. Is user a RESEARCHER with SudoGrant?
-   → Yes: Check if specific SudoPermission is in grant.permissions
-     → Permission present: Elevated access for that action
-     → Permission absent: Denied
-   → No SudoGrant: Researcher-level access only (read-heavy, assessment management)
-
-3. Is user a TEACHER?
-   → Teacher-level access (own students via enrollment)
-
-4. Is user a STUDENT?
-   → Student-level access (own data only)
-```
-
-### Creation Hierarchy
-
-```
-Admin seeds → Researchers (via ensure_admin + create_user)
-Researchers seed → Teachers (via sudo CREATE_TEACHER or registration codes)
-Teachers seed → Students (via create_user or registration codes)
-```
-
-### SudoGrant Lifecycle
-
-```
-[No Grant] → Grant Created (admin or authorized researcher)
-                → Grant Updated (re-grant with new permissions)
-                → Grant Revoked (admin or grant creator)
-                   → [No Grant]
-```
-
----
-
-## 7) Endpoints
-
-### Sudo Grant Management
+#### Sudo Grant Management
 
 | Method | Path | Auth | UC |
 |--------|------|------|----|
@@ -629,7 +454,7 @@ Teachers seed → Students (via create_user or registration codes)
 
 **DELETE response (204):** no body
 
-### Affected Endpoints (Permission Enforcement)
+#### Affected Endpoints (Permission Enforcement)
 
 These endpoints are defined in other FR domains but enforce sudo permission checks defined by this spec:
 
@@ -647,9 +472,46 @@ Notes:
 - `IsTeacherOrAbove` guards user management endpoints; checks `is_staff`, `RESEARCHER`, or `TEACHER` role.
 - Individual permission functions (`can_create_user`, `can_edit_user`, `can_delete_user`) perform the fine-grained sudo checks within these views.
 
----
+### 6.2 Permission Check Flow
 
-## 8) DRF Permission Classes
+#### Evaluation Order
+
+```
+1. Is user.is_staff?
+   → Yes: Admin-level access (within admin scope; cannot target other admins)
+   → No: Continue
+
+2. Is user a RESEARCHER with SudoGrant?
+   → Yes: Check if specific SudoPermission is in grant.permissions
+     → Permission present: Elevated access for that action
+     → Permission absent: Denied
+   → No SudoGrant: Researcher-level access only (read-heavy, assessment management)
+
+3. Is user a TEACHER?
+   → Teacher-level access (own students via enrollment)
+
+4. Is user a STUDENT?
+   → Student-level access (own data only)
+```
+
+#### Creation Hierarchy
+
+```
+Admin seeds → Researchers (via ensure_admin + create_user)
+Researchers seed → Teachers (via sudo CREATE_TEACHER or registration codes)
+Teachers seed → Students (via create_user or registration codes)
+```
+
+#### SudoGrant Lifecycle
+
+```
+[No Grant] → Grant Created (admin or authorized researcher)
+                → Grant Updated (re-grant with new permissions)
+                → Grant Revoked (admin or grant creator)
+                   → [No Grant]
+```
+
+### 6.3 DRF Permission Classes
 
 The following DRF permission classes enforce role-based access control across all API endpoints. They are defined in `core/permissions.py` and used with the `@permission_classes` decorator.
 
@@ -671,23 +533,23 @@ The following DRF permission classes enforce role-based access control across al
 | `has_any_role(user, roles)` | `→ bool` | Check if user has any of the specified roles |
 | `has_sudo_permission(user, perm)` | `→ bool` | Check if user is a sudoed researcher with the given permission |
 
----
+### 6.4 Data Model
 
-## 9) Data Model
-
-### SudoPermission Enum
+#### SudoPermission Enum
 
 ```
 CREATE_TEACHER    — Create teacher accounts
 CREATE_STUDENT    — Create student accounts
 CREATE_RESEARCHER_CODES — Generate researcher registration codes
 EDIT_USER         — Edit user accounts (within user role space)
-DELETE_USER       — Delete user accounts (within user role space)
+DELETE_USER        — Delete user accounts (within user role space)
 ISSUE_STUDENT_RESET_CODE — Researcher can issue reset codes for students (sudo extension)
 ISSUE_RESEARCHER_RESET_CODE — Researcher can issue reset codes for researchers (sudo extension)
+VIEW_IDENTIFIABLE_VIZ — Researcher can view identifiable fields in visualization data (FR-09)
+EXPORT_IDENTIFIABLE — Researcher can export identifiable fields in CSV exports (FR-10)
 ```
 
-### SudoGrant Model
+#### SudoGrant Model
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -702,9 +564,7 @@ ISSUE_RESEARCHER_RESET_CODE — Researcher can issue reset codes for researchers
 
 **Validation:** `SudoGrant.clean()` validates that all values in `permissions` are valid `SudoPermission` choices.
 
----
-
-## 10) Wireframe Mapping
+### 6.5 Wireframe Mapping
 
 No wireframes have been created for FR-03 sudo management. The grant and revoke operations are admin/researcher dashboard features that will be designed when the admin panel wireframes are created.
 
@@ -716,7 +576,109 @@ No wireframes have been created for FR-03 sudo management. The grant and revoke 
 
 ---
 
-## 11) Cross-Domain References
+## 7) Error Model
+
+| Scenario | Behavior | Contract |
+|----------|----------|----------|
+| Grantee not a researcher | Must have RESEARCHER role | `400` |
+| Escalation attempt (granting unheld permissions) | Cannot grant permissions you don't hold | `403` |
+| Researcher sets can_grant_sudo=True | Only admins can set can_grant_sudo | `403` |
+| Granter not authorized (no can_grant_sudo) | can_grant_sudo=False | `403` |
+| Missing required user_id | Missing field | `400` |
+| User not found | Not found | `404` |
+| Invalid permission values | Validation error from clean() | `400` |
+| Non-researcher/non-admin attempts grant | Permission class rejection | `403` |
+| Grant not found (revoke) | Not found | `404` |
+| Unauthorized revocation (not grant creator) | Can only revoke grants you created | `403` |
+| Non-researcher/non-admin attempts revoke | Permission class rejection | `403` |
+| Insufficient permission for user creation | Forbidden | `403` |
+| Insufficient permission for user edit | Forbidden | `403` |
+| Admin target blocked in edit | Forbidden | `403` |
+| Insufficient permission for user delete | Forbidden | `403` |
+
+---
+
+## 8) Test Strategy by Layer
+
+**Naming Convention:** `test_SUDO_UC_nn[_ROLE|_En]`, `test_SUDO_CN_nn`, `ST-SUDO-UC-nn`
+
+### Backend Unit
+
+- test_SUDO_UC_01 (aggregator)
+- test_SUDO_UC_01_ADMIN
+- test_SUDO_UC_01_RESEARCHER
+- test_SUDO_UC_01_E1
+- test_SUDO_UC_01_E2
+- test_SUDO_UC_01_E3
+- test_SUDO_UC_01_E4
+- test_SUDO_UC_01_E5
+- test_SUDO_UC_01_E6
+- test_SUDO_UC_01_E7
+- test_SUDO_UC_01_E8
+- test_SUDO_CN_03 (escalation prevention)
+- test_SUDO_CN_05 (admin-only can_grant_sudo)
+- test_SUDO_CN_06 (permission enum validation)
+- test_SUDO_CN_08 (update-on-regranting)
+- test_SUDO_UC_02 (aggregator)
+- test_SUDO_UC_02_ADMIN
+- test_SUDO_UC_02_RESEARCHER
+- test_SUDO_UC_02_E1
+- test_SUDO_UC_02_E2
+- test_SUDO_UC_02_E3
+- test_SUDO_UC_03 (aggregator — role matrix)
+- test_SUDO_UC_03_ADMIN
+- test_SUDO_UC_03_RESEARCHER (no sudo)
+- test_SUDO_UC_03_RESEARCHER_CREATE_TEACHER
+- test_SUDO_UC_03_RESEARCHER_CREATE_STUDENT
+- test_SUDO_UC_03_TEACHER
+- test_SUDO_UC_03_E1
+- test_SUDO_UC_04 (aggregator — role matrix)
+- test_SUDO_UC_04_ADMIN
+- test_SUDO_UC_04_RESEARCHER_EDIT_USER
+- test_SUDO_UC_04_TEACHER (own students)
+- test_SUDO_UC_04_E1
+- test_SUDO_UC_04_E2
+- test_SUDO_UC_05 (aggregator — role matrix)
+- test_SUDO_UC_05_ADMIN
+- test_SUDO_UC_05_RESEARCHER_DELETE_USER
+- test_SUDO_UC_05_TEACHER (own students)
+- test_SUDO_UC_05_E1
+
+### Backend Integration
+
+- test_SUDO_UC_01_admin_grant_flow
+- test_SUDO_UC_01_researcher_delegate_flow
+- test_SUDO_UC_01_escalation_blocked
+- test_SUDO_UC_02_admin_revoke_flow
+- test_SUDO_UC_02_researcher_revoke_own
+- test_SUDO_UC_02_researcher_revoke_other_blocked
+
+### Security
+
+- test_SUDO_UC_01_non_admin_cannot_grant_sudo
+
+### System Tests (Black Box)
+
+- ST-SUDO-UC-01
+- ST-SUDO-UC-01-E2
+- ST-SUDO-UC-02
+- ST-SUDO-UC-03
+- ST-SUDO-UC-04
+- ST-SUDO-UC-05
+
+---
+
+## 9) NFR Cross-References
+
+| Constraint | NFR | Rationale |
+|-----------|-----|-----------|
+| SUDO-CN-03 (no escalation) | NFR-SEC-08 (Least Privilege) | Subset-only delegation ensures researchers cannot grant permissions beyond what they hold |
+| SUDO-CN-04 (admin/user space separation) | NFR-SEC-08 (Least Privilege) | Sudo operates exclusively within user role space; admin accounts are protected from sudo-elevated operations |
+| SUDO-CN-01 (role hierarchy) | NFR-PRIV-01 (FERPA-Compliant Data Access Controls) | Role hierarchy ensures users can only access data appropriate to their role level |
+
+---
+
+## 10) Cross-Domain References
 
 FR-03 defines the permission model that other FR domains reference:
 
@@ -726,11 +688,13 @@ FR-03 defines the permission model that other FR domains reference:
 | FR-02 REG | REG-CN-10 references role hierarchy + sudo for code generation | `CREATE_STUDENT` and `CREATE_RESEARCHER_CODES` sudo expand researcher code generation scope |
 | FR-05 CRS | Course visibility uses role hierarchy | Researcher read access to all courses (defined in FR-05) |
 | FR-06 ASMT | Assessment CRUD uses role hierarchy | Researcher full access to assessments (defined in FR-06) |
+| FR-09 VIZ | VIZ-CN-01 uses `VIEW_IDENTIFIABLE_VIZ` sudo to gate researcher access to identifiable fields | `has_sudo_permission(user, VIEW_IDENTIFIABLE_VIZ)` controls anonymization in VIZ endpoints |
+| FR-10 EXP | EXP-CN-01 uses `EXPORT_IDENTIFIABLE` sudo to gate researcher access to identifiable fields in CSV exports | `has_sudo_permission(user, EXPORT_IDENTIFIABLE)` + explicit `identifiable=true` query param required |
 | FR-12 ENV | Admin bootstrap creates system admin | `ensure_admin` sets `is_staff=True` without user role |
 
 ---
 
-## 12) Implementation Notes
+## 11) Current Implementation Alignment Notes
 
 ### Permission Wiring Status
 

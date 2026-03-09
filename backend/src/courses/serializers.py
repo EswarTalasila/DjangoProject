@@ -43,6 +43,18 @@ class CourseInputSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255)
 
 
+class StudentNestedInputSerializer(StrictFieldsSerializer):
+    """
+    Validates student creation payloads for the nested course endpoint.
+
+    courseId comes from the URL path parameter, not the request body.
+    """
+
+    name = serializers.CharField(max_length=255)
+    consent = serializers.BooleanField(required=False)
+    password = serializers.CharField(required=False, allow_blank=True, trim_whitespace=False)
+
+
 class CourseOutputSerializer(serializers.Serializer):
     """
     Formats course data for API responses.

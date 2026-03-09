@@ -1,114 +1,87 @@
-"""
-Assessment domain helpers.
-
-This module provides business logic for managing assessment templates including:
-- Creating assessments with various question types
-- Converting assessments to DTOs for API responses
-- Managing rubric relationships between assessments
-
-Assessment types by grading mode:
-- AUTO: All questions are auto-gradable (MCQ, number scale)
-- MANUAL: All questions require teacher grading
-- HYBRID: Mix of auto-gradable and manual questions
-- RUBRIC: Assessment serves as a rubric for other assessments
-- MOOD_METER: Special check-in assessment with grid selection
-
-Question types:
-- MULTIPLE_CHOICE: Select one or more choices with point values
-- SHORT_ANSWER: Free text response (manual grading)
-- NUMBER_SCALE: Numeric value within a range
-- MOOD_METER: Row/column grid selection for emotional check-ins
-"""
+"""Assessment domain helpers."""
 
 from collections.abc import Iterable
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
+from django.utils import timezone
 
 from accounts.models import User
 from assignments.models import Assignment
-from core.dtos import AssessmentDTO, QuestionDTO
+from core.dtos import AssessmentDTO, QuestionDTO, QuestionGroupDTO
+
+from core.lifecycle import ConflictError
 
 from .models import (
     Assessment,
+    AssessmentQuestionGroup,
+    AssessmentStatus,
     GradingMode,
+    GradingStrategy,
     McqChoice,
-    MoodMeterLabel,
-    MoodMeterQuestion,
     MultipleChoiceQuestion,
     NumberScaleQuestion,
     Question,
     QuestionKind,
+    ScoringPolicy,
     ShortAnswerQuestion,
 )
 
 
+class AssessmentReferencedError(Exception):
+    """Raised when a mutation is blocked because assignments reference the assessment."""
+
+
 def assessment_to_dto(assessment: Assessment) -> AssessmentDTO:
-    """
-    Convert an Assessment to a full DTO including all questions.
-
-    Args:
-        assessment: The Assessment model instance
-
-    Returns:
-        AssessmentDTO with id, title, category, gradingMode, questions,
-        rubricId, and rubricAssessmentIds.
-    """
+    groups = []
+    for g in assessment.question_groups.all().order_by("order_index"):
+        groups.append(
+            QuestionGroupDTO(
+                id=g.id,
+                name=g.name,
+                rubricId=g.rubric_id,
+                orderIndex=g.order_index,
+            )
+        )
     return AssessmentDTO(
         id=assessment.id,
         title=assessment.title,
         category=assessment.category,
         gradingMode=assessment.grading_mode,
+        scoringPolicy=assessment.scoring_policy,
         questions=[question_to_dto(q) for q in assessment.questions.all()],
-        rubricId=assessment.rubric_id,
-        rubricAssessmentIds=assessment.rubric_assessment_ids or [],
+        questionGroups=groups,
     )
 
 
 def question_to_dto(question: Question) -> QuestionDTO:
-    """
-    Convert a Question to a DTO, handling all question types.
-
-    The data field structure varies by question type:
-    - MULTIPLE_CHOICE: {"choices": [...], "selectAll": bool, "correctAnswers": []}
-    - SHORT_ANSWER: {"caseSensitive": bool, "trim": bool}
-    - NUMBER_SCALE: {"min": int, "max": int, "target": int}
-    - MOOD_METER: {"labels": [str]}
-
-    Args:
-        question: The Question model instance
-
-    Returns:
-        QuestionDTO with questionId, id, type, prompt, maxPoints, autoGradable, graded,
-        and type-specific data
-    """
     data: dict | None = None
     select_all = None
     min_value = None
     max_value = None
-    if question.kind == QuestionKind.MULTIPLE_CHOICE:
-        choices = [
-            {"prompt": choice.choice_text, "score": choice.points}
-            for choice in question.mcq_choices.all()
-        ]
-        select_all = question.multiple_choice.select_all
-        data = {"choices": choices, "selectAll": select_all, "correctAnswers": []}
-    elif question.kind == QuestionKind.SHORT_ANSWER:
-        data = {
-            "caseSensitive": question.short_answer.case_sensitive,
-            "trim": question.short_answer.trim,
-        }
-    elif question.kind == QuestionKind.NUMBER_SCALE:
-        min_value = question.number_scale.min
-        max_value = question.number_scale.max
-        data = {
-            "min": min_value,
-            "max": max_value,
-            "target": question.number_scale.target,
-        }
-    elif question.kind == QuestionKind.MOOD_METER:
-        data = {
-            "labels": [label.label for label in question.mood_meter_labels.all()],
-        }
+    try:
+        if question.kind == QuestionKind.MULTIPLE_CHOICE:
+            choices = [
+                {"prompt": choice.choice_text, "score": choice.points}
+                for choice in question.mcq_choices.all()
+            ]
+            select_all = question.multiple_choice.select_all
+            data = {"choices": choices, "selectAll": select_all, "correctAnswers": []}
+        elif question.kind == QuestionKind.SHORT_ANSWER:
+            data = {
+                "caseSensitive": question.short_answer.case_sensitive,
+                "trim": question.short_answer.trim,
+            }
+        elif question.kind == QuestionKind.NUMBER_SCALE:
+            min_value = question.number_scale.min
+            max_value = question.number_scale.max
+            data = {
+                "min": min_value,
+                "max": max_value,
+                "target": question.number_scale.target,
+            }
+    except ObjectDoesNotExist:
+        pass
 
     return QuestionDTO(
         questionId=question.id,
@@ -122,153 +95,177 @@ def question_to_dto(question: Question) -> QuestionDTO:
         min=min_value,
         max=max_value,
         data=data,
+        groupId=question.question_group_id,
+        rubricId=question.rubric_id,
+        gradingStrategy=question.grading_strategy,
     )
 
 
 @transaction.atomic
 def create_assessment(request_user: User, payload: dict) -> Assessment:
-    """
-    Create a new assessment template.
-
-    For MOOD_METER assessments, delegates to create_mood_meter_assessment which
-    creates a special single-question assessment.
-
-    For other types, creates the assessment and all its questions based on the
-    payload. Also applies rubric links if the assessment is of RUBRIC type.
-
-    Args:
-        request_user: The admin creating the assessment
-        payload: Dict with title, gradingMode, questions, category, rubricId, rubricAssessmentIds
-
-    Returns:
-        The created Assessment
-    """
     grading_mode = payload.get("gradingMode")
+    scoring_policy = payload.get("scoringPolicy", ScoringPolicy.STANDARD)
     title = payload.get("title")
     if not grading_mode:
         raise ValueError("gradingMode is required")
     if not title:
         raise ValueError("title is required")
-    if grading_mode == GradingMode.MOOD_METER:
-        return create_mood_meter_assessment(request_user, payload)
+
+    questions_payload = payload.get("questions") or []
 
     assessment = Assessment.objects.create(
         title=title,
         grading_mode=grading_mode,
+        scoring_policy=scoring_policy,
         created_by_admin=request_user,
-        rubric_id=payload.get("rubricId"),
-        rubric_assessment_ids=payload.get("rubricAssessmentIds") or [],
         category=payload.get("category"),
     )
-    _replace_questions(assessment, payload.get("questions") or [])
-    _apply_rubric_links(assessment)
+    group_map = _create_question_groups(assessment, payload.get("questionGroups") or [])
+    _replace_questions(assessment, questions_payload, group_map)
+    _validate_rubric_rules(assessment)
     return assessment
 
-
-def create_mood_meter_assessment(request_user: User, payload: dict) -> Assessment:
-    """
-    Create a mood meter assessment with a pre-configured question.
-
-    Mood meter assessments are special check-in assessments that allow students
-    to select how they're feeling on a grid. They always have exactly one
-    question with a default prompt.
-
-    Args:
-        request_user: The admin creating the assessment
-        payload: Dict with title and category
-
-    Returns:
-        The created Assessment with its mood meter question
-    """
-    title = payload.get("title")
-    if not title:
-        raise ValueError("title is required")
-    assessment = Assessment.objects.create(
-        title=title,
-        grading_mode=GradingMode.MOOD_METER,
-        created_by_admin=request_user,
-        rubric_id=None,
-        rubric_assessment_ids=[],
-        category=payload.get("category"),
-    )
-    question = Question.objects.create(
-        assessment=assessment,
-        question_type=QuestionKind.MOOD_METER,
-        kind=QuestionKind.MOOD_METER,
-        prompt="How are you feeling today?",
-        max_points=0.0,
-        auto_gradable=False,
-        graded=False,
-    )
-    MoodMeterQuestion.objects.create(question=question)
-    return assessment
 
 
 @transaction.atomic
 def update_assessment(assessment: Assessment, payload: dict) -> Assessment:
-    """
-    Update an existing assessment, replacing all questions.
+    if Assignment.objects.filter(assessment=assessment).exists():
+        raise AssessmentReferencedError("Cannot update assessment referenced by assignments")
 
-    Note: This replaces all questions, which can invalidate existing submissions
-    if question IDs change. Consider locking assessments after submissions exist.
+    grading_mode = payload.get("gradingMode", assessment.grading_mode)
+    scoring_policy = payload.get("scoringPolicy", assessment.scoring_policy)
+    questions_payload = payload.get("questions") or []
 
-    Args:
-        assessment: The Assessment to update
-        payload: Dict with title, category, gradingMode, questions, rubricId, rubricAssessmentIds
-
-    Returns:
-        The updated Assessment
-    """
     assessment.title = payload.get("title", assessment.title)
     assessment.category = payload.get("category")
-    assessment.grading_mode = payload.get("gradingMode", assessment.grading_mode)
-    assessment.rubric_id = payload.get("rubricId")
-    assessment.rubric_assessment_ids = payload.get("rubricAssessmentIds") or []
+    assessment.grading_mode = grading_mode
+    assessment.scoring_policy = scoring_policy
     assessment.save()
-    _replace_questions(assessment, payload.get("questions") or [])
-    _apply_rubric_links(assessment)
+
+    # Replace question groups
+    AssessmentQuestionGroup.objects.filter(assessment=assessment).delete()
+    group_map = _create_question_groups(assessment, payload.get("questionGroups") or [])
+    _replace_questions(assessment, questions_payload, group_map)
+    _validate_rubric_rules(assessment)
     return assessment
 
 
 @transaction.atomic
 def delete_assessment(assessment: Assessment) -> None:
-    """
-    Delete an assessment and all associated assignments.
-
-    Note: This is a hard delete. Consider implementing soft delete for auditability.
-    """
-    Assignment.objects.filter(assessment=assessment).delete()
+    if Assignment.objects.filter(assessment=assessment).exists():
+        raise AssessmentReferencedError("Cannot delete assessment referenced by assignments")
     assessment.delete()
 
 
-def list_assessments() -> list[Assessment]:
-    """Return all assessments in the system."""
-    return list(Assessment.objects.all())
+def list_assessments(include_archived: bool = False) -> list[Assessment]:
+    """List assessments. By default only ACTIVE; set include_archived=True for all."""
+    qs = Assessment.objects.all()
+    if not include_archived:
+        qs = qs.filter(status=AssessmentStatus.ACTIVE)
+    return list(qs)
 
 
-def _replace_questions(assessment: Assessment, questions: Iterable[dict]) -> None:
-    """Delete all existing questions and create new ones from payloads."""
+@transaction.atomic
+def archive_assessment(request_user: User, assessment: Assessment) -> Assessment:
+    """ARCH-UC-01: Archive an assessment template."""
+    if assessment.status == AssessmentStatus.ARCHIVED:
+        raise ConflictError("Assessment is already archived.")
+    assessment.status = AssessmentStatus.ARCHIVED
+    assessment.archived_at = timezone.now()
+    assessment.archived_by = request_user
+    assessment.save(update_fields=["status", "archived_at", "archived_by"])
+    return assessment
+
+
+@transaction.atomic
+def restore_assessment(request_user: User, assessment: Assessment) -> Assessment:
+    """ARCH-UC-04: Restore an archived assessment."""
+    if assessment.status != AssessmentStatus.ARCHIVED:
+        raise ConflictError("Assessment is not archived.")
+    assessment.status = AssessmentStatus.ACTIVE
+    assessment.archived_at = None
+    assessment.archived_by = None
+    assessment.restored_at = timezone.now()
+    assessment.restored_by = request_user
+    assessment.save(update_fields=["status", "archived_at", "archived_by", "restored_at", "restored_by"])
+    return assessment
+
+
+@transaction.atomic
+def purge_assessment(assessment: Assessment) -> None:
+    """ARCH-UC-06: Hard-delete an archived assessment. Admin-only."""
+    if assessment.status != AssessmentStatus.ARCHIVED:
+        raise ConflictError("Only archived assessments can be purged.")
+    if Assignment.objects.filter(assessment=assessment).exists():
+        raise ConflictError("Cannot purge: assessment has associated assignments.")
+    assessment.delete()
+
+
+def _create_question_groups(
+    assessment: Assessment, groups: list[dict]
+) -> dict[str, AssessmentQuestionGroup]:
+    """Create question groups and return a map from clientKey to model instance."""
+    from rubrics.models import Rubric, RubricStatus
+
+    group_map: dict[str, AssessmentQuestionGroup] = {}
+    for idx, g in enumerate(groups):
+        rubric_id = g.get("rubricId")
+        if rubric_id:
+            rubric = Rubric.objects.filter(id=rubric_id).first()
+            if not rubric:
+                raise ValueError(f"Rubric {rubric_id} not found")
+            if rubric.status == RubricStatus.ARCHIVED:
+                raise ValueError(f"Cannot attach archived rubric {rubric_id}")
+        group = AssessmentQuestionGroup.objects.create(
+            assessment=assessment,
+            name=g.get("name", f"Group {idx + 1}"),
+            rubric_id=rubric_id,
+            order_index=g.get("orderIndex", idx),
+        )
+        client_key = g.get("clientKey", str(idx))
+        group_map[client_key] = group
+    return group_map
+
+
+def _replace_questions(
+    assessment: Assessment,
+    questions: Iterable[dict],
+    group_map: dict[str, AssessmentQuestionGroup] | None = None,
+) -> None:
     Question.objects.filter(assessment=assessment).delete()
     for question_payload in questions:
-        _create_question(assessment, question_payload)
+        _create_question(assessment, question_payload, group_map or {})
 
 
-def _create_question(assessment: Assessment, payload: dict) -> Question:
-    """
-    Create a Question with its type-specific configuration.
+def _create_question(
+    assessment: Assessment,
+    payload: dict,
+    group_map: dict[str, AssessmentQuestionGroup],
+) -> Question:
+    from rubrics.models import Rubric, RubricStatus
 
-    Each question type has a related model for its settings:
-    - MULTIPLE_CHOICE -> MultipleChoiceQuestion + McqChoice records
-    - SHORT_ANSWER -> ShortAnswerQuestion
-    - NUMBER_SCALE -> NumberScaleQuestion with min/max/target
-    - MOOD_METER -> MoodMeterQuestion + MoodMeterLabel records
-    """
     kind = payload.get("type")
     if not kind:
         raise ValueError("Question type is required")
     prompt = payload.get("prompt")
     if not prompt:
         raise ValueError("Question prompt is required")
+
+    # Resolve question group
+    group_key = payload.get("groupClientKey")
+    question_group = group_map.get(group_key) if group_key else None
+
+    # Resolve per-question rubric
+    rubric_id = payload.get("rubricId")
+    if rubric_id:
+        rubric = Rubric.objects.filter(id=rubric_id).first()
+        if not rubric:
+            raise ValueError(f"Rubric {rubric_id} not found")
+        if rubric.status == RubricStatus.ARCHIVED:
+            raise ValueError(f"Cannot attach archived rubric {rubric_id}")
+
+    grading_strategy = payload.get("gradingStrategy", GradingStrategy.AUTO)
+
     question = Question.objects.create(
         assessment=assessment,
         question_type=kind,
@@ -277,6 +274,9 @@ def _create_question(assessment: Assessment, payload: dict) -> Question:
         max_points=payload.get("maxPoints") or 0,
         auto_gradable=kind in (QuestionKind.MULTIPLE_CHOICE, QuestionKind.NUMBER_SCALE),
         graded=False,
+        question_group=question_group,
+        rubric_id=rubric_id,
+        grading_strategy=grading_strategy,
     )
     data = payload.get("data") or {}
 
@@ -309,28 +309,34 @@ def _create_question(assessment: Assessment, payload: dict) -> Question:
             max=max_value,
             target=data.get("target"),
         )
-    elif kind == QuestionKind.MOOD_METER:
-        MoodMeterQuestion.objects.create(question=question)
-        for label in data.get("labels", []):
-            MoodMeterLabel.objects.create(question=question, label=label)
-
     return question
 
 
-def _apply_rubric_links(assessment: Assessment) -> None:
-    """
-    Link this rubric assessment to its target assessments.
+def _validate_rubric_rules(assessment: Assessment) -> None:
+    """Validate rubric linkage rules based on grading mode."""
+    mode = assessment.grading_mode
+    questions = assessment.questions.all()
 
-    When an assessment is of type RUBRIC, it can be linked to other assessments
-    to provide grading criteria. This function updates the rubric_id field on
-    all target assessments listed in rubric_assessment_ids.
-    """
-    if assessment.grading_mode != GradingMode.RUBRIC:
-        return
-    if not assessment.rubric_assessment_ids:
-        return
-    for assessment_id in assessment.rubric_assessment_ids:
-        target = Assessment.objects.filter(id=assessment_id).first()
-        if target:
-            target.rubric_id = assessment.id
-            target.save(update_fields=["rubric_id"])
+    for q in questions:
+        has_rubric = q.rubric_id is not None or (
+            q.question_group and q.question_group.rubric_id is not None
+        )
+        strategy = q.grading_strategy
+
+        if mode == GradingMode.AUTO:
+            if has_rubric:
+                raise ValueError("AUTO mode does not allow rubric linkage")
+        elif mode == GradingMode.MANUAL:
+            if not has_rubric:
+                raise ValueError(
+                    f"MANUAL question '{q.prompt[:30]}' must have a rubric"
+                )
+        elif mode == GradingMode.HYBRID:
+            if strategy == GradingStrategy.MANUAL and not has_rubric:
+                raise ValueError(
+                    f"HYBRID question '{q.prompt[:30]}' with MANUAL strategy must have a rubric"
+                )
+            if strategy == GradingStrategy.AUTO and has_rubric:
+                raise ValueError(
+                    f"HYBRID question '{q.prompt[:30]}' with AUTO strategy must not have a rubric"
+                )

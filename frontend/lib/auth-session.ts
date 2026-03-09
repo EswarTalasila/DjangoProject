@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 export type SessionProfile = {
   id: string;
@@ -9,8 +10,23 @@ export type SessionProfile = {
   isStaff: boolean;
 };
 
-const VALID_ROLES = ["TEACHER", "RESEARCHER", "STUDENT"] as const;
+export type SudoCapabilities = {
+  hasSudo: boolean;
+  canGrantSudo: boolean;
+  permissions: string[];
+  isStaff: boolean;
+};
 
+const VALID_ROLES = ["ADMIN", "TEACHER", "RESEARCHER", "STUDENT"] as const;
+
+const EMPTY_SUDO_CAPABILITIES: SudoCapabilities = {
+  hasSudo: false,
+  canGrantSudo: false,
+  permissions: [],
+  isStaff: false,
+};
+
+/** Resolve the API base URL for server-side fetches, preferring PROXY_TARGET when localhost is configured. */
 function resolveApiBaseUrl() {
   const configured = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
   try {
@@ -28,7 +44,10 @@ function resolveApiBaseUrl() {
   }
 }
 
-export async function getSessionProfile(): Promise<SessionProfile | null> {
+// React cache() deduplicates calls within the same server render pass.
+// The dashboard layout and SidebarWrapper both call getSessionProfile(),
+// so without this they'd fire two separate /auth/me requests per navigation.
+export const getSessionProfile = cache(async (): Promise<SessionProfile | null> => {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get("access_token")?.value;
   if (!accessToken) return null;
@@ -38,7 +57,7 @@ export async function getSessionProfile(): Promise<SessionProfile | null> {
     response = await fetch(`${resolveApiBaseUrl()}/auth/me`, {
       method: "GET",
       headers: { Authorization: `Bearer ${accessToken}` },
-      cache: "no-store",
+      next: { revalidate: 30 },
     });
   } catch {
     return null;
@@ -52,4 +71,32 @@ export async function getSessionProfile(): Promise<SessionProfile | null> {
   }
 
   return profile;
-}
+});
+
+/** GET /api/v1/sudo-grants/me — Fetch the current user's sudo capabilities (cached per render pass). */
+export const getSudoCapabilities = cache(async (): Promise<SudoCapabilities | null> => {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get("access_token")?.value;
+  if (!accessToken) return null;
+
+  let response: Response;
+  try {
+    response = await fetch(`${resolveApiBaseUrl()}/sudo-grants/me`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      cache: 'no-store',
+    });
+  } catch {
+    return EMPTY_SUDO_CAPABILITIES;
+  }
+
+  if (!response.ok) return EMPTY_SUDO_CAPABILITIES;
+
+  const data = (await response.json()) as Partial<SudoCapabilities>;
+  return {
+    hasSudo: Boolean(data.hasSudo),
+    canGrantSudo: Boolean(data.canGrantSudo),
+    permissions: Array.isArray(data.permissions) ? data.permissions : [],
+    isStaff: Boolean(data.isStaff),
+  };
+});

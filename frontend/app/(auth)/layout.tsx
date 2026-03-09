@@ -8,7 +8,7 @@ export default function AuthLayout({
   return (
     <div className="h-screen w-full lg:grid lg:grid-cols-2">
       {/* LEFT SIDE: Branding & Visuals (Hidden on mobile) */}
-      <div className="hidden bg-green-800 lg:flex flex-col justify-between p-10 text-white">
+      <div className="hidden bg-[#2a8a42] lg:flex flex-col justify-between p-10 text-white">
         
         {/* Logo Area */}
         <div className="flex items-center gap-2 text-lg font-bold">

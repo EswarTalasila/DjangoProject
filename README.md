@@ -31,16 +31,18 @@ git clone <repository-url>
 cd <repository-name>
 ```
 
-2. Copy the environment template and configure values:
+2. Initialize profile env files:
 ```bash
-cp .env.template .env
+task env:init
 ```
 
-Edit `.env` and set at minimum:
+Edit profile files under `env/` and set required values:
 ```env
-ENVIRONMENT=development
+# env/.env.development
 POSTGRES_PASSWORD=your-secure-password
 DJANGO_SECRET_KEY=your-secure-random-string
+
+# env/.env.production
 GOOGLE_CLIENT_ID=your-google-oauth-client-id
 GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-oauth-client-id
@@ -66,16 +68,13 @@ docker compose exec backend python src/manage.py createsuperuser
 - Backend API: http://localhost:8000/api/v1/
 - Django Admin: http://localhost:8000/admin/
 
-### Docker Services
+### Docker Services by Profile
 
-| Service        | Port | Description                                       |
-|----------------|------|---------------------------------------------------|
-| `frontend`     | 3000 | Nextjs dev server                                 |
-| `backend`      | 8000 | Django REST API                                   |
-| `database`     | 5432 | PostgreSQL 17                                     |
-| `pgadmin`      | 5050 | Database management UI (auto-connects to database)|
-| `nginx`        | 80   | Reverse proxy (production routing)                |
-| `frontend-e2e` | -    | Playwright E2E test runner with headless Chromium |
+| Profile | Services |
+|---------|----------|
+| `development` | `database`, `backend`, `frontend` |
+| `testing` | `database`, `backend`, `frontend`, `pgadmin`, `otel-collector`, `jaeger` |
+| `production` | `database`, `backend-prod`, `frontend-prod`, `nginx-prod` |
 
 ### Roles and Workflows
 - Admin: creates assessments and manages users.
@@ -174,6 +173,8 @@ Run `task help` for a grouped command guide or `task list` for the raw list. Key
 | `task help`                | Show grouped command guide                 |
 | `task list`                | Show raw task list (alphanumeric sort)     |
 | `task list:json`           | Show task list in JSON                     |
+| `task env:init`            | Create missing profile env files from templates |
+| `task env:reset`           | Overwrite profile env files from templates |
 | `task up`                  | Start all services                         |
 | `task up:dev`              | Start services in development profile       |
 | `task up:test`             | Start services in testing profile + auto-seed |
@@ -504,14 +505,27 @@ npm run dev
 │   ├── Wiki/                # Active FR/NFR/testing docs and indexes
 │   └── diagrams/            # PlantUML and OpenTelemetry diagrams
 ├── Deployment/templates/    # Docker and CI/CD templates
+├── env/                     # Profile env templates and runtime env files
 ├── scripts/                 # Utility scripts
 ├── docker-compose.yml       # Development container orchestration
-└── .env.template            # Environment variable reference
+└── .env.template            # Compatibility env reference (see env/)
 ```
 
 ## Environment Variables
 
-See `.env.template` for the full list. Key variables:
+Profile templates live in `env/`:
+
+- `env/.env.development.template`
+- `env/.env.testing.template`
+- `env/.env.production.template`
+
+Runtime files (gitignored):
+
+- `env/.env.development`
+- `env/.env.testing`
+- `env/.env.production`
+
+Key variables:
 
 | Variable                       | Description                                  | Required   |
 |--------------------------------|----------------------------------------------|------------|

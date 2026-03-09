@@ -4,6 +4,9 @@ import pytest
 
 from accounts.models import OAuthAccount, OAuthProvider, Role, User, UserRole
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.django_db
 class TestAuthErrors:

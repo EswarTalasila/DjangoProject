@@ -7,7 +7,7 @@ from core.permissions import primary_role
 from ..models import Role, SudoGrant, SudoPermission, User
 
 NON_DELEGABLE_PERMISSIONS = {
-    SudoPermission.CREATE_RESEARCHER_CODES.value,
+    SudoPermission.ISSUE_RESEARCHER_REG_CODE.value,
 }
 
 

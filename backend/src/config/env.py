@@ -20,6 +20,8 @@ class EnvSettings(BaseSettings):
         env_ignore_empty=True,
         # Extra fields are ignored (allows unrelated env vars)
         extra="ignore",
+        # Allow both field names and validation aliases in constructors
+        populate_by_name=True,
     )
 
     # Runtime profile signal
@@ -37,6 +39,21 @@ class EnvSettings(BaseSettings):
         default=None,
         validation_alias="DJANGO_DEBUG",
         description="Optional debug override (development only)",
+    )
+    django_secure_ssl_redirect: bool | None = Field(
+        default=None,
+        validation_alias="DJANGO_SECURE_SSL_REDIRECT",
+        description="Optional SSL redirect override (defaults true in production).",
+    )
+    django_session_cookie_secure: bool | None = Field(
+        default=None,
+        validation_alias="DJANGO_SESSION_COOKIE_SECURE",
+        description="Optional session cookie secure override (defaults true in production).",
+    )
+    django_csrf_cookie_secure: bool | None = Field(
+        default=None,
+        validation_alias="DJANGO_CSRF_COOKIE_SECURE",
+        description="Optional CSRF cookie secure override (defaults true in production).",
     )
     django_allowed_hosts: str = Field(
         default="localhost,127.0.0.1",
@@ -94,6 +111,18 @@ class EnvSettings(BaseSettings):
         description="Local trace file path (development/testing only)",
     )
 
+    # Image upload settings (FR-15)
+    img_allow_unscanned_uploads: bool = Field(
+        default=False,
+        validation_alias="IMG_ALLOW_UNSCANNED_UPLOADS",
+        description="Allow uploads without scanner in production (auto-promote to READY).",
+    )
+    media_root: str = Field(
+        default="",
+        validation_alias="MEDIA_ROOT",
+        description="Filesystem path for media storage. Defaults to BASE_DIR/media.",
+    )
+
     @property
     def is_development(self) -> bool:
         return self.environment == "development"
@@ -133,14 +162,20 @@ class EnvSettings(BaseSettings):
 
     @property
     def ssl_redirect_enabled(self) -> bool:
+        if self.django_secure_ssl_redirect is not None:
+            return bool(self.django_secure_ssl_redirect)
         return self.is_production
 
     @property
     def session_cookie_secure(self) -> bool:
+        if self.django_session_cookie_secure is not None:
+            return bool(self.django_session_cookie_secure)
         return self.is_testing or self.is_production
 
     @property
     def csrf_cookie_secure(self) -> bool:
+        if self.django_csrf_cookie_secure is not None:
+            return bool(self.django_csrf_cookie_secure)
         return self.is_testing or self.is_production
 
     @property
@@ -167,18 +202,34 @@ class EnvSettings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_runtime_contract(self) -> "EnvSettings":
-        """Fail fast for unsafe production configuration."""
+        """Fail fast for unsafe production configuration (ENV-UC-02, ENV-CN-02).
+
+        Aggregates all violations in one pass per ENV-CN-02 before raising.
+        """
         if not self.is_production:
             return self
 
-        self._validate_debug_override()
-        self._validate_secret_key()
-        self._validate_admin_bootstrap()
-        self._validate_allowed_hosts()
-        self._validate_cors()
-        self._validate_database_url()
-        self._validate_oauth()
-        self._validate_otel_export_policy()
+        violations: list[str] = []
+        for validator in [
+            self._validate_debug_override,
+            self._validate_secret_key,
+            self._validate_admin_bootstrap,
+            self._validate_allowed_hosts,
+            self._validate_cors,
+            self._validate_database_url,
+            self._validate_oauth,
+            self._validate_otel_export_policy,
+        ]:
+            try:
+                validator()
+            except ValueError as exc:
+                violations.append(str(exc))
+
+        if violations:
+            report = "; ".join(violations)
+            raise ValueError(
+                f"Production startup blocked — {len(violations)} violation(s): {report}"
+            )
         return self
 
     def _validate_secret_key(self) -> None:

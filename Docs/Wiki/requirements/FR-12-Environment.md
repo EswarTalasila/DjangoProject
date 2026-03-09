@@ -2,11 +2,12 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | DRAFT |
-| **Date** | 2026-02-11 |
+| **Status** | READY |
+| **Date** | 2026-02-28 |
 | **Domain** | ENV |
 | **Applies To** | ADMIN (bootstrap/deployment), ALL (runtime behavior) |
 | **Related Issues** | #30 (environment profile system), #29 (auth/registration integration), #32 (observability controls) |
+| **Dependencies** | FR-13 INFRA (Docker Compose and Taskfile pass `ENVIRONMENT` to backend service) |
 
 ---
 
@@ -57,8 +58,8 @@
 
 ### ENV-UC-01 — Configure Runtime Profile
 
-**Roles:** ALL  
-**Preconditions:** Application process starts with environment variables loaded.  
+**Roles:** ALL
+**Preconditions:** Application process starts with environment variables loaded.
 **Trigger:** Runtime configuration initializes.
 
 **Main Flow:**
@@ -70,19 +71,20 @@
 **Postcondition:** A single, validated runtime profile is available to all environment-dependent behavior.
 
 **Role Coverage:**
-> **ENV-UC-01-ALL**  
+> **ENV-UC-01-ALL**
 > - Infrastructure-level behavior; identical for all roles.
 
 **Errors:**
-**ENV-UC-01-E1** — Invalid profile value  
-- Trigger: Unsupported `ENVIRONMENT` value  
+**ENV-UC-01-E1** — Invalid profile value
+- Trigger: Unsupported `ENVIRONMENT` value
 - Behavior: Startup rejected with clear error showing valid values
 
 **Tests:**
 **Backend Unit:**
-- test_ENV_UC_01
-- test_ENV_UC_01_E1
-- test_ENV_CN_01
+- test_ENV_UC_01_accepts_valid_profiles
+- test_ENV_UC_01_default_profile_is_development
+- test_ENV_UC_01_E1_rejects_invalid_profile
+- test_ENV_CN_01_environment_controls_profile_properties
 
 **Backend Integration:**
 - test_ENV_UC_01_runtime_profile_wiring
@@ -95,8 +97,8 @@
 
 ### ENV-UC-02 — Validate Production Configuration (Fail Fast)
 
-**Roles:** ALL  
-**Preconditions:** `ENVIRONMENT=production`.  
+**Roles:** ALL
+**Preconditions:** `ENVIRONMENT=production`.
 **Trigger:** Startup validator runs before app serves requests.
 
 **Main Flow:**
@@ -108,25 +110,27 @@
 **Postcondition:** Production either starts securely or does not start at all.
 
 **Role Coverage:**
-> **ENV-UC-02-ALL**  
+> **ENV-UC-02-ALL**
 > - Infrastructure-level behavior; identical for all roles.
 
 **Errors:**
-**ENV-UC-02-E1** — Insecure production secrets/config  
-- Trigger: Weak/default secret key, debug enabled, unsafe DB defaults, missing required OAuth values  
+**ENV-UC-02-E1** — Insecure production secrets/config
+- Trigger: Weak/default secret key, debug enabled, unsafe DB defaults, missing required OAuth values
 - Behavior: Startup blocked with violation list
 
-**ENV-UC-02-E2** — Missing production hardening setting  
-- Trigger: Required production safety flags absent  
+**ENV-UC-02-E2** — Missing production hardening setting
+- Trigger: Required production safety flags absent
 - Behavior: Startup blocked with explicit missing-key report
 
 **Tests:**
 **Backend Unit:**
-- test_ENV_UC_02
-- test_ENV_UC_02_E1
-- test_ENV_UC_02_E2
-- test_ENV_CN_02
-- test_ENV_CN_10
+- test_ENV_UC_02_dev_testing_skip_validation
+- test_ENV_UC_02_production_passes_with_valid_config
+- test_ENV_UC_02_E1_debug_enabled
+- test_ENV_UC_02_E1_weak_secret_key
+- test_ENV_UC_02_E2_aggregates_all_violations
+- test_ENV_CN_02_all_violations_aggregated_in_one_pass
+- test_ENV_CN_10_missing_client_id_blocks_production
 
 **Backend Integration:**
 - test_ENV_UC_02_production_boot_guard
@@ -140,8 +144,8 @@
 
 ### ENV-UC-03 — Bootstrap Admin in All Profiles
 
-**Roles:** ADMIN  
-**Preconditions:** Admin bootstrap command available.  
+**Roles:** ADMIN
+**Preconditions:** Admin bootstrap command available.
 **Trigger:** `ensure_admin` runs on startup or by explicit command.
 
 **Main Flow:**
@@ -155,25 +159,25 @@
 **Postcondition:** Exactly one bootstrap admin exists; creation is idempotent and profile-safe.
 
 **Role Coverage:**
-> **ENV-UC-03-ADMIN**  
+> **ENV-UC-03-ADMIN**
 > - Admin-only operational flow.
 
 **Errors:**
-**ENV-UC-03-E1** — Production default credential rejection  
-- Trigger: Placeholder/default bootstrap credentials in production  
+**ENV-UC-03-E1** — Production default credential rejection
+- Trigger: Placeholder/default bootstrap credentials in production
 - Behavior: Command exits with explicit rejection
 
-**ENV-UC-03-E2** — Bootstrap password policy failure  
-- Trigger: Password fails required policy  
+**ENV-UC-03-E2** — Bootstrap password policy failure
+- Trigger: Password fails required policy
 - Behavior: Command exits with policy error details
 
 **Tests:**
 **Backend Unit:**
-- test_ENV_UC_03_ADMIN
-- test_ENV_UC_03_E1
-- test_ENV_UC_03_E2
-- test_ENV_CN_04
-- test_ENV_CN_05
+- test_ENV_UC_03_ADMIN_creates_admin_with_django_flags
+- test_ENV_UC_03_E1_production_default_credentials_rejected
+- test_ENV_UC_03_E2_password_policy_failure
+- test_ENV_CN_04_production_password_denylist
+- test_ENV_CN_05_idempotent_ensure_admin
 
 **Backend Integration:**
 - test_ENV_UC_03_idempotent_bootstrap
@@ -188,8 +192,8 @@
 
 ### ENV-UC-04 — Control Seed Data by Profile
 
-**Roles:** ADMIN  
-**Preconditions:** Seed command exists and database reachable.  
+**Roles:** ADMIN
+**Preconditions:** Seed command exists and database reachable.
 **Trigger:** Seed operation requested.
 
 **Main Flow:**
@@ -201,19 +205,19 @@
 **Postcondition:** Seed behavior follows profile policy; no accidental production seed.
 
 **Role Coverage:**
-> **ENV-UC-04-ADMIN**  
+> **ENV-UC-04-ADMIN**
 > - Admin/developer operational command flow.
 
 **Errors:**
-**ENV-UC-04-E1** — Production seed blocked  
-- Trigger: Seed command invoked in production  
+**ENV-UC-04-E1** — Production seed blocked
+- Trigger: Seed command invoked in production
 - Behavior: Command rejects operation with guard message
 
 **Tests:**
 **Backend Unit:**
-- test_ENV_UC_04_ADMIN
-- test_ENV_UC_04_E1
-- test_ENV_CN_06
+- test_ENV_UC_04_ADMIN_seed_runs_in_dev
+- test_ENV_UC_04_E1_production_seed_blocked
+- test_ENV_CN_06_weak_secret_blocked_in_production
 
 **Backend Integration:**
 - test_ENV_UC_04_testing_auto_seed
@@ -227,8 +231,8 @@
 
 ### ENV-UC-05 — Gate API Docs and Debug Tooling by Profile
 
-**Roles:** ALL  
-**Preconditions:** URL/router configuration loads at startup.  
+**Roles:** ALL
+**Preconditions:** URL/router configuration loads at startup.
 **Trigger:** Runtime URL map builds.
 
 **Main Flow:**
@@ -240,19 +244,20 @@
 **Postcondition:** API docs/debug exposure matches profile security posture.
 
 **Role Coverage:**
-> **ENV-UC-05-ALL**  
+> **ENV-UC-05-ALL**
 > - Infrastructure-level behavior; identical for all roles.
 
 **Errors:**
-**ENV-UC-05-E1** — Production docs/debug exposure detected  
-- Trigger: Protected docs/debug route available in production  
+**ENV-UC-05-E1** — Production docs/debug exposure detected
+- Trigger: Protected docs/debug route available in production
 - Behavior: Startup/config validation fails
 
 **Tests:**
 **Backend Unit:**
-- test_ENV_UC_05
-- test_ENV_UC_05_E1
-- test_ENV_CN_07
+- test_ENV_UC_05_api_docs_enabled_in_development
+- test_ENV_UC_05_debug_toolbar_only_in_development
+- test_ENV_UC_05_E1_api_docs_disabled_in_production
+- test_ENV_CN_07_seed_production_blocked
 
 **Backend Integration:**
 - test_ENV_UC_05_route_gating_by_profile
@@ -265,8 +270,8 @@
 
 ### ENV-UC-06 — Manage Secrets and Tracing by Profile
 
-**Roles:** ADMIN  
-**Preconditions:** Secret and telemetry settings are configured.  
+**Roles:** ADMIN
+**Preconditions:** Secret and telemetry settings are configured.
 **Trigger:** Runtime initialization and deployment setup.
 
 **Main Flow:**
@@ -280,25 +285,25 @@
 **Postcondition:** Secrets, OAuth, and tracing policies are profile-correct and explicit.
 
 **Role Coverage:**
-> **ENV-UC-06-ADMIN**  
+> **ENV-UC-06-ADMIN**
 > - Admin/deployment operational flow.
 
 **Errors:**
-**ENV-UC-06-E1** — Missing required OAuth config  
-- Trigger: Required OAuth env values absent  
+**ENV-UC-06-E1** — Missing required OAuth config
+- Trigger: Required OAuth env values absent
 - Behavior: startup/config validation error
 
-**ENV-UC-06-E2** — Secret management policy violation  
-- Trigger: Production secret handling not meeting policy requirements  
+**ENV-UC-06-E2** — Secret management policy violation
+- Trigger: Production secret handling not meeting policy requirements
 - Behavior: startup/deploy validation error
 
 **Tests:**
 **Backend Unit:**
-- test_ENV_UC_06_ADMIN
-- test_ENV_UC_06_E1
-- test_ENV_UC_06_E2
-- test_ENV_CN_08
-- test_ENV_CN_09
+- test_ENV_UC_06_ADMIN_tracing_defaults_by_profile
+- test_ENV_UC_06_E1_missing_oauth_blocks_production
+- test_ENV_UC_06_E2_otel_enabled_without_endpoint
+- test_ENV_CN_08_production_session_security
+- test_ENV_CN_09_default_admin_email_blocked
 
 **Backend Integration:**
 - test_ENV_UC_06_tracing_mode_by_profile
@@ -384,7 +389,9 @@
 
 ---
 
-## 6) Behavior by Environment (Reference)
+## 6) Infrastructure Contract
+
+### 6.1 Behavior by Environment (Reference)
 
 | Capability | Development | Testing | Production |
 |---|---|---|---|
@@ -398,13 +405,11 @@
 | Tracing default | Configurable | Enabled | Disabled (opt-in) |
 | Secret management hardening | Optional local flow | Optional test flow | Required hardened flow |
 
----
-
-## 7) Environment Variable Contract (`.env.template`)
+### 6.2 Environment Variable Contract (`.env.template`)
 
 This section defines the canonical environment key contract to freeze before implementation cleanup.
 
-### Core profile keys (required)
+#### Core profile keys (required)
 
 | Key | development | testing | production | Notes |
 |---|---|---|---|---|
@@ -414,7 +419,7 @@ This section defines the canonical environment key contract to freeze before imp
 | `DJANGO_ALLOWED_HOSTS` | required | required | required | Comma-separated |
 | `DJANGO_CORS_ALLOWED_ORIGINS` | required | required | required | Comma-separated |
 
-### OAuth keys (required by policy)
+#### OAuth keys (required by policy)
 
 | Key | development | testing | production | Notes |
 |---|---|---|---|---|
@@ -423,7 +428,7 @@ This section defines the canonical environment key contract to freeze before imp
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | required | required | required | Frontend Google SDK |
 | `NEXT_PUBLIC_API_URL` | required | required | required | Frontend API base URL |
 
-### Admin bootstrap keys
+#### Admin bootstrap keys
 
 | Key | development | testing | production | Notes |
 |---|---|---|---|---|
@@ -431,7 +436,7 @@ This section defines the canonical environment key contract to freeze before imp
 | `ADMIN_EMAIL` | required | required | required | Used by `ensure_admin` |
 | `ADMIN_PASSWORD` | required | required | required | Production strict policy |
 
-### Observability keys
+#### Observability keys
 
 | Key | development | testing | production | Notes |
 |---|---|---|---|---|
@@ -441,7 +446,7 @@ This section defines the canonical environment key contract to freeze before imp
 | `OTEL_EXPORTER_OTLP_HEADERS` | optional | optional | optional | Export headers |
 | `OTEL_TRACE_FILE` | optional | optional | optional | Local trace export file |
 
-### Docker/compose support keys
+#### Docker/compose support keys
 
 | Key | development | testing | production | Notes |
 |---|---|---|---|---|
@@ -449,7 +454,7 @@ This section defines the canonical environment key contract to freeze before imp
 | `POSTGRES_USER` | required (compose) | required (compose) | required (compose) | Compose database service |
 | `POSTGRES_PASSWORD` | required (compose) | required (compose) | required (compose) | Compose database service |
 
-### E2E/testing keys
+#### E2E/testing keys
 
 | Key | development | testing | production | Notes |
 |---|---|---|---|---|
@@ -459,27 +464,13 @@ This section defines the canonical environment key contract to freeze before imp
 
 E2E identity keys (`E2E_ADMIN_*`, `E2E_TEACHER_*`, `E2E_STUDENT_*`) are supported as overrides but are not required in `.env.template`; deterministic seed defaults remain the baseline path.
 
-### Keys to deprecate from template
+#### Keys to deprecate from template
 
 - `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` (use `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`)
 - `JWT_SECRET_KEY`, `JWT_EXPIRATION_HOURS`, `JWT_REFRESH_EXPIRATION_DAYS` (not currently used by Django settings)
 - `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE` as env keys (currently controlled by profile/settings logic, not env ingestion)
 
----
-
-## 8) Test Naming Summary
-
-Use v5 naming from `Requirements-Index.md` and `Testing-Index.md`:
-
-- Domain aggregator: `test_ENV_UC_##`
-- Role test: `test_ENV_UC_##_ADMIN` (or `_ALL` split by relevant role in implementation)
-- Error test: `test_ENV_UC_##_E#`
-- Constraint test: `test_ENV_CN_##`
-- System tests: `ST-ENV-UC-##` and `ST-ENV-UC-##-E#`
-
----
-
-## 9) Diagnostics Code Contract
+### 6.3 Diagnostics Code Contract
 
 Environment diagnostics are part of FR-12 acceptance behavior.
 
@@ -497,3 +488,118 @@ Code ownership:
 - `profile_guard.py` owns `ENV-P*` diagnostics.
 
 This contract is required so Task output, CI logs, and requirements tracing stay consistent as checks expand.
+
+---
+
+## 7) Error Model
+
+ENV errors are configuration-level. They manifest as startup failures or command rejections, not HTTP error responses to end users.
+
+| Scenario | Behavior | Source |
+|----------|----------|--------|
+| Invalid `ENVIRONMENT` value | Startup rejected; valid values listed in error | ENV-UC-01-E1 |
+| Weak/default secret key, debug enabled, unsafe DB defaults | Startup blocked with consolidated violation list | ENV-UC-02-E1 |
+| Required production safety flags absent | Startup blocked with explicit missing-key report | ENV-UC-02-E2 |
+| Placeholder/default bootstrap credentials in production | `ensure_admin` exits with explicit rejection | ENV-UC-03-E1 |
+| Bootstrap password fails policy (length, denylist) | `ensure_admin` exits with policy error details | ENV-UC-03-E2 |
+| Seed command invoked in production | Command rejects operation with guard message | ENV-UC-04-E1 |
+| Protected docs/debug route available in production | Startup/config validation fails | ENV-UC-05-E1 |
+| Required OAuth env values absent | Startup/config validation error | ENV-UC-06-E1 |
+| Production secret handling not meeting policy | Startup/deploy validation error | ENV-UC-06-E2 |
+
+All ENV errors are deterministic configuration violations detected before the application serves traffic. No ENV error is transient or retryable — resolution requires changing the environment configuration.
+
+---
+
+## 8) Test Strategy by Layer
+
+### Naming Convention
+
+Use v5 naming from `Requirements-Index.md` and `Testing-Index.md`:
+
+- Domain aggregator: `test_ENV_UC_nn`
+- Role test: `test_ENV_UC_nn_ADMIN` (or `_ALL` split by relevant role in implementation)
+- Error test: `test_ENV_UC_nn_En`
+- Constraint test: `test_ENV_CN_nn`
+- System tests: `ST-ENV-UC-##` and `ST-ENV-UC-##-E#`
+
+### Backend Unit
+
+- Profile configuration: `ENVIRONMENT` enum validation, default fallback to `development`, rejection of invalid values (ENV-UC-01).
+- Production fail-fast: aggregated violation detection for weak secrets, debug mode, unsafe DB defaults, missing OAuth values (ENV-UC-02).
+- Bootstrap admin: idempotent creation, profile-aware credential validation, password policy enforcement, denylist checks (ENV-UC-03).
+- Seed guards: profile-based seed gating — testing auto, development manual, production blocked (ENV-UC-04).
+- Route gating: API docs/debug endpoint registration by profile (ENV-UC-05).
+- Secret/tracing policy: OAuth config presence validation, profile-aware tracing defaults (ENV-UC-06).
+- Constraint coverage: all 12 constraints (ENV-CN-01 through ENV-CN-12) have dedicated unit tests.
+
+### Backend Integration
+
+- Runtime profile wiring: settings, commands, and task wrappers consume the validated profile consistently.
+- Production boot guard: startup sequence rejects insecure configurations end-to-end.
+- Idempotent bootstrap: repeated `ensure_admin` invocations produce no side effects.
+- Profile-aware bootstrap: credential validation differs correctly across profiles.
+- Seed behavior: testing auto-seed and development manual seed operate correctly.
+- Route gating by profile: URL map includes/excludes docs endpoints based on active profile.
+- Tracing mode by profile: `effective_otel_enabled` produces correct defaults per environment.
+- OAuth validation: required OAuth env values checked at startup in production.
+
+### System Tests (Black Box)
+
+- ST-ENV-UC-01 through ST-ENV-UC-06 and their error variants (ST-ENV-UC-01-E1, ST-ENV-UC-02-E1, ST-ENV-UC-02-E2, ST-ENV-UC-03-E1, ST-ENV-UC-03-E2, ST-ENV-UC-04-E1, ST-ENV-UC-05-E1, ST-ENV-UC-06-E1, ST-ENV-UC-06-E2).
+
+---
+
+## 9) NFR Cross-References
+
+- **NFR-OPS-01** (Environment Profile System)
+  - `ENVIRONMENT` as single authoritative runtime profile selector (ENV-CN-01).
+  - Task/compose entry points explicitly set profile (ENV-CN-12).
+- **NFR-OPS-02** (Startup Validation)
+  - Production fail-fast rejects insecure/incomplete configuration before serving traffic (ENV-CN-02).
+  - OAuth config completeness enforced at startup (ENV-CN-10).
+- **NFR-OPS-03** (Secret Management)
+  - Production secrets follow encrypted-at-rest handling and key separation policy (ENV-CN-06).
+- **NFR-OPS-04** (Deployment Guards)
+  - Seed data and API docs/debug tooling gated by profile (ENV-CN-07).
+- **NFR-OPS-05** (Observability Instrumentation)
+  - Profile-driven tracing enablement policy; testing on-by-default, production opt-in (ENV-CN-11).
+- **NFR-SEC-04** (Password Strength Policy)
+  - Bootstrap admin password meets strict policy and denylist in production (ENV-CN-04).
+- **NFR-SEC-05** (Session Security)
+  - Production cookie and transport settings enforced (ENV-CN-08).
+- **NFR-SEC-06** (Credential Exposure Prevention)
+  - Production startup rejects placeholder/default secrets and unsafe defaults (ENV-CN-09).
+- **NFR-REL-02** (Idempotent Bootstrap Operations)
+  - `ensure_admin` safe for repeated execution; no duplicate admin creation (ENV-CN-05).
+
+---
+
+## 10) Cross-Domain References
+
+| FR | Reference | Notes |
+|----|-----------|-------|
+| FR-01 AUTH | OAuth config validation at startup | Production startup enforces presence of `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` for configured auth flows (ENV-UC-02, ENV-UC-06, ENV-CN-10). |
+| FR-04 USER | Seed data creates test users | `seed_e2e` creates deterministic test users with known credentials; gated by profile (ENV-UC-04, ENV-CN-07). |
+| FR-08 SUB | Seed data creates test submissions | `seed_e2e` may create test submissions for E2E fixtures; gated by profile (ENV-UC-04). |
+| FR-11 OBS | `effective_otel_enabled` tracing toggle | FR-11 consumes `effective_otel_enabled` from `env.py` to determine tracing behavior. FR-12 defines the profile-driven defaults (ENV-CN-11). Production OTel validation (`_validate_otel_export_policy`) enforces OBS-CN-06. |
+| FR-13 INFRA | Docker Compose and Taskfile `ENVIRONMENT` passthrough | FR-13 owns `docker-compose.yml` and `Taskfile.yml`; must explicitly set `ENVIRONMENT` per ENV-CN-12. Backend service environment block must include `ENVIRONMENT` variable. |
+
+---
+
+## 11) Current Implementation Alignment Notes
+
+All FR-12 items are implemented. Final state as of 2026-03-03:
+
+1. **`ENVIRONMENT` field in `config/env.py`.** DONE. `Literal["development", "testing", "production"]` with default `"development"`. Profile convenience properties (`is_development`, `is_testing`, `is_production`) derive from this single field (ENV-CN-01).
+2. **Production startup validation (aggregated).** DONE. `@model_validator` `validate_runtime_contract` collects all violations in one pass (ENV-CN-02) and raises a single consolidated error. Checks: debug override, secret key, admin bootstrap, allowed hosts, CORS, database URL, OAuth, OTel export policy.
+3. **`ensure_admin` profile-aware validation.** DONE. Reads `env.is_production`; rejects default/placeholder emails, enforces 12+ char password with denylist, validates email format, calls Django `validate_password` (ENV-CN-04, ENV-CN-05, ENV-CN-09).
+4. **`seed_e2e` production guard.** DONE. `CommandError("seed_e2e is blocked in production.")` when `env.is_production` (ENV-CN-07).
+5. **API docs gated by profile.** DONE. `config/urls.py` registers Swagger/ReDoc/schema only when `settings.ENVIRONMENT != "production"` (ENV-UC-05, ENV-CN-07).
+6. **Profile-aware tracing.** DONE. `effective_otel_enabled` and `_validate_otel_export_policy` enforce ENV-CN-11 defaults (testing=on, dev=configurable, prod=opt-in).
+7. **Diagnostics.** DONE. `env_report` management command (`core/management/commands/env_report.py`) and `profile_guard.py` (`scripts/runtime/profile_guard.py`) operational.
+8. **`.env.template` cleanup.** DONE. Template aligned with section 6.2 contract; legacy keys (`GOOGLE_OAUTH_*`, `JWT_*`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`) removed.
+
+### Deferred / Out of FR-12 Scope
+- **ENV-CN-12 Taskfile/Compose passthrough**: `docker-compose.yml` and `Taskfile.yml` already set `ENVIRONMENT` explicitly. FR-13 INFRA owns further deployment template changes.
+- **System tests (ST-ENV-*)**: Black-box system tests require a running Docker stack and are deferred to E2E test infrastructure (FR-13).

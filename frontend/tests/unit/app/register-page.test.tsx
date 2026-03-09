@@ -79,8 +79,8 @@ describe("Register page", () => {
 
     await user.type(screen.getByLabelText("First Name"), "Alex");
     await user.type(screen.getByLabelText("Last Name"), "Torres");
-    await user.type(screen.getByLabelText("Password"), "change-me-123");
-    await user.type(screen.getByLabelText("Confirm Password"), "change-me-123");
+    await user.type(screen.getByLabelText("Password"), "Change-Me-123!");
+    await user.type(screen.getByLabelText("Confirm Password"), "Change-Me-123!");
     await user.click(screen.getByRole("button", { name: "Complete Registration" }));
 
     await waitFor(() => {
@@ -92,8 +92,8 @@ describe("Register page", () => {
           code: "STU-CODE",
           firstName: "Alex",
           lastName: "Torres",
-          password: "change-me-123",
-          confirmPassword: "change-me-123",
+          password: "Change-Me-123!",
+          confirmPassword: "Change-Me-123!",
         }),
       );
     });
@@ -101,8 +101,16 @@ describe("Register page", () => {
     const secondPayload = mockApiPost.mock.calls[1][1];
     expect(secondPayload).not.toHaveProperty("name");
     expect(secondPayload).not.toHaveProperty("username");
-    expect(screen.getByText("Your Username")).toBeInTheDocument();
+    expect(mockCookiesSet).toHaveBeenCalledWith("user_name", "Alex Torres", { expires: 1 });
+
+    // Student sees username confirmation screen instead of immediate redirect
+    expect(await screen.findByText("Account Created")).toBeInTheDocument();
     expect(screen.getByText("atorres0")).toBeInTheDocument();
+    expect(screen.getByText(/Save your username/i)).toBeInTheDocument();
+
+    // Click Continue to Dashboard navigates to dashboard
+    await user.click(screen.getByRole("button", { name: /Continue to Dashboard/i }));
+    expect(mockPush).toHaveBeenCalledWith("/dashboard");
   });
 
   it("submits teacher local registration and stores display-name cookie", async () => {
@@ -138,8 +146,8 @@ describe("Register page", () => {
     await user.type(screen.getByLabelText("First Name"), "Morgan");
     await user.type(screen.getByLabelText("Last Name"), "Blake");
     await user.type(screen.getByLabelText("Email"), "mblake@example.com");
-    await user.type(screen.getByLabelText("Password"), "change-me-123");
-    await user.type(screen.getByLabelText("Confirm Password"), "change-me-123");
+    await user.type(screen.getByLabelText("Password"), "Change-Me-123!");
+    await user.type(screen.getByLabelText("Confirm Password"), "Change-Me-123!");
     await user.click(screen.getByRole("button", { name: "Complete Registration" }));
 
     await waitFor(() => {
@@ -152,8 +160,8 @@ describe("Register page", () => {
           firstName: "Morgan",
           lastName: "Blake",
           email: "mblake@example.com",
-          password: "change-me-123",
-          confirmPassword: "change-me-123",
+          password: "Change-Me-123!",
+          confirmPassword: "Change-Me-123!",
         }),
       );
     });
@@ -269,8 +277,8 @@ describe("Register page", () => {
     await user.type(screen.getByLabelText("First Name"), "Morgan");
     await user.type(screen.getByLabelText("Last Name"), "Blake");
     await user.type(screen.getByLabelText("Email"), "mblake@example.com");
-    await user.type(screen.getByLabelText("Password"), "change-me-123");
-    await user.type(screen.getByLabelText("Confirm Password"), "change-me-123");
+    await user.type(screen.getByLabelText("Password"), "Change-Me-123!");
+    await user.type(screen.getByLabelText("Confirm Password"), "Change-Me-123!");
     await user.click(screen.getByRole("button", { name: "Complete Registration" }));
 
     expect(await screen.findByText("Email is already in use.")).toBeInTheDocument();
@@ -291,7 +299,7 @@ describe("Register page", () => {
 
     await user.type(screen.getByLabelText("First Name"), "Alex");
     await user.type(screen.getByLabelText("Last Name"), "Torres");
-    await user.type(screen.getByLabelText("Password"), "change-me-123");
+    await user.type(screen.getByLabelText("Password"), "Change-Me-123!");
     await user.type(screen.getByLabelText("Confirm Password"), "different-pass");
     await user.click(screen.getByRole("button", { name: "Complete Registration" }));
 

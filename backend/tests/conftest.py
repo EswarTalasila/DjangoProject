@@ -1,6 +1,7 @@
 """Pytest fixtures for backend tests."""
 
 import pytest
+
 from django.core.cache import cache
 from rest_framework.test import APIClient
 
