@@ -37,6 +37,10 @@ jobs:
             sleep 5
           done
 
+      - name: Create media directories
+        run: |
+          docker compose exec -T backend mkdir -p /app/media/package_artifacts /app/media/snapshots /app/media/submissions /app/src/staticfiles
+
       - name: Run backend tests with coverage
         run: |
           docker compose exec -T backend python scripts/coverage/coverage_report.py \
