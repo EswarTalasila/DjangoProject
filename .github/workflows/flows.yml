@@ -18,17 +18,6 @@ jobs:
           echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" >> env/.env.development
           echo "NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}" >> env/.env.development
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-backend-${{ hashFiles('backend/Dockerfile', 'backend/pyproject.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-backend-
-
       - name: Build and start services
         run: |
           docker compose --env-file env/.env.development --profile development up -d --build
@@ -62,17 +51,6 @@ jobs:
           echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" >> env/.env.development
           echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" >> env/.env.development
           echo "NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}" >> env/.env.development
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-frontend-${{ hashFiles('frontend/Dockerfile.dev', 'frontend/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-frontend-
 
       - name: Build and start services
         run: |
