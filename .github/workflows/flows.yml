@@ -1,0 +1,39 @@
+name: flows
+
+
+on: 
+  push:
+  
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create env file
+        run: cp env/.env.development.template env/.env.development
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-backend-${{ hashFiles('backend/Dockerfile', 'backend/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-backend-
+      - name: Build and start services
+        run : |
+          docker compose --env-file env/.env.development --profile development up -d --build
+          until docker compose exec -T backend python src/manage.py check 2>/dev/null; do
+            echo "Waiting for backend ..."
+            sleep 5
+          done
+
+      - name : Run backend tests with coverage
+        run: |
+          docker compose exec -T backend python scripts/coverage/coverage_report.py \
+            --gate none --workers auto
+
+          
+
