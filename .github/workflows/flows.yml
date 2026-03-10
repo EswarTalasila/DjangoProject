@@ -1,0 +1,68 @@
+name: Tests
+
+on:
+  push:
+  workflow_dispatch:
+
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create env file
+        run: |
+          cp env/.env.development.template env/.env.development
+          echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" >> env/.env.development
+          echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" >> env/.env.development
+          echo "NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}" >> env/.env.development
+
+      - name: Build and start services
+        run: |
+          docker compose --env-file env/.env.development --profile development up -d --build
+          until docker compose exec -T backend python src/manage.py check 2>/dev/null; do
+            echo "Waiting for backend..."
+            sleep 5
+          done
+
+      - name: Create media directories
+        run: |
+          docker compose exec -T -u root backend mkdir -p /app/media/package_artifacts /app/media/snapshots /app/media/submissions /app/src/staticfiles
+          docker compose exec -T -u root backend chown -R django:django /app/media /app/src/staticfiles
+
+      - name: Run backend tests with coverage
+        run: |
+          docker compose exec -T backend python scripts/coverage/coverage_report.py \
+            --gate none --workers auto
+
+      - name: Stop services
+        if: always()
+        run: docker compose --env-file env/.env.development --profile development down
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create env file
+        run: |
+          cp env/.env.development.template env/.env.development
+          echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" >> env/.env.development
+          echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" >> env/.env.development
+          echo "NEXT_PUBLIC_GOOGLE_CLIENT_ID=${{ secrets.NEXT_PUBLIC_GOOGLE_CLIENT_ID }}" >> env/.env.development
+
+      - name: Build and start services
+        run: |
+          docker compose --env-file env/.env.development --profile development up -d --build
+          until docker compose exec -T frontend sh -c "test -x /app/node_modules/.bin/vitest"; do
+            echo "Waiting for frontend dependencies..."
+            sleep 5
+          done
+
+      - name: Run frontend tests with coverage
+        run: docker compose exec -T frontend npm run test:coverage
+
+      - name: Stop services
+        if: always()
+        run: docker compose --env-file env/.env.development --profile development down
