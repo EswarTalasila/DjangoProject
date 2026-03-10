@@ -39,7 +39,8 @@ jobs:
 
       - name: Create media directories
         run: |
-          docker compose exec -T backend mkdir -p /app/media/package_artifacts /app/media/snapshots /app/media/submissions /app/src/staticfiles
+          docker compose exec -T -u root backend mkdir -p /app/media/package_artifacts /app/media/snapshots /app/media/submissions /app/src/staticfiles
+          docker compose exec -T -u root backend chown -R django:django /app/media /app/src/staticfiles
 
       - name: Run backend tests with coverage
         run: |
