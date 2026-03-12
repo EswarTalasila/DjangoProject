@@ -324,8 +324,10 @@ services:
       - prod
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./proxy/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./proxy/ssl:/etc/nginx/ssl:ro
       - media_data:/app/media:ro
     depends_on:
       - frontend-prod
