@@ -300,10 +300,13 @@ X_FRAME_OPTIONS = "DENY"
 CSRF_COOKIE_SECURE = env.csrf_cookie_secure
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = "Lax"
+if env.csrf_trusted_origins_list:
+    CSRF_TRUSTED_ORIGINS = env.csrf_trusted_origins_list
 SESSION_COOKIE_SECURE = env.session_cookie_secure
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SECURE_SSL_REDIRECT = env.ssl_redirect_enabled
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_HSTS_SECONDS = 31536000 if env.is_production else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env.is_production
 SECURE_HSTS_PRELOAD = env.is_production

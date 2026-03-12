@@ -36,6 +36,7 @@ VALID_PROD_BASE = dict(  # noqa: C408
     django_secret_key="a-very-long-production-secret-key-that-is-safe-1234",
     django_allowed_hosts="app.example.com",
     django_cors_allowed_origins="https://app.example.com",
+    django_csrf_trusted_origins="https://app.example.com",
     database_url="postgres://prod_user:strong_pw@db.example.com:5432/prod_db",
     google_client_id="real-client-id",
     google_client_secret="real-client-secret",

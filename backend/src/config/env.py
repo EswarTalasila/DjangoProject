@@ -59,6 +59,10 @@ class EnvSettings(BaseSettings):
         default="localhost,127.0.0.1",
         description="Comma-separated list of allowed hosts",
     )
+    django_csrf_trusted_origins: str = Field(
+        default="",
+        description="Comma-separated CSRF trusted origins (e.g. https://example.com)",
+    )
 
     # Database
     database_url: str = Field(
@@ -200,6 +204,15 @@ class EnvSettings(BaseSettings):
         """Parse DJANGO_CORS_ALLOWED_ORIGINS into a list."""
         return [o.strip() for o in self.django_cors_allowed_origins.split(",") if o.strip()]
 
+    @property
+    def csrf_trusted_origins_list(self) -> list[str]:
+        """Parse DJANGO_CSRF_TRUSTED_ORIGINS into a list."""
+        return [
+            o.strip()
+            for o in self.django_csrf_trusted_origins.split(",")
+            if o.strip()
+        ]
+
     @model_validator(mode="after")
     def validate_runtime_contract(self) -> "EnvSettings":
         """Fail fast for unsafe production configuration (ENV-UC-02, ENV-CN-02).
@@ -216,6 +229,7 @@ class EnvSettings(BaseSettings):
             self._validate_admin_bootstrap,
             self._validate_allowed_hosts,
             self._validate_cors,
+            self._validate_csrf_trusted_origins,
             self._validate_database_url,
             self._validate_oauth,
             self._validate_otel_export_policy,
@@ -284,6 +298,19 @@ class EnvSettings(BaseSettings):
                 raise ValueError(
                     "Invalid production DJANGO_CORS_ALLOWED_ORIGINS: "
                     "wildcard/localhost origins are not allowed."
+                )
+
+    def _validate_csrf_trusted_origins(self) -> None:
+        origins = self.csrf_trusted_origins_list
+        if not origins:
+            raise ValueError(
+                "Invalid production DJANGO_CSRF_TRUSTED_ORIGINS: value cannot be empty."
+            )
+        for origin in origins:
+            if "localhost" in origin.lower() or "127.0.0.1" in origin:
+                raise ValueError(
+                    "Invalid production DJANGO_CSRF_TRUSTED_ORIGINS: "
+                    "localhost origins are not allowed."
                 )
 
     def _validate_database_url(self) -> None:

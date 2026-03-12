@@ -35,6 +35,7 @@ _VALID_PROD = dict(
     database_url="postgres://produser:s3cureP@ss@db.prod.example.com:5432/proddb",
     django_allowed_hosts="app.example.com",
     django_cors_allowed_origins="https://app.example.com",
+    django_csrf_trusted_origins="https://app.example.com",
     google_client_id="123456.apps.googleusercontent.com",
     google_client_secret="GOCSPX-real-secret",
     admin_email="admin@mycompany.com",
