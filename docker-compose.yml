@@ -311,6 +311,7 @@ services:
     environment:
       - NEXT_TELEMETRY_DISABLED=1
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api/v1}
+      - BACKEND_INTERNAL_URL=${BACKEND_INTERNAL_URL:-http://backend-prod:8000/api/v1}
       - NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
 
   # ==========================================================================

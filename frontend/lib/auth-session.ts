@@ -26,8 +26,16 @@ const EMPTY_SUDO_CAPABILITIES: SudoCapabilities = {
   isStaff: false,
 };
 
-/** Resolve the API base URL for server-side fetches, preferring PROXY_TARGET when localhost is configured. */
+/** Resolve the API base URL for server-side fetches.
+ *  Priority: BACKEND_INTERNAL_URL > PROXY_TARGET (when localhost) > NEXT_PUBLIC_API_URL.
+ *  NEXT_PUBLIC_API_URL may be a relative path (e.g. "/api/v1") which doesn't work
+ *  with Node.js fetch — BACKEND_INTERNAL_URL provides the absolute Docker-internal URL. */
 function resolveApiBaseUrl() {
+  // Prefer explicit internal URL for server-side calls (works in both dev and prod containers)
+  if (process.env.BACKEND_INTERNAL_URL) {
+    return process.env.BACKEND_INTERNAL_URL.replace(/\/$/, "");
+  }
+
   const configured = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
   try {
     const url = new URL(configured);
@@ -40,7 +48,12 @@ function resolveApiBaseUrl() {
     }
     return url.toString().replace(/\/$/, "");
   } catch {
-    return configured.replace(/\/$/, "");
+    // configured is a relative path (e.g. "/api/v1") — unusable for server-side fetch.
+    // Fall back to Docker-internal backend URL.
+    if (process.env.PROXY_TARGET) {
+      return `${process.env.PROXY_TARGET.replace(/\/$/, "")}/api/v1`;
+    }
+    return `http://localhost:8000${configured}`;
   }
 }
 
