@@ -11,6 +11,7 @@ async function loadAuthSession() {
   vi.resetModules();
   process.env.NEXT_PUBLIC_API_URL = API_BASE;
   delete process.env.PROXY_TARGET;
+  delete process.env.BACKEND_INTERNAL_URL;
 
   mockCookieGet = vi.fn();
   vi.doMock("next/headers", () => ({
@@ -26,6 +27,7 @@ async function loadAuthSession() {
 describe("auth-session", () => {
   beforeEach(() => {
     delete process.env.PROXY_TARGET;
+    delete process.env.BACKEND_INTERNAL_URL;
   });
 
   describe("getSessionProfile", () => {
