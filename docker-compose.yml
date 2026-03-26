@@ -356,6 +356,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "8443:8443"
     volumes:
       - ./proxy/nginx.prod.conf:/etc/nginx/nginx.conf:ro
       - ./proxy/ssl:/etc/nginx/ssl:ro
@@ -365,6 +366,7 @@ services:
       - backend-prod
     networks:
       - eel-network-prod
+      - eel-network
 
   # ==========================================================================
   # OTel Collector
