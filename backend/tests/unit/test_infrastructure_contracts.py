@@ -388,7 +388,12 @@ class TestINFRA_CN_09:
     def test_INFRA_CN_09_profile_grouping(self):
         """Services are mapped to profile groups according to env architecture."""
         services = _compose_services()
-        assert services["database"].get("profiles", []) == []
+        # Dev/test database is profile-gated (prod has its own database-prod)
+        assert sorted(services["database"].get("profiles", [])) == [
+            "development",
+            "testing",
+        ]
+        assert sorted(services["database-prod"].get("profiles", [])) == ["prod"]
         assert sorted(services["backend"].get("profiles", [])) == [
             "development",
             "testing",
