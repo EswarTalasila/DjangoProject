@@ -93,8 +93,10 @@ Docs/diagrams/otel/*.jsonl
 # Secrets and credentials
 *.pem
 *.key
+*.crt
 secrets/
 credentials/
+proxy/ssl/
 
 # Database dumps
 *.sql

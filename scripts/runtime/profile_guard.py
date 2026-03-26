@@ -100,7 +100,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    compose_bin = "docker compose"
+    # Auto-detect whether sudo is needed for docker
+    check = subprocess.run("docker info", shell=True, capture_output=True, check=False)
+    compose_bin = "docker compose" if check.returncode == 0 else "sudo docker compose"
     deadline = time.time() + args.wait
     while time.time() < deadline:
         running, restarting = backend_status(compose_bin, args.service)

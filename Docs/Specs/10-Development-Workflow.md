@@ -23,8 +23,8 @@ cp "<repository>/Deployment/templates/traefik.template.yml" "<repository>/Deploy
 2) Create a local `.env` for secrets (do not commit):
 ```bash
 # Example variables
-POSTGRES_DB=datadash
-POSTGRES_USER=datadash
+POSTGRES_DB=eelab
+POSTGRES_USER=eelab
 POSTGRES_PASSWORD=replace_me
 DJANGO_SECRET_KEY=replace_me
 DJANGO_ALLOWED_HOSTS=localhost

@@ -434,7 +434,7 @@ class TestValidateDatabaseUrl:
     def test_default_url_rejected(self):
         """Default local database URL is rejected in production."""
         with pytest.raises(ValueError, match="DATABASE_URL"):
-            _make_prod(database_url="postgres://datadash:change-me@localhost:5432/datadash")
+            _make_prod(database_url="postgres://eelab:change-me@localhost:5432/eelab")
 
     def test_change_me_in_url_rejected(self):
         """URL containing 'change-me' is rejected."""

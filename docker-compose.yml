@@ -39,15 +39,18 @@
 
 services:
   # ==========================================================================
-  # Database
+  # Database (dev / testing)
   # ==========================================================================
   database:
     image: postgres:17-alpine
     container_name: eel-database
     restart: unless-stopped
+    profiles:
+      - development
+      - testing
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-datadash}
-      POSTGRES_USER: ${POSTGRES_USER:-datadash}
+      POSTGRES_DB: ${POSTGRES_DB:-eelab}
+      POSTGRES_USER: ${POSTGRES_USER:-eelab}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -55,13 +58,40 @@ services:
       test:
         [
           "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-datadash} -d ${POSTGRES_DB:-datadash}",
+          "pg_isready -U ${POSTGRES_USER:-eelab} -d ${POSTGRES_DB:-eelab}",
         ]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - eel-network
+
+  # ==========================================================================
+  # Database (production) — isolated instance, volume, and credentials
+  # ==========================================================================
+  database-prod:
+    image: postgres:17-alpine
+    container_name: eel-database-prod
+    restart: unless-stopped
+    profiles:
+      - prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - eel-network-prod
   # ==========================================================================
   # pgAdmin - Database Management UI
   # Access at http://localhost:5050
@@ -85,7 +115,7 @@ services:
       # Use pgpass file for auto-login to database servers
       PGPASS_FILE: /var/lib/pgadmin/pgpass
       # Pass database credentials for pgpass generation
-      POSTGRES_USER: ${POSTGRES_USER:-datadash}
+      POSTGRES_USER: ${POSTGRES_USER:-eelab}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     volumes:
       # Auto-register database server on startup
@@ -115,7 +145,7 @@ services:
       - development
       - testing
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER:-datadash}:${POSTGRES_PASSWORD:-change-me}@database:5432/${POSTGRES_DB:-datadash}
+      - DATABASE_URL=postgres://${POSTGRES_USER:-eelab}:${POSTGRES_PASSWORD:-change-me}@database:5432/${POSTGRES_DB:-eelab}
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-local-dev-secret-change-in-prod}
       - DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,backend,eel-backend,eel-frontend}
@@ -258,7 +288,7 @@ services:
     profiles:
       - prod
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database-prod:5432/${POSTGRES_DB}
       - ENVIRONMENT=production
       - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
       - DJANGO_ALLOWED_HOSTS=${DJANGO_ALLOWED_HOSTS}
@@ -278,12 +308,12 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-Admin}
     volumes:
-      - media_data:/app/media
+      - media_data_prod:/app/media
     depends_on:
-      database:
+      database-prod:
         condition: service_healthy
     networks:
-      - eel-network
+      - eel-network-prod
     command: >
       sh -c "python src/manage.py migrate &&
              python src/manage.py collectstatic --noinput &&
@@ -307,7 +337,7 @@ services:
     depends_on:
       - backend-prod
     networks:
-      - eel-network
+      - eel-network-prod
     environment:
       - NEXT_TELEMETRY_DISABLED=1
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api/v1}
@@ -318,7 +348,7 @@ services:
   # Reverse Proxy (Nginx) - Production
   # ==========================================================================
   nginx-prod:
-    image: nginx:latest
+    image: nginx:1.27-alpine
     container_name: eel-proxy-prod
     restart: unless-stopped
     profiles:
@@ -329,12 +359,12 @@ services:
     volumes:
       - ./proxy/nginx.prod.conf:/etc/nginx/nginx.conf:ro
       - ./proxy/ssl:/etc/nginx/ssl:ro
-      - media_data:/app/media:ro
+      - media_data_prod:/app/media:ro
     depends_on:
       - frontend-prod
       - backend-prod
     networks:
-      - eel-network
+      - eel-network-prod
 
   # ==========================================================================
   # OTel Collector
@@ -375,11 +405,14 @@ services:
 
 volumes:
   postgres_data:
-  media_data:
+  postgres_data_prod:
+  media_data_prod:
   frontend_node_modules:
   frontend_npm_cache:
   playwright_node_modules:
 
 networks:
   eel-network:
+    driver: bridge
+  eel-network-prod:
     driver: bridge

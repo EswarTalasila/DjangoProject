@@ -141,7 +141,7 @@ class TestENV_UC_02:
     def test_ENV_UC_02_E1_unsafe_db_defaults(self):
         """Default/local DATABASE_URL blocked in production (ENV-UC-02-E1)."""
         err = _build_raises(
-            database_url="postgres://datadash:change-me@localhost:5432/datadash"
+            database_url="postgres://eelab:change-me@localhost:5432/eelab"
         )
         assert "DATABASE_URL" in str(err)
 
@@ -155,7 +155,7 @@ class TestENV_UC_02:
         err = _build_raises(
             django_secret_key="django-insecure-local-dev-only-change-in-production",
             django_debug=True,
-            database_url="postgres://datadash:change-me@localhost:5432/datadash",
+            database_url="postgres://eelab:change-me@localhost:5432/eelab",
             google_client_id="",
             google_client_secret="",
             admin_email="admin@example.com",

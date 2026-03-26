@@ -58,7 +58,7 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 
 # Set required environment variables
-export DATABASE_URL=postgres://datadash:password@localhost:5432/datadash
+export DATABASE_URL=postgres://eelab:password@localhost:5432/eelab
 export DJANGO_SECRET_KEY=local-dev-secret-key
 export ENVIRONMENT=development
 export DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1

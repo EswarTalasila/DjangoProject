@@ -5,13 +5,16 @@
 version: "3"
 
 vars:
-  DOCKER_COMPOSE: docker compose
+  # Auto-detect whether sudo is needed for docker (e.g. server vs local)
+  DOCKER_SUDO:
+    sh: 'if docker info >/dev/null 2>&1; then echo ""; else echo "sudo"; fi'
+  DOCKER_COMPOSE: "{{.DOCKER_SUDO}} docker compose"
   ENV_FILE_DEV: env/.env.development
   ENV_FILE_TEST: env/.env.testing
   ENV_FILE_PROD: env/.env.production
-  DOCKER_COMPOSE_DEV: docker compose --env-file env/.env.development --profile development
-  DOCKER_COMPOSE_TEST: docker compose --env-file env/.env.testing --profile testing
-  DOCKER_COMPOSE_PROD: docker compose --env-file env/.env.production --profile prod
+  DOCKER_COMPOSE_DEV: "{{.DOCKER_SUDO}} docker compose --env-file env/.env.development --profile development"
+  DOCKER_COMPOSE_TEST: "{{.DOCKER_SUDO}} docker compose --env-file env/.env.testing --profile testing"
+  DOCKER_COMPOSE_PROD: "{{.DOCKER_SUDO}} docker compose --env-file env/.env.production --profile prod"
   BACKEND_CONTAINER: backend
   FRONTEND_CONTAINER: frontend
   DATABASE_CONTAINER: database
@@ -183,7 +186,7 @@ tasks:
     internal: true
     desc: Verify Docker daemon is running
     preconditions:
-      - sh: docker info > /dev/null 2>&1
+      - sh: "{{.DOCKER_SUDO}} docker info > /dev/null 2>&1"
         msg: "Docker is not running. Please start Docker Desktop or the Docker daemon."
 
   _check:env-dev:
@@ -599,7 +602,7 @@ tasks:
     desc: Open psql shell in the database container
     deps: [_check:docker]
     cmds:
-      - '{{.DOCKER_COMPOSE}} exec {{.DATABASE_CONTAINER}} sh -c ''psql -U "$${POSTGRES_USER:-datadash}" -d "$${POSTGRES_DB:-datadash}"'''
+      - '{{.DOCKER_COMPOSE}} exec {{.DATABASE_CONTAINER}} sh -c ''psql -U "$${POSTGRES_USER:-eelab}" -d "$${POSTGRES_DB:-eelab}"'''
 
   docker:pgadmin:
     desc: Open pgAdmin in browser (database management UI)

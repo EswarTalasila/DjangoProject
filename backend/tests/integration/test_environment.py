@@ -73,7 +73,7 @@ class TestENV_UC_02_Integration:
             EnvSettings(
                 environment="production",
                 django_secret_key="django-insecure-local-dev-only-change-in-production",
-                database_url="postgres://datadash:change-me@localhost:5432/datadash",
+                database_url="postgres://eelab:change-me@localhost:5432/eelab",
                 google_client_id="",
                 google_client_secret="",
             )

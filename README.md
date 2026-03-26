@@ -281,7 +281,7 @@ docker compose exec backend python src/manage.py makemigrations
 docker compose exec backend python src/manage.py shell
 
 # Open database shell
-docker compose exec database psql -U datadash -d datadash
+docker compose exec database psql -U eelab -d eelab
 ```
 
 #### pgAdmin (Database Management UI)
@@ -423,7 +423,7 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 uv pip install -e ".[dev]"
 
 # Set environment variables (or use .env file)
-export DATABASE_URL=postgres://user:pass@localhost:5432/datadash
+export DATABASE_URL=postgres://user:pass@localhost:5432/eelab
 export DJANGO_SECRET_KEY=local-dev-secret
 export ENVIRONMENT=development
 
@@ -453,7 +453,7 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 
 # Set environment variables (or use .env file)
-export DATABASE_URL=postgres://user:pass@localhost:5432/datadash
+export DATABASE_URL=postgres://user:pass@localhost:5432/eelab
 export DJANGO_SECRET_KEY=local-dev-secret
 export ENVIRONMENT=development
 
