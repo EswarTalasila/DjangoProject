@@ -356,6 +356,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "8080:8080"
       - "8443:8443"
     volumes:
       - ./proxy/nginx.prod.conf:/etc/nginx/nginx.conf:ro
