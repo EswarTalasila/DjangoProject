@@ -8,7 +8,7 @@ from django.utils import timezone
 from accounts.models import Role, User
 from core.dtos import AssignmentDTO
 from core.permissions import primary_role
-from courses.models import Course, Enrollment, EnrollmentStatus
+from courses.models import Enrollment, EnrollmentStatus
 
 from ..models import Assignment, AssignmentStatus
 
