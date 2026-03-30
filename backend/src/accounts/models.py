@@ -587,7 +587,8 @@ class RegistrationCode(models.Model):
             models.UniqueConstraint(fields=["code_hash"], name="uq_registration_code_hash"),
         ]
         indexes = [
-            models.Index(fields=["code_hash"], name="idx_registration_code_hash"),
+            # code_hash index omitted: the uq_registration_code_hash UniqueConstraint
+            # already creates an implicit index.
             models.Index(fields=["code_prefix"], name="idx_registration_code_prefix"),
             models.Index(fields=["code_type"], name="idx_registration_code_type"),
             models.Index(fields=["course"], name="idx_registration_course"),
@@ -596,7 +597,7 @@ class RegistrationCode(models.Model):
         ]
 
     def clean(self):
-        """Model-level constraints for bounded code usage."""
+        """Model-level constraints for bounded code usage and course binding."""
         super().clean()
         if self.max_uses < 1:
             raise ValidationError("max_uses must be >= 1")
@@ -604,6 +605,8 @@ class RegistrationCode(models.Model):
             raise ValidationError("times_used must be >= 0")
         if self.times_used > self.max_uses:
             raise ValidationError("times_used cannot exceed max_uses")
+        if self.code_type == RegistrationCodeType.STUDENT and not self.course_id:
+            raise ValidationError({"course": "Student registration codes must reference a course."})
 
     def __str__(self):
         """Return a readable string representation."""

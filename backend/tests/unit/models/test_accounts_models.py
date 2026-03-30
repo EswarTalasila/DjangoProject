@@ -164,6 +164,8 @@ class TestRegistrationCode:
         code = RegistrationCode.__new__(RegistrationCode)
         code.max_uses = 5
         code.times_used = 3
+        code.code_type = "TEACHER"
+        code.course_id = None
 
         code.clean()  # should not raise
 
