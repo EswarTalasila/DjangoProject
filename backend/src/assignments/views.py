@@ -24,7 +24,7 @@ from core.errors import error_response
 from core.models import AuditAction, AuditOutcome
 from core.pagination import paginate
 from core.permissions import IsTeacher, IsTeacherOrAbove, has_role, primary_role
-from courses.models import Enrollment
+from courses.models import Enrollment, EnrollmentStatus
 from courses.services import can_view_course
 
 from .serializers import AssignmentSerializer, AssignmentUpdateSerializer
@@ -67,6 +67,7 @@ def _can_read_assignment(user: User, assignment) -> bool:
         return Enrollment.objects.filter(
             course_id=assignment.course_id,
             student_profile__user=user,
+            status=EnrollmentStatus.ACTIVE,
         ).exists()
     if role == Role.TEACHER and assignment.course_id is not None:
         return can_view_course(user, assignment.course)

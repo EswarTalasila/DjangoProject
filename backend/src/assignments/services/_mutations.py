@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from assessments.models import Assessment, AssessmentStatus, QuestionKind
 from core.helpers import answer_type_from_question
-from courses.models import Course, Enrollment
+from courses.models import Course, Enrollment, EnrollmentStatus
 from courses.services import can_manage_course
 from submissions.models import (
     Answer,
@@ -255,9 +255,9 @@ def _create_submissions_for_course(assignment: Assignment) -> None:
         return
     if assignment.course_id is None:
         return
-    student_ids = Enrollment.objects.filter(course_id=assignment.course_id).values_list(
-        "student_profile__user_id", flat=True
-    )
+    student_ids = Enrollment.objects.filter(
+        course_id=assignment.course_id, status=EnrollmentStatus.ACTIVE
+    ).values_list("student_profile__user_id", flat=True)
     for student_id in student_ids:
         if Submission.objects.filter(assignment=assignment, student_id=student_id).exists():
             continue

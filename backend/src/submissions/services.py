@@ -421,9 +421,21 @@ def _create_answer(submission: Submission, payload: dict) -> Answer:
     question = Question.objects.filter(id=question_id).first()
     if not question:
         raise ValueError("Question not found")
+    # Bug 2 fix: verify question belongs to the submission's assignment's assessment
+    if question.assessment_id != submission.assignment.assessment_id:
+        raise ValueError(
+            f"Question {question_id} does not belong to assessment "
+            f"{submission.assignment.assessment_id}"
+        )
     answer_type = payload.get("type")
     if not answer_type:
         raise ValueError("Answer type is required")
+    # Bug 3 fix: verify answer type matches question kind
+    if answer_type != question.question_type:
+        raise ValueError(
+            f"Answer type mismatch: payload type '{answer_type}' does not match "
+            f"question type '{question.question_type}'"
+        )
     answer = Answer.objects.create(
         submission=submission,
         question=question,

@@ -8,7 +8,7 @@ from django.utils import timezone
 from accounts.models import Role, User
 from core.dtos import AssignmentDTO
 from core.permissions import primary_role
-from courses.models import Course, Enrollment
+from courses.models import Enrollment, EnrollmentStatus
 
 from ..models import Assignment, AssignmentStatus
 
@@ -52,7 +52,9 @@ def list_for_user(user: User) -> list[Assignment]:
     role = primary_role(user)
     now = timezone.now()
     if role == Role.STUDENT:
-        enrollments = Enrollment.objects.filter(student_profile__user=user)
+        enrollments = Enrollment.objects.filter(
+            student_profile__user=user, status=EnrollmentStatus.ACTIVE
+        )
         course_ids = [enrollment.course_id for enrollment in enrollments]
         return list(
             Assignment.objects.filter(
