@@ -49,7 +49,7 @@ class TestRubricToDto:
         rubric.created_by_id = 42
         rubric.created_at = "2025-01-01T00:00:00Z"
         rubric.updated_at = "2025-01-02T00:00:00Z"
-        rubric.criteria.all.return_value.order_by.return_value = []
+        rubric.criteria.all.return_value = []
 
         dto = rubric_to_dto(rubric)
 
@@ -77,7 +77,7 @@ class TestRubricToDto:
         criterion.description = "Work quality"
         criterion.order_index = 0
         criterion.weight = 1.0
-        criterion.levels.all.return_value.order_by.return_value = [level]
+        criterion.levels.all.return_value = [level]
 
         rubric = MagicMock()
         rubric.id = 1
@@ -87,7 +87,7 @@ class TestRubricToDto:
         rubric.created_by_id = 1
         rubric.created_at = "2025-01-01"
         rubric.updated_at = "2025-01-01"
-        rubric.criteria.all.return_value.order_by.return_value = [criterion]
+        rubric.criteria.all.return_value = [criterion]
 
         dto = rubric_to_dto(rubric)
 

@@ -34,6 +34,8 @@ def list_or_create(request):
             rubric = create_rubric(request.user, serializer.validated_data)
         except ValueError as exc:
             return error_response(exc)
+        # Re-fetch with prefetches for efficient DTO serialization.
+        rubric = _rubric_with_related(rubric.id)
         return Response(rubric_to_dto(rubric).model_dump(), status=status.HTTP_201_CREATED)
 
     rubrics = list_rubrics()
@@ -63,6 +65,8 @@ def detail(request, rubric_id: int):
             return error_response(exc, status_code=status.HTTP_409_CONFLICT)
         except ValueError as exc:
             return error_response(exc)
+        # Re-fetch with prefetches for efficient DTO serialization.
+        updated = _rubric_with_related(updated.id)
         return Response(rubric_to_dto(updated).model_dump(), status=status.HTTP_200_OK)
 
     if not IsResearcherOrAdmin().has_permission(request, None):
@@ -86,4 +90,6 @@ def archive(request, rubric_id: int):
         archived = archive_rubric(rubric)
     except ValueError as exc:
         return error_response(exc, status_code=status.HTTP_409_CONFLICT)
+    # Re-fetch with prefetches for efficient DTO serialization.
+    archived = _rubric_with_related(archived.id)
     return Response(rubric_to_dto(archived).model_dump(), status=status.HTTP_200_OK)

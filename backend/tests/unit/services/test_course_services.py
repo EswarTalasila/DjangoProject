@@ -337,7 +337,8 @@ class TestListCoursesForUser:
 
         sentinel = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
         mock_qs = MagicMock()
-        mock_course_model.objects.all.return_value = mock_qs
+        # Chain: .select_related(...).filter(status=ACTIVE)
+        mock_course_model.objects.select_related.return_value = mock_qs
         mock_qs.filter.return_value = sentinel
 
         admin = SimpleNamespace(id=1, is_staff=True, is_authenticated=True)
@@ -354,7 +355,8 @@ class TestListCoursesForUser:
 
         sentinel = [SimpleNamespace(id=1)]
         mock_qs = MagicMock()
-        mock_course_model.objects.all.return_value = mock_qs
+        # Chain: .select_related(...).filter(status=ACTIVE)
+        mock_course_model.objects.select_related.return_value = mock_qs
         mock_qs.filter.return_value = sentinel
 
         researcher = SimpleNamespace(id=2, is_staff=False, is_authenticated=True)
@@ -372,7 +374,8 @@ class TestListCoursesForUser:
         sentinel = [SimpleNamespace(id=3)]
         mock_qs = MagicMock()
         mock_filtered_qs = MagicMock()
-        mock_course_model.objects.all.return_value = mock_qs
+        # Chain: .select_related(...).filter(status=ACTIVE)
+        mock_course_model.objects.select_related.return_value = mock_qs
         # First .filter(status=ACTIVE) returns a filtered queryset
         mock_qs.filter.return_value = mock_filtered_qs
         # Second .filter(teacher_profile__user=user) returns sentinel

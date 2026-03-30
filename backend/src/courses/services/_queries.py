@@ -102,7 +102,7 @@ def list_courses_for_user(user: User, include_archived: bool = False) -> list[Co
     """
     from ..models import CourseStatus
 
-    base_qs = Course.objects.all()
+    base_qs = Course.objects.select_related("teacher_profile__user")
     if not include_archived:
         base_qs = base_qs.filter(status=CourseStatus.ACTIVE)
 

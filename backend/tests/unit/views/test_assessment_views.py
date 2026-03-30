@@ -72,11 +72,12 @@ class TestListOrCreateView:
         mock_paginate.assert_called_once()
 
     @patch("assessments.views.assessment_to_dto")
+    @patch("assessments.views._assessment_with_related")
     @patch("assessments.views.create_assessment")
     @patch("assessments.views.IsResearcherOrAdmin")
     @patch("assessments.views.IsTeacherOrAbove.has_permission", return_value=True)
     def test_post_creates_assessment(
-        self, mock_perm, mock_is_ra, mock_create, mock_dto
+        self, mock_perm, mock_is_ra, mock_create, mock_refetch, mock_dto
     ):
         """POST creates a new assessment and returns DTO."""
         from assessments.views import list_or_create
@@ -84,6 +85,7 @@ class TestListOrCreateView:
         mock_is_ra.return_value.has_permission.return_value = True
         fake_assessment = SimpleNamespace(id=1)
         mock_create.return_value = fake_assessment
+        mock_refetch.return_value = fake_assessment
         mock_dto.return_value = _make_dto()
 
         user = MagicMock(is_authenticated=True)
@@ -188,12 +190,13 @@ class TestDetailView:
         assert response.data["id"] == 1
 
     @patch("assessments.views.assessment_to_dto")
+    @patch("assessments.views._assessment_with_related")
     @patch("assessments.views.update_assessment")
     @patch("assessments.views.IsResearcherOrAdmin")
     @patch("assessments.views.Assessment")
     @patch("assessments.views.IsTeacherOrAbove.has_permission", return_value=True)
     def test_patch_updates_assessment(
-        self, mock_perm, mock_assessment_model, mock_is_ra, mock_update, mock_dto
+        self, mock_perm, mock_assessment_model, mock_is_ra, mock_update, mock_refetch, mock_dto
     ):
         """PATCH updates assessment and returns DTO."""
         from assessments.views import detail
@@ -204,6 +207,7 @@ class TestDetailView:
             fake_assessment
         )
         mock_update.return_value = fake_assessment
+        mock_refetch.return_value = fake_assessment
         mock_dto.return_value = _make_dto(title="Updated")
 
         user = MagicMock(is_authenticated=True)

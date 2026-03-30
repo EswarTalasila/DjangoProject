@@ -92,6 +92,8 @@ def list_or_create(request):
             assessment = create_assessment(request.user, serializer.validated_data)
         except ValueError as exc:
             return error_response(exc)
+        # Re-fetch with prefetches for efficient DTO serialization.
+        assessment = _assessment_with_related(assessment.id)
         return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_201_CREATED)
 
     include_archived, include_archived_error = _parse_include_archived(request)
@@ -142,6 +144,8 @@ def detail(request, assessment_id: int):
             return error_response(exc, status_code=status.HTTP_409_CONFLICT)
         except ValueError as exc:
             return error_response(exc)
+        # Re-fetch with prefetches for efficient DTO serialization.
+        updated = _assessment_with_related(updated.id)
         return Response(assessment_to_dto(updated).model_dump(), status=status.HTTP_200_OK)
 
     if not IsResearcherOrAdmin().has_permission(request, None):
@@ -200,6 +204,8 @@ def archive(request, assessment_id: int):
         complete_audit(audit_id, AuditOutcome.FAILURE)
         return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
     complete_audit(audit_id, AuditOutcome.SUCCESS)
+    # Re-fetch with prefetches for efficient DTO serialization.
+    assessment = _assessment_with_related(assessment.id)
     return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_200_OK)
 
 
@@ -228,4 +234,6 @@ def restore(request, assessment_id: int):
         complete_audit(audit_id, AuditOutcome.FAILURE)
         return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
     complete_audit(audit_id, AuditOutcome.SUCCESS)
+    # Re-fetch with prefetches for efficient DTO serialization.
+    assessment = _assessment_with_related(assessment.id)
     return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_200_OK)
