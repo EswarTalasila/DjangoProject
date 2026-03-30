@@ -1006,8 +1006,9 @@ class TestGetByStudentIdExtended:
         """Teacher who owns the student (via assignment course) can view their submissions."""
         from submissions.views import get_by_student_id
 
-        owned_subs = [MagicMock()]
-        mock_sub_model.objects.filter.return_value = owned_subs
+        owned_qs = MagicMock()
+        owned_qs.exists.return_value = True
+        mock_sub_model.objects.filter.return_value = owned_qs
         mock_paginate.return_value = Response([], status=200)
 
         user = _user(id=200, role=Role.TEACHER)
@@ -1022,7 +1023,9 @@ class TestGetByStudentIdExtended:
         """Teacher with no owned submissions for the student gets 403."""
         from submissions.views import get_by_student_id
 
-        mock_sub_model.objects.filter.return_value = []
+        owned_qs = MagicMock()
+        owned_qs.exists.return_value = False
+        mock_sub_model.objects.filter.return_value = owned_qs
 
         user = _user(id=200, role=Role.TEACHER)
         request = _authed_request("get", "/submissions/students/100/", user=user)

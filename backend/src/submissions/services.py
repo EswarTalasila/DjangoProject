@@ -52,7 +52,9 @@ _ANSWER_SCORING_PREFETCHES = [
 
 def _prefetch_submission_for_dto(qs: QuerySet[Submission]) -> QuerySet[Submission]:
     """Add prefetches needed to serialize submissions to DTOs without N+1."""
-    return qs.prefetch_related(*_ANSWER_SUBTYPE_PREFETCHES)
+    return qs.select_related(
+        "assignment__course__teacher_profile__user",
+    ).prefetch_related(*_ANSWER_SUBTYPE_PREFETCHES)
 
 
 def _prefetch_submission_for_scoring(qs: QuerySet[Submission]) -> QuerySet[Submission]:
@@ -276,7 +278,7 @@ def get_by_student_and_assignment(student_id: int, assignment_id: int) -> Submis
     return submission
 
 
-def list_me(user_id: int, status: str | None) -> list[dict]:
+def list_me(user_id: int, status: str | None) -> QuerySet[Submission]:
     """
     List all submissions for a user, whether as student or teacher.
 
@@ -284,22 +286,21 @@ def list_me(user_id: int, status: str | None) -> list[dict]:
     where the user is the teacher (self-assessments). Optionally filters
     by submission status.
 
+    Returns a lazy queryset ordered newest-first (undated drafts last).
+
     Args:
         user_id: The user's ID
         status: Optional status filter (IN_PROGRESS, SUBMITTED, GRADED)
 
     Returns:
-        List of compact submission DTOs
+        Ordered queryset of Submissions
     """
-    from django.db.models import Q
+    from django.db.models import F, Q
 
     qs = Submission.objects.filter(Q(student_id=user_id) | Q(teacher_id=user_id))
     if status:
         qs = qs.filter(status=status)
-    items = list(qs)
-    # Sort newest submissions first, with undated drafts last.
-    items.sort(key=lambda s: (s.submitted_at is not None, s.submitted_at), reverse=True)
-    return [submission_to_compact_dto(sub).model_dump() for sub in items]
+    return qs.order_by(F("submitted_at").desc(nulls_last=True))
 
 
 @transaction.atomic
@@ -391,17 +392,11 @@ def override_score(submission_id: int, scores: list) -> Submission:
             "Completion-scored assessments always award full credit and cannot be manually overridden"
         )
 
-    answers = list(submission.answers.all())
+    answers = list(submission.answers.select_related("question"))
     total = 0.0
 
-    # Build a lookup for max_points per question so we can validate scores.
-    question_ids = [a.question_id for a in answers]
-    max_pts_map = dict(
-        Question.objects.filter(id__in=question_ids).values_list("id", "max_points")
-    )
-
     def _validate_score(answer, score_val):
-        cap = max_pts_map.get(answer.question_id)
+        cap = answer.question.max_points
         if cap is not None and score_val > cap:
             raise ValueError(
                 f"Score {score_val} exceeds max points ({cap}) for question {answer.question_id}"

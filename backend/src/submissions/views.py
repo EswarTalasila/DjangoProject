@@ -360,16 +360,14 @@ def get_by_student_id(request, student_id: int):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     elif role == Role.TEACHER:
         # Teacher can only see submissions for assignments they own (SUB-CN-08).
-        owned_submissions = list(
-            Submission.objects.filter(
-                student_id=student_id,
-                assignment__course__teacher_profile__user_id=request.user.id,
-            )
+        owned_qs = Submission.objects.filter(
+            student_id=student_id,
+            assignment__course__teacher_profile__user_id=request.user.id,
         )
-        if not owned_submissions:
+        if not owned_qs.exists():
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         return paginate(
-            owned_submissions,
+            owned_qs,
             request,
             transform_fn=lambda s: submission_to_compact_dto(s).model_dump(),
         )
@@ -480,7 +478,7 @@ def list_me_view(request):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     status_filter = request.query_params.get("status")
     results = list_me(request.user.id, status_filter)
-    return paginate(results, request)
+    return paginate(results, request, transform_fn=lambda s: submission_to_compact_dto(s).model_dump())
 
 
 @api_view(["PATCH"])

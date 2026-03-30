@@ -58,17 +58,26 @@ def _mock_submission(
     answer_list = answers or []
     sub.answers = MagicMock()
     sub.answers.all.return_value = answer_list
-    # Support chained .select_related().prefetch_related() used by _auto_score_submission.
-    sub.answers.select_related.return_value.prefetch_related.return_value = answer_list
+    sub.answers.order_by.return_value = MagicMock()
+    sub.answers.order_by.return_value.values_list.return_value = [
+        a.score for a in answer_list
+    ]
+    # Support chained .select_related() used by override_score (iterable)
+    # and .select_related().prefetch_related() used by _auto_score_submission.
+    sr_mock = MagicMock()
+    sr_mock.__iter__ = lambda self: iter(answer_list)
+    sr_mock.prefetch_related.return_value = answer_list
+    sub.answers.select_related.return_value = sr_mock
     return sub
 
 
-def _mock_answer(*, answer_type, question_id=1, score=None):
+def _mock_answer(*, answer_type, question_id=1, score=None, max_points=100.0):
     """Build a lightweight mock Answer with the given type."""
     answer = MagicMock()
     answer.answer_type = answer_type
     answer.question_id = question_id
     answer.score = score
+    answer.question.max_points = max_points
     return answer
 
 
@@ -506,54 +515,53 @@ class TestGetByStudentAndAssignment:
 class TestListMe:
     """Tests for the list_me service (user dashboard)."""
 
-    @patch("submissions.services.submission_to_compact_dto")
     @patch("submissions.services.Submission")
-    def test_combines_student_and_teacher_subs(self, mock_model, mock_compact):
-        """Q-based filter returns deduplicated results for a user."""
+    def test_combines_student_and_teacher_subs(self, mock_model):
+        """Q-based filter returns ordered queryset for a user."""
         from submissions.services import list_me
 
         s1 = _mock_submission(id=1, assignment_id=10, status=SubmissionStatus.SUBMITTED, submitted_at=timezone.now())
         s2 = _mock_submission(id=2, assignment_id=11, status=SubmissionStatus.GRADED, submitted_at=timezone.now())
 
-        # Single Q-based filter returns all matching submissions (DB-level dedup).
-        mock_model.objects.filter.return_value = [s1, s2]
-        mock_compact.return_value = MagicMock(model_dump=MagicMock(return_value={"id": 1}))
+        # list_me chains .filter(Q(...)).order_by(...) — mock the chain.
+        mock_qs = MagicMock()
+        mock_qs.order_by.return_value = mock_qs
+        mock_qs.__iter__ = MagicMock(return_value=iter([s1, s2]))
+        mock_qs.__len__ = MagicMock(return_value=2)
+        mock_model.objects.filter.return_value = mock_qs
 
         result = list_me(100, None)
 
-        assert len(result) == 2
+        # Result is a (mock) queryset, verify order_by was called
+        mock_qs.order_by.assert_called_once()
 
-    @patch("submissions.services.submission_to_compact_dto")
     @patch("submissions.services.Submission")
-    def test_filters_by_status(self, mock_model, mock_compact):
+    def test_filters_by_status(self, mock_model):
         """When status param is provided, only matching submissions are returned."""
         from submissions.services import list_me
 
-        s2 = _mock_submission(id=2, status=SubmissionStatus.GRADED, submitted_at=timezone.now())
-
-        # Chain: .filter(Q(...)).filter(status=...) — mock the chain.
+        # Chain: .filter(Q(...)).filter(status=...).order_by(...) — mock the chain.
         inner_qs = MagicMock()
-        inner_qs.__iter__ = MagicMock(return_value=iter([s2]))
+        inner_qs.order_by.return_value = inner_qs
         mock_model.objects.filter.return_value.filter.return_value = inner_qs
-
-        mock_compact.return_value = MagicMock(
-            model_dump=MagicMock(return_value={"status": SubmissionStatus.GRADED})
-        )
 
         result = list_me(100, SubmissionStatus.GRADED)
 
-        assert len(result) == 1
-        assert result[0]["status"] == SubmissionStatus.GRADED
+        inner_qs.order_by.assert_called_once()
 
     @patch("submissions.services.Submission")
     def test_returns_empty_when_no_submissions(self, mock_model):
-        """Returns empty list when user has no submissions."""
+        """Returns empty queryset when user has no submissions."""
         from submissions.services import list_me
 
-        mock_model.objects.filter.return_value = []
+        mock_qs = MagicMock()
+        mock_qs.order_by.return_value = mock_qs
+        mock_qs.__iter__ = MagicMock(return_value=iter([]))
+        mock_qs.__len__ = MagicMock(return_value=0)
+        mock_model.objects.filter.return_value = mock_qs
 
         result = list_me(100, None)
-        assert result == []
+        mock_qs.order_by.assert_called_once()
 
 
 # ============================================================================
