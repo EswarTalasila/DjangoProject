@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from accounts.models import Role, TeacherProfile, UserRole
+from accounts.models import Role, StudentProfile, TeacherProfile, UserRole
 from assessments.models import Assessment, AssessmentStatus, GradingMode, Question, QuestionKind
 from assignments.models import Assignment, AssignmentStatus
 from courses.models import Course, Enrollment, EnrollmentStatus
@@ -188,8 +188,6 @@ class TestCreateAssignment:
         # Enroll a second student
         student2 = UserFactory()
         UserRole.objects.create(user=student2, role=Role.STUDENT)
-        from accounts.models import StudentProfile
-
         StudentProfile.objects.create(user=student2, created_by=admin_user)
         Enrollment.objects.create(
             course=course,
@@ -208,6 +206,48 @@ class TestCreateAssignment:
         assert resp.status_code == 201
         asgn = Assignment.objects.get(id=resp.json()["id"])
         assert Submission.objects.filter(assignment=asgn).count() == 2
+
+    def test_ASGN_CN_05_dropped_students_do_not_receive_submissions(
+        self, api_client, teacher_user, student_user, admin_user
+    ):
+        """Only ACTIVE enrollments receive placeholder submissions."""
+        assessment = _make_assessment(admin_user)
+        Question.objects.create(
+            assessment=assessment,
+            question_type=QuestionKind.SHORT_ANSWER,
+            kind=QuestionKind.SHORT_ANSWER,
+            prompt="Describe your approach",
+            max_points=5.0,
+            auto_gradable=False,
+            graded=False,
+        )
+        course = _make_course(teacher_user)
+        _enroll(course, student_user)
+
+        dropped_student = UserFactory()
+        UserRole.objects.create(user=dropped_student, role=Role.STUDENT)
+        StudentProfile.objects.create(user=dropped_student, created_by=admin_user)
+        Enrollment.objects.create(
+            course=course,
+            student_profile=dropped_student.student_profile,
+            status=EnrollmentStatus.DROPPED,
+        )
+
+        api_client.force_authenticate(user=teacher_user)
+        payload = {
+            "assessmentId": assessment.id,
+            "audienceType": "COURSE",
+            "courseId": course.id,
+            "openAt": timezone.now().isoformat(),
+        }
+        resp = api_client.post("/api/v1/assignments/", payload, format="json")
+        assert resp.status_code == 201
+
+        assignment = Assignment.objects.get(id=resp.json()["id"])
+        assert Submission.objects.filter(assignment=assignment, student=student_user).count() == 1
+        assert (
+            Submission.objects.filter(assignment=assignment, student=dropped_student).count() == 0
+        )
 
     def test_ASGN_CN_11_teacher_audience_type_rejected(
         self, api_client, teacher_user, admin_user
@@ -441,6 +481,23 @@ class TestGetDetail:
         resp = api_client.get(f"/api/v1/assignments/{assignment.id}")
         assert resp.status_code == 403
 
+    def test_ASGN_UC_04_E2_student_dropped(
+        self, api_client, teacher_user, student_user, admin_user
+    ):
+        """Dropped students cannot view assignment detail."""
+        assessment = _make_assessment(admin_user)
+        course = _make_course(teacher_user)
+        Enrollment.objects.create(
+            course=course,
+            student_profile=student_user.student_profile,
+            status=EnrollmentStatus.DROPPED,
+        )
+        assignment = _make_assignment(assessment, course, teacher_user)
+
+        api_client.force_authenticate(user=student_user)
+        resp = api_client.get(f"/api/v1/assignments/{assignment.id}")
+        assert resp.status_code == 403
+
     def test_ASGN_UC_04_E3_teacher_not_owner(self, api_client, teacher_user, admin_user):
         """Teacher cannot view assignment for a course they don't own (403)."""
         other_teacher = _second_teacher()
@@ -483,6 +540,23 @@ class TestGetDetail:
         """Unenrolled student cannot fetch assignment template (403)."""
         assessment = _make_assessment(admin_user)
         course = _make_course(teacher_user)
+        assignment = _make_assignment(assessment, course, teacher_user)
+
+        api_client.force_authenticate(user=student_user)
+        resp = api_client.get(f"/api/v1/assignments/{assignment.id}/template")
+        assert resp.status_code == 403
+
+    def test_ASGN_UC_04_TEMPLATE_E2_student_dropped(
+        self, api_client, teacher_user, student_user, admin_user
+    ):
+        """Dropped students cannot fetch assignment template."""
+        assessment = _make_assessment(admin_user)
+        course = _make_course(teacher_user)
+        Enrollment.objects.create(
+            course=course,
+            student_profile=student_user.student_profile,
+            status=EnrollmentStatus.DROPPED,
+        )
         assignment = _make_assignment(assessment, course, teacher_user)
 
         api_client.force_authenticate(user=student_user)
