@@ -37,6 +37,7 @@ def _mock_submission(
     *,
     id=1,
     assignment_id=10,
+    assessment_id=20,
     student_id=100,
     teacher_id=None,
     submitted_at=None,
@@ -48,6 +49,7 @@ def _mock_submission(
     sub = MagicMock()
     sub.id = id
     sub.assignment_id = assignment_id
+    sub.assignment.assessment_id = assessment_id
     sub.student_id = student_id
     sub.teacher_id = teacher_id
     sub.submitted_at = submitted_at
@@ -83,12 +85,14 @@ def _mock_assessment(*, id=20, grading_mode=GradingMode.AUTO):
     return a
 
 
-def _mock_question(*, id=1, auto_gradable=True, max_points=5.0):
+def _mock_question(*, id=1, auto_gradable=True, max_points=5.0, assessment_id=20, question_type="SHORT_ANSWER"):
     """Build a lightweight mock Question."""
     q = MagicMock()
     q.id = id
     q.auto_gradable = auto_gradable
     q.max_points = max_points
+    q.assessment_id = assessment_id
+    q.question_type = question_type
     return q
 
 
@@ -874,7 +878,7 @@ class TestCreateAnswer:
         """MCQ answer creates a MultipleChoiceAnswer with selected indices."""
         from submissions.services import _create_answer
 
-        mock_q.objects.filter.return_value.first.return_value = _mock_question()
+        mock_q.objects.filter.return_value.first.return_value = _mock_question(question_type="MULTIPLE_CHOICE")
         answer_obj = MagicMock()
         mock_a.objects.create.return_value = answer_obj
         mc_obj = MagicMock()
@@ -917,7 +921,7 @@ class TestCreateAnswer:
         """Number scale creates a NumberScaleAnswer with the value."""
         from submissions.services import _create_answer
 
-        mock_q.objects.filter.return_value.first.return_value = _mock_question()
+        mock_q.objects.filter.return_value.first.return_value = _mock_question(question_type="NUMBER_SCALE")
         answer_obj = MagicMock()
         mock_a.objects.create.return_value = answer_obj
 
