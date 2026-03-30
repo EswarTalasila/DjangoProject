@@ -117,6 +117,16 @@ class Submission(models.Model):
         """Database table configuration for Submission."""
 
         db_table = "submissions"
+        constraints = [
+            # Exactly one of student or teacher must be set (XOR).
+            models.CheckConstraint(
+                condition=(
+                    models.Q(student_id__isnull=False, teacher_id__isnull=True)
+                    | models.Q(student_id__isnull=True, teacher_id__isnull=False)
+                ),
+                name="ck_submission_owner_xor",
+            ),
+        ]
 
     def __str__(self):
         """Return a readable string representation."""
