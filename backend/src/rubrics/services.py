@@ -12,8 +12,21 @@ class RubricReferencedError(Exception):
     """Raised when a mutation is blocked because questions/groups reference the rubric."""
 
 
+def _rubric_with_related(rubric_id: int) -> Rubric | None:
+    """Fetch a rubric with criteria and levels prefetched for DTO conversion."""
+    return (
+        Rubric.objects.filter(id=rubric_id)
+        .prefetch_related("criteria__levels")
+        .first()
+    )
+
+
 def rubric_to_dto(rubric: Rubric) -> RubricDTO:
-    """Convert a Rubric model instance to a RubricDTO with nested criteria and levels."""
+    """Convert a Rubric model instance to a RubricDTO with nested criteria and levels.
+
+    For best performance, pass a rubric loaded via _rubric_with_related() or
+    from list_rubrics() so that criteria and levels are prefetched.
+    """
     criteria = []
     for criterion in rubric.criteria.all().order_by("order_index"):
         levels = [
@@ -49,8 +62,8 @@ def rubric_to_dto(rubric: Rubric) -> RubricDTO:
 
 
 def list_rubrics() -> list[Rubric]:
-    """Return all rubrics ordered by default queryset ordering."""
-    return list(Rubric.objects.all())
+    """Return all rubrics with criteria and levels prefetched."""
+    return list(Rubric.objects.prefetch_related("criteria__levels").all())
 
 
 @transaction.atomic

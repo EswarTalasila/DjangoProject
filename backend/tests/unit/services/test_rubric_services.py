@@ -110,7 +110,7 @@ class TestListRubrics:
         from rubrics.services import list_rubrics
 
         sentinel = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
-        mock_rubric_model.objects.all.return_value = sentinel
+        mock_rubric_model.objects.prefetch_related.return_value.all.return_value = sentinel
 
         result = list_rubrics()
 

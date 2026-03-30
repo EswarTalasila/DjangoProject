@@ -18,7 +18,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import Role, User
-from assessments.services import assessment_to_dto as assessment_template_to_dto
+from assessments.services import (
+    _assessment_with_related,
+    assessment_to_dto as assessment_template_to_dto,
+)
 from core.audit import complete_audit, get_client_ip, log_audit
 from core.errors import error_response
 from core.models import AuditAction, AuditOutcome
@@ -277,7 +280,9 @@ def template(request, assignment_id: int):
         return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
     if not _can_read_assignment(request.user, assignment):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+    # Fetch assessment with prefetches for efficient DTO serialization.
+    assessment = _assessment_with_related(assignment.assessment_id)
     return Response(
-        assessment_template_to_dto(assignment.assessment).model_dump(),
+        assessment_template_to_dto(assessment).model_dump(),
         status=status.HTTP_200_OK,
     )

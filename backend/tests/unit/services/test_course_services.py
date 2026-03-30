@@ -281,7 +281,7 @@ class TestCourseToDto:
         enrollment = SimpleNamespace(
             student_profile=student_profile, course_id=100, enrolled_at=None
         )
-        mock_enrollment_model.objects.filter.return_value = [enrollment]
+        mock_enrollment_model.objects.filter.return_value.select_related.return_value = [enrollment]
         mock_assignment_model.objects.filter.return_value.values_list.return_value = [5, 6]
 
         course = SimpleNamespace(
@@ -305,7 +305,7 @@ class TestCourseToDto:
         """Course with no enrollments or assignments returns zero counts."""
         from courses.services._queries import course_to_dto
 
-        mock_enrollment_model.objects.filter.return_value = []
+        mock_enrollment_model.objects.filter.return_value.select_related.return_value = []
         mock_assignment_model.objects.filter.return_value.values_list.return_value = []
 
         course = SimpleNamespace(
@@ -403,7 +403,7 @@ class TestListStudentsInCourse:
         enrollment = SimpleNamespace(
             student_profile=student_profile, course_id=10, enrolled_at=None
         )
-        mock_enrollment_model.objects.filter.return_value = [enrollment]
+        mock_enrollment_model.objects.filter.return_value.select_related.return_value = [enrollment]
 
         course = SimpleNamespace(id=10)
 
@@ -418,7 +418,7 @@ class TestListStudentsInCourse:
         """Returns empty list when no enrollments exist."""
         from courses.services._queries import list_students_in_course
 
-        mock_enrollment_model.objects.filter.return_value = []
+        mock_enrollment_model.objects.filter.return_value.select_related.return_value = []
 
         result = list_students_in_course(SimpleNamespace(id=10))
 

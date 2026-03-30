@@ -88,7 +88,7 @@ class TestEnrollmentStatusGating:
         from assignments.services._queries import list_for_user
 
         mock_tz.now.return_value = datetime(2025, 6, 1, tzinfo=UTC)
-        mock_enrollment.objects.filter.return_value = []
+        mock_enrollment.objects.filter.return_value.values_list.return_value = []
 
         user = MagicMock()
         user.id = 1
@@ -96,7 +96,7 @@ class TestEnrollmentStatusGating:
         # The mock returns [] so we get no course_ids, which is fine — we
         # just need to verify the filter was called with status
         mock_qs = MagicMock()
-        mock_assignment.objects.filter.return_value = mock_qs
+        mock_assignment.objects.select_related.return_value.filter.return_value = mock_qs
         mock_qs.filter.return_value.order_by.return_value = []
 
         list_for_user(user)

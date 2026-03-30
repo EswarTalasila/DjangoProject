@@ -54,7 +54,10 @@ def can_manage_course(request_user: User, course: Course) -> bool:
 
 def course_to_dto(course: Course) -> CourseDTO:
     """Convert a Course to a DTO with enrolled students and assignment IDs."""
-    enrollments = Enrollment.objects.filter(course=course, status=EnrollmentStatus.ACTIVE)
+    enrollments = (
+        Enrollment.objects.filter(course=course, status=EnrollmentStatus.ACTIVE)
+        .select_related("student_profile__user")
+    )
     students = [enrollment_to_student_dto(e) for e in enrollments]
     assignment_ids = list(Assignment.objects.filter(course=course).values_list("id", flat=True))
     teacher_user = course.teacher_profile.user if course.teacher_profile else None
@@ -122,5 +125,8 @@ def list_courses_for_user(user: User, include_archived: bool = False) -> list[Co
 
 def list_students_in_course(course: Course) -> list[EnrollmentStudentDTO]:
     """Return all students enrolled in a course as DTOs."""
-    enrollments = Enrollment.objects.filter(course=course, status=EnrollmentStatus.ACTIVE)
+    enrollments = (
+        Enrollment.objects.filter(course=course, status=EnrollmentStatus.ACTIVE)
+        .select_related("student_profile__user")
+    )
     return [enrollment_to_student_dto(e) for e in enrollments]

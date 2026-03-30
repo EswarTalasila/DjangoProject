@@ -31,6 +31,7 @@ from .models import Assessment
 from .serializers import AssessmentSerializer
 from .services import (
     AssessmentReferencedError,
+    _assessment_with_related,
     archive_assessment,
     assessment_to_dto,
     create_assessment,
@@ -126,6 +127,8 @@ def detail(request, assessment_id: int):
         return Response({"detail": "Assessment not found"}, status=status.HTTP_404_NOT_FOUND)
 
     if request.method == "GET":
+        # Re-fetch with prefetches for efficient DTO serialization.
+        assessment = _assessment_with_related(assessment_id)
         return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_200_OK)
 
     if request.method == "PATCH":

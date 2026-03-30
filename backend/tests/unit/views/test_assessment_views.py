@@ -163,10 +163,11 @@ class TestDetailView:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     @patch("assessments.views.assessment_to_dto")
+    @patch("assessments.views._assessment_with_related")
     @patch("assessments.views.Assessment")
     @patch("assessments.views.IsTeacherOrAbove.has_permission", return_value=True)
     def test_get_returns_dto(
-        self, mock_perm, mock_assessment_model, mock_dto
+        self, mock_perm, mock_assessment_model, mock_with_related, mock_dto
     ):
         """GET returns assessment DTO."""
         from assessments.views import detail
@@ -175,6 +176,7 @@ class TestDetailView:
         mock_assessment_model.objects.filter.return_value.first.return_value = (
             fake_assessment
         )
+        mock_with_related.return_value = fake_assessment
         mock_dto.return_value = _make_dto()
 
         user = MagicMock(is_authenticated=True)

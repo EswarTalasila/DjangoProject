@@ -136,12 +136,14 @@ class TestDetail:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     @patch("rubrics.views.rubric_to_dto")
+    @patch("rubrics.views._rubric_with_related")
     @patch("rubrics.views.Rubric")
-    def test_get_returns_rubric(self, mock_rubric_model, mock_to_dto):
+    def test_get_returns_rubric(self, mock_rubric_model, mock_with_related, mock_to_dto):
         """Returns 200 with rubric DTO on successful GET."""
         from rubrics.views import detail
 
         mock_rubric_model.objects.filter.return_value.first.return_value = MagicMock()
+        mock_with_related.return_value = MagicMock()
         mock_to_dto.return_value.model_dump.return_value = {"id": 1}
 
         user = _user(role=Role.TEACHER)

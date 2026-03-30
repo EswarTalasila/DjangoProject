@@ -12,6 +12,7 @@ from .models import Rubric
 from .serializers import RubricSerializer
 from .services import (
     RubricReferencedError,
+    _rubric_with_related,
     archive_rubric,
     create_rubric,
     delete_rubric,
@@ -47,6 +48,8 @@ def detail(request, rubric_id: int):
         return Response({"detail": "Rubric not found"}, status=status.HTTP_404_NOT_FOUND)
 
     if request.method == "GET":
+        # Re-fetch with prefetched criteria/levels for efficient DTO serialization.
+        rubric = _rubric_with_related(rubric_id)
         return Response(rubric_to_dto(rubric).model_dump(), status=status.HTTP_200_OK)
 
     if request.method == "PATCH":
