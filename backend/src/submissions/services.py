@@ -243,14 +243,14 @@ def get_submission(submission_id: int) -> Submission:
     return submission
 
 
-def get_by_assignment(assignment_id: int) -> list[Submission]:
-    """Get all submissions for an assignment."""
-    return list(Submission.objects.filter(assignment_id=assignment_id))
+def get_by_assignment(assignment_id: int):
+    """Get all submissions for an assignment (returns lazy queryset for pagination)."""
+    return Submission.objects.filter(assignment_id=assignment_id)
 
 
-def get_by_student(student_id: int) -> list[Submission]:
-    """Get all submissions by a student across all assignments."""
-    return list(Submission.objects.filter(student_id=student_id))
+def get_by_student(student_id: int):
+    """Get all submissions by a student across all assignments (returns lazy queryset)."""
+    return Submission.objects.filter(student_id=student_id)
 
 
 def get_by_student_and_assignment(student_id: int, assignment_id: int) -> Submission:

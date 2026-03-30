@@ -120,9 +120,8 @@ def _serialize_answers(submission, identifiable: bool) -> str:
 def _answer_value(answer) -> dict:
     if answer.answer_type == AnswerType.MULTIPLE_CHOICE:
         try:
-            selected = list(
-                answer.multiple_choice.selected.values_list("choice_index", flat=True)
-            )
+            # Use .all() to leverage prefetch cache instead of values_list().
+            selected = [sel.choice_index for sel in answer.multiple_choice.selected.all()]
             return {"selected": selected}
         except Exception:
             return {}
@@ -230,7 +229,8 @@ def export_course_submissions(
     qs = Submission.objects.filter(
         assignment__course=course,
     ).select_related(
-        "assignment__assessment", "assignment__course", "student",
+        "assignment__assessment", "assignment__course",
+        "student__student_profile",
     )
 
     if start_date:
