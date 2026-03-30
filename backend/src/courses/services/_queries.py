@@ -2,6 +2,8 @@
 Course and student domain queries — read-only helpers and DTOs.
 """
 
+from django.db.models import Prefetch
+
 from accounts.models import Role, StudentProfile, TeacherProfile, User
 from assignments.models import Assignment
 from core.dtos import CourseDTO, EnrollmentStudentDTO
@@ -54,12 +56,9 @@ def can_manage_course(request_user: User, course: Course) -> bool:
 
 def course_to_dto(course: Course) -> CourseDTO:
     """Convert a Course to a DTO with enrolled students and assignment IDs."""
-    enrollments = (
-        Enrollment.objects.filter(course=course, status=EnrollmentStatus.ACTIVE)
-        .select_related("student_profile__user")
-    )
+    enrollments = _active_enrollments_for_course(course)
     students = [enrollment_to_student_dto(e) for e in enrollments]
-    assignment_ids = list(Assignment.objects.filter(course=course).values_list("id", flat=True))
+    assignment_ids = _assignment_ids_for_course(course)
     teacher_user = course.teacher_profile.user if course.teacher_profile else None
     return CourseDTO(
         id=course.id,
@@ -102,7 +101,18 @@ def list_courses_for_user(user: User, include_archived: bool = False) -> list[Co
     """
     from ..models import CourseStatus
 
-    base_qs = Course.objects.select_related("teacher_profile__user")
+    base_qs = Course.objects.select_related("teacher_profile__user").prefetch_related(
+        Prefetch(
+            "enrollments",
+            queryset=Enrollment.objects.filter(status=EnrollmentStatus.ACTIVE).select_related(
+                "student_profile__user"
+            ),
+        ),
+        Prefetch(
+            "assignments",
+            queryset=Assignment.objects.only("id", "course_id"),
+        ),
+    )
     if not include_archived:
         base_qs = base_qs.filter(status=CourseStatus.ACTIVE)
 
@@ -130,3 +140,23 @@ def list_students_in_course(course: Course) -> list[EnrollmentStudentDTO]:
         .select_related("student_profile__user")
     )
     return [enrollment_to_student_dto(e) for e in enrollments]
+
+
+def _active_enrollments_for_course(course: Course) -> list[Enrollment]:
+    """Return active enrollments, using a prefetched cache when available."""
+    prefetched = getattr(course, "_prefetched_objects_cache", {}).get("enrollments")
+    if prefetched is not None:
+        return list(prefetched)
+    return list(
+        Enrollment.objects.filter(course=course, status=EnrollmentStatus.ACTIVE).select_related(
+            "student_profile__user"
+        )
+    )
+
+
+def _assignment_ids_for_course(course: Course) -> list[int]:
+    """Return assignment IDs, using a prefetched cache when available."""
+    prefetched = getattr(course, "_prefetched_objects_cache", {}).get("assignments")
+    if prefetched is not None:
+        return [assignment.id for assignment in prefetched]
+    return list(Assignment.objects.filter(course=course).values_list("id", flat=True))

@@ -12,6 +12,7 @@ from django.db import connection
 from accounts.models import Role, StudentProfile, TeacherProfile, UserRole
 from assessments.models import (
     Assessment,
+    AssessmentQuestionGroup,
     GradingMode,
     McqChoice,
     MultipleChoiceQuestion,
@@ -202,6 +203,12 @@ class TestAssessmentDtoQueryCount:
         assessment, _ = _create_assessment_with_questions(
             admin_user, n_mcq=5, n_sa=3, n_ns=2,
         )
+        for i in range(3):
+            AssessmentQuestionGroup.objects.create(
+                assessment=assessment,
+                name=f"Group {i}",
+                order_index=i,
+            )
 
         # Warm up
         _assessment_with_related(assessment.id)
@@ -273,6 +280,41 @@ class TestCourseDtoQueryCount:
         # 1 enrollment query (with select_related) + 1 assignment query.
         assert len(ctx.captured_queries) <= 4, (
             f"Expected <= 4 queries for course DTO, got {len(ctx.captured_queries)}:\n"
+            + "\n".join(q["sql"][:120] for q in ctx.captured_queries)
+        )
+
+    def test_course_list_dto_constant_queries(self, admin_user):
+        """Serializing multiple courses should not issue 2 extra queries per course."""
+        from courses.services._queries import course_to_dto, list_courses_for_user
+
+        teacher = UserFactory()
+        UserRole.objects.create(user=teacher, role=Role.TEACHER)
+        tp = TeacherProfile.objects.create(user=teacher)
+
+        for course_idx in range(3):
+            course = Course.objects.create(
+                name=f"Query Course {course_idx}",
+                teacher_profile=tp,
+            )
+            for student_idx in range(2):
+                student = UserFactory(
+                    username=f"qc_list_student_{course_idx}_{student_idx}@example.com"
+                )
+                UserRole.objects.create(user=student, role=Role.STUDENT)
+                sp = StudentProfile.objects.create(
+                    user=student, created_by=admin_user, consent=False,
+                )
+                Enrollment.objects.create(
+                    course=course, student_profile=sp, status=EnrollmentStatus.ACTIVE,
+                )
+
+        with CaptureQueriesContext(connection) as ctx:
+            courses = list_courses_for_user(teacher)
+            [course_to_dto(course) for course in courses]
+
+        # 1 base query + 2 prefetch queries (active enrollments, assignments).
+        assert len(ctx.captured_queries) <= 5, (
+            f"Expected <= 5 queries for course list DTOs, got {len(ctx.captured_queries)}:\n"
             + "\n".join(q["sql"][:120] for q in ctx.captured_queries)
         )
 

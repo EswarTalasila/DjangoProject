@@ -4,6 +4,7 @@ from collections.abc import Iterable
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils import timezone
 
 from accounts.models import User
@@ -37,7 +38,10 @@ def _assessment_with_related(assessment_id: int) -> Assessment | None:
     return (
         Assessment.objects.filter(id=assessment_id)
         .prefetch_related(
-            "question_groups",
+            Prefetch(
+                "question_groups",
+                queryset=AssessmentQuestionGroup.objects.order_by("order_index"),
+            ),
             "questions__mcq_choices",
             "questions__multiple_choice",
             "questions__short_answer",
@@ -54,7 +58,7 @@ def assessment_to_dto(assessment: Assessment) -> AssessmentDTO:
     so that question_groups, questions and their sub-types are prefetched.
     """
     groups = []
-    for g in assessment.question_groups.all().order_by("order_index"):
+    for g in assessment.question_groups.all():
         groups.append(
             QuestionGroupDTO(
                 id=g.id,
@@ -192,7 +196,10 @@ def list_assessments(include_archived: bool = False) -> list[Assessment]:
         qs = qs.filter(status=AssessmentStatus.ACTIVE)
     return list(
         qs.prefetch_related(
-            "question_groups",
+            Prefetch(
+                "question_groups",
+                queryset=AssessmentQuestionGroup.objects.order_by("order_index"),
+            ),
             "questions__mcq_choices",
             "questions__multiple_choice",
             "questions__short_answer",

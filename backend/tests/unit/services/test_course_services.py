@@ -299,6 +299,35 @@ class TestCourseToDto:
         assert dto.teacherId == 42
         assert dto.teacherName == "Teacher Smith"
 
+    def test_converts_course_to_dto_using_prefetched_relations(self):
+        """Prefetched enrollments and assignments avoid extra ORM lookups."""
+        from courses.services._queries import course_to_dto
+
+        teacher_user = SimpleNamespace(id=42, name="Teacher Smith")
+        user = SimpleNamespace(id=1, name="Student1", username="s1")
+        student_profile = SimpleNamespace(user=user, consent=True)
+        enrollment = SimpleNamespace(
+            student_profile=student_profile, course_id=100, enrolled_at=None
+        )
+        assignment = SimpleNamespace(id=5)
+
+        course = SimpleNamespace(
+            id=100,
+            name="Math 101",
+            teacher_profile_id=42,
+            teacher_profile=SimpleNamespace(user=teacher_user),
+            created_at=None,
+            _prefetched_objects_cache={
+                "enrollments": [enrollment],
+                "assignments": [assignment],
+            },
+        )
+
+        dto = course_to_dto(course)
+
+        assert dto.studentCount == 1
+        assert dto.assignmentIds == [5]
+
     @patch("courses.services._queries.Assignment")
     @patch("courses.services._queries.Enrollment")
     def test_empty_course_produces_zero_counts(self, mock_enrollment_model, mock_assignment_model):
@@ -337,8 +366,7 @@ class TestListCoursesForUser:
 
         sentinel = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
         mock_qs = MagicMock()
-        # Chain: .select_related(...).filter(status=ACTIVE)
-        mock_course_model.objects.select_related.return_value = mock_qs
+        mock_course_model.objects.select_related.return_value.prefetch_related.return_value = mock_qs
         mock_qs.filter.return_value = sentinel
 
         admin = SimpleNamespace(id=1, is_staff=True, is_authenticated=True)
@@ -355,8 +383,7 @@ class TestListCoursesForUser:
 
         sentinel = [SimpleNamespace(id=1)]
         mock_qs = MagicMock()
-        # Chain: .select_related(...).filter(status=ACTIVE)
-        mock_course_model.objects.select_related.return_value = mock_qs
+        mock_course_model.objects.select_related.return_value.prefetch_related.return_value = mock_qs
         mock_qs.filter.return_value = sentinel
 
         researcher = SimpleNamespace(id=2, is_staff=False, is_authenticated=True)
@@ -374,8 +401,7 @@ class TestListCoursesForUser:
         sentinel = [SimpleNamespace(id=3)]
         mock_qs = MagicMock()
         mock_filtered_qs = MagicMock()
-        # Chain: .select_related(...).filter(status=ACTIVE)
-        mock_course_model.objects.select_related.return_value = mock_qs
+        mock_course_model.objects.select_related.return_value.prefetch_related.return_value = mock_qs
         # First .filter(status=ACTIVE) returns a filtered queryset
         mock_qs.filter.return_value = mock_filtered_qs
         # Second .filter(teacher_profile__user=user) returns sentinel

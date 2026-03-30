@@ -280,10 +280,10 @@ def export_course_submissions(
     def _generate():
         buf, writer = _make_writer()
         yield UTF8_BOM + writer.writerow(cols).encode("utf-8")
-        # When include_answers is True, prefetch_related is active and
-        # .iterator() would discard the prefetch cache. Iterate normally
-        # so answer sub-type lookups use the cache instead of N+1-ing.
-        rows = qs if include_answers else qs.iterator(chunk_size=2000)
+        # Keep exports chunked; in Django 5.x, iterator(chunk_size=...) remains
+        # compatible with prefetch_related and avoids loading the full export
+        # result set into memory at once.
+        rows = qs.iterator(chunk_size=2000)
         for sub in rows:
             student = sub.student
             assessment = sub.assignment.assessment
@@ -313,4 +313,3 @@ def export_course_submissions(
             yield row_str.encode("utf-8")
 
     return _generate(), row_count, not identifiable
-

@@ -55,7 +55,7 @@ class TestAssessmentToDto:
         assessment.grading_mode = GradingMode.AUTO
         assessment.scoring_policy = "STANDARD"
         assessment.questions.all.return_value = []
-        assessment.question_groups.all.return_value.order_by.return_value = []
+        assessment.question_groups.all.return_value = []
 
         dto = assessment_to_dto(assessment)
 
@@ -78,7 +78,7 @@ class TestAssessmentToDto:
         assessment.grading_mode = GradingMode.MANUAL
         assessment.scoring_policy = "COMPLETION"
         assessment.questions.all.return_value = []
-        assessment.question_groups.all.return_value.order_by.return_value = []
+        assessment.question_groups.all.return_value = []
 
         dto = assessment_to_dto(assessment)
 
