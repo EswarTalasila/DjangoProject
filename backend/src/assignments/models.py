@@ -149,6 +149,18 @@ class Assignment(models.Model):
         indexes = [
             models.Index(fields=["status"], name="idx_assignment_status"),
         ]
+        constraints = [
+            # COURSE assignments must reference a course.
+            models.CheckConstraint(
+                condition=~models.Q(audience_type="COURSE") | models.Q(course_id__isnull=False),
+                name="ck_assignment_course_required_for_course_audience",
+            ),
+            # TEACHER assignments must NOT reference a course.
+            models.CheckConstraint(
+                condition=~models.Q(audience_type="TEACHER") | models.Q(course_id__isnull=True),
+                name="ck_assignment_no_course_for_teacher_audience",
+            ),
+        ]
 
     def __str__(self):
         """Return a readable string representation."""

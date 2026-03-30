@@ -242,20 +242,25 @@ class TestUserInputSerializer:
 class TestUserOutputSerializer:
     """Tests for UserOutputSerializer output shape."""
 
-    def _mock_user(self, roles=None):
+    def _mock_user(self, roles=None, is_staff=False):
         """Build a mock user with a roles queryset."""
         user = MagicMock()
         user.id = 1
         user.name = "Test User"
         user.username = "testuser"
         user.email = "test@example.com"
+        user.is_staff = is_staff
+        user.is_authenticated = True
+        user._cached_role_set = None
         qs = MagicMock()
         if roles:
             qs.all.return_value = [SimpleNamespace(role=r) for r in roles]
             qs.first.return_value = SimpleNamespace(role=roles[0])
+            qs.values_list.return_value = list(roles)
         else:
             qs.all.return_value = []
             qs.first.return_value = None
+            qs.values_list.return_value = []
         user.roles = qs
         return user
 
@@ -277,11 +282,11 @@ class TestUserOutputSerializer:
         data = UserOutputSerializer(user).data
         assert data["role"] == "STUDENT"
 
-    def test_first_role_used_when_multiple(self):
-        """When multiple roles exist, the first from queryset is used."""
+    def test_highest_priority_role_used_when_multiple(self):
+        """When multiple roles exist, the highest-priority role is returned."""
         user = self._mock_user(roles=[Role.TEACHER, Role.RESEARCHER])
         data = UserOutputSerializer(user).data
-        assert data["role"] == "TEACHER"
+        assert data["role"] == "RESEARCHER"
 
 
 # ---------------------------------------------------------------------------

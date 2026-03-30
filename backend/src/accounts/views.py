@@ -1039,6 +1039,8 @@ def _edit_user(request, user_id: int):
         complete_audit(audit_id, AuditOutcome.SUCCESS)
 
     user.refresh_from_db()
+    # Clear the per-request role cache so the serializer sees the updated roles.
+    user._cached_role_set = None
     return Response(UserOutputSerializer(user).data, status=status.HTTP_200_OK)
 
 
