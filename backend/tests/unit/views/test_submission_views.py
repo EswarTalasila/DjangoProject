@@ -107,16 +107,18 @@ class TestCreateForAssignment:
         assert response.status_code == http_status.HTTP_404_NOT_FOUND
 
     @patch("submissions.views.submission_to_dto")
+    @patch("submissions.views.get_submission_for_dto")
     @patch("submissions.views.create_submission")
     @patch("submissions.views._student_enrolled_in_assignment")
     @patch("submissions.views._assignment_for")
-    def test_student_can_create_own_submission(self, mock_assign_for, mock_enrolled, mock_create, mock_dto):
+    def test_student_can_create_own_submission(self, mock_assign_for, mock_enrolled, mock_create, mock_refetch, mock_dto):
         """Student creating their own submission gets 201."""
         from submissions.views import create_for_assignment
 
         mock_assign_for.return_value = _mock_assignment()
         mock_enrolled.return_value = True
         mock_create.return_value = MagicMock()
+        mock_refetch.return_value = MagicMock()
         mock_dto.return_value = _mock_submission_dto()
 
         user = _user(id=100, role=Role.STUDENT)
@@ -194,7 +196,7 @@ class TestCreateForAssignment:
 class TestGetOne:
     """Tests for the get_one submission retrieval view."""
 
-    @patch("submissions.views.get_submission")
+    @patch("submissions.views.get_submission_for_dto")
     def test_returns_404_when_not_found(self, mock_get):
         """Returns 404 when submission does not exist."""
         from submissions.views import get_one
@@ -210,7 +212,7 @@ class TestGetOne:
 
     @patch("submissions.views.submission_to_dto")
     @patch("submissions.views._can_access_submission")
-    @patch("submissions.views.get_submission")
+    @patch("submissions.views.get_submission_for_dto")
     def test_returns_200_for_authorized_user(self, mock_get, mock_access, mock_dto):
         """Returns 200 with submission DTO for authorized user."""
         from submissions.views import get_one
@@ -228,7 +230,7 @@ class TestGetOne:
         assert response.status_code == http_status.HTTP_200_OK
 
     @patch("submissions.views._can_access_submission")
-    @patch("submissions.views.get_submission")
+    @patch("submissions.views.get_submission_for_dto")
     def test_returns_403_for_unauthorized_user(self, mock_get, mock_access):
         """Returns 403 when user cannot access the submission."""
         from submissions.views import get_one
@@ -505,16 +507,17 @@ class TestOverrideScoreView:
         assert response.status_code == http_status.HTTP_404_NOT_FOUND
 
     @patch("submissions.views.submission_to_dto")
+    @patch("submissions.views.get_submission_for_dto")
     @patch("submissions.views.override_score")
     @patch("submissions.views.Submission")
-    def test_admin_can_override(self, mock_sub_model, mock_override, mock_dto):
+    def test_admin_can_override(self, mock_sub_model, mock_override, mock_refetch, mock_dto):
         """Admin can override scores on any submission."""
         from submissions.views import override_score_view
 
         sub = MagicMock()
         sub.assignment = _mock_assignment()
         mock_sub_model.objects.filter.return_value.select_related.return_value.first.return_value = sub
-        mock_override.return_value = MagicMock()
+        mock_refetch.return_value = MagicMock()
         mock_dto.return_value = _mock_submission_dto()
 
         user = _user(id=1, is_staff=True)
@@ -717,16 +720,18 @@ class TestAssignmentSubmissions:
         assert response.status_code == http_status.HTTP_404_NOT_FOUND
 
     @patch("submissions.views.submission_to_dto")
+    @patch("submissions.views.get_submission_for_dto")
     @patch("submissions.views.create_submission")
     @patch("submissions.views._student_enrolled_in_assignment")
     @patch("submissions.views._assignment_for")
-    def test_post_creates_submission(self, mock_assign_for, mock_enrolled, mock_create, mock_dto):
+    def test_post_creates_submission(self, mock_assign_for, mock_enrolled, mock_create, mock_refetch, mock_dto):
         """POST creates a submission and returns 201."""
         from submissions.views import assignment_submissions
 
         mock_assign_for.return_value = _mock_assignment()
         mock_enrolled.return_value = True
         mock_create.return_value = MagicMock()
+        mock_refetch.return_value = MagicMock()
         mock_dto.return_value = _mock_submission_dto()
 
         user = _user(id=100, role=Role.STUDENT)
@@ -1061,7 +1066,7 @@ class TestGetStudentSubmission:
         assert response.status_code == http_status.HTTP_404_NOT_FOUND
 
     @patch("submissions.views.submission_to_dto")
-    @patch("submissions.views.get_by_student_and_assignment")
+    @patch("submissions.views.get_by_student_and_assignment_for_dto")
     @patch("submissions.views._assignment_for")
     def test_admin_can_view_any(self, mock_assign_for, mock_get, mock_dto):
         """Admin can view any student's submission for any assignment."""
@@ -1080,7 +1085,7 @@ class TestGetStudentSubmission:
 
     @patch("submissions.views.has_sudo_permission")
     @patch("submissions.views.submission_to_dto")
-    @patch("submissions.views.get_by_student_and_assignment")
+    @patch("submissions.views.get_by_student_and_assignment_for_dto")
     @patch("submissions.views._assignment_for")
     def test_researcher_can_view_any(self, mock_assign_for, mock_get, mock_dto, mock_sudo):
         """Researcher with sudo can view any student's submission."""
@@ -1130,7 +1135,7 @@ class TestGetStudentSubmission:
         assert response.status_code == http_status.HTTP_403_FORBIDDEN
 
     @patch("submissions.views.submission_to_dto")
-    @patch("submissions.views.get_by_student_and_assignment")
+    @patch("submissions.views.get_by_student_and_assignment_for_dto")
     @patch("submissions.views._student_enrolled_in_assignment")
     @patch("submissions.views._assignment_for")
     def test_student_enrolled_can_view_own(self, mock_assign_for, mock_enrolled, mock_get, mock_dto):
@@ -1166,7 +1171,7 @@ class TestGetStudentSubmission:
         assert response.status_code == http_status.HTTP_403_FORBIDDEN
 
     @patch("submissions.views.submission_to_dto")
-    @patch("submissions.views.get_by_student_and_assignment")
+    @patch("submissions.views.get_by_student_and_assignment_for_dto")
     @patch("submissions.views._teacher_owns_assignment")
     @patch("submissions.views._assignment_for")
     def test_teacher_owning_can_view(self, mock_assign_for, mock_owns, mock_get, mock_dto):
@@ -1199,7 +1204,7 @@ class TestGetStudentSubmission:
 
         assert response.status_code == http_status.HTTP_403_FORBIDDEN
 
-    @patch("submissions.views.get_by_student_and_assignment")
+    @patch("submissions.views.get_by_student_and_assignment_for_dto")
     @patch("submissions.views._assignment_for")
     def test_value_error_returns_error_response(self, mock_assign_for, mock_get):
         """ValueError from service returns error response."""
@@ -1227,10 +1232,11 @@ class TestOverrideScoreViewExtended:
     """Extended tests for override_score_view covering uncovered branches."""
 
     @patch("submissions.views.submission_to_dto")
+    @patch("submissions.views.get_submission_for_dto")
     @patch("submissions.views.override_score")
     @patch("submissions.views._teacher_owns_assignment")
     @patch("submissions.views.Submission")
-    def test_teacher_owning_can_override(self, mock_sub_model, mock_owns, mock_override, mock_dto):
+    def test_teacher_owning_can_override(self, mock_sub_model, mock_owns, mock_override, mock_refetch, mock_dto):
         """Teacher who owns the assignment can override scores."""
         from submissions.views import override_score_view
 
@@ -1238,7 +1244,7 @@ class TestOverrideScoreViewExtended:
         sub.assignment = _mock_assignment(teacher_id=200)
         mock_sub_model.objects.filter.return_value.select_related.return_value.first.return_value = sub
         mock_owns.return_value = True
-        mock_override.return_value = MagicMock()
+        mock_refetch.return_value = MagicMock()
         mock_dto.return_value = _mock_submission_dto()
 
         user = _user(id=200, role=Role.TEACHER)

@@ -42,7 +42,9 @@ from .services import (
     get_by_assignment,
     get_by_student,
     get_by_student_and_assignment,
+    get_by_student_and_assignment_for_dto,
     get_submission,
+    get_submission_for_dto,
     list_me,
     override_score,
     submission_to_compact_dto,
@@ -189,6 +191,8 @@ def _create_for_assignment(request, assignment_id: int, assignment: Assignment):
         )
     except ValueError as exc:
         return error_response(exc)
+    # Re-fetch with prefetches for efficient DTO serialization.
+    submission = get_submission_for_dto(submission.id)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_201_CREATED)
 
 
@@ -288,7 +292,7 @@ def get_one(request, submission_id: int):
         404: "Submission not found" if ID invalid
     """
     try:
-        submission = get_submission(submission_id)
+        submission = get_submission_for_dto(submission_id)
     except ValueError as exc:
         return error_response(exc)
     if not _can_access_submission(request.user, submission):
@@ -416,7 +420,7 @@ def get_student_submission(request, student_id: int, assignment_id: int):
     else:
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     try:
-        submission = get_by_student_and_assignment(student_id, assignment_id)
+        submission = get_by_student_and_assignment_for_dto(student_id, assignment_id)
     except ValueError as exc:
         return error_response(exc)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
@@ -461,6 +465,8 @@ def save_draft(request, student_id: int, assignment_id: int):
         submission = create_submission(assignment_id, payload, SubmissionStatus.IN_PROGRESS)
     except ValueError as exc:
         return error_response(exc)
+    # Re-fetch with prefetches for efficient DTO serialization.
+    submission = get_submission_for_dto(submission.id)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
 
 
@@ -527,9 +533,11 @@ def override_score_view(request, submission_id: int):
     )
 
     try:
-        submission = override_score(submission_id, request.data)
+        override_score(submission_id, request.data)
     except ValueError as exc:
         complete_audit(audit_id, AuditOutcome.FAILURE)
         return error_response(exc)
     complete_audit(audit_id, AuditOutcome.SUCCESS)
+    # Re-fetch with prefetches for efficient DTO serialization.
+    submission = get_submission_for_dto(submission_id)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
