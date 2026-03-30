@@ -33,7 +33,7 @@ from core.errors import error_response
 from core.models import AuditAction, AuditOutcome
 from core.pagination import paginate
 from core.permissions import has_role, has_sudo_permission, primary_role
-from courses.models import Enrollment
+from courses.models import Enrollment, EnrollmentStatus
 
 from .models import Submission, SubmissionStatus
 from .serializers import SubmissionSerializer
@@ -109,7 +109,9 @@ def _student_enrolled_in_assignment(user, assignment: Assignment) -> bool:
     if not assignment.course_id:
         return False
     return Enrollment.objects.filter(
-        course_id=assignment.course_id, student_profile__user_id=user.id
+        course_id=assignment.course_id,
+        student_profile__user_id=user.id,
+        status=EnrollmentStatus.ACTIVE,
     ).exists()
 
 
