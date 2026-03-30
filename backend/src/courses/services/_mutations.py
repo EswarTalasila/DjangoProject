@@ -153,7 +153,7 @@ def _create_submissions_for_student(student_user: User, course: Course) -> None:
     that were already created. This creates NOT_STARTED submissions with
     empty answers for each assignment in the course.
     """
-    assignments = Assignment.objects.filter(course=course)
+    assignments = Assignment.objects.filter(course=course, status=AssignmentStatus.ACTIVE)
     for assignment in assignments:
         assessment = Assessment.objects.filter(id=assignment.assessment_id).first()
         if not assessment:
