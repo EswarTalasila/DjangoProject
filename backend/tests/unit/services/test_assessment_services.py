@@ -402,7 +402,8 @@ class TestListAssessments:
         sentinel = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
         qs = MagicMock()
         mock_assessment_model.objects.all.return_value = qs
-        qs.filter.return_value = sentinel
+        # Chain: .filter().prefetch_related() -> iterable that yields sentinel
+        qs.filter.return_value.prefetch_related.return_value = sentinel
 
         result = list_assessments()
 
@@ -415,7 +416,10 @@ class TestListAssessments:
         from assessments.services import list_assessments
 
         sentinel = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
-        mock_assessment_model.objects.all.return_value = sentinel
+        qs = MagicMock()
+        mock_assessment_model.objects.all.return_value = qs
+        # Chain: .prefetch_related() -> iterable that yields sentinel (no filter)
+        qs.prefetch_related.return_value = sentinel
 
         result = list_assessments(include_archived=True)
 

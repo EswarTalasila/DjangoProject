@@ -231,9 +231,12 @@ class TestAnswerValue:
     def test_multiple_choice(self):
         """Extracts selected indices from a multiple choice answer."""
         from exports.services import _answer_value
+        from types import SimpleNamespace
         answer = MagicMock()
         answer.answer_type = "MULTIPLE_CHOICE"
-        answer.multiple_choice.selected.values_list.return_value = [0, 2]
+        answer.multiple_choice.selected.all.return_value = [
+            SimpleNamespace(choice_index=0), SimpleNamespace(choice_index=2),
+        ]
         result = _answer_value(answer)
         assert result == {"selected": [0, 2]}
 
@@ -242,7 +245,7 @@ class TestAnswerValue:
         from exports.services import _answer_value
         answer = MagicMock()
         answer.answer_type = "MULTIPLE_CHOICE"
-        answer.multiple_choice.selected.values_list.side_effect = Exception("err")
+        answer.multiple_choice.selected.all.side_effect = Exception("err")
         result = _answer_value(answer)
         assert result == {}
 

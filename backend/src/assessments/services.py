@@ -32,7 +32,27 @@ class AssessmentReferencedError(Exception):
     """Raised when a mutation is blocked because assignments reference the assessment."""
 
 
+def _assessment_with_related(assessment_id: int) -> Assessment | None:
+    """Fetch an assessment with all related data prefetched for DTO conversion."""
+    return (
+        Assessment.objects.filter(id=assessment_id)
+        .prefetch_related(
+            "question_groups",
+            "questions__mcq_choices",
+            "questions__multiple_choice",
+            "questions__short_answer",
+            "questions__number_scale",
+        )
+        .first()
+    )
+
+
 def assessment_to_dto(assessment: Assessment) -> AssessmentDTO:
+    """Convert an Assessment to a DTO.
+
+    For best performance, pass an assessment loaded via _assessment_with_related()
+    so that question_groups, questions and their sub-types are prefetched.
+    """
     groups = []
     for g in assessment.question_groups.all().order_by("order_index"):
         groups.append(
@@ -55,6 +75,11 @@ def assessment_to_dto(assessment: Assessment) -> AssessmentDTO:
 
 
 def question_to_dto(question: Question) -> QuestionDTO:
+    """Convert a Question to a DTO.
+
+    Expects question.mcq_choices, question.multiple_choice, question.short_answer,
+    and question.number_scale to be prefetched by the caller for optimal performance.
+    """
     data: dict | None = None
     select_all = None
     min_value = None
@@ -158,11 +183,22 @@ def delete_assessment(assessment: Assessment) -> None:
 
 
 def list_assessments(include_archived: bool = False) -> list[Assessment]:
-    """List assessments. By default only ACTIVE; set include_archived=True for all."""
+    """List assessments with related data prefetched for DTO conversion.
+
+    By default only ACTIVE; set include_archived=True for all.
+    """
     qs = Assessment.objects.all()
     if not include_archived:
         qs = qs.filter(status=AssessmentStatus.ACTIVE)
-    return list(qs)
+    return list(
+        qs.prefetch_related(
+            "question_groups",
+            "questions__mcq_choices",
+            "questions__multiple_choice",
+            "questions__short_answer",
+            "questions__number_scale",
+        )
+    )
 
 
 @transaction.atomic

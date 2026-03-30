@@ -66,9 +66,10 @@ class TestListOrCreate:
         mock_paginate.assert_called_once()
 
     @patch("rubrics.views.rubric_to_dto")
+    @patch("rubrics.views._rubric_with_related")
     @patch("rubrics.views.create_rubric")
     @patch("rubrics.views.RubricSerializer")
-    def test_post_creates_rubric(self, mock_serializer_cls, mock_create, mock_to_dto):
+    def test_post_creates_rubric(self, mock_serializer_cls, mock_create, mock_refetch, mock_to_dto):
         """Creates a rubric and returns 201 on valid POST request."""
         from rubrics.views import list_or_create
 
@@ -77,7 +78,9 @@ class TestListOrCreate:
         serializer.validated_data = {"title": "R1"}
         mock_serializer_cls.return_value = serializer
 
-        mock_create.return_value = MagicMock()
+        fake_rubric = MagicMock()
+        mock_create.return_value = fake_rubric
+        mock_refetch.return_value = fake_rubric
         mock_to_dto.return_value.model_dump.return_value = {"id": 1}
 
         user = _user(role=Role.RESEARCHER)
@@ -136,12 +139,14 @@ class TestDetail:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     @patch("rubrics.views.rubric_to_dto")
+    @patch("rubrics.views._rubric_with_related")
     @patch("rubrics.views.Rubric")
-    def test_get_returns_rubric(self, mock_rubric_model, mock_to_dto):
+    def test_get_returns_rubric(self, mock_rubric_model, mock_with_related, mock_to_dto):
         """Returns 200 with rubric DTO on successful GET."""
         from rubrics.views import detail
 
         mock_rubric_model.objects.filter.return_value.first.return_value = MagicMock()
+        mock_with_related.return_value = MagicMock()
         mock_to_dto.return_value.model_dump.return_value = {"id": 1}
 
         user = _user(role=Role.TEACHER)
@@ -164,10 +169,11 @@ class TestDetail:
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     @patch("rubrics.views.rubric_to_dto")
+    @patch("rubrics.views._rubric_with_related")
     @patch("rubrics.views.update_rubric")
     @patch("rubrics.views.RubricSerializer")
     @patch("rubrics.views.Rubric")
-    def test_patch_updates_rubric(self, mock_rubric_model, mock_serializer_cls, mock_update, mock_to_dto):
+    def test_patch_updates_rubric(self, mock_rubric_model, mock_serializer_cls, mock_update, mock_refetch, mock_to_dto):
         """Returns 200 with updated rubric DTO on successful PATCH."""
         from rubrics.views import detail
 
@@ -176,7 +182,9 @@ class TestDetail:
         serializer.is_valid.return_value = True
         serializer.validated_data = {"title": "New"}
         mock_serializer_cls.return_value = serializer
-        mock_update.return_value = MagicMock()
+        fake_rubric = MagicMock()
+        mock_update.return_value = fake_rubric
+        mock_refetch.return_value = fake_rubric
         mock_to_dto.return_value.model_dump.return_value = {"id": 1}
 
         user = _user(role=Role.RESEARCHER)
@@ -301,14 +309,17 @@ class TestArchive:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     @patch("rubrics.views.rubric_to_dto")
+    @patch("rubrics.views._rubric_with_related")
     @patch("rubrics.views.archive_rubric")
     @patch("rubrics.views.Rubric")
-    def test_archives_successfully(self, mock_rubric, mock_archive, mock_to_dto):
+    def test_archives_successfully(self, mock_rubric, mock_archive, mock_refetch, mock_to_dto):
         """Returns 200 with updated DTO on successful archive."""
         from rubrics.views import archive
 
         mock_rubric.objects.filter.return_value.first.return_value = MagicMock()
-        mock_archive.return_value = MagicMock()
+        fake_rubric = MagicMock()
+        mock_archive.return_value = fake_rubric
+        mock_refetch.return_value = fake_rubric
         mock_to_dto.return_value.model_dump.return_value = {"id": 1}
 
         user = _user(role=Role.RESEARCHER)

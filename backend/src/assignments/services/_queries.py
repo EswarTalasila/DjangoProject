@@ -30,13 +30,13 @@ def assignment_to_dto(assignment: Assignment) -> AssignmentDTO:
 
 
 def get_assignment(assignment_id: int) -> Assignment | None:
-    """Retrieve an assignment by ID, or None if not found."""
-    return Assignment.objects.filter(id=assignment_id).first()
+    """Retrieve an assignment by ID with assessment eagerly loaded, or None if not found."""
+    return Assignment.objects.select_related("assessment").filter(id=assignment_id).first()
 
 
 def list_by_course(course_id: int, include_archived: bool = False) -> list[Assignment]:
     """List assignments for a course. ARCH-CN-06: default ACTIVE-only."""
-    qs = Assignment.objects.filter(course_id=course_id)
+    qs = Assignment.objects.select_related("assessment").filter(course_id=course_id)
     if not include_archived:
         qs = qs.filter(status=AssignmentStatus.ACTIVE)
     return list(qs)
@@ -52,12 +52,14 @@ def list_for_user(user: User) -> list[Assignment]:
     role = primary_role(user)
     now = timezone.now()
     if role == Role.STUDENT:
-        enrollments = Enrollment.objects.filter(
-            student_profile__user=user, status=EnrollmentStatus.ACTIVE
+        course_ids = list(
+            Enrollment.objects.filter(
+                student_profile__user=user, status=EnrollmentStatus.ACTIVE
+            ).values_list("course_id", flat=True)
         )
-        course_ids = [enrollment.course_id for enrollment in enrollments]
         return list(
-            Assignment.objects.filter(
+            Assignment.objects.select_related("assessment")
+            .filter(
                 course_id__in=course_ids,
                 open_at__lte=now,
                 status=AssignmentStatus.ACTIVE,
@@ -67,7 +69,9 @@ def list_for_user(user: User) -> list[Assignment]:
         )
     if role == Role.TEACHER:
         return list(
-            Assignment.objects.filter(created_by=user).order_by("open_at")
+            Assignment.objects.select_related("assessment")
+            .filter(created_by=user)
+            .order_by("open_at")
         )
     # ADMIN/RESEARCHER viewing own assignments — return empty (they use cross-user endpoint)
     return []

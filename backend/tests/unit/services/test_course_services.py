@@ -281,7 +281,7 @@ class TestCourseToDto:
         enrollment = SimpleNamespace(
             student_profile=student_profile, course_id=100, enrolled_at=None
         )
-        mock_enrollment_model.objects.filter.return_value = [enrollment]
+        mock_enrollment_model.objects.filter.return_value.select_related.return_value = [enrollment]
         mock_assignment_model.objects.filter.return_value.values_list.return_value = [5, 6]
 
         course = SimpleNamespace(
@@ -305,7 +305,7 @@ class TestCourseToDto:
         """Course with no enrollments or assignments returns zero counts."""
         from courses.services._queries import course_to_dto
 
-        mock_enrollment_model.objects.filter.return_value = []
+        mock_enrollment_model.objects.filter.return_value.select_related.return_value = []
         mock_assignment_model.objects.filter.return_value.values_list.return_value = []
 
         course = SimpleNamespace(
@@ -337,7 +337,8 @@ class TestListCoursesForUser:
 
         sentinel = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
         mock_qs = MagicMock()
-        mock_course_model.objects.all.return_value = mock_qs
+        # Chain: .select_related(...).filter(status=ACTIVE)
+        mock_course_model.objects.select_related.return_value = mock_qs
         mock_qs.filter.return_value = sentinel
 
         admin = SimpleNamespace(id=1, is_staff=True, is_authenticated=True)
@@ -354,7 +355,8 @@ class TestListCoursesForUser:
 
         sentinel = [SimpleNamespace(id=1)]
         mock_qs = MagicMock()
-        mock_course_model.objects.all.return_value = mock_qs
+        # Chain: .select_related(...).filter(status=ACTIVE)
+        mock_course_model.objects.select_related.return_value = mock_qs
         mock_qs.filter.return_value = sentinel
 
         researcher = SimpleNamespace(id=2, is_staff=False, is_authenticated=True)
@@ -372,7 +374,8 @@ class TestListCoursesForUser:
         sentinel = [SimpleNamespace(id=3)]
         mock_qs = MagicMock()
         mock_filtered_qs = MagicMock()
-        mock_course_model.objects.all.return_value = mock_qs
+        # Chain: .select_related(...).filter(status=ACTIVE)
+        mock_course_model.objects.select_related.return_value = mock_qs
         # First .filter(status=ACTIVE) returns a filtered queryset
         mock_qs.filter.return_value = mock_filtered_qs
         # Second .filter(teacher_profile__user=user) returns sentinel
@@ -403,7 +406,7 @@ class TestListStudentsInCourse:
         enrollment = SimpleNamespace(
             student_profile=student_profile, course_id=10, enrolled_at=None
         )
-        mock_enrollment_model.objects.filter.return_value = [enrollment]
+        mock_enrollment_model.objects.filter.return_value.select_related.return_value = [enrollment]
 
         course = SimpleNamespace(id=10)
 
@@ -418,7 +421,7 @@ class TestListStudentsInCourse:
         """Returns empty list when no enrollments exist."""
         from courses.services._queries import list_students_in_course
 
-        mock_enrollment_model.objects.filter.return_value = []
+        mock_enrollment_model.objects.filter.return_value.select_related.return_value = []
 
         result = list_students_in_course(SimpleNamespace(id=10))
 

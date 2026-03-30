@@ -120,9 +120,8 @@ def _serialize_answers(submission, identifiable: bool) -> str:
 def _answer_value(answer) -> dict:
     if answer.answer_type == AnswerType.MULTIPLE_CHOICE:
         try:
-            selected = list(
-                answer.multiple_choice.selected.values_list("choice_index", flat=True)
-            )
+            # Use .all() to leverage prefetch cache instead of values_list().
+            selected = [sel.choice_index for sel in answer.multiple_choice.selected.all()]
             return {"selected": selected}
         except Exception:
             return {}
@@ -230,7 +229,8 @@ def export_course_submissions(
     qs = Submission.objects.filter(
         assignment__course=course,
     ).select_related(
-        "assignment__assessment", "assignment__course", "student",
+        "assignment__assessment", "assignment__course",
+        "student__student_profile",
     )
 
     if start_date:
@@ -280,7 +280,11 @@ def export_course_submissions(
     def _generate():
         buf, writer = _make_writer()
         yield UTF8_BOM + writer.writerow(cols).encode("utf-8")
-        for sub in qs.iterator(chunk_size=2000):
+        # When include_answers is True, prefetch_related is active and
+        # .iterator() would discard the prefetch cache. Iterate normally
+        # so answer sub-type lookups use the cache instead of N+1-ing.
+        rows = qs if include_answers else qs.iterator(chunk_size=2000)
+        for sub in rows:
             student = sub.student
             assessment = sub.assignment.assessment
             # Resolve student profile for consent

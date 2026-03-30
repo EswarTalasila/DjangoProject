@@ -14,9 +14,10 @@ Submission lifecycle:
 from collections.abc import Iterable
 
 from django.db import transaction
+from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 
-from assessments.models import Assessment, GradingMode, Question, ScoringPolicy
+from assessments.models import Assessment, GradingMode, McqChoice, Question, ScoringPolicy
 from assignments.models import Assignment
 from core.dtos import AnswerDTO, SubmissionCompactDTO, SubmissionDTO
 
@@ -30,6 +31,63 @@ from .models import (
     Submission,
     SubmissionStatus,
 )
+
+
+# ── Prefetch helpers ──────────────────────────────────────────────────
+
+# Shared prefetch paths for answer sub-types used by DTO serialization.
+_ANSWER_SUBTYPE_PREFETCHES = [
+    "answers__multiple_choice__selected",
+    "answers__short_answer",
+    "answers__number_scale",
+]
+
+# Extended prefetch paths that also pull question + mcq_choices for scoring.
+_ANSWER_SCORING_PREFETCHES = [
+    *_ANSWER_SUBTYPE_PREFETCHES,
+    "answers__question__mcq_choices",
+    "answers__question__number_scale",
+]
+
+
+def _prefetch_submission_for_dto(qs: QuerySet[Submission]) -> QuerySet[Submission]:
+    """Add prefetches needed to serialize submissions to DTOs without N+1."""
+    return qs.select_related(
+        "assignment__course__teacher_profile__user",
+    ).prefetch_related(*_ANSWER_SUBTYPE_PREFETCHES)
+
+
+def _prefetch_submission_for_scoring(qs: QuerySet[Submission]) -> QuerySet[Submission]:
+    """Add prefetches needed to auto-score submissions without N+1."""
+    return qs.prefetch_related(*_ANSWER_SCORING_PREFETCHES)
+
+
+def get_submission_for_dto(submission_id: int) -> Submission:
+    """Retrieve a single submission with answer sub-types prefetched for DTO conversion.
+
+    Raises:
+        ValueError: If submission not found
+    """
+    submission = _prefetch_submission_for_dto(
+        Submission.objects.filter(id=submission_id)
+    ).first()
+    if not submission:
+        raise ValueError("Submission not found")
+    return submission
+
+
+def get_by_student_and_assignment_for_dto(student_id: int, assignment_id: int) -> Submission:
+    """Get a student's submission with answer prefetches for DTO conversion.
+
+    Raises:
+        ValueError: If no submission exists
+    """
+    submission = _prefetch_submission_for_dto(
+        Submission.objects.filter(student_id=student_id, assignment_id=assignment_id)
+    ).first()
+    if not submission:
+        raise ValueError("Submission not found")
+    return submission
 
 # Valid forward transitions in the submission state machine (SUB-CN-01).
 _VALID_TRANSITIONS: dict[str, set[str]] = {
@@ -103,7 +161,8 @@ def answer_to_dto(answer: Answer) -> AnswerDTO:
     """
     data: dict
     if answer.answer_type == AnswerType.MULTIPLE_CHOICE:
-        selected = list(answer.multiple_choice.selected.values_list("choice_index", flat=True))
+        # Use .all() to leverage prefetch cache instead of values_list() which always queries.
+        selected = [sel.choice_index for sel in answer.multiple_choice.selected.all()]
         data = {"selected": selected}
     elif answer.answer_type == AnswerType.SHORT_ANSWER:
         data = {"text": answer.short_answer.text}
@@ -186,14 +245,14 @@ def get_submission(submission_id: int) -> Submission:
     return submission
 
 
-def get_by_assignment(assignment_id: int) -> list[Submission]:
-    """Get all submissions for an assignment."""
-    return list(Submission.objects.filter(assignment_id=assignment_id))
+def get_by_assignment(assignment_id: int):
+    """Get all submissions for an assignment (returns lazy queryset for pagination)."""
+    return Submission.objects.filter(assignment_id=assignment_id)
 
 
-def get_by_student(student_id: int) -> list[Submission]:
-    """Get all submissions by a student across all assignments."""
-    return list(Submission.objects.filter(student_id=student_id))
+def get_by_student(student_id: int):
+    """Get all submissions by a student across all assignments (returns lazy queryset)."""
+    return Submission.objects.filter(student_id=student_id)
 
 
 def get_by_student_and_assignment(student_id: int, assignment_id: int) -> Submission:
@@ -219,7 +278,7 @@ def get_by_student_and_assignment(student_id: int, assignment_id: int) -> Submis
     return submission
 
 
-def list_me(user_id: int, status: str | None) -> list[dict]:
+def list_me(user_id: int, status: str | None) -> QuerySet[Submission]:
     """
     List all submissions for a user, whether as student or teacher.
 
@@ -227,22 +286,21 @@ def list_me(user_id: int, status: str | None) -> list[dict]:
     where the user is the teacher (self-assessments). Optionally filters
     by submission status.
 
+    Returns a lazy queryset ordered newest-first (undated drafts last).
+
     Args:
         user_id: The user's ID
         status: Optional status filter (IN_PROGRESS, SUBMITTED, GRADED)
 
     Returns:
-        List of compact submission DTOs
+        Ordered queryset of Submissions
     """
-    student_subs = Submission.objects.filter(student_id=user_id)
-    teacher_subs = Submission.objects.filter(teacher_id=user_id)
-    submissions = {sub.id: sub for sub in list(student_subs) + list(teacher_subs)}
-    items = list(submissions.values())
+    from django.db.models import F, Q
+
+    qs = Submission.objects.filter(Q(student_id=user_id) | Q(teacher_id=user_id))
     if status:
-        items = [sub for sub in items if sub.status == status]
-    # Sort newest submissions first, with undated drafts last.
-    items.sort(key=lambda s: (s.submitted_at is not None, s.submitted_at), reverse=True)
-    return [submission_to_compact_dto(sub).model_dump() for sub in items]
+        qs = qs.filter(status=status)
+    return qs.order_by(F("submitted_at").desc(nulls_last=True))
 
 
 @transaction.atomic
@@ -316,13 +374,17 @@ def override_score(submission_id: int, scores: list) -> Submission:
     Raises:
         ValueError: If submission not found, no scores provided, or assessment not found
     """
-    submission = Submission.objects.filter(id=submission_id).first()
+    submission = (
+        Submission.objects.select_related("assignment__assessment")
+        .filter(id=submission_id)
+        .first()
+    )
     if not submission:
         raise ValueError("Submission not found")
     if not scores:
         raise ValueError("Override score request must include score values")
 
-    assessment = Assessment.objects.filter(id=submission.assignment.assessment_id).first()
+    assessment = submission.assignment.assessment
     if not assessment:
         raise ValueError("Assessment not found")
     if assessment.scoring_policy == ScoringPolicy.COMPLETION:
@@ -330,17 +392,11 @@ def override_score(submission_id: int, scores: list) -> Submission:
             "Completion-scored assessments always award full credit and cannot be manually overridden"
         )
 
-    answers = list(submission.answers.all())
+    answers = list(submission.answers.select_related("question"))
     total = 0.0
 
-    # Build a lookup for max_points per question so we can validate scores.
-    question_ids = [a.question_id for a in answers]
-    max_pts_map = dict(
-        Question.objects.filter(id__in=question_ids).values_list("id", "max_points")
-    )
-
     def _validate_score(answer, score_val):
-        cap = max_pts_map.get(answer.question_id)
+        cap = answer.question.max_points
         if cap is not None and score_val > cap:
             raise ValueError(
                 f"Score {score_val} exceeds max points ({cap}) for question {answer.question_id}"
@@ -473,8 +529,15 @@ def _auto_score_submission(submission: Submission, assessment: Assessment) -> No
             submission.submitted_at = timezone.now()
         return
 
+    # Prefetch answers with question + mcq_choices + number_scale to avoid N+1.
+    answers = list(
+        submission.answers
+        .select_related("question__number_scale")
+        .prefetch_related("question__mcq_choices", "multiple_choice__selected")
+    )
+
     total = 0.0
-    for answer in submission.answers.all():
+    for answer in answers:
         question = answer.question
         if not question.auto_gradable:
             continue
@@ -495,9 +558,12 @@ def _auto_score_mcq(answer: Answer, question: Question) -> float:
 
     Each choice has an associated point value. The score is the sum of points
     for all selected choices.
+
+    Expects question.mcq_choices and answer.multiple_choice.selected to be
+    prefetched by the caller.
     """
-    choices = list(question.mcq_choices.all())
-    selected = list(answer.multiple_choice.selected.values_list("choice_index", flat=True))
+    choices = list(question.mcq_choices.all())  # hits prefetch cache
+    selected = [sel.choice_index for sel in answer.multiple_choice.selected.all()]
     score = 0.0
     for idx in selected:
         if idx is None or idx < 0 or idx >= len(choices):
@@ -514,6 +580,8 @@ def _auto_score_number_scale(answer: Answer, question: Question) -> float:
 
     Full points are awarded only if the answer exactly matches the target.
     If no target is set, returns 0.
+
+    Expects question.number_scale to be select_related by the caller.
     """
     target = question.number_scale.target
     if target is None:
