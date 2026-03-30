@@ -280,7 +280,11 @@ def export_course_submissions(
     def _generate():
         buf, writer = _make_writer()
         yield UTF8_BOM + writer.writerow(cols).encode("utf-8")
-        for sub in qs.iterator(chunk_size=2000):
+        # When include_answers is True, prefetch_related is active and
+        # .iterator() would discard the prefetch cache. Iterate normally
+        # so answer sub-type lookups use the cache instead of N+1-ing.
+        rows = qs if include_answers else qs.iterator(chunk_size=2000)
+        for sub in rows:
             student = sub.student
             assessment = sub.assignment.assessment
             # Resolve student profile for consent
