@@ -18,25 +18,13 @@ import {
   listAssignmentsForUser,
   type Assignment,
 } from '@/lib/assignment-api';
-
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
+import { toErrorMessage, formatDate } from '@/lib/utils';
 
 type CourseAssignmentsTabProps = {
   courseId: number;
   userRole: 'TEACHER' | 'RESEARCHER' | 'STUDENT';
   userId: number;
 };
-
-function formatDate(value: string | null): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString();
-}
 
 export default function CourseAssignmentsTab({
   courseId,
@@ -62,7 +50,7 @@ export default function CourseAssignmentsTab({
       setAssignments(items);
     } catch (error: unknown) {
       setLoadError(
-        extractDetail(error, 'Failed to load assignments for this course.'),
+        toErrorMessage(error, 'Failed to load assignments for this course.'),
       );
     } finally {
       setIsLoading(false);

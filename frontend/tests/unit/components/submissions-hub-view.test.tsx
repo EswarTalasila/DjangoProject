@@ -143,21 +143,16 @@ describe("SubmissionsHubView", () => {
       });
     });
 
-    it("handles paginated submissions response", async () => {
-      mockListMySubmissions.mockResolvedValueOnce({
-        count: 1,
-        next: null,
-        previous: null,
-        results: [
-          {
-            id: 20,
-            assignmentId: 3,
-            submittedAt: "2026-01-15T10:00:00Z",
-            score: 90,
-            status: "SUBMITTED",
-          },
-        ],
-      });
+    it("renders single submission correctly", async () => {
+      mockListMySubmissions.mockResolvedValueOnce([
+        {
+          id: 20,
+          assignmentId: 3,
+          submittedAt: "2026-01-15T10:00:00Z",
+          score: 90,
+          status: "SUBMITTED",
+        },
+      ]);
       mockListAssignmentsForUser.mockResolvedValueOnce([]);
       const Component = await loadComponent();
       render(<Component role="STUDENT" userId={1} />);

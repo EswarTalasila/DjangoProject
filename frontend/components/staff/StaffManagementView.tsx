@@ -15,13 +15,9 @@ import {
   type StudentUser,
 } from '@/lib/password-reset-api';
 import { listCourses, type CourseSummary } from '@/lib/course-api';
+import { toErrorMessage } from '@/lib/utils';
 
 type Tab = 'teachers' | 'students' | 'researchers';
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
 
 type StaffManagementViewProps = {
   canResetStudents: boolean;
@@ -132,7 +128,7 @@ export default function StaffManagementView({ canResetStudents, canResetResearch
       setResetExpiresAt(response.expiresAt);
       setIsResetDialogOpen(true);
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to issue reset code.'));
+      toast.error(toErrorMessage(error, 'Failed to issue reset code.'));
     } finally {
       setIsActionLoading(false);
     }

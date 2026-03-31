@@ -15,6 +15,7 @@ import {
 } from '@/lib/submission-api';
 import { getAssignment, getAssignmentTemplate, type Assignment } from '@/lib/assignment-api';
 import type { Assessment, Question } from '@/lib/assessment-api';
+import { toErrorMessage, formatDate, formatScore } from '@/lib/utils';
 
 type Role = 'ADMIN' | 'TEACHER' | 'RESEARCHER' | 'STUDENT';
 
@@ -22,25 +23,6 @@ type SubmissionDetailViewProps = {
   submissionId: number;
   viewerRole: Role;
 };
-
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
-
-function formatDate(value: string | null): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString();
-}
-
-function formatScore(value: number | null | undefined): string {
-  if (value == null) return '-';
-  if (Number.isInteger(value)) return String(value);
-  return value.toFixed(2).replace(/\.?0+$/, '');
-}
 
 function formatQuestionKind(kind: Question['type']): string {
   switch (kind) {
@@ -107,7 +89,7 @@ export default function SubmissionDetailView({ submissionId, viewerRole }: Submi
       }
       setScoreInputs(nextInputs);
     } catch (error: unknown) {
-      setLoadError(extractDetail(error, 'Failed to load submission.'));
+      setLoadError(toErrorMessage(error, 'Failed to load submission.'));
     } finally {
       setIsLoading(false);
     }
@@ -179,7 +161,7 @@ export default function SubmissionDetailView({ submissionId, viewerRole }: Submi
       setScoreInputs(nextInputs);
       toast.success('Scores updated.');
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to update scores.'));
+      toast.error(toErrorMessage(error, 'Failed to update scores.'));
     } finally {
       setIsSavingScores(false);
     }

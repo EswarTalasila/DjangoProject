@@ -31,12 +31,7 @@ import {
   listAssessments,
   type Assessment,
 } from '@/lib/assessment-api';
-
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
+import { toErrorMessage } from '@/lib/utils';
 
 type AssessmentListViewProps = {
   canManage: boolean;
@@ -85,14 +80,14 @@ export default function AssessmentListView({ canManage }: AssessmentListViewProp
       setDeleteTargetId(null);
       await loadAssessments();
     } catch (error: unknown) {
-      const detail = extractDetail(error, '');
+      const axErr = error as { response?: { data?: { detail?: string }; status?: number } };
       if (
-        (error as ApiError).response?.data?.detail?.toLowerCase().includes('referenced') ||
-        (error as { response?: { status?: number } }).response?.status === 409
+        axErr.response?.data?.detail?.toLowerCase().includes('referenced') ||
+        axErr.response?.status === 409
       ) {
         toast.error('Cannot delete — assessment is referenced by assignments.');
       } else {
-        toast.error(detail || 'Failed to delete assessment.');
+        toast.error(toErrorMessage(error, 'Failed to delete assessment.'));
       }
     } finally {
       setIsDeleting(false);

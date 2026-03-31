@@ -27,6 +27,7 @@ import {
   type Assignment,
 } from '@/lib/assignment-api';
 import { listCourses, type CourseSummary } from '@/lib/course-api';
+import { formatDate } from '@/lib/utils';
 
 type Role = 'TEACHER' | 'RESEARCHER' | 'ADMIN';
 
@@ -35,13 +36,6 @@ type AssignmentListViewProps = {
   userId: string;
   canCreate: boolean;
 };
-
-function formatDate(value: string | null): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString();
-}
 
 export default function AssignmentListView({ role, userId, canCreate }: AssignmentListViewProps) {
   const router = useRouter();

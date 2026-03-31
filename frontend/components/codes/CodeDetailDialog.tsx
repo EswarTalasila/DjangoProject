@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import type { RegistrationCode, RegistrationCodeStatus } from '@/lib/registration-code-api';
+import { formatDateTime } from '@/lib/utils';
 
 const STATUS_COLORS: Record<RegistrationCodeStatus, string> = {
   ACTIVE: 'bg-status-success-bg text-status-success',
@@ -20,16 +21,6 @@ const STATUS_COLORS: Record<RegistrationCodeStatus, string> = {
   REVOKED: 'bg-status-error-bg text-status-error',
   ARCHIVED: 'bg-muted text-muted-foreground',
 };
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
 
 type CodeDetailDialogProps = {
   open: boolean;

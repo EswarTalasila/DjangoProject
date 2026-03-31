@@ -26,12 +26,7 @@ import {
 } from '@/lib/rubric-api';
 import CriterionBlock from '@/components/rubrics/CriterionBlock';
 import RubricGridPreview from '@/components/rubrics/RubricGridPreview';
-
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
+import { toErrorMessage } from '@/lib/utils';
 
 function emptyCriterion(): CriterionInput {
   return {
@@ -131,7 +126,7 @@ export default function RubricQuickBuilderDrawer({
         );
       } catch (error: unknown) {
         if (cancelled) return;
-        toast.error(extractDetail(error, 'Failed to load rubric template.'));
+        toast.error(toErrorMessage(error, 'Failed to load rubric template.'));
         onOpenChange(false);
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -216,7 +211,7 @@ export default function RubricQuickBuilderDrawer({
       onOpenChange(false);
     } catch (error: unknown) {
       toast.error(
-        extractDetail(
+        toErrorMessage(
           error,
           isEditMode ? 'Failed to update rubric.' : 'Failed to create rubric.',
         ),

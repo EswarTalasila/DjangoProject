@@ -18,6 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import type { RegistrationCode, RegistrationCodeStatus } from '@/lib/registration-code-api';
+import { formatShortDate } from '@/lib/utils';
 
 const STATUS_COLORS: Record<RegistrationCodeStatus, string> = {
   ACTIVE: 'bg-status-success-bg text-status-success',
@@ -37,13 +38,6 @@ function StatusBadge({ status }: { status: RegistrationCodeStatus }) {
   );
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
 
 type CodesTableProps = {
   codes: RegistrationCode[];
@@ -116,10 +110,10 @@ export function CodesTable({
                   {code.courseName ?? '-'}
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {formatDate(code.expiresAt)}
+                  {formatShortDate(code.expiresAt)}
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {formatDate(code.createdAt)}
+                  {formatShortDate(code.createdAt)}
                 </TableCell>
                 <TableCell>
                   <DropdownMenu>
