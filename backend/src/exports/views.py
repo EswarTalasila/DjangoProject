@@ -72,7 +72,8 @@ def _check_course_access(user, course):
                 {"detail": "You do not own this course"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-    except Exception:
+    except AttributeError:
+        # User or course lacks a teacher_profile (RelatedObjectDoesNotExist)
         return Response(
             {"detail": "You do not own this course"},
             status=status.HTTP_403_FORBIDDEN,
