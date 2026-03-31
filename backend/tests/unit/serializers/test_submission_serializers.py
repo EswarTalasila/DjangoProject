@@ -87,31 +87,73 @@ class TestAnswerSerializer:
         assert not s.is_valid()
         assert "data" in s.errors
 
-    def test_score_is_optional(self):
-        """Score field is optional and defaults to absent."""
+    def test_score_is_read_only(self):
+        """Score field is read-only and excluded from validated_data."""
+        from submissions.serializers import AnswerSerializer
+
+        data = {"questionId": 1, "type": "SHORT_ANSWER", "data": {"text": "hi"}, "score": 8.5}
+        s = AnswerSerializer(data=data)
+        assert s.is_valid(), s.errors
+        assert "score" not in s.validated_data
+
+    def test_score_absent_is_valid(self):
+        """Omitting score is valid."""
         from submissions.serializers import AnswerSerializer
 
         data = {"questionId": 1, "type": "SHORT_ANSWER", "data": {"text": "hi"}}
         s = AnswerSerializer(data=data)
         assert s.is_valid()
-        assert "score" not in s.validated_data or s.validated_data.get("score") is None
 
-    def test_score_accepts_null(self):
-        """Score field accepts null value."""
+    # ── Data key structural validation ──────────────────────────────────
+
+    def test_mcq_missing_selected_rejected(self):
+        """MULTIPLE_CHOICE data without 'selected' is rejected."""
         from submissions.serializers import AnswerSerializer
 
-        data = {"questionId": 1, "type": "SHORT_ANSWER", "data": {"text": "hi"}, "score": None}
+        data = {"questionId": 1, "type": "MULTIPLE_CHOICE", "data": {"wrong_key": [0]}}
         s = AnswerSerializer(data=data)
-        assert s.is_valid()
+        assert not s.is_valid()
+        assert "data" in s.errors.get("non_field_errors", [""])[0] or "data" in str(s.errors)
 
-    def test_score_accepts_float(self):
-        """Score field accepts float values."""
+    def test_short_answer_missing_text_rejected(self):
+        """SHORT_ANSWER data without 'text' is rejected."""
         from submissions.serializers import AnswerSerializer
 
-        data = {"questionId": 1, "type": "SHORT_ANSWER", "data": {"text": "hi"}, "score": 8.5}
+        data = {"questionId": 1, "type": "SHORT_ANSWER", "data": {"value": "hi"}}
         s = AnswerSerializer(data=data)
-        assert s.is_valid()
-        assert s.validated_data["score"] == 8.5
+        assert not s.is_valid()
+
+    def test_number_scale_missing_val_rejected(self):
+        """NUMBER_SCALE data without 'val' is rejected."""
+        from submissions.serializers import AnswerSerializer
+
+        data = {"questionId": 1, "type": "NUMBER_SCALE", "data": {"value": 5}}
+        s = AnswerSerializer(data=data)
+        assert not s.is_valid()
+
+    def test_mcq_empty_selected_is_valid(self):
+        """MULTIPLE_CHOICE data with empty selected list is still structurally valid."""
+        from submissions.serializers import AnswerSerializer
+
+        data = {"questionId": 1, "type": "MULTIPLE_CHOICE", "data": {"selected": []}}
+        s = AnswerSerializer(data=data)
+        assert s.is_valid(), s.errors
+
+    def test_data_with_extra_keys_is_valid(self):
+        """Extra keys in data dict are allowed (forward compatibility)."""
+        from submissions.serializers import AnswerSerializer
+
+        data = {"questionId": 1, "type": "SHORT_ANSWER", "data": {"text": "hi", "extra": True}}
+        s = AnswerSerializer(data=data)
+        assert s.is_valid(), s.errors
+
+    def test_mcq_empty_data_rejected(self):
+        """MULTIPLE_CHOICE with empty data dict is rejected (missing 'selected')."""
+        from submissions.serializers import AnswerSerializer
+
+        data = {"questionId": 1, "type": "MULTIPLE_CHOICE", "data": {}}
+        s = AnswerSerializer(data=data)
+        assert not s.is_valid()
 
 
 # ============================================================================
@@ -129,7 +171,6 @@ class TestSubmissionSerializer:
         data = {
             "assignmentId": 10,
             "studentId": 100,
-            "status": "SUBMITTED",
             "answers": [{"questionId": 1, "type": "SHORT_ANSWER", "data": {"text": "hi"}}],
         }
         s = SubmissionSerializer(data=data)
@@ -142,7 +183,6 @@ class TestSubmissionSerializer:
         data = {
             "assignmentId": 10,
             "teacherId": 200,
-            "status": "SUBMITTED",
         }
         s = SubmissionSerializer(data=data)
         assert s.is_valid(), s.errors
@@ -151,43 +191,33 @@ class TestSubmissionSerializer:
         """Missing assignmentId is rejected."""
         from submissions.serializers import SubmissionSerializer
 
-        data = {"studentId": 100, "status": "SUBMITTED"}
+        data = {"studentId": 100}
         s = SubmissionSerializer(data=data)
         assert not s.is_valid()
         assert "assignmentId" in s.errors
 
-    def test_missing_status(self):
-        """Missing status is rejected."""
+    def test_status_is_read_only(self):
+        """Status field is read-only and excluded from validated_data."""
+        from submissions.serializers import SubmissionSerializer
+
+        data = {"assignmentId": 10, "studentId": 100, "status": "SUBMITTED"}
+        s = SubmissionSerializer(data=data)
+        assert s.is_valid(), s.errors
+        assert "status" not in s.validated_data
+
+    def test_status_omitted_is_valid(self):
+        """Omitting status is valid (service layer controls lifecycle)."""
         from submissions.serializers import SubmissionSerializer
 
         data = {"assignmentId": 10, "studentId": 100}
         s = SubmissionSerializer(data=data)
-        assert not s.is_valid()
-        assert "status" in s.errors
-
-    def test_invalid_status(self):
-        """Invalid status value is rejected."""
-        from submissions.serializers import SubmissionSerializer
-
-        data = {"assignmentId": 10, "studentId": 100, "status": "INVALID"}
-        s = SubmissionSerializer(data=data)
-        assert not s.is_valid()
-        assert "status" in s.errors
-
-    def test_all_valid_statuses(self):
-        """All four status values are accepted."""
-        from submissions.serializers import SubmissionSerializer
-
-        for status_val in ("NOT_STARTED", "IN_PROGRESS", "SUBMITTED", "GRADED"):
-            data = {"assignmentId": 10, "status": status_val}
-            s = SubmissionSerializer(data=data)
-            assert s.is_valid(), f"{status_val} should be valid, errors: {s.errors}"
+        assert s.is_valid(), s.errors
 
     def test_student_id_is_optional(self):
         """studentId field is optional."""
         from submissions.serializers import SubmissionSerializer
 
-        data = {"assignmentId": 10, "status": "SUBMITTED"}
+        data = {"assignmentId": 10}
         s = SubmissionSerializer(data=data)
         assert s.is_valid()
 
@@ -195,7 +225,7 @@ class TestSubmissionSerializer:
         """teacherId field is optional."""
         from submissions.serializers import SubmissionSerializer
 
-        data = {"assignmentId": 10, "status": "SUBMITTED"}
+        data = {"assignmentId": 10}
         s = SubmissionSerializer(data=data)
         assert s.is_valid()
 
@@ -203,7 +233,7 @@ class TestSubmissionSerializer:
         """answers field is optional."""
         from submissions.serializers import SubmissionSerializer
 
-        data = {"assignmentId": 10, "status": "SUBMITTED"}
+        data = {"assignmentId": 10}
         s = SubmissionSerializer(data=data)
         assert s.is_valid()
 
@@ -213,9 +243,34 @@ class TestSubmissionSerializer:
 
         data = {
             "assignmentId": 10,
-            "status": "SUBMITTED",
             "answers": [{"questionId": 1, "type": "INVALID_TYPE", "data": {}}],
         }
         s = SubmissionSerializer(data=data)
         assert not s.is_valid()
         assert "answers" in s.errors
+
+    def test_nested_answer_structural_validation(self):
+        """Nested answer with missing required data keys causes parent to fail."""
+        from submissions.serializers import SubmissionSerializer
+
+        data = {
+            "assignmentId": 10,
+            "answers": [{"questionId": 1, "type": "SHORT_ANSWER", "data": {"wrong": "key"}}],
+        }
+        s = SubmissionSerializer(data=data)
+        assert not s.is_valid()
+        assert "answers" in s.errors
+
+    def test_submitted_at_and_score_are_read_only(self):
+        """submittedAt and score are read-only and excluded from validated_data."""
+        from submissions.serializers import SubmissionSerializer
+
+        data = {
+            "assignmentId": 10,
+            "submittedAt": "2026-01-01T00:00:00Z",
+            "score": 95.0,
+        }
+        s = SubmissionSerializer(data=data)
+        assert s.is_valid(), s.errors
+        assert "submittedAt" not in s.validated_data
+        assert "score" not in s.validated_data
