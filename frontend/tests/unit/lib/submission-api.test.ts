@@ -173,7 +173,7 @@ describe("submission api", () => {
   });
 
   describe("listStudentSubmissions", () => {
-    it("fetches all submissions for a student", async () => {
+    it("fetches all submissions for a student and normalizes paginated response", async () => {
       server.use(
         http.get(`${API_BASE}/students/42/submissions/`, () =>
           HttpResponse.json({
@@ -188,12 +188,7 @@ describe("submission api", () => {
       const { listStudentSubmissions } = await loadSubmissionApi();
       const result = await listStudentSubmissions(42);
 
-      expect(result).toEqual({
-        count: 1,
-        next: null,
-        previous: null,
-        results: [compactSubmission],
-      });
+      expect(result).toEqual([compactSubmission]);
     });
   });
 
