@@ -5,10 +5,6 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Plus,
   Loader2,
-  Layers,
-  Trash2,
-  Eye,
-  Pencil,
   GripVertical,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -38,10 +34,10 @@ import {
   updateAssessment,
 } from '@/lib/assessment-api';
 import { listRubrics, type Rubric } from '@/lib/rubric-api';
-import QuestionBlock from './QuestionBlock';
-import RubricQuickBuilderDrawer from './RubricQuickBuilderDrawer';
-import RubricTemplatePreviewDrawer from './RubricTemplatePreviewDrawer';
 import { toErrorMessage } from '@/lib/utils';
+import QuestionEditor from './QuestionEditor';
+import QuestionGroupPanel from './QuestionGroupPanel';
+import AssessmentActionBar from './AssessmentActionBar';
 
 // -- Error handling --
 
@@ -1159,349 +1155,73 @@ export default function AssessmentBuilderForm({
           </aside>
 
           {/* Center: Selected question editor */}
-          <section className="space-y-4 min-w-0">
-            {!selectedQuestion ? (
-              <div className="rounded-sm border border-border bg-card p-6 text-sm text-muted-foreground">
-                Select a question to edit.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <div className="rounded-sm border border-border bg-muted/30 p-3">
-                  <dl className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                    <div>
-                      <dt className="text-muted-foreground">Rubric</dt>
-                      <dd className="font-medium text-foreground">
-                        {selectedEffectiveRubricName ?? 'None'}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground">Group</dt>
-                      <dd className="font-medium text-foreground">
-                        {selectedGroup?.name ?? 'None'}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-muted-foreground flex items-center gap-1.5">
-                        Rubric Source
-                        <HelpTip
-                          text={
-                            'Question: this question has its own rubric.\nGroup: this question uses the rubric from its assigned group.\nN/A: no rubric is attached.'
-                          }
-                        />
-                      </dt>
-                      <dd className="font-medium text-foreground">
-                        {selectedQuestion.rubricId != null
-                          ? 'Question'
-                          : selectedEffectiveRubricId != null
-                            ? 'Group'
-                            : 'N/A'}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-                <QuestionBlock
-                  index={selectedQuestionIndex}
-                  question={selectedQuestion}
-                  gradingMode={gradingMode}
-                  groupOptions={questionGroups}
-                  onChange={(updated) => handleQuestionChange(selectedQuestionIndex, updated)}
-                  onRemove={() => handleQuestionRemove(selectedQuestionIndex)}
-                  onMoveUp={selectedQuestionIndex === 0 ? null : () => handleMoveUp(selectedQuestionIndex)}
-                  onMoveDown={
-                    selectedQuestionIndex === questions.length - 1
-                      ? null
-                      : () => handleMoveDown(selectedQuestionIndex)
-                  }
-                />
-              </div>
-            )}
-          </section>
+          <QuestionEditor
+            selectedQuestionIndex={selectedQuestionIndex}
+            selectedQuestion={selectedQuestion}
+            questions={questions}
+            gradingMode={gradingMode}
+            questionGroups={questionGroups}
+            selectedEffectiveRubricName={selectedEffectiveRubricName}
+            selectedGroupName={selectedGroup?.name ?? null}
+            rubricSource={
+              selectedQuestion?.rubricId != null
+                ? 'Question'
+                : selectedEffectiveRubricId != null
+                  ? 'Group'
+                  : 'N/A'
+            }
+            onQuestionChange={handleQuestionChange}
+            onQuestionRemove={handleQuestionRemove}
+            onMoveUp={handleMoveUp}
+            onMoveDown={handleMoveDown}
+          />
 
           {/* Right: Rubric and group panel */}
-          <aside className="rounded-sm border border-border bg-card p-4 space-y-4 xl:sticky xl:top-4 max-h-[calc(100vh-180px)] overflow-y-auto">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-sm font-semibold text-foreground">Rubric Binding</h3>
-                <HelpTip text="Attach rubric templates to manual questions. In HYBRID mode, questions marked AUTO should not have rubrics." />
-              </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setIsQuickRubricOpen(true)}
-              >
-                <Plus className="mr-1 h-4 w-4" /> New Rubric
-              </Button>
-            </div>
-
-            {!isRubricEnabled ? (
-              <div className="rounded border border-border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
-                <p className="font-medium text-foreground">Rubrics disabled in AUTO mode</p>
-                <p>Switch grading mode to MANUAL or HYBRID to attach rubrics.</p>
-              </div>
-            ) : (
-              <>
-                {isRubricsLoading ? (
-                  <p className="text-xs text-muted-foreground">Loading rubrics...</p>
-                ) : (
-                  <div className="space-y-2">
-                    <Label>Rubric template</Label>
-                    <div className="grid grid-cols-[1fr_auto_auto] gap-2">
-                      <Select value={rubricApplyId} onValueChange={setRubricApplyId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select rubric" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__NONE__">No rubric</SelectItem>
-                          {rubrics.map((rubric) => (
-                            <SelectItem
-                              key={rubric.id}
-                              value={String(rubric.id)}
-                              disabled={rubric.status !== 'ACTIVE'}
-                            >
-                              {rubric.title}
-                              {rubric.status !== 'ACTIVE' ? ' (Archived)' : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9"
-                        disabled={rubricApplyId === '__NONE__'}
-                        onClick={() =>
-                          openInlineRubricEditor(
-                            rubricApplyId === '__NONE__' ? null : Number(rubricApplyId),
-                          )
-                        }
-                      >
-                        <Pencil className="h-4 w-4" />
-                        <span className="sr-only">Edit selected rubric</span>
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
-                        className="h-9 w-9"
-                        disabled={rubricApplyId === '__NONE__'}
-                        onClick={() =>
-                          openRubricPreview(
-                            rubricApplyId === '__NONE__' ? null : Number(rubricApplyId),
-                          )
-                        }
-                      >
-                        <Eye className="h-4 w-4" />
-                        <span className="sr-only">Preview selected rubric</span>
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Attach to selected questions. Use the eye icon to preview the selected template.
-                    </p>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 gap-2">
-                  <Button type="button" variant="outline" onClick={applyRubricToSelectedQuestions}>
-                    Apply to Active/Selected Questions
-                  </Button>
-                  {showTips && (
-                    <p className="text-xs text-muted-foreground">
-                      Tip: select multiple questions on the left, then apply once.
-                    </p>
-                  )}
-                </div>
-
-                <div className="border-t border-border pt-3 space-y-3">
-                  <div className="flex items-center gap-1.5">
-                    <h4 className="text-sm font-semibold text-foreground">Group Manager</h4>
-                    <HelpTip text="Use groups when multiple questions should share the same rubric. Group rubrics are inherited by questions that do not have a direct rubric." />
-                  </div>
-
-                  <div className="grid grid-cols-[1fr_auto] gap-2">
-                    <Input
-                      placeholder="New group name"
-                      value={newGroupName}
-                      onChange={(e) => setNewGroupName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          createGroupFromInput();
-                        }
-                      }}
-                    />
-                    <Button type="button" variant="outline" onClick={createGroupFromInput}>
-                      <Plus className="mr-1 h-4 w-4" /> Add
-                    </Button>
-                  </div>
-
-                  <div className="rounded border border-border bg-muted/30 p-2 text-xs text-muted-foreground">
-                    {questionGroups.length} group(s), {ungroupedCount} ungrouped question(s), applying to {activeSelectionCount} selected question(s).
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2">
-                    <Select value={assignGroupKey} onValueChange={setAssignGroupKey}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Assign selected to group" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__NONE__">No group</SelectItem>
-                        {questionGroups.map((group) => (
-                          <SelectItem key={group.clientKey} value={group.clientKey}>
-                            {group.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {questionGroups.length === 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      No groups yet. Create one to share rubric settings across questions.
-                    </p>
-                  )}
-
-                  {questionGroups.length > 0 && selectedAssignGroup && (
-                    <div className="rounded border border-border p-2 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Input
-                          value={selectedAssignGroup.name}
-                          onChange={(e) =>
-                            updateQuestionGroup(selectedAssignGroup.clientKey, {
-                              name: e.target.value,
-                            })
-                          }
-                          placeholder="Group name"
-                        />
-                        <span className="rounded bg-muted px-2 py-1 text-[10px] text-muted-foreground whitespace-nowrap">
-                          {questionCountByGroupKey.get(selectedAssignGroup.clientKey) ?? 0}{' '}
-                          question(s)
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive"
-                          onClick={() => removeQuestionGroup(selectedAssignGroup.clientKey)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-
-                      <div className="grid grid-cols-[1fr_auto_auto] gap-2">
-                        <Select
-                          value={
-                            selectedAssignGroup.rubricId != null
-                              ? String(selectedAssignGroup.rubricId)
-                              : '__NONE__'
-                          }
-                          onValueChange={(value) =>
-                            updateQuestionGroup(selectedAssignGroup.clientKey, {
-                              rubricId: value === '__NONE__' ? null : Number(value),
-                            })
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Group rubric" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__NONE__">No group rubric</SelectItem>
-                            {rubrics.map((rubricOption) => (
-                              <SelectItem
-                                key={rubricOption.id}
-                                value={String(rubricOption.id)}
-                                disabled={rubricOption.status !== 'ACTIVE'}
-                              >
-                                {rubricOption.title}
-                                {rubricOption.status !== 'ACTIVE' ? ' (Archived)' : ''}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-9 w-9"
-                          disabled={selectedAssignGroup.rubricId == null}
-                          onClick={() => openInlineRubricEditor(selectedAssignGroup.rubricId)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                          <span className="sr-only">Edit group rubric</span>
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          className="h-9 w-9"
-                          disabled={selectedAssignGroup.rubricId == null}
-                          onClick={() => openRubricPreview(selectedAssignGroup.rubricId)}
-                        >
-                          <Eye className="h-4 w-4" />
-                          <span className="sr-only">Preview group rubric</span>
-                        </Button>
-                      </div>
-
-                      <p className="text-xs text-muted-foreground">
-                        {selectedAssignGroup.rubricId
-                          ? `Using rubric: ${
-                              rubricById.get(selectedAssignGroup.rubricId)?.title ??
-                              'Unavailable'
-                            }`
-                          : 'No rubric attached to this group'}
-                      </p>
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={assignGroupToSelected}
-                      >
-                        <Layers className="mr-1 h-4 w-4" />
-                        Apply Group To Active/Selected
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </aside>
+          <QuestionGroupPanel
+            isRubricEnabled={isRubricEnabled}
+            isRubricsLoading={isRubricsLoading}
+            rubrics={rubrics}
+            rubricApplyId={rubricApplyId}
+            onRubricApplyIdChange={setRubricApplyId}
+            onApplyRubricToSelected={applyRubricToSelectedQuestions}
+            onOpenQuickRubric={() => setIsQuickRubricOpen(true)}
+            onOpenInlineRubricEditor={openInlineRubricEditor}
+            onOpenRubricPreview={openRubricPreview}
+            showTips={showTips}
+            questionGroups={questionGroups}
+            newGroupName={newGroupName}
+            onNewGroupNameChange={setNewGroupName}
+            onCreateGroup={createGroupFromInput}
+            ungroupedCount={ungroupedCount}
+            activeSelectionCount={activeSelectionCount}
+            assignGroupKey={assignGroupKey}
+            onAssignGroupKeyChange={setAssignGroupKey}
+            selectedAssignGroup={selectedAssignGroup}
+            questionCountByGroupKey={questionCountByGroupKey}
+            rubricById={rubricById}
+            onUpdateQuestionGroup={updateQuestionGroup}
+            onRemoveQuestionGroup={removeQuestionGroup}
+            onAssignGroupToSelected={assignGroupToSelected}
+          />
         </div>
 
-      {/* Action buttons */}
-      <div className="flex items-center gap-3">
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {mode === 'create' ? 'Create Assessment' : 'Save Changes'}
-        </Button>
-        <Button type="button" variant="outline" onClick={handleCancel}>
-          Cancel
-        </Button>
-      </div>
-
-      <RubricQuickBuilderDrawer
-        open={isQuickRubricOpen}
-        onOpenChange={setIsQuickRubricOpen}
-        mode="create"
-        onCreated={handleQuickRubricCreated}
-        onOpenFullEditor={openFullRubricEditor}
-      />
-      <RubricQuickBuilderDrawer
-        open={isQuickRubricEditOpen}
-        onOpenChange={setIsQuickRubricEditOpen}
-        mode="edit"
-        rubricId={quickEditRubricId}
-        onSaved={handleQuickRubricSaved}
-        onOpenFullEditor={openFullRubricEditor}
-      />
-      <RubricTemplatePreviewDrawer
-        open={isRubricPreviewOpen}
-        onOpenChange={setIsRubricPreviewOpen}
-        rubricId={previewRubricId}
-        onEditRubric={openInlineRubricEditor}
-        onOpenFullEditor={openFullRubricEditor}
+      {/* Action buttons and rubric drawers */}
+      <AssessmentActionBar
+        mode={mode}
+        isSubmitting={isSubmitting}
+        onCancel={handleCancel}
+        isQuickRubricOpen={isQuickRubricOpen}
+        onQuickRubricOpenChange={setIsQuickRubricOpen}
+        onQuickRubricCreated={handleQuickRubricCreated}
+        isQuickRubricEditOpen={isQuickRubricEditOpen}
+        onQuickRubricEditOpenChange={setIsQuickRubricEditOpen}
+        quickEditRubricId={quickEditRubricId}
+        onQuickRubricSaved={handleQuickRubricSaved}
+        isRubricPreviewOpen={isRubricPreviewOpen}
+        onRubricPreviewOpenChange={setIsRubricPreviewOpen}
+        previewRubricId={previewRubricId}
+        onOpenInlineRubricEditor={openInlineRubricEditor}
+        onOpenFullRubricEditor={openFullRubricEditor}
       />
     </form>
   );
