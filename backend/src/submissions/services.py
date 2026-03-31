@@ -393,7 +393,6 @@ def override_score(submission_id: int, scores: list) -> Submission:
         )
 
     answers = list(submission.answers.select_related("question"))
-    total = 0.0
 
     def _validate_score(answer, score_val):
         cap = answer.question.max_points
@@ -402,29 +401,40 @@ def override_score(submission_id: int, scores: list) -> Submission:
                 f"Score {score_val} exceeds max points ({cap}) for question {answer.question_id}"
             )
 
-    # HYBRID mode: only manually score SHORT_ANSWER questions
-    # Other question types (MCQ, NUMBER_SCALE) keep their auto-calculated scores
-    if assessment.grading_mode == GradingMode.HYBRID:
+    def _apply_scores(answers, scores, *, scorable_filter=None):
+        """Apply scores to answers and return the total.
+
+        Args:
+            answers: Ordered answer queryset.
+            scores: List of numeric score values to apply.
+            scorable_filter: Optional callable(answer) -> bool. When provided,
+                only answers where the filter returns True consume a score from
+                the list; other answers keep their existing score.
+        """
+        total = 0.0
         score_index = 0
         for answer in answers:
-            if answer.answer_type == AnswerType.SHORT_ANSWER and score_index < len(scores):
+            should_score = scorable_filter(answer) if scorable_filter else True
+            if should_score and score_index < len(scores):
                 _validate_score(answer, scores[score_index])
                 answer.score = scores[score_index]
                 score_index += 1
             total += answer.score or 0.0
-        # If extra scores remain, add the last one as bonus points
+        # Extra scores beyond consumed count are added as bonus
         if score_index != len(scores):
             total += scores[-1]
+        return total
+
+    if assessment.grading_mode == GradingMode.HYBRID:
+        # HYBRID: only manually score SHORT_ANSWER questions;
+        # other types (MCQ, NUMBER_SCALE) keep their auto-calculated scores
+        total = _apply_scores(
+            answers, scores,
+            scorable_filter=lambda a: a.answer_type == AnswerType.SHORT_ANSWER,
+        )
     else:
-        # MANUAL and other modes: apply scores to answers in order
-        for idx, answer in enumerate(answers):
-            if idx < len(scores):
-                _validate_score(answer, scores[idx])
-                answer.score = scores[idx]
-            total += answer.score or 0.0
-        # Extra scores beyond answer count are added as bonus
-        if len(scores) > len(answers):
-            total += scores[-1]
+        # MANUAL and other modes: apply scores to all answers in order
+        total = _apply_scores(answers, scores)
 
     Answer.objects.bulk_update(answers, ["score"])
     submission.score = total
