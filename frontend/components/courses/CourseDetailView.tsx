@@ -13,12 +13,7 @@ import CourseRosterTab from './CourseRosterTab';
 import CourseRegistrationTab from './CourseRegistrationTab';
 import CourseAssignmentsTab from './CourseAssignmentsTab';
 import CourseGradebookTab from './CourseGradebookTab';
-
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
+import { toErrorMessage } from '@/lib/utils';
 
 const TABS = ['roster', 'registration', 'assignments', 'gradebook'] as const;
 type Tab = (typeof TABS)[number];
@@ -112,7 +107,7 @@ export default function CourseDetailView({
       setIsEditingName(false);
       toast.success('Course name updated.');
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to update course name.'));
+      toast.error(toErrorMessage(error, 'Failed to update course name.'));
     } finally {
       setIsSavingName(false);
     }

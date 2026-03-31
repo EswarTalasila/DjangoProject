@@ -17,12 +17,7 @@ import {
   type RegistrationCodeStatus,
   type RegistrationCodeType,
 } from '@/lib/registration-code-api';
-
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
+import { toErrorMessage } from '@/lib/utils';
 
 type CodeManagementViewProps = {
   userRole: 'TEACHER' | 'RESEARCHER';
@@ -119,7 +114,7 @@ export default function CodeManagementView({
       setIsCodeDialogOpen(true);
       await loadCodes();
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to generate code.'));
+      toast.error(toErrorMessage(error, 'Failed to generate code.'));
     } finally {
       setIsActionLoading(false);
     }
@@ -132,7 +127,7 @@ export default function CodeManagementView({
       toast.success(`Code ${code.codePrefix} revoked.`);
       await loadCodes();
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to revoke code.'));
+      toast.error(toErrorMessage(error, 'Failed to revoke code.'));
     } finally {
       setIsActionLoading(false);
     }
@@ -145,7 +140,7 @@ export default function CodeManagementView({
       toast.success(`Code ${code.codePrefix} archived.`);
       await loadCodes();
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to archive code.'));
+      toast.error(toErrorMessage(error, 'Failed to archive code.'));
     } finally {
       setIsActionLoading(false);
     }

@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PasswordStrengthChecklist } from "@/components/ui/password-strength-checklist";
+import { toErrorMessage } from "@/lib/utils";
 
 const changePasswordSchema = z
   .object({
@@ -35,7 +36,6 @@ const changePasswordSchema = z
   });
 
 type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
-type ApiError = { response?: { data?: { detail?: string } } };
 
 type Props = {
   profile: SessionProfile;
@@ -66,8 +66,7 @@ export function ChangePasswordForm({ profile }: Props) {
       toast.success("Password changed. Logging out...");
       await logout();
     } catch (error: unknown) {
-      const detail = (error as ApiError).response?.data?.detail;
-      setGeneralError(detail || "Failed to change password.");
+      setGeneralError(toErrorMessage(error, "Failed to change password."));
     } finally {
       setIsLoading(false);
     }

@@ -6,11 +6,7 @@ import { ArrowRight } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { listCourses, type CourseSummary } from '@/lib/course-api';
-import { listMySubmissions, type Paginated, type SubmissionCompactDTO } from '@/lib/submission-api';
-
-function extractResults<T>(payload: Paginated<T> | T[]): T[] {
-  return Array.isArray(payload) ? payload : payload.results;
-}
+import { listMySubmissions, type SubmissionCompactDTO } from '@/lib/submission-api';
 
 export default function StudentView() {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
@@ -29,7 +25,7 @@ export default function StudentView() {
         ]);
         if (cancelled) return;
         setCourses(courseList);
-        setSubmissions(extractResults(submissionList));
+        setSubmissions(submissionList);
       } finally {
         if (!cancelled) {
           setIsLoading(false);

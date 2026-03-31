@@ -41,17 +41,12 @@ import { listRubrics, type Rubric } from '@/lib/rubric-api';
 import QuestionBlock from './QuestionBlock';
 import RubricQuickBuilderDrawer from './RubricQuickBuilderDrawer';
 import RubricTemplatePreviewDrawer from './RubricTemplatePreviewDrawer';
+import { toErrorMessage } from '@/lib/utils';
 
 // -- Error handling --
 
-type ApiError = { response?: { data?: { detail?: string }; status?: number } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
-
 function getStatusCode(error: unknown): number | undefined {
-  return (error as ApiError).response?.status;
+  return (error as { response?: { status?: number } }).response?.status;
 }
 
 // -- Constants --
@@ -770,7 +765,7 @@ export default function AssessmentBuilderForm({
           'This assessment is referenced by assignments and cannot be modified',
         );
       } else {
-        toast.error(extractDetail(err, 'Failed to save assessment'));
+        toast.error(toErrorMessage(err, 'Failed to save assessment'));
       }
     } finally {
       setIsSubmitting(false);

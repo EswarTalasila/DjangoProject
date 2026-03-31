@@ -13,12 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { getRubric, type Rubric } from '@/lib/rubric-api';
 import RubricGridPreview from '@/components/rubrics/RubricGridPreview';
-
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
+import { toErrorMessage } from '@/lib/utils';
 
 type RubricTemplatePreviewDrawerProps = {
   open: boolean;
@@ -56,7 +51,7 @@ export default function RubricTemplatePreviewDrawer({
       } catch (error: unknown) {
         if (!cancelled) {
           setRubric(null);
-          setLoadError(extractDetail(error, 'Failed to load rubric template.'));
+          setLoadError(toErrorMessage(error, 'Failed to load rubric template.'));
         }
       } finally {
         if (!cancelled) setIsLoading(false);

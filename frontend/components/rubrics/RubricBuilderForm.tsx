@@ -19,17 +19,12 @@ import {
 } from '@/lib/rubric-api';
 import CriterionBlock from './CriterionBlock';
 import RubricGridPreview from './RubricGridPreview';
+import { toErrorMessage } from '@/lib/utils';
 
 // -- Error handling --
 
-type ApiError = { response?: { data?: { detail?: string }; status?: number } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
-
 function getStatusCode(error: unknown): number | undefined {
-  return (error as ApiError).response?.status;
+  return (error as { response?: { status?: number } }).response?.status;
 }
 
 // -- Helpers --
@@ -234,7 +229,7 @@ export default function RubricBuilderForm({
           'This rubric is referenced by assessments and cannot be modified',
         );
       } else {
-        toast.error(extractDetail(err, 'Failed to save rubric'));
+        toast.error(toErrorMessage(err, 'Failed to save rubric'));
       }
     } finally {
       setIsSubmitting(false);

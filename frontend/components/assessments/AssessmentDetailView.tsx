@@ -37,12 +37,7 @@ import {
 } from '@/lib/assessment-api';
 import { listRubrics, type Rubric } from '@/lib/rubric-api';
 import RubricTemplatePreviewDrawer from '@/components/assessments/RubricTemplatePreviewDrawer';
-
-type ApiError = { response?: { data?: { detail?: string }; status?: number } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
+import { toErrorMessage } from '@/lib/utils';
 
 function formatPoints(value: number): string {
   if (Number.isInteger(value)) return String(value);
@@ -160,15 +155,16 @@ export default function AssessmentDetailView({
       toast.success('Assessment deleted.');
       router.push('/dashboard/assessments');
     } catch (error: unknown) {
+      const axErr = error as { response?: { data?: { detail?: string }; status?: number } };
       if (
-        (error as ApiError).response?.data?.detail
+        axErr.response?.data?.detail
           ?.toLowerCase()
           .includes('referenced') ||
-        (error as ApiError).response?.status === 409
+        axErr.response?.status === 409
       ) {
         toast.error('Cannot delete — assessment is referenced by assignments.');
       } else {
-        toast.error(extractDetail(error, 'Failed to delete assessment.'));
+        toast.error(toErrorMessage(error, 'Failed to delete assessment.'));
       }
     } finally {
       setIsDeleting(false);
@@ -256,7 +252,7 @@ export default function AssessmentDetailView({
       toast.success(`Question moved to ${targetLabel}.`);
     } catch (error: unknown) {
       setAssessment(previousAssessment);
-      toast.error(extractDetail(error, 'Failed to move question between groups.'));
+      toast.error(toErrorMessage(error, 'Failed to move question between groups.'));
     } finally {
       setIsReassigningGroup(false);
     }

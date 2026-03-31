@@ -33,12 +33,7 @@ import {
   type Rubric,
   type RubricCriterion,
 } from '@/lib/rubric-api';
-
-type ApiError = { response?: { data?: { detail?: string }; status?: number } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
+import { toErrorMessage } from '@/lib/utils';
 
 type RubricDetailViewProps = {
   rubricId: number;
@@ -80,15 +75,16 @@ export default function RubricDetailView({
       toast.success('Rubric deleted.');
       router.push('/dashboard/rubrics');
     } catch (error: unknown) {
+      const axErr = error as { response?: { data?: { detail?: string }; status?: number } };
       if (
-        (error as ApiError).response?.data?.detail
+        axErr.response?.data?.detail
           ?.toLowerCase()
           .includes('referenced') ||
-        (error as ApiError).response?.status === 409
+        axErr.response?.status === 409
       ) {
         toast.error('Cannot delete — rubric is referenced by assessments.');
       } else {
-        toast.error(extractDetail(error, 'Failed to delete rubric.'));
+        toast.error(toErrorMessage(error, 'Failed to delete rubric.'));
       }
     } finally {
       setIsDeleting(false);
@@ -101,7 +97,7 @@ export default function RubricDetailView({
       toast.success('Rubric archived.');
       await loadRubric();
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to archive rubric.'));
+      toast.error(toErrorMessage(error, 'Failed to archive rubric.'));
     }
   }
 

@@ -18,12 +18,7 @@ import {
 import { createAssignment } from '@/lib/assignment-api';
 import { listAssessments, type Assessment } from '@/lib/assessment-api';
 import { listCourses, type CourseSummary } from '@/lib/course-api';
-
-type ApiError = { response?: { data?: { detail?: string }; status?: number } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
+import { toErrorMessage } from '@/lib/utils';
 
 function toDateTimeLocal(value: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -131,10 +126,10 @@ export default function AssignmentCreateView() {
       toast.success('Assignment created.');
       router.push(`/dashboard/assignments/${created.id}`);
     } catch (error: unknown) {
-      if ((error as ApiError).response?.status === 409) {
+      if ((error as { response?: { status?: number } }).response?.status === 409) {
         toast.error('Cannot create assignment from archived assessment.');
       } else {
-        toast.error(extractDetail(error, 'Failed to create assignment.'));
+        toast.error(toErrorMessage(error, 'Failed to create assignment.'));
       }
     } finally {
       setIsSubmitting(false);

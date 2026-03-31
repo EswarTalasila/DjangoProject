@@ -24,7 +24,6 @@ import {
   getSubmission,
   listAssignmentSubmissions,
   listMySubmissions,
-  type Paginated,
   type SubmissionCompactDTO,
   type SubmissionStatus,
 } from '@/lib/submission-api';
@@ -34,6 +33,7 @@ import {
   type Assignment,
 } from '@/lib/assignment-api';
 import { listCourses, type CourseSummary } from '@/lib/course-api';
+import { toErrorMessage, formatDate, formatScore } from '@/lib/utils';
 
 type Role = 'ADMIN' | 'TEACHER' | 'RESEARCHER' | 'STUDENT';
 
@@ -46,28 +46,6 @@ type SubmissionRow = SubmissionCompactDTO & {
   studentId: number | null;
 };
 
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
-
-function formatDate(value: string | null): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString();
-}
-
-function formatScore(value: number | null): string {
-  if (value == null) return '-';
-  if (Number.isInteger(value)) return String(value);
-  return value.toFixed(2).replace(/\.?0+$/, '');
-}
-
-function extractResults<T>(payload: Paginated<T> | T[]): T[] {
-  return Array.isArray(payload) ? payload : payload.results;
-}
 
 const STATUS_OPTIONS: Array<{ value: 'ALL' | SubmissionStatus; label: string }> = [
   { value: 'ALL', label: 'All statuses' },
@@ -109,9 +87,9 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
         assignmentMap[assignment.id] = assignment.title || `Assignment #${assignment.id}`;
       }
       setMyAssignments(assignmentMap);
-      setMySubmissions(extractResults(submissions));
+      setMySubmissions(submissions);
     } catch (error: unknown) {
-      setLoadError(extractDetail(error, 'Failed to load your submissions.'));
+      setLoadError(toErrorMessage(error, 'Failed to load your submissions.'));
     }
   }, [studentStatusFilter, userId]);
 
@@ -119,7 +97,7 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
     setLoadError(null);
     setIsRefreshingRows(true);
     try {
-      const compact = extractResults(await listAssignmentSubmissions(assignmentId));
+      const compact = await listAssignmentSubmissions(assignmentId);
       if (compact.length === 0) {
         setSubmissionRows([]);
         return;
@@ -143,7 +121,7 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
         })),
       );
     } catch (error: unknown) {
-      setLoadError(extractDetail(error, 'Failed to load submissions for this assignment.'));
+      setLoadError(toErrorMessage(error, 'Failed to load submissions for this assignment.'));
       setSubmissionRows([]);
     } finally {
       setIsRefreshingRows(false);
@@ -163,7 +141,7 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
         setSubmissionRows([]);
       }
     } catch (error: unknown) {
-      setLoadError(extractDetail(error, 'Failed to load your assignments.'));
+      setLoadError(toErrorMessage(error, 'Failed to load your assignments.'));
     }
   }, [loadRowsForAssignment, userId]);
 
@@ -192,7 +170,7 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
         setSubmissionRows([]);
       }
     } catch (error: unknown) {
-      setLoadError(extractDetail(error, 'Failed to load submissions scope.'));
+      setLoadError(toErrorMessage(error, 'Failed to load submissions scope.'));
     }
   }, [loadRowsForAssignment]);
 
@@ -236,7 +214,7 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
         await loadRowsForAssignment(Number(nextAssignmentId));
       }
     } catch (error: unknown) {
-      setLoadError(extractDetail(error, 'Failed to load assignments for this course.'));
+      setLoadError(toErrorMessage(error, 'Failed to load assignments for this course.'));
     } finally {
       setIsRefreshingRows(false);
     }

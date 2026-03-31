@@ -39,8 +39,7 @@ import {
   type SubmissionDTO,
   type SubmissionStatus,
 } from '@/lib/submission-api';
-
-type ApiError = { response?: { data?: { detail?: string }; status?: number } };
+import { toErrorMessage, formatDate } from '@/lib/utils';
 
 type AssignmentDetailViewProps = {
   assignmentId: number;
@@ -57,10 +56,6 @@ type StudentAttemptAnswer = {
 };
 type StudentFlowStage = 'attempt' | 'submitted';
 
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
-
 function toLocalInputValue(value: string | null): string {
   if (!value) return '';
   const date = new Date(value);
@@ -74,13 +69,6 @@ function toIsoOrNull(value: string): string | null {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString();
-}
-
-function formatDate(value: string | null): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString();
 }
 
 function formatQuestionKind(kind: Question['type']): string {
@@ -385,8 +373,9 @@ export default function AssignmentDetailView({
             setStudentSubmittedAt(sub.submittedAt ? new Date(sub.submittedAt) : null);
           }
         } catch (error: unknown) {
-          const statusCode = (error as ApiError).response?.status;
-          const detail = (error as ApiError).response?.data?.detail;
+          const axErr = error as { response?: { data?: { detail?: string }; status?: number } };
+          const statusCode = axErr.response?.status;
+          const detail = axErr.response?.data?.detail;
           const missingSubmission =
             statusCode === 404 && (detail?.toLowerCase().includes('submission') ?? true);
           if (!missingSubmission) {
@@ -396,7 +385,7 @@ export default function AssignmentDetailView({
         }
       }
     } catch (error: unknown) {
-      setLoadError(extractDetail(error, 'Failed to load assignment.'));
+      setLoadError(toErrorMessage(error, 'Failed to load assignment.'));
     } finally {
       setIsLoading(false);
     }
@@ -589,7 +578,7 @@ export default function AssignmentDetailView({
       setStudentSubmittedAt(result.submittedAt ? new Date(result.submittedAt) : new Date());
       toast.success('Submission sent successfully.');
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to submit. Please try again.'));
+      toast.error(toErrorMessage(error, 'Failed to submit. Please try again.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -631,7 +620,7 @@ export default function AssignmentDetailView({
       setDueAtInput(toLocalInputValue(updated.dueAt));
       toast.success('Assignment updated.');
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to update assignment.'));
+      toast.error(toErrorMessage(error, 'Failed to update assignment.'));
     } finally {
       setIsUpdating(false);
     }
@@ -646,7 +635,7 @@ export default function AssignmentDetailView({
       setAssignment(updated);
       toast.success('Assignment archived.');
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to archive assignment.'));
+      toast.error(toErrorMessage(error, 'Failed to archive assignment.'));
     } finally {
       setIsArchiving(false);
     }
@@ -661,7 +650,7 @@ export default function AssignmentDetailView({
       toast.success('Assignment deleted.');
       router.push('/dashboard/assignments');
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to delete assignment.'));
+      toast.error(toErrorMessage(error, 'Failed to delete assignment.'));
     } finally {
       setIsDeleting(false);
     }

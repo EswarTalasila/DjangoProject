@@ -28,20 +28,7 @@ import {
   type SudoGrantListItem,
 } from '@/lib/sudo-api';
 import { getSudoPermissionLabel, SUDO_CAPABILITY_NOTE } from '@/lib/sudo-permissions';
-
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
+import { toErrorMessage, formatShortDate } from '@/lib/utils';
 
 type SudoDelegationViewProps = {
   currentUserId: number | null;
@@ -99,7 +86,7 @@ export default function SudoDelegationView({ currentUserId }: SudoDelegationView
       setIsGrantDialogOpen(false);
       await loadData();
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to grant sudo permissions.'));
+      toast.error(toErrorMessage(error, 'Failed to grant sudo permissions.'));
     } finally {
       setIsActionLoading(false);
     }
@@ -115,7 +102,7 @@ export default function SudoDelegationView({ currentUserId }: SudoDelegationView
       setRevokeTarget(null);
       await loadData();
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to revoke sudo grant.'));
+      toast.error(toErrorMessage(error, 'Failed to revoke sudo grant.'));
     } finally {
       setIsActionLoading(false);
     }
@@ -227,7 +214,7 @@ export default function SudoDelegationView({ currentUserId }: SudoDelegationView
                     {grant.canGrantSudo ? 'Yes' : 'No'}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(grant.grantedAt)}
+                    {formatShortDate(grant.grantedAt)}
                   </TableCell>
                   <TableCell>
                     <Button

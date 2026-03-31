@@ -19,22 +19,7 @@ import {
   listRegistrationCodes,
   type RegistrationCode,
 } from '@/lib/registration-code-api';
-
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
+import { toErrorMessage, formatDateTime } from '@/lib/utils';
 
 type CourseRegistrationTabProps = {
   courseId: number;
@@ -94,7 +79,7 @@ export default function CourseRegistrationTab({ courseId }: CourseRegistrationTa
       setIsCodeDialogOpen(true);
       await loadCodes();
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to generate registration code.'));
+      toast.error(toErrorMessage(error, 'Failed to generate registration code.'));
     } finally {
       setIsCreating(false);
     }
@@ -176,10 +161,10 @@ export default function CourseRegistrationTab({ courseId }: CourseRegistrationTa
                     {code.timesUsed} / {code.maxUses}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(code.expiresAt)}
+                    {formatDateTime(code.expiresAt)}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(code.createdAt)}
+                    {formatDateTime(code.createdAt)}
                   </TableCell>
                 </TableRow>
               ))}
