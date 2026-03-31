@@ -139,6 +139,24 @@ class TestAnswerSerializer:
         s = AnswerSerializer(data=data)
         assert s.is_valid(), s.errors
 
+    def test_mcq_selected_must_be_list(self):
+        """MULTIPLE_CHOICE selected payload must be a list."""
+        from submissions.serializers import AnswerSerializer
+
+        data = {"questionId": 1, "type": "MULTIPLE_CHOICE", "data": {"selected": "oops"}}
+        s = AnswerSerializer(data=data)
+        assert not s.is_valid()
+        assert "data" in str(s.errors)
+
+    def test_mcq_selected_entries_must_be_ints(self):
+        """MULTIPLE_CHOICE selected entries must be integers."""
+        from submissions.serializers import AnswerSerializer
+
+        data = {"questionId": 1, "type": "MULTIPLE_CHOICE", "data": {"selected": [0, "2"]}}
+        s = AnswerSerializer(data=data)
+        assert not s.is_valid()
+        assert "data" in str(s.errors)
+
     def test_data_with_extra_keys_is_valid(self):
         """Extra keys in data dict are allowed (forward compatibility)."""
         from submissions.serializers import AnswerSerializer
@@ -154,6 +172,24 @@ class TestAnswerSerializer:
         data = {"questionId": 1, "type": "MULTIPLE_CHOICE", "data": {}}
         s = AnswerSerializer(data=data)
         assert not s.is_valid()
+
+    def test_short_answer_text_must_be_string(self):
+        """SHORT_ANSWER text payload must be a string."""
+        from submissions.serializers import AnswerSerializer
+
+        data = {"questionId": 1, "type": "SHORT_ANSWER", "data": {"text": ["hi"]}}
+        s = AnswerSerializer(data=data)
+        assert not s.is_valid()
+        assert "data" in str(s.errors)
+
+    def test_number_scale_val_must_be_integer(self):
+        """NUMBER_SCALE val payload must be an integer."""
+        from submissions.serializers import AnswerSerializer
+
+        data = {"questionId": 1, "type": "NUMBER_SCALE", "data": {"val": "five"}}
+        s = AnswerSerializer(data=data)
+        assert not s.is_valid()
+        assert "data" in str(s.errors)
 
 
 # ============================================================================

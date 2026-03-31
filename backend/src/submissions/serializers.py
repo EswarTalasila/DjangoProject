@@ -25,6 +25,11 @@ _REQUIRED_KEYS: dict[str, set[str]] = {
 }
 
 
+def _is_plain_int(value) -> bool:
+    """Return True for int values while rejecting bools."""
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 class AnswerSerializer(serializers.Serializer):
     """
     Validates answer payloads within a submission.
@@ -47,7 +52,7 @@ class AnswerSerializer(serializers.Serializer):
     score = serializers.FloatField(required=False, allow_null=True, read_only=True)
 
     def validate(self, attrs):
-        """Check that data dict contains the required keys for the answer type."""
+        """Check that data dict contains the required keys and value shapes for the answer type."""
         answer_type = attrs.get("type")
         data = attrs.get("data", {})
         required = _REQUIRED_KEYS.get(answer_type, set())
@@ -56,6 +61,29 @@ class AnswerSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"data": f"Missing required key(s) for {answer_type}: {', '.join(sorted(missing))}"}
             )
+
+        if answer_type == "MULTIPLE_CHOICE":
+            selected = data.get("selected")
+            if not isinstance(selected, list):
+                raise serializers.ValidationError(
+                    {"data": "'selected' must be a list of integer choice indices"}
+                )
+            if any(not _is_plain_int(choice_index) for choice_index in selected):
+                raise serializers.ValidationError(
+                    {"data": "'selected' must contain only integer choice indices"}
+                )
+        elif answer_type == "SHORT_ANSWER":
+            text = data.get("text")
+            if not isinstance(text, str):
+                raise serializers.ValidationError(
+                    {"data": "'text' must be a string"}
+                )
+        elif answer_type == "NUMBER_SCALE":
+            value = data.get("val")
+            if not _is_plain_int(value):
+                raise serializers.ValidationError(
+                    {"data": "'val' must be an integer"}
+                )
         return attrs
 
 
