@@ -7,12 +7,12 @@ reject invalid rows at the database boundary.
 import pytest
 from django.db import IntegrityError
 
-from assignments.models import Assignment, AudienceType
-from submissions.models import Submission, SubmissionStatus
+from accounts.models import RegistrationCodeType
+from assignments.models import AudienceType
 from tests.factories import (
-    AssessmentFactory,
     AssignmentFactory,
     CourseFactory,
+    RegistrationCodeFactory,
     SubmissionFactory,
     UserFactory,
 )
@@ -92,3 +92,41 @@ class TestSubmissionOwnerXorConstraint:
         """Submission with neither student nor teacher violates constraint."""
         with pytest.raises(IntegrityError):
             SubmissionFactory(student=None, teacher=None)
+
+
+# ---------------------------------------------------------------------------
+# 3c follow-up. RegistrationCode course binding DB constraint
+# ---------------------------------------------------------------------------
+
+
+class TestRegistrationCodeCourseBindingConstraint:
+    """Student codes require a course; non-student codes must not reference one."""
+
+    def test_student_code_with_course_succeeds(self):
+        """Student registration code with a course FK is valid."""
+        code = RegistrationCodeFactory(code_type=RegistrationCodeType.STUDENT)
+        assert code.pk is not None
+
+    def test_student_code_without_course_rejected(self):
+        """Student registration code without a course violates the constraint."""
+        with pytest.raises(IntegrityError):
+            RegistrationCodeFactory(
+                code_type=RegistrationCodeType.STUDENT,
+                course=None,
+            )
+
+    def test_teacher_code_without_course_succeeds(self):
+        """Teacher registration code without a course FK is valid."""
+        code = RegistrationCodeFactory(
+            code_type=RegistrationCodeType.TEACHER,
+            course=None,
+        )
+        assert code.pk is not None
+
+    def test_teacher_code_with_course_rejected(self):
+        """Teacher registration code with a course FK violates the constraint."""
+        with pytest.raises(IntegrityError):
+            RegistrationCodeFactory(
+                code_type=RegistrationCodeType.TEACHER,
+                course=CourseFactory(),
+            )

@@ -585,6 +585,19 @@ class RegistrationCode(models.Model):
         db_table = "registration_codes"
         constraints = [
             models.UniqueConstraint(fields=["code_hash"], name="uq_registration_code_hash"),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        code_type=RegistrationCodeType.STUDENT,
+                        course_id__isnull=False,
+                    )
+                    | (
+                        ~models.Q(code_type=RegistrationCodeType.STUDENT)
+                        & models.Q(course_id__isnull=True)
+                    )
+                ),
+                name="ck_registration_code_course_binding",
+            ),
         ]
         indexes = [
             # code_hash index omitted: the uq_registration_code_hash UniqueConstraint
@@ -607,6 +620,10 @@ class RegistrationCode(models.Model):
             raise ValidationError("times_used cannot exceed max_uses")
         if self.code_type == RegistrationCodeType.STUDENT and not self.course_id:
             raise ValidationError({"course": "Student registration codes must reference a course."})
+        if self.code_type != RegistrationCodeType.STUDENT and self.course_id:
+            raise ValidationError(
+                {"course": "Only student registration codes may reference a course."}
+            )
 
     def __str__(self):
         """Return a readable string representation."""

@@ -180,7 +180,9 @@ class RegistrationCodeFactory(factory.django.DjangoModelFactory):
     code_prefix = factory.Sequence(lambda n: f"REG{n:05d}")
     code_type = RegistrationCodeType.STUDENT
     created_by = factory.SubFactory(UserFactory)
-    course = None
+    course = factory.LazyAttribute(
+        lambda obj: CourseFactory() if obj.code_type == RegistrationCodeType.STUDENT else None
+    )
     max_uses = 1
     times_used = 0
     expires_at = factory.LazyFunction(lambda: timezone.now() + timedelta(days=1))

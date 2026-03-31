@@ -46,12 +46,14 @@ class TestRegistrationCodeCourseBinding:
         code = self._make_code("RESEARCHER", course_id=None)
         code.clean()  # should not raise
 
-    def test_teacher_code_with_course_passes(self):
-        """TEACHER code with a course is valid (not forbidden)."""
+    def test_teacher_code_with_course_fails(self):
+        """TEACHER code with a course violates the course-binding invariant."""
         code = self._make_code("TEACHER", course_id=42)
-        code.clean()  # should not raise
+        with pytest.raises(ValidationError, match="Only student"):
+            code.clean()
 
-    def test_researcher_code_with_course_passes(self):
-        """RESEARCHER code with a course is valid (not forbidden)."""
+    def test_researcher_code_with_course_fails(self):
+        """RESEARCHER code with a course violates the course-binding invariant."""
         code = self._make_code("RESEARCHER", course_id=42)
-        code.clean()  # should not raise
+        with pytest.raises(ValidationError, match="Only student"):
+            code.clean()
