@@ -26,6 +26,7 @@ from core.audit import complete_audit, get_client_ip, log_audit
 from core.errors import error_response
 from core.models import AuditAction, AuditOutcome
 from core.pagination import paginate
+from core.parsers import parse_include_archived
 from core.permissions import IsTeacher, IsTeacherOrAbove, has_role, primary_role
 from courses.models import Enrollment, EnrollmentStatus
 from courses.services import can_view_course
@@ -44,22 +45,6 @@ from .services import (
     restore_assignment,
     update_assignment,
 )
-
-
-def _parse_include_archived(request):
-    raw = request.query_params.get("includeArchived")
-    if raw is None or raw == "":
-        return False, None
-    value = raw.lower()
-    if value not in {"true", "false"}:
-        return (
-            None,
-            Response(
-                {"detail": "includeArchived must be true or false"},
-                status=status.HTTP_400_BAD_REQUEST,
-            ),
-        )
-    return value == "true", None
 
 
 def _can_read_assignment(user: User, assignment) -> bool:
@@ -183,7 +168,7 @@ def list_course(request, course_id: int):
             return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
         if not can_view_course(request.user, course):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
-    include_archived, include_archived_error = _parse_include_archived(request)
+    include_archived, include_archived_error = parse_include_archived(request)
     if include_archived_error is not None:
         return include_archived_error
     assignments = list_by_course(course_id, include_archived=include_archived)
