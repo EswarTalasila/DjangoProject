@@ -294,7 +294,7 @@ class TestCanAccessSubmission:
 
         assert _can_access_submission(user, sub) is False
 
-    @patch("submissions.views._teacher_owns_assignment")
+    @patch("submissions.views.teacher_owns_assignment")
     def test_teacher_can_access_owned_assignment(self, mock_owns):
         """Teacher can access submissions for assignments they own."""
         from submissions.views import _can_access_submission
@@ -305,7 +305,7 @@ class TestCanAccessSubmission:
 
         assert _can_access_submission(user, sub) is True
 
-    @patch("submissions.views._teacher_owns_assignment")
+    @patch("submissions.views.teacher_owns_assignment")
     def test_teacher_cannot_access_unowned_assignment(self, mock_owns):
         """Teacher cannot access submissions for assignments they do not own."""
         from submissions.views import _can_access_submission
@@ -527,7 +527,7 @@ class TestOverrideScoreView:
 
         assert response.status_code == http_status.HTTP_200_OK
 
-    @patch("submissions.views._teacher_owns_assignment")
+    @patch("submissions.views.teacher_owns_assignment")
     @patch("submissions.views.Submission")
     def test_teacher_not_owning_gets_403(self, mock_sub_model, mock_owns):
         """Teacher who does not own the assignment gets 403."""
@@ -772,7 +772,7 @@ class TestAssignmentSubmissions:
 
     @patch("submissions.views.paginate")
     @patch("submissions.views.get_by_assignment")
-    @patch("submissions.views._teacher_owns_assignment")
+    @patch("submissions.views.teacher_owns_assignment")
     @patch("submissions.views._assignment_for")
     def test_get_teacher_owns_returns_paginated(
         self, mock_assign_for, mock_owns, mock_get_by, mock_paginate
@@ -792,7 +792,7 @@ class TestAssignmentSubmissions:
 
         mock_get_by.assert_called_once_with(10)
 
-    @patch("submissions.views._teacher_owns_assignment")
+    @patch("submissions.views.teacher_owns_assignment")
     @patch("submissions.views._assignment_for")
     def test_get_teacher_not_owning_gets_403(self, mock_assign_for, mock_owns):
         """GET as teacher who does not own the assignment returns 403."""
@@ -883,7 +883,7 @@ class TestGetByAssignmentId:
 
         assert response.status_code == http_status.HTTP_403_FORBIDDEN
 
-    @patch("submissions.views._teacher_owns_assignment")
+    @patch("submissions.views.teacher_owns_assignment")
     @patch("submissions.views._assignment_for")
     def test_teacher_not_owning_gets_403(self, mock_assign_for, mock_owns):
         """Teacher who does not own the assignment gets 403."""
@@ -901,7 +901,7 @@ class TestGetByAssignmentId:
 
     @patch("submissions.views.paginate")
     @patch("submissions.views.get_by_assignment")
-    @patch("submissions.views._teacher_owns_assignment")
+    @patch("submissions.views.teacher_owns_assignment")
     @patch("submissions.views._assignment_for")
     def test_teacher_owning_gets_paginated(self, mock_assign_for, mock_owns, mock_get_by, mock_paginate):
         """Teacher who owns the assignment gets paginated results."""
@@ -1157,7 +1157,7 @@ class TestGetStudentSubmission:
 
         assert response.status_code == http_status.HTTP_200_OK
 
-    @patch("submissions.views._teacher_owns_assignment")
+    @patch("submissions.views.teacher_owns_assignment")
     @patch("submissions.views._assignment_for")
     def test_teacher_not_owning_gets_403(self, mock_assign_for, mock_owns):
         """Teacher who does not own the assignment gets 403."""
@@ -1175,7 +1175,7 @@ class TestGetStudentSubmission:
 
     @patch("submissions.views.submission_to_dto")
     @patch("submissions.views.get_by_student_and_assignment_for_dto")
-    @patch("submissions.views._teacher_owns_assignment")
+    @patch("submissions.views.teacher_owns_assignment")
     @patch("submissions.views._assignment_for")
     def test_teacher_owning_can_view(self, mock_assign_for, mock_owns, mock_get, mock_dto):
         """Teacher who owns the assignment can view student submission."""
@@ -1237,7 +1237,7 @@ class TestOverrideScoreViewExtended:
     @patch("submissions.views.submission_to_dto")
     @patch("submissions.views.get_submission_for_dto")
     @patch("submissions.views.override_score")
-    @patch("submissions.views._teacher_owns_assignment")
+    @patch("submissions.views.teacher_owns_assignment")
     @patch("submissions.views.Submission")
     def test_teacher_owning_can_override(self, mock_sub_model, mock_owns, mock_override, mock_refetch, mock_dto):
         """Teacher who owns the assignment can override scores."""

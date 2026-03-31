@@ -32,7 +32,7 @@ from core.audit import complete_audit, get_client_ip, log_audit
 from core.errors import error_response
 from core.models import AuditAction, AuditOutcome
 from core.pagination import paginate
-from core.permissions import has_role, has_sudo_permission, primary_role
+from core.permissions import has_role, has_sudo_permission, primary_role, teacher_owns_assignment
 from courses.models import Enrollment, EnrollmentStatus
 
 from .models import Submission, SubmissionStatus
@@ -74,26 +74,8 @@ def _assignment_for(assignment_id: int) -> Assignment | None:
     )
 
 
-def _teacher_owns_assignment(user, assignment: Assignment) -> bool:
-    """
-    Check if the given user (teacher) owns the assignment.
-
-    Ownership is determined by either:
-    1. The assignment's teacher_id matches the user's ID, OR
-    2. The assignment's course belongs to the user's teacher profile
-
-    Args:
-        user: The User instance to check ownership for
-        assignment: The Assignment to check
-
-    Returns:
-        True if the user owns the assignment, False otherwise
-    """
-    if assignment.teacher_id == user.id:
-        return True
-    if assignment.course and assignment.course.teacher_profile:
-        return bool(assignment.course.teacher_profile.user_id == user.id)
-    return False
+# Backward-compatible alias — image_views.py imports this name.
+_teacher_owns_assignment = teacher_owns_assignment
 
 
 def _student_enrolled_in_assignment(user, assignment: Assignment) -> bool:
@@ -142,7 +124,7 @@ def _can_access_submission(user, submission) -> bool:
     if role == Role.STUDENT:
         return bool(submission.student_id == user.id)
     if role == Role.TEACHER:
-        return _teacher_owns_assignment(user, submission.assignment)
+        return teacher_owns_assignment(user, submission.assignment)
     return False
 
 
@@ -267,7 +249,7 @@ def assignment_submissions(request, assignment_id: int):
         not request.user.is_staff
         and not has_role(request.user, Role.RESEARCHER)
         and role == Role.TEACHER
-        and not _teacher_owns_assignment(request.user, assignment)
+        and not teacher_owns_assignment(request.user, assignment)
     ):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
@@ -330,7 +312,7 @@ def get_by_assignment_id(request, assignment_id: int):
         not request.user.is_staff
         and not has_role(request.user, Role.RESEARCHER)
         and role == Role.TEACHER
-        and not _teacher_owns_assignment(request.user, assignment)
+        and not teacher_owns_assignment(request.user, assignment)
     ):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
@@ -413,7 +395,7 @@ def get_student_submission(request, student_id: int, assignment_id: int):
         if not _student_enrolled_in_assignment(request.user, assignment):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     elif role == Role.TEACHER:
-        if not _teacher_owns_assignment(request.user, assignment):
+        if not teacher_owns_assignment(request.user, assignment):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     else:
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
@@ -514,7 +496,7 @@ def override_score_view(request, submission_id: int):
     submission = Submission.objects.filter(id=submission_id).select_related("assignment").first()
     if not submission:
         return error_response("Submission not found", status.HTTP_404_NOT_FOUND)
-    if role == Role.TEACHER and not _teacher_owns_assignment(request.user, submission.assignment):
+    if role == Role.TEACHER and not teacher_owns_assignment(request.user, submission.assignment):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
 
     old_scores = list(
