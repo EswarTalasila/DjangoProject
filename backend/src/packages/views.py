@@ -76,7 +76,8 @@ def _check_workspace_access(user, workspace):
                     {"detail": "You do not own this workspace's course"},
                     status=status.HTTP_403_FORBIDDEN,
                 )
-        except Exception:
+        except AttributeError:
+            # User or course lacks a teacher_profile (RelatedObjectDoesNotExist)
             return Response(
                 {"detail": "You do not own this workspace's course"},
                 status=status.HTTP_403_FORBIDDEN,
@@ -377,8 +378,13 @@ def snapshot_list_create_view(request, workspace_id):
         )
     except PermissionError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
-    except Exception as exc:
+    except (ValueError, KeyError) as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    except OSError as exc:
+        return Response(
+            {"detail": f"Snapshot storage error: {exc}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
 
     return Response(_snapshot_to_dict(snapshot), status=status.HTTP_201_CREATED)
 

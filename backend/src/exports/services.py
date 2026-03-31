@@ -7,11 +7,16 @@ so the view layer can set response headers before streaming begins.
 
 import csv
 import json
+import logging
+
+from django.core.exceptions import ObjectDoesNotExist
 
 from accounts.models import Role, SudoPermission
 from core.permissions import has_role, has_sudo_permission
 from courses.models import Course, Enrollment
 from submissions.models import AnswerType, Submission
+
+logger = logging.getLogger(__name__)
 
 from .models import ExportAuditLog
 
@@ -123,17 +128,20 @@ def _answer_value(answer) -> dict:
             # Use .all() to leverage prefetch cache instead of values_list().
             selected = [sel.choice_index for sel in answer.multiple_choice.selected.all()]
             return {"selected": selected}
-        except Exception:
+        except (ObjectDoesNotExist, AttributeError):
+            logger.warning("Missing multiple_choice sub-record for answer %s", answer.id)
             return {}
     elif answer.answer_type == AnswerType.SHORT_ANSWER:
         try:
             return {"text": answer.short_answer.text}
-        except Exception:
+        except (ObjectDoesNotExist, AttributeError):
+            logger.warning("Missing short_answer sub-record for answer %s", answer.id)
             return {}
     elif answer.answer_type == AnswerType.NUMBER_SCALE:
         try:
             return {"val": answer.number_scale.val}
-        except Exception:
+        except (ObjectDoesNotExist, AttributeError):
+            logger.warning("Missing number_scale sub-record for answer %s", answer.id)
             return {}
     return {}
 
@@ -292,7 +300,7 @@ def export_course_submissions(
             if student:
                 try:
                     consent = student.student_profile.consent
-                except Exception:
+                except (ObjectDoesNotExist, AttributeError):
                     consent = ""
             data = {
                 "studentId": student.id if student else "",

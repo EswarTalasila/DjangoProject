@@ -25,6 +25,7 @@ from core.errors import error_response
 from core.lifecycle import ConflictError
 from core.models import AuditAction, AuditOutcome
 from core.pagination import paginate
+from core.parsers import parse_include_archived
 from core.permissions import IsResearcherOrAdmin, IsTeacherOrAbove
 
 from .models import Assessment
@@ -40,22 +41,6 @@ from .services import (
     restore_assessment,
     update_assessment,
 )
-
-
-def _parse_include_archived(request):
-    raw = request.query_params.get("includeArchived")
-    if raw is None or raw == "":
-        return False, None
-    value = raw.lower()
-    if value not in {"true", "false"}:
-        return (
-            None,
-            Response(
-                {"detail": "includeArchived must be true or false"},
-                status=status.HTTP_400_BAD_REQUEST,
-            ),
-        )
-    return value == "true", None
 
 
 @api_view(["GET", "POST"])
@@ -96,7 +81,7 @@ def list_or_create(request):
         assessment = _assessment_with_related(assessment.id)
         return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_201_CREATED)
 
-    include_archived, include_archived_error = _parse_include_archived(request)
+    include_archived, include_archived_error = parse_include_archived(request)
     if include_archived_error is not None:
         return include_archived_error
     assessments = list_assessments(include_archived=include_archived)

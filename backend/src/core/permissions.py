@@ -240,3 +240,49 @@ class IsTeacherOrAbove(permissions.BasePermission):
             or has_role(request.user, Role.RESEARCHER)
             or has_role(request.user, Role.TEACHER)
         )
+
+
+# ── Reusable ownership checks ─────────────────────────────────────────
+
+
+def teacher_owns_course(user, course) -> bool:
+    """
+    Check if a teacher user owns the given course.
+
+    Returns True if the course's teacher_profile matches the user's
+    teacher_profile. Returns False if either lacks a teacher profile.
+
+    Args:
+        user: User instance to check ownership for
+        course: Course instance (must have teacher_profile relation)
+
+    Returns:
+        True if the user owns the course, False otherwise
+    """
+    try:
+        return course.teacher_profile_id == user.teacher_profile.id
+    except AttributeError:
+        return False
+
+
+def teacher_owns_assignment(user, assignment) -> bool:
+    """
+    Check if a teacher user owns the given assignment.
+
+    Ownership is determined by either:
+    1. The assignment's teacher_id matches the user's ID, OR
+    2. The assignment's course belongs to the user's teacher profile
+
+    Args:
+        user: User instance to check ownership for
+        assignment: Assignment instance (should be select_related with
+            course__teacher_profile__user for efficiency)
+
+    Returns:
+        True if the user owns the assignment, False otherwise
+    """
+    if assignment.teacher_id == user.id:
+        return True
+    if assignment.course and assignment.course.teacher_profile:
+        return bool(assignment.course.teacher_profile.user_id == user.id)
+    return False
