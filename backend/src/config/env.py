@@ -202,15 +202,15 @@ class EnvSettings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse DJANGO_CORS_ALLOWED_ORIGINS into a list."""
-        return [o.strip() for o in self.django_cors_allowed_origins.split(",") if o.strip()]
+        return [origin.strip() for origin in self.django_cors_allowed_origins.split(",") if origin.strip()]
 
     @property
     def csrf_trusted_origins_list(self) -> list[str]:
         """Parse DJANGO_CSRF_TRUSTED_ORIGINS into a list."""
         return [
-            o.strip()
-            for o in self.django_csrf_trusted_origins.split(",")
-            if o.strip()
+            origin.strip()
+            for origin in self.django_csrf_trusted_origins.split(",")
+            if origin.strip()
         ]
 
     @model_validator(mode="after")
