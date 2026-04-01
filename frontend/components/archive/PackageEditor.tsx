@@ -543,9 +543,9 @@ export default function PackageEditor({
         if (result.valid) {
           toast.success('Package is ready to build!');
         } else {
-          const n = result.violations.length;
+          const violationCount = result.violations.length;
           toast.error(
-            `Found ${n} ${n === 1 ? 'problem' : 'problems'} — see details below.`,
+            `Found ${violationCount} ${violationCount === 1 ? 'problem' : 'problems'} — see details below.`,
           );
         }
       })

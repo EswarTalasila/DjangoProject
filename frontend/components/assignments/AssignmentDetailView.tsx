@@ -159,18 +159,18 @@ function toAnswerPayloads(
   answers: Record<number, StudentAttemptAnswer>,
 ): AnswerPayload[] {
   return questions.map((q) => {
-    const a = answers[q.questionId] ?? defaultStudentAnswer(q);
+    const answer = answers[q.questionId] ?? defaultStudentAnswer(q);
     if (q.type === 'MULTIPLE_CHOICE') {
-      return { questionId: q.questionId, type: 'MULTIPLE_CHOICE', data: { selected: a.selectedChoiceIndexes } };
+      return { questionId: q.questionId, type: 'MULTIPLE_CHOICE', data: { selected: answer.selectedChoiceIndexes } };
     }
     if (q.type === 'SHORT_ANSWER') {
-      return { questionId: q.questionId, type: 'SHORT_ANSWER', data: { text: a.textResponse } };
+      return { questionId: q.questionId, type: 'SHORT_ANSWER', data: { text: answer.textResponse } };
     }
-    return { questionId: q.questionId, type: 'NUMBER_SCALE', data: { val: a.numericResponse } };
+    return { questionId: q.questionId, type: 'NUMBER_SCALE', data: { val: answer.numericResponse } };
   });
 }
 
-function hydateStudentAnswers(
+function hydrateStudentAnswers(
   questions: Question[],
   submission: SubmissionDTO,
 ): Record<number, StudentAttemptAnswer> {
@@ -246,7 +246,7 @@ export default function AssignmentDetailView({
         try {
           const sub = await getStudentSubmission(viewerId, assignmentId);
           setSubmission(sub);
-          setStudentAnswers(hydateStudentAnswers(template.questions, sub));
+          setStudentAnswers(hydrateStudentAnswers(template.questions, sub));
           if (sub.status === 'SUBMITTED' || sub.status === 'GRADED') {
             setStudentFlowStage('submitted');
             setStudentSubmittedAt(sub.submittedAt ? new Date(sub.submittedAt) : null);
