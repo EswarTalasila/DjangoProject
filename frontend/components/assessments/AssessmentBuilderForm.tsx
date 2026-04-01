@@ -799,8 +799,8 @@ export default function AssessmentBuilderForm({
 
   const selectedManualCount = useMemo(() => {
     return selectedQuestionIndices.filter((idx) => {
-      const q = questions[idx];
-      return q ? isManualQuestion(q, gradingMode) : false;
+      const question = questions[idx];
+      return question ? isManualQuestion(question, gradingMode) : false;
     }).length;
   }, [selectedQuestionIndices, questions, gradingMode]);
 

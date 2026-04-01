@@ -31,8 +31,8 @@ export default function VizCourseSummaryView({
     try {
       setLoading(true);
       setError(null);
-      const d = await fetchCourseSummary(courseId);
-      setData(d);
+      const summaryData = await fetchCourseSummary(courseId);
+      setData(summaryData);
     } catch {
       setError('Failed to load course summary.');
     } finally {

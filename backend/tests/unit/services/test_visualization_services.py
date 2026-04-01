@@ -207,7 +207,7 @@ class TestAssignmentGradeSummary:
         mock_submission.objects.filter.return_value = qs
         qs.filter.return_value = qs
         qs.count.return_value = 0
-        qs.aggregate.return_value = {"avg": None, "high": None, "low": None}
+        qs.aggregate.return_value = {"average": None, "highest": None, "lowest": None}
         qs.values_list.return_value = []
 
         mock_dist.return_value = [
@@ -249,7 +249,7 @@ class TestAssignmentGradeSummary:
         mock_submission.objects.filter.return_value = qs
         qs.filter.return_value = qs
         qs.count.return_value = 0
-        qs.aggregate.return_value = {"avg": None, "high": None, "low": None}
+        qs.aggregate.return_value = {"average": None, "highest": None, "lowest": None}
         qs.values_list.return_value = []
 
         mock_dist.return_value = []
@@ -581,7 +581,7 @@ class TestAssignmentGradeSummaryExtended:
         qs.filter.return_value = submitted_qs
         submitted_qs.count.return_value = 8
         submitted_qs.filter.return_value = submitted_qs
-        submitted_qs.aggregate.return_value = {"avg": 85.123, "high": 98.0, "low": 62.0}
+        submitted_qs.aggregate.return_value = {"average": 85.123, "highest": 98.0, "lowest": 62.0}
         submitted_qs.values_list.return_value = [62.0, 70.0, 85.0, 98.0]
 
         mock_dist.return_value = []
@@ -612,7 +612,7 @@ class TestAssignmentGradeSummaryExtended:
         mock_submission.objects.filter.return_value = qs
         qs.filter.return_value = qs
         qs.count.return_value = 0
-        qs.aggregate.return_value = {"avg": None, "high": None, "low": None}
+        qs.aggregate.return_value = {"average": None, "highest": None, "lowest": None}
         qs.values_list.return_value = []
         mock_dist.return_value = []
 

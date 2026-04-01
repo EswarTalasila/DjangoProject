@@ -79,8 +79,8 @@ export default function VizDashboardView({ role }: { role: string }) {
     try {
       setLoading(true);
       setError(null);
-      const d = await fetchDashboard();
-      setData(d);
+      const dashboardData = await fetchDashboard();
+      setData(dashboardData);
     } catch {
       setError('Failed to load dashboard data.');
     } finally {

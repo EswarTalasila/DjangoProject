@@ -71,8 +71,8 @@ class Command(BaseCommand):
         role = options["role"]
         force_password = options["force_password"]
         if role == "all":
-            for r in VALID_ROLES:
-                self._provision(r, force_password=force_password)
+            for role in VALID_ROLES:
+                self._provision(role, force_password=force_password)
         else:
             self._provision(role, force_password=force_password)
 

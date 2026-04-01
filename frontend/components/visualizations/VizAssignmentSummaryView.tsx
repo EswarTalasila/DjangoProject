@@ -48,8 +48,8 @@ export default function VizAssignmentSummaryView({
     try {
       setLoading(true);
       setError(null);
-      const d = await fetchAssignmentSummary(assignmentId);
-      setData(d);
+      const summaryData = await fetchAssignmentSummary(assignmentId);
+      setData(summaryData);
     } catch {
       setError('Failed to load assignment summary.');
     } finally {

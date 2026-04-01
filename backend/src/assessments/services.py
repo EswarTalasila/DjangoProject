@@ -58,13 +58,13 @@ def assessment_to_dto(assessment: Assessment) -> AssessmentDTO:
     so that question_groups, questions and their sub-types are prefetched.
     """
     groups = []
-    for g in assessment.question_groups.all():
+    for group in assessment.question_groups.all():
         groups.append(
             QuestionGroupDTO(
-                id=g.id,
-                name=g.name,
-                rubricId=g.rubric_id,
-                orderIndex=g.order_index,
+                id=group.id,
+                name=group.name,
+                rubricId=group.rubric_id,
+                orderIndex=group.order_index,
             )
         )
     return AssessmentDTO(
@@ -73,7 +73,7 @@ def assessment_to_dto(assessment: Assessment) -> AssessmentDTO:
         category=assessment.category,
         gradingMode=assessment.grading_mode,
         scoringPolicy=assessment.scoring_policy,
-        questions=[question_to_dto(q) for q in assessment.questions.all()],
+        questions=[question_to_dto(question) for question in assessment.questions.all()],
         questionGroups=groups,
     )
 

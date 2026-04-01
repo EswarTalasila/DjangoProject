@@ -45,12 +45,12 @@ def _can_grant_permissions(
     if can_grant_sudo:
         return False, "Only admins can set can_grant_sudo=True"
 
-    non_delegable = [p for p in permissions if p in NON_DELEGABLE_PERMISSIONS]
+    non_delegable = [permission for permission in permissions if permission in NON_DELEGABLE_PERMISSIONS]
     if non_delegable:
         return False, f"Cannot delegate non-delegable permissions: {non_delegable}"
 
     # Subset check: granter must hold all permissions being granted
-    missing = [p for p in permissions if p not in granter_grant.permissions]
+    missing = [permission for permission in permissions if permission not in granter_grant.permissions]
     if missing:
         return False, f"Cannot grant permissions you don't hold: {missing}"
 
