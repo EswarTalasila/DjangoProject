@@ -372,6 +372,16 @@ class SubmissionImage(models.Model):
         db_column="submission_owner_user_id",
         related_name="owned_submission_images",
     )
+    # Link to the shared ImageAsset (nullable during migration transition)
+    asset = models.ForeignKey(
+        "core.ImageAsset",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column="asset_id",
+        related_name="submission_images",
+    )
+    # Blob metadata kept on SubmissionImage for backward compatibility
     storage_key = models.CharField(max_length=512, unique=True)
     original_filename = models.CharField(max_length=255)
     mime_type = models.CharField(max_length=64)
