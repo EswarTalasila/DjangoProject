@@ -210,7 +210,7 @@ def export_roster(user, course: Course, *, status_filter=None, identifiable=True
                 "courseId": course.id,
                 "courseName": course.name,
             }
-            row_str = writer.writerow([_csv_val(data.get(c)) for c in cols])
+            row_str = writer.writerow([_csv_val(data.get(column)) for column in cols])
             yield row_str.encode("utf-8")
 
     return _generate(), row_count, not identifiable
@@ -317,7 +317,7 @@ def export_course_submissions(
             }
             if include_answers:
                 data["answers"] = _serialize_answers(sub, identifiable)
-            row_str = writer.writerow([_csv_val(data.get(c)) for c in cols])
+            row_str = writer.writerow([_csv_val(data.get(column)) for column in cols])
             yield row_str.encode("utf-8")
 
     return _generate(), row_count, not identifiable

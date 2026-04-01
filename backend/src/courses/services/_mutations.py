@@ -195,11 +195,11 @@ def archive_course(request_user: User, course: Course) -> Course:
     active_assignments = Assignment.objects.filter(
         course=course, status=AssignmentStatus.ACTIVE
     )
-    for asgn in active_assignments:
-        asgn.status = AssignmentStatus.ARCHIVED
-        asgn.archived_at = timezone.now()
-        asgn.archived_by = request_user
-        asgn.save(update_fields=["status", "archived_at", "archived_by"])
+    for assignment in active_assignments:
+        assignment.status = AssignmentStatus.ARCHIVED
+        assignment.archived_at = timezone.now()
+        assignment.archived_by = request_user
+        assignment.save(update_fields=["status", "archived_at", "archived_by"])
     course.status = CourseStatus.ARCHIVED
     course.archived_at = timezone.now()
     course.archived_by = request_user

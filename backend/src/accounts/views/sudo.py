@@ -60,17 +60,17 @@ def _list_sudo_grants(request):
 
     results = [
         {
-            "id": g.id,
+            "id": grant.id,
             "user": {
-                "id": g.user.id,
-                "username": g.user.username,
-                "name": g.user.name or g.user.username,
+                "id": grant.user.id,
+                "username": grant.user.username,
+                "name": grant.user.name or grant.user.username,
             },
-            "permissions": g.permissions,
-            "canGrantSudo": g.can_grant_sudo,
-            "grantedAt": g.granted_at.isoformat(),
+            "permissions": grant.permissions,
+            "canGrantSudo": grant.can_grant_sudo,
+            "grantedAt": grant.granted_at.isoformat(),
         }
-        for g in grants
+        for grant in grants
     ]
     return Response(results, status=status.HTTP_200_OK)
 

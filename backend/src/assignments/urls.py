@@ -11,7 +11,7 @@ urlpatterns = [
     path("<int:assignment_id>", views.detail, name="assignments-detail"),
     path(
         "<int:assignment_id>/template",
-        views.template,
+        views.get_assignment_template,
         name="assignments-template",
     ),
     path(

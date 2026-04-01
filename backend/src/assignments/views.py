@@ -256,7 +256,7 @@ def restore(request, assignment_id: int):
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def template(request, assignment_id: int):
+def get_assignment_template(request, assignment_id: int):
     """
     Get the assessment template attached to an assignment using assignment-level access rules.
     """

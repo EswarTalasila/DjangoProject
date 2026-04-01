@@ -59,14 +59,14 @@ def dashboard_overview(user) -> dict:
     active_enrollments_sq = (
         Enrollment.objects.filter(course=OuterRef("pk"), status=EnrollmentStatus.ACTIVE)
         .values("course")
-        .annotate(c=Count("id"))
-        .values("c")[:1]
+        .annotate(enrollment_count=Count("id"))
+        .values("enrollment_count")[:1]
     )
     assignment_count_sq = (
         Assignment.objects.filter(course=OuterRef("pk"))
         .values("course")
-        .annotate(c=Count("id"))
-        .values("c")[:1]
+        .annotate(assignment_count=Count("id"))
+        .values("assignment_count")[:1]
     )
     submitted_count_sq = (
         Submission.objects.filter(
@@ -74,8 +74,8 @@ def dashboard_overview(user) -> dict:
             status__in=[SubmissionStatus.SUBMITTED, SubmissionStatus.GRADED],
         )
         .values("assignment__course")
-        .annotate(c=Count("id"))
-        .values("c")[:1]
+        .annotate(submitted_count=Count("id"))
+        .values("submitted_count")[:1]
     )
     pending_count_sq = (
         Submission.objects.filter(
@@ -83,8 +83,8 @@ def dashboard_overview(user) -> dict:
             status=SubmissionStatus.SUBMITTED,
         )
         .values("assignment__course")
-        .annotate(c=Count("id"))
-        .values("c")[:1]
+        .annotate(pending_count=Count("id"))
+        .values("pending_count")[:1]
     )
     graded_avg_sq = (
         Submission.objects.filter(
@@ -92,8 +92,8 @@ def dashboard_overview(user) -> dict:
             status=SubmissionStatus.GRADED,
         )
         .values("assignment__course")
-        .annotate(v=Avg("score"))
-        .values("v")[:1]
+        .annotate(avg_score=Avg("score"))
+        .values("avg_score")[:1]
     )
 
     courses = courses.annotate(
@@ -172,11 +172,11 @@ def course_summary(
     assignments = course.assignments.select_related("assessment")
 
     if start_date or end_date:
-        s, e = _date_to_datetime_range(start_date, end_date)
-        if s:
-            assignments = assignments.filter(open_at__gte=s)
-        if e:
-            assignments = assignments.filter(open_at__lte=e)
+        start_dt, end_dt = _date_to_datetime_range(start_date, end_date)
+        if start_dt:
+            assignments = assignments.filter(open_at__gte=start_dt)
+        if end_dt:
+            assignments = assignments.filter(open_at__lte=end_dt)
 
     if category:
         assignments = assignments.filter(assessment__category=category)
@@ -189,8 +189,8 @@ def course_summary(
             status__in=[SubmissionStatus.SUBMITTED, SubmissionStatus.GRADED],
         )
         .values("assignment")
-        .annotate(c=Count("id"))
-        .values("c")[:1]
+        .annotate(submitted_count=Count("id"))
+        .values("submitted_count")[:1]
     )
     graded_count_sq = (
         Submission.objects.filter(
@@ -198,8 +198,8 @@ def course_summary(
             status=SubmissionStatus.GRADED,
         )
         .values("assignment")
-        .annotate(c=Count("id"))
-        .values("c")[:1]
+        .annotate(graded_count=Count("id"))
+        .values("graded_count")[:1]
     )
     pending_count_sq = (
         Submission.objects.filter(
@@ -207,8 +207,8 @@ def course_summary(
             status=SubmissionStatus.SUBMITTED,
         )
         .values("assignment")
-        .annotate(c=Count("id"))
-        .values("c")[:1]
+        .annotate(pending_count=Count("id"))
+        .values("pending_count")[:1]
     )
     avg_score_sq = (
         Submission.objects.filter(
@@ -216,8 +216,8 @@ def course_summary(
             status=SubmissionStatus.GRADED,
         )
         .values("assignment")
-        .annotate(v=Avg("score"))
-        .values("v")[:1]
+        .annotate(avg_score=Avg("score"))
+        .values("avg_score")[:1]
     )
 
     assignments = assignments.annotate(
@@ -228,16 +228,16 @@ def course_summary(
     )
 
     items = []
-    for asgn in assignments:
-        submitted_count = asgn.submitted_count
-        graded_count = asgn.graded_count
+    for assignment in assignments:
+        submitted_count = assignment.submitted_count
+        graded_count = assignment.graded_count
         completion_pct = round(submitted_count / enrolled_count, 4) if enrolled_count > 0 else None
 
-        avg_score = round(asgn.avg_score, 2) if asgn.avg_score is not None else None
-        pending = asgn.pending_count
+        avg_score = round(assignment.avg_score, 2) if assignment.avg_score is not None else None
+        pending = assignment.pending_count
 
         entry = {
-            "assessmentCategory": asgn.assessment.category,
+            "assessmentCategory": assignment.assessment.category,
             "submittedCount": submitted_count,
             "totalStudents": enrolled_count,
             "completionPct": completion_pct,
@@ -246,8 +246,8 @@ def course_summary(
             "pendingGrades": pending,
         }
         if not anonymize:
-            entry["assignmentId"] = asgn.id
-            entry["assessmentTitle"] = asgn.assessment.title
+            entry["assignmentId"] = assignment.id
+            entry["assessmentTitle"] = assignment.assessment.title
 
         items.append(entry)
 
@@ -331,11 +331,11 @@ def assignment_grade_summary(
     subs = Submission.objects.filter(assignment=assignment)
 
     if start_date or end_date:
-        s, e = _date_to_datetime_range(start_date, end_date)
-        if s:
-            subs = subs.filter(submitted_at__gte=s)
-        if e:
-            subs = subs.filter(submitted_at__lte=e)
+        start_dt, end_dt = _date_to_datetime_range(start_date, end_date)
+        if start_dt:
+            subs = subs.filter(submitted_at__gte=start_dt)
+        if end_dt:
+            subs = subs.filter(submitted_at__lte=end_dt)
 
     submitted_q = Q(status=SubmissionStatus.SUBMITTED) | Q(status=SubmissionStatus.GRADED)
     submitted_count = subs.filter(submitted_q).count()
@@ -343,11 +343,11 @@ def assignment_grade_summary(
 
     graded_qs = subs.filter(status=SubmissionStatus.GRADED)
     graded_count = graded_qs.count()
-    agg = graded_qs.aggregate(avg=Avg("score"), high=Max("score"), low=Min("score"))
+    agg = graded_qs.aggregate(average=Avg("score"), highest=Max("score"), lowest=Min("score"))
 
-    avg_score = round(agg["avg"], 2) if agg["avg"] is not None else None
-    high_score = agg["high"]
-    low_score = agg["low"]
+    avg_score = round(agg["average"], 2) if agg["average"] is not None else None
+    high_score = agg["highest"]
+    low_score = agg["lowest"]
 
     # Median computed from score list (DB doesn't have native median)
     scores = list(graded_qs.values_list("score", flat=True))
