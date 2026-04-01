@@ -35,9 +35,8 @@ from ._utils import (
     REGISTRATION_CODE_STATUS_EXHAUSTED,
     REGISTRATION_CODE_STATUS_EXPIRED,
     REGISTRATION_CODE_STATUS_REVOKED,
-    REGISTRATION_CODE_TOKEN_BYTES,
-    _generate_secret_token,
     _registration_code_hashes_for_lookup,
+    generate_registration_code,
     generate_managed_username,
     identifier_in_use,
     normalize_username_identifier,
@@ -402,10 +401,10 @@ def create_registration_codes(
 
     created: list[RegistrationCode] = []
     for _ in range(count):
-        candidate = _generate_secret_token("REG", nbytes=REGISTRATION_CODE_TOKEN_BYTES)
+        candidate = generate_registration_code(code_type)
         candidate_hashes = _registration_code_hashes_for_lookup(candidate)
         while RegistrationCode.objects.filter(code_hash__in=candidate_hashes).exists():
-            candidate = _generate_secret_token("REG", nbytes=REGISTRATION_CODE_TOKEN_BYTES)
+            candidate = generate_registration_code(code_type)
             candidate_hashes = _registration_code_hashes_for_lookup(candidate)
         persisted_hash = registration_code_hash(candidate)
         created.append(
