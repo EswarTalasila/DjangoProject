@@ -1,4 +1,11 @@
-"""Pure unit tests for submissions.image_services (no database)."""
+"""Pure unit tests for submissions.image_services (no database).
+
+Generic validation functions (validate_mime_and_magic, validate_file_size,
+compute_sha256) now live in core.media.services and are re-exported by
+submissions.image_services. Patches must target core.media.services.settings
+for those functions. Submission-specific functions (check_image_count,
+check_duplicate) still read settings/models from submissions.image_services.
+"""
 
 from __future__ import annotations
 
@@ -28,12 +35,12 @@ class _NoopAtomicMixin:
 
 
 # ---------------------------------------------------------------------------
-# validate_mime_and_magic
+# validate_mime_and_magic  (core.media.services)
 # ---------------------------------------------------------------------------
 
 class TestValidateMimeAndMagic:
 
-    @patch("submissions.image_services.settings")
+    @patch("core.media.services.settings")
     def test_rejects_unsupported_mime_type(self, mock_settings):
         """Rejects files with a MIME type not in the allowed list."""
         from submissions.image_services import ImageValidationError, validate_mime_and_magic
@@ -45,7 +52,7 @@ class TestValidateMimeAndMagic:
         with pytest.raises(ImageValidationError, match="Unsupported image type"):
             validate_mime_and_magic(file)
 
-    @patch("submissions.image_services.settings")
+    @patch("core.media.services.settings")
     def test_accepts_valid_jpeg(self, mock_settings):
         """Accepts a JPEG file with correct MIME type and magic bytes."""
         from submissions.image_services import validate_mime_and_magic
@@ -58,7 +65,7 @@ class TestValidateMimeAndMagic:
         result = validate_mime_and_magic(file)
         assert result == "image/jpeg"
 
-    @patch("submissions.image_services.settings")
+    @patch("core.media.services.settings")
     def test_rejects_jpeg_with_wrong_magic(self, mock_settings):
         """Rejects a JPEG-typed file whose magic bytes do not match."""
         from submissions.image_services import ImageValidationError, validate_mime_and_magic
@@ -71,7 +78,7 @@ class TestValidateMimeAndMagic:
         with pytest.raises(ImageValidationError, match="magic bytes do not match"):
             validate_mime_and_magic(file)
 
-    @patch("submissions.image_services.settings")
+    @patch("core.media.services.settings")
     def test_accepts_valid_png(self, mock_settings):
         """Accepts a PNG file with correct MIME type and magic bytes."""
         from submissions.image_services import validate_mime_and_magic
@@ -84,7 +91,7 @@ class TestValidateMimeAndMagic:
         result = validate_mime_and_magic(file)
         assert result == "image/png"
 
-    @patch("submissions.image_services.settings")
+    @patch("core.media.services.settings")
     def test_rejects_png_with_wrong_magic(self, mock_settings):
         """Rejects a PNG-typed file whose magic bytes do not match."""
         from submissions.image_services import ImageValidationError, validate_mime_and_magic
@@ -97,7 +104,7 @@ class TestValidateMimeAndMagic:
         with pytest.raises(ImageValidationError, match="magic bytes do not match"):
             validate_mime_and_magic(file)
 
-    @patch("submissions.image_services.settings")
+    @patch("core.media.services.settings")
     def test_accepts_valid_webp(self, mock_settings):
         """Accepts a WebP file with correct MIME type and magic bytes."""
         from submissions.image_services import validate_mime_and_magic
@@ -110,7 +117,7 @@ class TestValidateMimeAndMagic:
         result = validate_mime_and_magic(file)
         assert result == "image/webp"
 
-    @patch("submissions.image_services.settings")
+    @patch("core.media.services.settings")
     def test_rejects_webp_with_wrong_magic(self, mock_settings):
         """Rejects a WebP-typed file whose magic bytes do not match."""
         from submissions.image_services import ImageValidationError, validate_mime_and_magic
@@ -123,7 +130,7 @@ class TestValidateMimeAndMagic:
         with pytest.raises(ImageValidationError, match="magic bytes do not match"):
             validate_mime_and_magic(file)
 
-    @patch("submissions.image_services.settings")
+    @patch("core.media.services.settings")
     def test_handles_none_content_type(self, mock_settings):
         """Rejects files with None content type as unsupported."""
         from submissions.image_services import ImageValidationError, validate_mime_and_magic
@@ -137,12 +144,12 @@ class TestValidateMimeAndMagic:
 
 
 # ---------------------------------------------------------------------------
-# validate_file_size
+# validate_file_size  (core.media.services)
 # ---------------------------------------------------------------------------
 
 class TestValidateFileSize:
 
-    @patch("submissions.image_services.settings")
+    @patch("core.media.services.settings")
     def test_accepts_small_file(self, mock_settings):
         """Accepts a file whose size is under the maximum limit."""
         from submissions.image_services import validate_file_size
@@ -154,7 +161,7 @@ class TestValidateFileSize:
         result = validate_file_size(file)
         assert result == 500_000
 
-    @patch("submissions.image_services.settings")
+    @patch("core.media.services.settings")
     def test_rejects_oversized_file(self, mock_settings):
         """Rejects a file that exceeds the maximum allowed size."""
         from submissions.image_services import ImageValidationError, validate_file_size
@@ -168,7 +175,7 @@ class TestValidateFileSize:
 
 
 # ---------------------------------------------------------------------------
-# check_image_count
+# check_image_count  (submissions.image_services — submission-specific)
 # ---------------------------------------------------------------------------
 
 class TestCheckImageCount:
@@ -198,7 +205,7 @@ class TestCheckImageCount:
 
 
 # ---------------------------------------------------------------------------
-# compute_sha256
+# compute_sha256  (core.media.services)
 # ---------------------------------------------------------------------------
 
 class TestComputeSha256:
@@ -213,7 +220,7 @@ class TestComputeSha256:
 
 
 # ---------------------------------------------------------------------------
-# check_duplicate
+# check_duplicate  (submissions.image_services — submission-specific)
 # ---------------------------------------------------------------------------
 
 class TestCheckDuplicate:
@@ -236,5 +243,3 @@ class TestCheckDuplicate:
 
         with pytest.raises(ImageValidationError, match="Duplicate"):
             check_duplicate(1, "abc123")
-
-
