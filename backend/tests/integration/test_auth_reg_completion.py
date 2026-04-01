@@ -884,7 +884,7 @@ class TestAuthRegCompletion:
         assert "Email already taken" in duplicate.json()["detail"]
 
     def test_REG_UC_01_E4(self, api_client, monkeypatch):
-        """OAuth registration returns error when provider token verification fails."""
+        """OAuth registration returns server error for unexpected provider failures."""
         researcher = self._make_user(
             role=Role.RESEARCHER,
             username="reg-e4-researcher",
@@ -910,7 +910,8 @@ class TestAuthRegCompletion:
             },
             format="json",
         )
-        assert response.status_code == 401
+        assert response.status_code == 500
+        assert response.json()["detail"] == "Internal server error"
 
     def test_REG_CN_03(self, api_client, teacher_user, student_user, monkeypatch):
         """Registration and join-course redemption roll back when enrollment step fails."""

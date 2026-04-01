@@ -253,12 +253,9 @@ def login_with_google(request):
             {"detail": "Access token verification failed."},
             status=status.HTTP_401_UNAUTHORIZED,
         )
-    except Exception as exc:
-        logger.warning("Unexpected error fetching Google userinfo: %s", type(exc).__name__)
-        return Response(
-            {"detail": "Access token verification failed."},
-            status=status.HTTP_401_UNAUTHORIZED,
-        )
+    except Exception:
+        logger.exception("Unexpected error fetching Google userinfo")
+        return v.server_error_response()
 
     subject = userinfo.get("sub")
     email = userinfo.get("email")

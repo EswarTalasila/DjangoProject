@@ -30,7 +30,7 @@ from rest_framework_simplejwt.tokens import RefreshToken  # noqa: F401
 from django.db.models import Exists, OuterRef, Prefetch, Q  # noqa: F401
 
 from core.audit import complete_audit, get_client_ip, log_audit  # noqa: F401
-from core.errors import error_response  # noqa: F401
+from core.errors import error_response, server_error_response  # noqa: F401
 from core.models import AuditAction, AuditOutcome  # noqa: F401
 from core.pagination import paginate  # noqa: F401
 from core.permissions import (  # noqa: F401

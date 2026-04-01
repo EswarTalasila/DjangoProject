@@ -102,11 +102,9 @@ def _register_oauth(request, payload):
         return Response(
             {"detail": "Invalid Google access token."}, status=status.HTTP_401_UNAUTHORIZED
         )
-    except Exception as exc:
-        logger.warning("Unexpected error fetching Google userinfo: %s", type(exc).__name__)
-        return Response(
-            {"detail": "Invalid Google access token."}, status=status.HTTP_401_UNAUTHORIZED
-        )
+    except Exception:
+        logger.exception("Unexpected error fetching Google userinfo")
+        return v.server_error_response()
 
     google_subject = str(google_user.get("sub", "")).strip()
     google_email = str(google_user.get("email", "")).strip()
