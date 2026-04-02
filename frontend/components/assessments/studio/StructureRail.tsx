@@ -100,6 +100,10 @@ export default function StructureRail({
   // Collapsible state for groups
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [collapsedUngrouped, setCollapsedUngrouped] = useState(false);
+  // Track which group zone is being hovered for visual feedback
+  const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
+  // "ungrouped" is tracked as "__UNGROUPED__"
+  const UNGROUPED_KEY = '__UNGROUPED__';
 
   const toggleGroup = (key: string) => {
     setCollapsedGroups((prev) => {
@@ -110,9 +114,21 @@ export default function StructureRail({
     });
   };
 
+  const handleGroupDragOver = (e: React.DragEvent, groupKey: string) => {
+    e.preventDefault();
+    if (draggingQuestionIndex !== null) {
+      setDragOverGroup(groupKey);
+    }
+  };
+
+  const handleGroupDragLeave = () => {
+    setDragOverGroup(null);
+  };
+
   const handleGroupDrop = (e: React.DragEvent, groupClientKey: string | undefined) => {
     e.preventDefault();
     e.stopPropagation();
+    setDragOverGroup(null);
     if (draggingQuestionIndex !== null) {
       onAssignGroup(draggingQuestionIndex, groupClientKey);
       onDragEnd();
@@ -123,21 +139,26 @@ export default function StructureRail({
     const isActive = selectedIndex === globalIndex;
     const valid = isQuestionValid(q);
 
+    const isDragTarget = dragOverQuestionIndex === globalIndex && draggingQuestionIndex !== globalIndex;
+
     return (
-      <button
-        key={`q-${globalIndex}`}
-        type="button"
-        data-question-row="true"
-        onClick={() => onSelectQuestion(globalIndex)}
-        className={cn(
-          'w-full group flex items-center gap-2.5 p-2 rounded-md transition-colors text-left relative border',
-          isActive
-            ? 'bg-accent border-border shadow-sm'
-            : 'hover:bg-accent/50 border-transparent',
-          dragOverQuestionIndex === globalIndex &&
-            draggingQuestionIndex !== globalIndex &&
-            'ring-1 ring-primary ring-offset-1 ring-offset-background',
+      <div key={`q-${globalIndex}`} className="relative">
+        {/* Insertion line above this question when dragging */}
+        {isDragTarget && (
+          <div className="absolute -top-0.5 left-2 right-2 h-0.5 bg-primary rounded-full z-10" />
         )}
+        <button
+          type="button"
+          data-question-row="true"
+          onClick={() => onSelectQuestion(globalIndex)}
+          className={cn(
+            'w-full group flex items-center gap-2.5 p-2 rounded-md transition-all text-left relative border',
+            isActive
+              ? 'bg-accent border-border shadow-sm'
+              : 'hover:bg-accent/50 border-transparent',
+            isDragTarget && 'border-primary/40 bg-primary/5',
+            draggingQuestionIndex === globalIndex && 'opacity-40',
+          )}
         onDragOver={(e) => {
           e.preventDefault();
           if (draggingQuestionIndex !== null && draggingQuestionIndex !== globalIndex) {
@@ -234,6 +255,7 @@ export default function StructureRail({
           </p>
         </div>
       </button>
+      </div>
     );
   };
 
@@ -278,8 +300,13 @@ export default function StructureRail({
         {/* Ungrouped section */}
         {(ungroupedQuestions.length > 0 || questionGroups.length > 0) && (
           <div
-            onDragOver={(e) => e.preventDefault()}
+            onDragOver={(e) => handleGroupDragOver(e, UNGROUPED_KEY)}
+            onDragLeave={handleGroupDragLeave}
             onDrop={(e) => handleGroupDrop(e, undefined)}
+            className={cn(
+              'rounded-md transition-colors',
+              dragOverGroup === UNGROUPED_KEY && draggingQuestionIndex !== null && 'bg-primary/5 ring-1 ring-primary/30',
+            )}
           >
             {questionGroups.length > 0 && (
               <button
@@ -320,8 +347,13 @@ export default function StructureRail({
           return (
             <div
               key={group.clientKey}
-              onDragOver={(e) => e.preventDefault()}
+              onDragOver={(e) => handleGroupDragOver(e, group.clientKey)}
+              onDragLeave={handleGroupDragLeave}
               onDrop={(e) => handleGroupDrop(e, group.clientKey)}
+              className={cn(
+                'rounded-md transition-colors',
+                dragOverGroup === group.clientKey && draggingQuestionIndex !== null && 'bg-primary/5 ring-1 ring-primary/30',
+              )}
             >
               <button
                 type="button"
