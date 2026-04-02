@@ -1,11 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import {
   Plus,
   FolderPlus,
   GripVertical,
   AlertCircle,
   FileText,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { QuestionInput, QuestionGroupInput, QuestionKind } from '@/lib/assessment-api';
@@ -48,6 +51,7 @@ type StructureRailProps = {
   onSelectQuestion: (index: number) => void;
   onAddQuestion: () => void;
   onAddGroup: () => void;
+  onAssignGroup: (questionIndex: number, groupClientKey: string | undefined) => void;
   draggingQuestionIndex: number | null;
   dragOverQuestionIndex: number | null;
   onDragStart: (index: number) => void;
@@ -57,6 +61,21 @@ type StructureRailProps = {
   groupByKey: Map<string, QuestionGroupInput>;
 };
 
+function isQuestionValid(q: QuestionInput): boolean {
+  if (!q.prompt.trim()) return false;
+  if (q.type === 'MULTIPLE_CHOICE') {
+    const choices = q.data?.choices;
+    if (!choices || choices.length < 2) return false;
+    if (choices.some((c) => !c.prompt.trim())) return false;
+  }
+  if (q.type === 'NUMBER_SCALE') {
+    const min = q.data?.min ?? 0;
+    const max = q.data?.max ?? 0;
+    if (min >= max) return false;
+  }
+  return true;
+}
+
 export default function StructureRail({
   questions,
   questionGroups,
@@ -64,6 +83,7 @@ export default function StructureRail({
   onSelectQuestion,
   onAddQuestion,
   onAddGroup,
+  onAssignGroup,
   draggingQuestionIndex,
   dragOverQuestionIndex,
   onDragStart,
@@ -77,19 +97,26 @@ export default function StructureRail({
     .map((q, i) => ({ question: q, globalIndex: i }))
     .filter(({ question }) => !question.groupClientKey);
 
-  const isQuestionValid = (q: QuestionInput): boolean => {
-    if (!q.prompt.trim()) return false;
-    if (q.type === 'MULTIPLE_CHOICE') {
-      const choices = q.data?.choices;
-      if (!choices || choices.length < 2) return false;
-      if (choices.some((c) => !c.prompt.trim())) return false;
+  // Collapsible state for groups
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [collapsedUngrouped, setCollapsedUngrouped] = useState(false);
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const handleGroupDrop = (e: React.DragEvent, groupClientKey: string | undefined) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (draggingQuestionIndex !== null) {
+      onAssignGroup(draggingQuestionIndex, groupClientKey);
+      onDragEnd();
     }
-    if (q.type === 'NUMBER_SCALE') {
-      const min = q.data?.min ?? 0;
-      const max = q.data?.max ?? 0;
-      if (min >= max) return false;
-    }
-    return true;
   };
 
   const renderQuestionRow = (q: QuestionInput, globalIndex: number) => {
@@ -103,7 +130,7 @@ export default function StructureRail({
         data-question-row="true"
         onClick={() => onSelectQuestion(globalIndex)}
         className={cn(
-          'w-full group flex items-start gap-2.5 p-2 rounded-md transition-colors text-left relative border',
+          'w-full group flex items-center gap-2.5 p-2 rounded-md transition-colors text-left relative border',
           isActive
             ? 'bg-accent border-border shadow-sm'
             : 'hover:bg-accent/50 border-transparent',
@@ -119,6 +146,7 @@ export default function StructureRail({
         }}
         onDrop={(e) => {
           e.preventDefault();
+          e.stopPropagation();
           if (draggingQuestionIndex !== null) {
             onDrop(draggingQuestionIndex, globalIndex);
           }
@@ -130,12 +158,13 @@ export default function StructureRail({
           <div className="absolute left-0 top-2 bottom-2 w-0.5 bg-primary rounded-r-sm" />
         )}
 
+        {/* Grip handle — centered vertically */}
         <span
           role="button"
           tabIndex={0}
           draggable
           aria-label={`Drag question ${globalIndex + 1}`}
-          className="mt-0.5 cursor-grab text-muted-foreground/50 hover:text-muted-foreground active:cursor-grabbing transition-colors"
+          className="flex-shrink-0 cursor-grab text-muted-foreground/40 hover:text-muted-foreground active:cursor-grabbing transition-colors self-center"
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -148,9 +177,7 @@ export default function StructureRail({
             const row = e.currentTarget.closest(
               '[data-question-row="true"]',
             ) as HTMLElement | null;
-            if (row) {
-              e.dataTransfer.setDragImage(row, 24, 18);
-            }
+            if (row) e.dataTransfer.setDragImage(row, 24, 18);
             onDragStart(globalIndex);
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', String(globalIndex));
@@ -163,19 +190,19 @@ export default function StructureRail({
           <GripVertical className="h-3.5 w-3.5" />
         </span>
 
-        <div className="flex-shrink-0 mt-0.5">
-          <span
-            className={cn(
-              'text-[10px] font-bold font-mono w-5 h-5 flex items-center justify-center rounded',
-              isActive
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground',
-            )}
-          >
-            {globalIndex + 1}
-          </span>
-        </div>
+        {/* Question number badge */}
+        <span
+          className={cn(
+            'flex-shrink-0 text-[10px] font-bold font-mono w-5 h-5 flex items-center justify-center rounded',
+            isActive
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted text-muted-foreground',
+          )}
+        >
+          {globalIndex + 1}
+        </span>
 
+        {/* Question info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-1 mb-0.5">
             <span
@@ -198,9 +225,7 @@ export default function StructureRail({
           <p
             className={cn(
               'text-xs truncate leading-tight',
-              isActive
-                ? 'text-foreground font-medium'
-                : 'text-muted-foreground',
+              isActive ? 'text-foreground font-medium' : 'text-muted-foreground',
             )}
           >
             {q.prompt.trim() || (
@@ -248,48 +273,86 @@ export default function StructureRail({
         </div>
       </div>
 
-      {/* Question list */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-3">
-        {/* Ungrouped questions */}
-        {ungroupedQuestions.length > 0 && (
-          <div className="space-y-1">
+      {/* Question tree */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        {/* Ungrouped section */}
+        {(ungroupedQuestions.length > 0 || questionGroups.length > 0) && (
+          <div
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => handleGroupDrop(e, undefined)}
+          >
             {questionGroups.length > 0 && (
-              <p className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
-                Ungrouped
-              </p>
+              <button
+                type="button"
+                onClick={() => setCollapsedUngrouped(!collapsedUngrouped)}
+                className="flex items-center gap-1.5 px-1 py-1 w-full text-left group hover:bg-accent/30 rounded transition-colors"
+              >
+                {collapsedUngrouped ? (
+                  <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+                ) : (
+                  <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
+                )}
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">
+                  Ungrouped
+                </span>
+                <span className="text-[9px] font-medium text-muted-foreground/50 ml-auto">
+                  {ungroupedQuestions.length}
+                </span>
+              </button>
             )}
-            {ungroupedQuestions.map(({ question, globalIndex }) =>
-              renderQuestionRow(question, globalIndex),
+            {!collapsedUngrouped && (
+              <div className={cn('space-y-0.5', questionGroups.length > 0 && 'pl-2 ml-1.5 border-l border-border')}>
+                {ungroupedQuestions.map(({ question, globalIndex }) =>
+                  renderQuestionRow(question, globalIndex),
+                )}
+              </div>
             )}
           </div>
         )}
 
-        {/* Grouped questions */}
+        {/* Grouped sections */}
         {questionGroups.map((group) => {
           const groupQuestions = questions
             .map((q, i) => ({ question: q, globalIndex: i }))
             .filter(({ question }) => question.groupClientKey === group.clientKey);
+          const isCollapsed = collapsedGroups.has(group.clientKey);
 
           return (
-            <div key={group.clientKey} className="space-y-1">
-              <div className="flex items-center justify-between px-2 py-1">
+            <div
+              key={group.clientKey}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => handleGroupDrop(e, group.clientKey)}
+            >
+              <button
+                type="button"
+                onClick={() => toggleGroup(group.clientKey)}
+                className="flex items-center gap-1.5 px-1 py-1 w-full text-left group hover:bg-accent/30 rounded transition-colors"
+              >
+                {isCollapsed ? (
+                  <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+                ) : (
+                  <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
+                )}
                 <span className="text-[10px] font-bold uppercase tracking-tight text-muted-foreground">
                   {group.name}
                 </span>
-                <span className="text-[9px] font-medium text-muted-foreground/70">
+                <span className="text-[9px] font-medium text-muted-foreground/50 ml-auto">
                   {groupQuestions.length}
                 </span>
-              </div>
-              <div className="pl-2 border-l-2 border-border ml-2 space-y-1">
-                {groupQuestions.map(({ question, globalIndex }) =>
-                  renderQuestionRow(question, globalIndex),
-                )}
-                {groupQuestions.length === 0 && (
-                  <p className="text-[10px] text-muted-foreground/50 py-2 px-2 italic">
-                    No questions in this group
-                  </p>
-                )}
-              </div>
+              </button>
+
+              {!isCollapsed && (
+                <div className="pl-2 border-l border-border ml-1.5 space-y-0.5">
+                  {groupQuestions.map(({ question, globalIndex }) =>
+                    renderQuestionRow(question, globalIndex),
+                  )}
+                  {groupQuestions.length === 0 && (
+                    <p className="text-[10px] text-muted-foreground/50 py-2 px-2 italic">
+                      Drop questions here
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}

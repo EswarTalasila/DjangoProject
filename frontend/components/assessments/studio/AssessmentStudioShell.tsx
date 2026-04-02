@@ -857,7 +857,7 @@ export default function AssessmentStudioShell({
         {/* Left Rail */}
         <aside
           className={cn(
-            'w-[280px] border-r border-border bg-muted/30 flex flex-col shrink-0 transition-transform duration-200',
+            'w-[280px] border-r border-border bg-muted/30 flex flex-col shrink-0 overflow-hidden transition-transform duration-200',
             'max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-20 max-lg:w-full max-lg:bg-background',
             mobileView === 'structure'
               ? 'max-lg:translate-x-0'
@@ -886,6 +886,15 @@ export default function AssessmentStudioShell({
               setDraggingQuestionIndex(null);
               setDragOverQuestionIndex(null);
             }}
+            onAssignGroup={(questionIndex, groupClientKey) => {
+              const question = questions[questionIndex];
+              if (question) {
+                handleQuestionChange(questionIndex, {
+                  ...question,
+                  groupClientKey: groupClientKey,
+                });
+              }
+            }}
             groupByKey={groupByKey}
           />
         </aside>
@@ -897,7 +906,7 @@ export default function AssessmentStudioShell({
             mobileView !== 'editor' && 'max-lg:hidden',
           )}
         >
-          <div className="max-w-4xl mx-auto py-6 lg:py-10 px-4 lg:px-8">
+          <div className="max-w-6xl mx-auto py-6 lg:py-10 px-4 lg:px-8">
             <QuestionStudio
               question={selectedQuestion}
               questionIndex={selectedQuestionIndex}
