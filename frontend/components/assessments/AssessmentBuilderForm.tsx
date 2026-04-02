@@ -94,13 +94,15 @@ function formatQuestionKind(kind: QuestionKind): string {
       return 'Number Scale';
     case 'MOOD_METER':
       return 'Mood Meter';
+    case 'FILE_UPLOAD':
+      return 'File Upload';
     default:
       return kind;
   }
 }
 
 function normalizeQuestionKind(kind: string): QuestionKind {
-  if (kind === 'MULTIPLE_CHOICE' || kind === 'SHORT_ANSWER' || kind === 'NUMBER_SCALE' || kind === 'MOOD_METER') {
+  if (kind === 'MULTIPLE_CHOICE' || kind === 'SHORT_ANSWER' || kind === 'NUMBER_SCALE' || kind === 'MOOD_METER' || kind === 'FILE_UPLOAD') {
     return kind;
   }
   return 'SHORT_ANSWER';

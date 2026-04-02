@@ -39,6 +39,7 @@ const TYPE_DEFAULTS: Record<QuestionKind, QuestionData> = {
   SHORT_ANSWER: { caseSensitive: false, trim: true },
   NUMBER_SCALE: { min: 1, max: 5, target: null },
   MOOD_METER: {},
+  FILE_UPLOAD: {},
 };
 
 export default function QuestionBlock({

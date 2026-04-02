@@ -150,6 +150,7 @@ class AnswerType(models.TextChoices):
     SHORT_ANSWER = "SHORT_ANSWER", "Short Answer"
     NUMBER_SCALE = "NUMBER_SCALE", "Number Scale"
     MOOD_METER = "MOOD_METER", "Mood Meter"
+    FILE_UPLOAD = "FILE_UPLOAD", "File Upload"
 
 
 class Answer(models.Model):
@@ -373,6 +374,41 @@ class MoodMeterAnswer(models.Model):
 
     def __str__(self):
         return f"MoodMeterAnswer({self.answer_id}: {self.mood_name})"
+
+
+class FileUploadAnswer(models.Model):
+    """
+    Extension model for FILE_UPLOAD responses.
+
+    Stores metadata about an uploaded file (PDF, image, etc.) submitted
+    as the student's answer. The actual file is stored via the media system.
+
+    Attributes:
+        answer: One-to-one link to base Answer (also primary key)
+        storage_key: Path to the file in the media storage backend
+        original_filename: The name of the file as uploaded
+        mime_type: MIME type of the uploaded file
+        size_bytes: File size in bytes
+    """
+
+    answer = models.OneToOneField(
+        Answer,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        db_column="id",
+        related_name="file_upload",
+    )
+
+    storage_key = models.CharField(max_length=512, blank=True, default="")
+    original_filename = models.CharField(max_length=255, blank=True, default="")
+    mime_type = models.CharField(max_length=64, blank=True, default="")
+    size_bytes = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "file_upload_answer"
+
+    def __str__(self):
+        return f"FileUploadAnswer({self.answer_id}: {self.original_filename})"
 
 
 class ImageStatus(models.TextChoices):

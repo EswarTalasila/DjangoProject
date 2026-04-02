@@ -118,6 +118,7 @@ class QuestionKind(models.TextChoices):
     SHORT_ANSWER = "SHORT_ANSWER", "Short Answer"
     NUMBER_SCALE = "NUMBER_SCALE", "Number Scale"
     MOOD_METER = "MOOD_METER", "Mood Meter"
+    FILE_UPLOAD = "FILE_UPLOAD", "File Upload"
 
 
 class Question(models.Model):

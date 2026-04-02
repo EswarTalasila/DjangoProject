@@ -6,7 +6,7 @@ export type SubmissionStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED' | 'GR
 
 export type AnswerPayload = {
   questionId: number;
-  type: 'MULTIPLE_CHOICE' | 'SHORT_ANSWER' | 'NUMBER_SCALE' | 'MOOD_METER';
+  type: 'MULTIPLE_CHOICE' | 'SHORT_ANSWER' | 'NUMBER_SCALE' | 'MOOD_METER' | 'FILE_UPLOAD';
   data: {
     selected?: number[];
     text?: string;
@@ -15,6 +15,10 @@ export type AnswerPayload = {
     moodName?: string;
     row?: number;
     col?: number;
+    storageKey?: string;
+    originalFilename?: string;
+    mimeType?: string;
+    sizeBytes?: number;
   };
   score?: number | null;
 };

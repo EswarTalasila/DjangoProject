@@ -41,6 +41,7 @@ _ANSWER_SUBTYPE_PREFETCHES = [
     "answers__short_answer",
     "answers__number_scale",
     "answers__mood_meter",
+    "answers__file_upload",
 ]
 
 # Extended prefetch paths that also pull question + mcq_choices for scoring.
@@ -175,6 +176,13 @@ def answer_to_dto(answer: Answer) -> AnswerDTO:
             "moodName": answer.mood_meter.mood_name,
             "row": answer.mood_meter.row,
             "col": answer.mood_meter.col,
+        }
+    elif answer.answer_type == AnswerType.FILE_UPLOAD:
+        data = {
+            "storageKey": answer.file_upload.storage_key,
+            "originalFilename": answer.file_upload.original_filename,
+            "mimeType": answer.file_upload.mime_type,
+            "sizeBytes": answer.file_upload.size_bytes,
         }
     else:
         data = {}
@@ -535,6 +543,15 @@ def _create_answer(submission: Submission, payload: dict) -> Answer:
             mood_name=data.get("moodName", ""),
             row=data.get("row"),
             col=data.get("col"),
+        )
+    elif answer_type == AnswerType.FILE_UPLOAD:
+        from .models import FileUploadAnswer
+        FileUploadAnswer.objects.create(
+            answer=answer,
+            storage_key=data.get("storageKey", ""),
+            original_filename=data.get("originalFilename", ""),
+            mime_type=data.get("mimeType", ""),
+            size_bytes=data.get("sizeBytes", 0),
         )
     return answer
 

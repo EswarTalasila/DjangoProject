@@ -36,6 +36,7 @@ const TYPE_DEFAULTS: Record<QuestionKind, QuestionData> = {
   SHORT_ANSWER: { caseSensitive: false, trim: true },
   NUMBER_SCALE: { min: 1, max: 5, target: null },
   MOOD_METER: {},
+  FILE_UPLOAD: {},
 };
 
 type QuestionStudioProps = {
@@ -197,6 +198,7 @@ export default function QuestionStudio({
                   { value: 'SHORT_ANSWER', label: 'Short Answer' },
                   { value: 'NUMBER_SCALE', label: 'Number Scale' },
                   { value: 'MOOD_METER', label: 'Mood Meter' },
+                  { value: 'FILE_UPLOAD', label: 'File Upload' },
                 ] as { value: QuestionKind; label: string }[]
               ).map(({ value, label }) => (
                 <button

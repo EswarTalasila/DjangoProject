@@ -1,0 +1,2 @@
+﻿studentId,studentName,studentUsername,consent,enrollmentStatus,enrolledAt,courseId,courseName
+909,Gina Smith,user723@example.com,false,ACTIVE,2026-04-01T00:54:41.120319+00:00,216,Course 73

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Plus,
   FolderPlus,
@@ -11,6 +11,15 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import type { QuestionInput, QuestionGroupInput, QuestionKind } from '@/lib/assessment-api';
 import { cn } from '@/lib/utils';
 
@@ -24,6 +33,8 @@ function formatQuestionKind(kind: QuestionKind): string {
       return 'NS';
     case 'MOOD_METER':
       return 'MM';
+    case 'FILE_UPLOAD':
+      return 'FU';
     default:
       return kind;
   }
@@ -39,6 +50,8 @@ function questionTypeColor(kind: QuestionKind): string {
       return 'text-amber-600 dark:text-amber-400';
     case 'MOOD_METER':
       return 'text-purple-600 dark:text-purple-400';
+    case 'FILE_UPLOAD':
+      return 'text-rose-600 dark:text-rose-400';
     default:
       return 'text-muted-foreground';
   }
@@ -107,6 +120,16 @@ export default function StructureRail({
   // Inline group renaming
   const [editingGroupKey, setEditingGroupKey] = useState<string | null>(null);
   const [editingGroupName, setEditingGroupName] = useState('');
+  // New group dialog
+  const [newGroupDialogOpen, setNewGroupDialogOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const newGroupInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (newGroupDialogOpen) {
+      setTimeout(() => newGroupInputRef.current?.focus(), 100);
+    }
+  }, [newGroupDialogOpen]);
   // "ungrouped" is tracked as "__UNGROUPED__"
   const UNGROUPED_KEY = '__UNGROUPED__';
 
@@ -295,9 +318,9 @@ export default function StructureRail({
             type="button"
             size="sm"
             onClick={onAddQuestion}
-            className="gap-1.5 text-xs"
+            className="gap-1.5 text-sm"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-4 w-4" />
             Question
           </Button>
           <Button
@@ -305,12 +328,12 @@ export default function StructureRail({
             variant="outline"
             size="sm"
             onClick={() => {
-              const name = window.prompt('Group name:');
-              if (name !== null) onAddGroup(name || undefined);
+              setNewGroupName('');
+              setNewGroupDialogOpen(true);
             }}
-            className="gap-1.5 text-xs"
+            className="gap-1.5 text-sm"
           >
-            <FolderPlus className="h-3.5 w-3.5" />
+            <FolderPlus className="h-4 w-4" />
             Group
           </Button>
         </div>
@@ -449,11 +472,57 @@ export default function StructureRail({
 
       {/* Footer */}
       <div className="p-3 border-t border-border bg-muted/30">
-        <div className="flex items-center justify-between text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+        <div className="flex items-center justify-between text-xs font-bold text-muted-foreground uppercase tracking-widest">
           <span>Total Points</span>
-          <span className="font-mono text-foreground">{totalPoints}</span>
+          <span className="font-mono text-foreground text-sm">{totalPoints}</span>
         </div>
       </div>
+
+      {/* New Group Dialog */}
+      <Dialog open={newGroupDialogOpen} onOpenChange={setNewGroupDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Create Question Group</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="new-group-name">Group Name</Label>
+              <Input
+                ref={newGroupInputRef}
+                id="new-group-name"
+                placeholder="e.g., Memory & Perception"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    onAddGroup(newGroupName || undefined);
+                    setNewGroupDialogOpen(false);
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setNewGroupDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                onAddGroup(newGroupName || undefined);
+                setNewGroupDialogOpen(false);
+              }}
+            >
+              Create Group
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

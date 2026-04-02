@@ -857,7 +857,7 @@ export default function AssessmentStudioShell({
         {/* Left Rail */}
         <aside
           className={cn(
-            'w-[280px] border-r border-border bg-muted/30 flex flex-col shrink-0 overflow-hidden transition-transform duration-200',
+            'w-[320px] border-r border-border bg-muted/30 flex flex-col shrink-0 overflow-hidden transition-transform duration-200',
             'max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-20 max-lg:w-full max-lg:bg-background',
             mobileView === 'structure'
               ? 'max-lg:translate-x-0'
@@ -946,7 +946,7 @@ export default function AssessmentStudioShell({
         {/* Right Rail */}
         <aside
           className={cn(
-            'w-[280px] border-l border-border bg-muted/30 shrink-0 overflow-hidden transition-transform duration-200',
+            'w-[320px] border-l border-border bg-muted/30 shrink-0 overflow-hidden transition-transform duration-200',
             'max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-20 max-lg:w-full max-lg:bg-background',
             mobileView === 'settings'
               ? 'max-lg:translate-x-0'

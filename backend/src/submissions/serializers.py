@@ -23,6 +23,7 @@ _REQUIRED_KEYS: dict[str, set[str]] = {
     "SHORT_ANSWER": {"text"},
     "NUMBER_SCALE": {"val"},
     "MOOD_METER": {"quadrant", "moodName"},
+    "FILE_UPLOAD": {"originalFilename"},
 }
 
 
