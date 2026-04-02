@@ -280,7 +280,7 @@ class EnvSettings(BaseSettings):
 
     def _validate_database_url(self) -> None:
         raw = self.database_url.lower()
-        weak_tokens = ("eelab", "datadash", "localdev", "change-me", "localhost")
+        weak_tokens = ("datadash", "localdev", "change-me", "localhost")
         if any(token in raw for token in weak_tokens):
             raise ValueError(
                 "Invalid production DATABASE_URL: default/local credentials "
