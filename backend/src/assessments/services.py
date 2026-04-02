@@ -73,6 +73,7 @@ def assessment_to_dto(assessment: Assessment) -> AssessmentDTO:
         category=assessment.category,
         gradingMode=assessment.grading_mode,
         scoringPolicy=assessment.scoring_policy,
+        rubricId=assessment.rubric_id,
         questions=[question_to_dto(question) for question in assessment.questions.all()],
         questionGroups=groups,
     )

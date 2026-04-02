@@ -48,6 +48,15 @@ class Assessment(models.Model):
         choices=ScoringPolicy.choices,
         default=ScoringPolicy.STANDARD,
     )
+    # Optional whole-assessment rubric. When set, this rubric applies to the
+    # entire assessment rather than individual questions or groups.
+    rubric = models.ForeignKey(
+        "rubrics.Rubric",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assessments",
+    )
     created_by_admin = models.ForeignKey(
         User, on_delete=models.PROTECT, db_column="created_by_admin_id"
     )

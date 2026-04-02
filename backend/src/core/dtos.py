@@ -103,6 +103,7 @@ class AssessmentDTO(BaseModel):
     category: str | None
     gradingMode: str
     scoringPolicy: str = "STANDARD"
+    rubricId: int | None = None
     questions: list[QuestionDTO]
     questionGroups: list[QuestionGroupDTO] = []
 
