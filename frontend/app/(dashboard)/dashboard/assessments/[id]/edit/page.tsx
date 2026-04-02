@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getSessionProfile } from '@/lib/auth-session';
-import AssessmentBuilderForm from '@/components/assessments/AssessmentBuilderForm';
+import AssessmentStudioShell from '@/components/assessments/studio/AssessmentStudioShell';
 
 export default async function EditAssessmentPage({
   params,
@@ -24,15 +24,5 @@ export default async function EditAssessmentPage({
     redirect('/dashboard/assessments');
   }
 
-  return (
-    <div className="space-y-6 p-4 md:p-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Edit Assessment</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Modify the assessment template and its questions.
-        </p>
-      </div>
-      <AssessmentBuilderForm mode="edit" assessmentId={assessmentId} />
-    </div>
-  );
+  return <AssessmentStudioShell mode="edit" assessmentId={assessmentId} />;
 }
