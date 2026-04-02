@@ -810,7 +810,7 @@ export default function AssessmentStudioShell({
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col h-[calc(100vh-64px)] overflow-hidden"
+      className="flex flex-col h-[calc(100vh-64px)] overflow-hidden -m-8 -mt-8"
     >
       {/* Top header bar */}
       <AssessmentStudioHeader
@@ -907,7 +907,7 @@ export default function AssessmentStudioShell({
             mobileView !== 'editor' && 'max-lg:hidden',
           )}
         >
-          <div className="max-w-6xl mx-auto py-6 lg:py-10 px-4 lg:px-8">
+          <div className="py-4 px-4 lg:px-6">
             <QuestionStudio
               question={selectedQuestion}
               questionIndex={selectedQuestionIndex}
