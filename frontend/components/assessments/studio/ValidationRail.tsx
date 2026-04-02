@@ -57,6 +57,7 @@ type ValidationRailProps = {
   activeQuestion: QuestionInput | undefined;
   activeQuestionIndex: number;
   // Validation
+  title: string;
   questions: QuestionInput[];
   questionsError: string | null;
   onNavigateToQuestion: (index: number) => void;
@@ -152,6 +153,7 @@ export default function ValidationRail({
   onScoringPolicyChange,
   activeQuestion,
   activeQuestionIndex,
+  title,
   questions,
   questionsError,
   onNavigateToQuestion,
@@ -191,6 +193,10 @@ export default function ValidationRail({
   const invalidQuestions = questions
     .map((q, i) => ({ question: q, index: i }))
     .filter(({ question }) => !isQuestionValid(question));
+
+  const hasTitleIssue = !title.trim();
+  const hasNoQuestions = questions.length === 0;
+  const totalIssues = invalidQuestions.length + (hasTitleIssue ? 1 : 0) + (hasNoQuestions ? 1 : 0);
 
   const totalPoints = questions.reduce(
     (sum, q) => sum + (q.maxPoints || 0),
@@ -675,60 +681,92 @@ export default function ValidationRail({
 
       {/* Validation issues */}
       <section className="mt-auto">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-amber-500 dark:text-amber-400" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
+            <BarChart3 className="h-5 w-5 text-amber-500 dark:text-amber-400" />
+            <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
               Validation
             </h3>
           </div>
           <span
             className={cn(
-              'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium',
-              invalidQuestions.length === 0
+              'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold',
+              (totalIssues === 0)
                 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
                 : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
             )}
           >
-            {invalidQuestions.length} issue{invalidQuestions.length !== 1 ? 's' : ''}
+            {totalIssues} issue{totalIssues !== 1 ? 's' : ''}
           </span>
         </div>
 
         {questionsError && (
-          <div className="rounded border border-destructive/30 bg-destructive/5 p-2 mb-2">
-            <p className="text-[10px] text-destructive font-medium">
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 mb-3">
+            <p className="text-sm text-destructive font-medium">
               {questionsError}
             </p>
           </div>
         )}
 
-        <div className="space-y-1.5">
+        <div className="space-y-2">
+          {/* Title validation */}
+          {!title.trim() && (
+            <div className="w-full flex items-center gap-3 p-3 bg-card border border-amber-200 dark:border-amber-800/50 rounded-lg text-left">
+              <AlertCircle className="h-5 w-5 text-amber-500 dark:text-amber-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground">
+                  Assessment Title
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Title is required before saving
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Question issues */}
           {invalidQuestions.map(({ question, index }) => (
             <button
               key={index}
               type="button"
               onClick={() => onNavigateToQuestion(index)}
-              className="w-full flex items-start gap-2 p-2 bg-card border border-border rounded-md text-left hover:border-amber-300 dark:hover:border-amber-700 transition-colors group"
+              className="w-full flex items-center gap-3 p-3 bg-card border border-border rounded-lg text-left hover:border-amber-300 dark:hover:border-amber-700 transition-colors group"
             >
-              <AlertCircle className="h-3.5 w-3.5 mt-0.5 text-amber-500 dark:text-amber-400 shrink-0" />
+              <AlertCircle className="h-5 w-5 text-amber-500 dark:text-amber-400 shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-[11px] font-medium text-foreground leading-none mb-0.5">
+                <p className="text-sm font-semibold text-foreground">
                   Question {index + 1}
                 </p>
-                <p className="text-[10px] text-muted-foreground truncate">
+                <p className="text-xs text-muted-foreground">
                   {getIssueDescription(question)}
                 </p>
               </div>
-              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-amber-500 transition-colors shrink-0" />
+              <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-amber-500 transition-colors shrink-0" />
             </button>
           ))}
 
-          {invalidQuestions.length === 0 && questions.length > 0 && (
-            <div className="p-3 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800/30 rounded-md text-center">
-              <p className="text-[11px] font-medium text-green-700 dark:text-green-400">
-                All questions valid
+          {/* No questions added */}
+          {questions.length === 0 && (
+            <div className="w-full flex items-center gap-3 p-3 bg-card border border-amber-200 dark:border-amber-800/50 rounded-lg text-left">
+              <AlertCircle className="h-5 w-5 text-amber-500 dark:text-amber-400 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground">
+                  No Questions
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Add at least one question
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* All good */}
+          {totalIssues === 0 && questions.length > 0 && (
+            <div className="p-4 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800/30 rounded-lg text-center">
+              <p className="text-sm font-bold text-green-700 dark:text-green-400">
+                All checks passed
               </p>
-              <p className="text-[10px] text-green-600/70 dark:text-green-400/70 mt-0.5">
+              <p className="text-xs text-green-600/70 dark:text-green-400/70 mt-1">
                 Assessment is ready to save.
               </p>
             </div>

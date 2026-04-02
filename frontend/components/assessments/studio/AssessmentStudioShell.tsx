@@ -716,7 +716,10 @@ export default function AssessmentStudioShell({
 
   async function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
-    if (!validate()) return;
+    if (!validate()) {
+      toast.error('Please fix the validation issues before saving.');
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -960,6 +963,7 @@ export default function AssessmentStudioShell({
             onScoringPolicyChange={setScoringPolicy}
             activeQuestion={selectedQuestion}
             activeQuestionIndex={selectedQuestionIndex}
+            title={title}
             questions={questions}
             questionsError={questionsError}
             onNavigateToQuestion={(idx) => {
