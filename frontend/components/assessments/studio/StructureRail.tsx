@@ -50,7 +50,8 @@ type StructureRailProps = {
   selectedIndex: number;
   onSelectQuestion: (index: number) => void;
   onAddQuestion: () => void;
-  onAddGroup: () => void;
+  onAddGroup: (name?: string) => void;
+  onRenameGroup: (clientKey: string, newName: string) => void;
   onAssignGroup: (questionIndex: number, groupClientKey: string | undefined) => void;
   draggingQuestionIndex: number | null;
   dragOverQuestionIndex: number | null;
@@ -83,6 +84,7 @@ export default function StructureRail({
   onSelectQuestion,
   onAddQuestion,
   onAddGroup,
+  onRenameGroup,
   onAssignGroup,
   draggingQuestionIndex,
   dragOverQuestionIndex,
@@ -102,8 +104,24 @@ export default function StructureRail({
   const [collapsedUngrouped, setCollapsedUngrouped] = useState(false);
   // Track which group zone is being hovered for visual feedback
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
+  // Inline group renaming
+  const [editingGroupKey, setEditingGroupKey] = useState<string | null>(null);
+  const [editingGroupName, setEditingGroupName] = useState('');
   // "ungrouped" is tracked as "__UNGROUPED__"
   const UNGROUPED_KEY = '__UNGROUPED__';
+
+  const startRenameGroup = (clientKey: string, currentName: string) => {
+    setEditingGroupKey(clientKey);
+    setEditingGroupName(currentName);
+  };
+
+  const commitRename = () => {
+    if (editingGroupKey && editingGroupName.trim()) {
+      onRenameGroup(editingGroupKey, editingGroupName.trim());
+    }
+    setEditingGroupKey(null);
+    setEditingGroupName('');
+  };
 
   const toggleGroup = (key: string) => {
     setCollapsedGroups((prev) => {
@@ -286,7 +304,10 @@ export default function StructureRail({
             type="button"
             variant="outline"
             size="sm"
-            onClick={onAddGroup}
+            onClick={() => {
+              const name = window.prompt('Group name:');
+              if (name !== null) onAddGroup(name || undefined);
+            }}
             className="gap-1.5 text-xs"
           >
             <FolderPlus className="h-3.5 w-3.5" />
@@ -355,23 +376,46 @@ export default function StructureRail({
                 dragOverGroup === group.clientKey && draggingQuestionIndex !== null && 'bg-primary/5 ring-1 ring-primary/30',
               )}
             >
-              <button
-                type="button"
-                onClick={() => toggleGroup(group.clientKey)}
-                className="flex items-center gap-1.5 px-1 py-1 w-full text-left group hover:bg-accent/30 rounded transition-colors"
-              >
-                {isCollapsed ? (
-                  <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+              <div className="flex items-center gap-1.5 px-1 py-1 w-full">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.clientKey)}
+                  className="flex-shrink-0 hover:bg-accent/30 rounded p-0.5 transition-colors"
+                >
+                  {isCollapsed ? (
+                    <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
+                  ) : (
+                    <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
+                  )}
+                </button>
+
+                {editingGroupKey === group.clientKey ? (
+                  <input
+                    type="text"
+                    value={editingGroupName}
+                    onChange={(e) => setEditingGroupName(e.target.value)}
+                    onBlur={commitRename}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitRename();
+                      if (e.key === 'Escape') { setEditingGroupKey(null); setEditingGroupName(''); }
+                    }}
+                    autoFocus
+                    className="flex-1 min-w-0 text-[10px] font-bold uppercase tracking-tight bg-background border border-border rounded px-1.5 py-0.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
                 ) : (
-                  <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
+                  <span
+                    onDoubleClick={() => startRenameGroup(group.clientKey, group.name)}
+                    className="flex-1 min-w-0 text-[10px] font-bold uppercase tracking-tight text-muted-foreground cursor-text truncate"
+                    title="Double-click to rename"
+                  >
+                    {group.name}
+                  </span>
                 )}
-                <span className="text-[10px] font-bold uppercase tracking-tight text-muted-foreground">
-                  {group.name}
-                </span>
-                <span className="text-[9px] font-medium text-muted-foreground/50 ml-auto">
+
+                <span className="text-[9px] font-medium text-muted-foreground/50 flex-shrink-0">
                   {groupQuestions.length}
                 </span>
-              </button>
+              </div>
 
               {!isCollapsed && (
                 <div className="pl-2 border-l border-border ml-1.5 space-y-0.5">

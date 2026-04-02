@@ -873,7 +873,8 @@ export default function AssessmentStudioShell({
               setMobileView('editor');
             }}
             onAddQuestion={addQuestion}
-            onAddGroup={() => addQuestionGroup()}
+            onAddGroup={(name) => addQuestionGroup(name)}
+            onRenameGroup={(clientKey, newName) => updateQuestionGroup(clientKey, { name: newName })}
             draggingQuestionIndex={draggingQuestionIndex}
             dragOverQuestionIndex={dragOverQuestionIndex}
             onDragStart={(idx) => {
