@@ -50,42 +50,42 @@ export default function McqFields({ data, onChange }: McqFieldsProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           Choices
         </Label>
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="h-7 px-2 text-xs text-muted-foreground"
+          className="text-sm text-muted-foreground"
           onClick={() => setIsChoicesOpen((v) => !v)}
         >
           {isChoicesOpen ? (
-            <ChevronUp className="mr-1 h-3.5 w-3.5" />
+            <ChevronUp className="mr-1.5 h-4 w-4" />
           ) : (
-            <ChevronDown className="mr-1 h-3.5 w-3.5" />
+            <ChevronDown className="mr-1.5 h-4 w-4" />
           )}
           {isChoicesOpen ? 'Hide' : 'Show'} ({choices.length})
         </Button>
       </div>
 
       {!isChoicesOpen && (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Choices hidden. Expand to edit order, text, and points.
         </p>
       )}
 
       {isChoicesOpen && (
         <>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Drag by the handle to reorder. Points are awarded when that choice is selected.
           </p>
 
-          <div className="rounded-sm border border-border overflow-hidden">
-            <div className="grid grid-cols-[minmax(0,1fr)_130px_48px] bg-muted border-b border-border text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
-              <div className="px-2 py-2">Choice Text</div>
-              <div className="px-2 py-2">Points</div>
-              <div className="px-2 py-2 text-right"> </div>
+          <div className="rounded-lg border border-border overflow-hidden">
+            <div className="grid grid-cols-[minmax(0,1fr)_140px_48px] bg-muted border-b border-border text-xs uppercase tracking-wider font-semibold text-muted-foreground">
+              <div className="px-3 py-2.5">Choice Text</div>
+              <div className="px-3 py-2.5">Points</div>
+              <div className="px-3 py-2.5 text-right"> </div>
             </div>
 
             {choices.length === 0 && (
@@ -99,7 +99,7 @@ export default function McqFields({ data, onChange }: McqFieldsProps) {
                 <div
                   key={i}
                   data-choice-row="true"
-                  className={`relative grid grid-cols-[minmax(0,1fr)_130px_48px] items-center gap-2 py-1 pr-1 ${
+                  className={`relative grid grid-cols-[minmax(0,1fr)_140px_48px] items-center gap-2 py-2 pr-1 ${
                     dragOverChoiceIndex === i && draggingChoiceIndex !== i
                       ? 'bg-accent/40 outline outline-1 outline-primary'
                       : 'bg-card'
@@ -157,14 +157,14 @@ export default function McqFields({ data, onChange }: McqFieldsProps) {
                   </span>
 
                   <div className="flex items-center gap-2 pl-10 pr-1">
-                    <span className="w-6 shrink-0 text-right text-xs font-medium text-muted-foreground">
+                    <span className="w-7 shrink-0 text-right text-sm font-medium text-muted-foreground">
                       {i + 1}.
                     </span>
                     <Input
                       placeholder="Choice text"
                       value={choice.prompt}
                       onChange={(e) => updateChoice(i, { ...choice, prompt: e.target.value })}
-                      className="h-9"
+                      className="h-10 text-sm"
                     />
                   </div>
 
@@ -176,9 +176,9 @@ export default function McqFields({ data, onChange }: McqFieldsProps) {
                       onChange={(e) =>
                         updateChoice(i, { ...choice, score: Number(e.target.value) || 0 })
                       }
-                      className="h-9 pr-10 text-right"
+                      className="h-10 pr-10 text-sm text-right [&::-webkit-inner-spin-button]:h-6 [&::-webkit-inner-spin-button]:w-5 [&::-webkit-inner-spin-button]:opacity-100"
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs uppercase tracking-wide text-muted-foreground">
                       pts
                     </span>
                   </div>
@@ -188,17 +188,17 @@ export default function McqFields({ data, onChange }: McqFieldsProps) {
                     variant="ghost"
                     size="icon"
                     onClick={() => removeChoice(i)}
-                    className="h-8 w-8 text-destructive justify-self-end"
+                    className="h-10 w-10 text-destructive justify-self-end"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-5 w-5" />
                   </Button>
                 </div>
               ))}
             </div>
           </div>
 
-          <Button type="button" variant="outline" size="sm" onClick={addChoice}>
-            <Plus className="mr-1 h-3 w-3" /> Add Choice
+          <Button type="button" variant="outline" onClick={addChoice} className="gap-2">
+            <Plus className="h-4 w-4" /> Add Choice
           </Button>
         </>
       )}

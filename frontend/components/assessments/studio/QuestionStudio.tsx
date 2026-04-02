@@ -74,17 +74,17 @@ export default function QuestionStudio({
   if (!question) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
-        <div className="w-16 h-16 bg-muted rounded-2xl flex items-center justify-center mb-5 text-muted-foreground">
-          <Plus className="h-8 w-8" />
+        <div className="w-20 h-20 bg-muted rounded-2xl flex items-center justify-center mb-6 text-muted-foreground">
+          <Plus className="h-10 w-10" />
         </div>
-        <h2 className="text-xl font-bold text-foreground mb-2">
+        <h2 className="text-2xl font-bold text-foreground mb-2">
           Ready to start?
         </h2>
-        <p className="text-sm text-muted-foreground max-w-xs mb-6">
+        <p className="text-base text-muted-foreground max-w-sm mb-8">
           Add your first question to begin building this assessment.
         </p>
-        <Button type="button" onClick={onAddQuestion} className="gap-2">
-          <Plus className="h-4 w-4" />
+        <Button type="button" size="lg" onClick={onAddQuestion} className="gap-2">
+          <Plus className="h-5 w-5" />
           Add First Question
         </Button>
       </div>
@@ -100,46 +100,34 @@ export default function QuestionStudio({
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6 pb-16">
+    <div className="space-y-6 pb-16">
       {/* Header section */}
-      <div className="flex items-center justify-between border-b border-border pb-4">
+      <div className="flex items-center justify-between border-b border-border pb-5">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg font-bold text-foreground">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-foreground">
               Question {questionIndex + 1}
             </h1>
             {selectedGroupName && (
-              <span className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
                 {selectedGroupName}
               </span>
             )}
           </div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-medium">
+          <p className="text-xs text-muted-foreground uppercase tracking-widest font-medium">
             Assessment Studio
           </p>
         </div>
 
         <div className="flex items-center gap-1">
           {onMoveUp && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={onMoveUp}
-              className="h-8 w-8"
-            >
-              <ChevronUp className="h-4 w-4" />
+            <Button type="button" variant="ghost" size="icon" onClick={onMoveUp}>
+              <ChevronUp className="h-5 w-5" />
             </Button>
           )}
           {onMoveDown && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={onMoveDown}
-              className="h-8 w-8"
-            >
-              <ChevronDown className="h-4 w-4" />
+            <Button type="button" variant="ghost" size="icon" onClick={onMoveDown}>
+              <ChevronDown className="h-5 w-5" />
             </Button>
           )}
           <Button
@@ -149,7 +137,7 @@ export default function QuestionStudio({
             onClick={onDuplicate}
             className="text-muted-foreground hover:text-foreground"
           >
-            <Copy className="h-4 w-4 mr-1.5" />
+            <Copy className="h-4 w-4 mr-2" />
             Duplicate
           </Button>
           <Button
@@ -159,29 +147,29 @@ export default function QuestionStudio({
             onClick={onRemove}
             className="text-muted-foreground hover:text-destructive"
           >
-            <Trash2 className="h-4 w-4 mr-1.5" />
+            <Trash2 className="h-4 w-4 mr-2" />
             Delete
           </Button>
         </div>
       </div>
 
       {/* Rubric context bar */}
-      <div className="rounded-md border border-border bg-muted/30 p-3">
-        <dl className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+      <div className="rounded-lg border border-border bg-muted/30 p-4">
+        <dl className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
           <div>
-            <dt className="text-muted-foreground">Rubric</dt>
+            <dt className="text-muted-foreground text-xs mb-0.5">Rubric</dt>
             <dd className="font-medium text-foreground">
               {selectedEffectiveRubricName ?? 'None'}
             </dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Group</dt>
+            <dt className="text-muted-foreground text-xs mb-0.5">Group</dt>
             <dd className="font-medium text-foreground">
               {selectedGroupName ?? 'None'}
             </dd>
           </div>
           <div>
-            <dt className="text-muted-foreground flex items-center gap-1.5">
+            <dt className="text-muted-foreground text-xs mb-0.5 flex items-center gap-1.5">
               Rubric Source
               <HelpTip
                 text={
@@ -196,13 +184,13 @@ export default function QuestionStudio({
 
       {/* Main content card */}
       <div className="bg-card border border-border rounded-lg overflow-hidden shadow-sm">
-        <div className="p-5 space-y-6">
+        <div className="p-6 space-y-8">
           {/* Response format selector */}
-          <div className="space-y-2">
-            <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+          <div className="space-y-3">
+            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
               Response Format
             </Label>
-            <div className="flex flex-wrap gap-1 p-1 bg-muted rounded-md border border-border w-fit">
+            <div className="flex flex-wrap gap-1.5 p-1.5 bg-muted rounded-lg border border-border w-fit">
               {(
                 [
                   { value: 'MULTIPLE_CHOICE', label: 'Multiple Choice' },
@@ -216,7 +204,7 @@ export default function QuestionStudio({
                   type="button"
                   onClick={() => handleTypeChange(value)}
                   className={cn(
-                    'px-3 py-1.5 text-[11px] font-medium rounded transition-colors',
+                    'px-4 py-2 text-sm font-medium rounded-md transition-colors',
                     question.type === value
                       ? 'bg-card text-foreground shadow-sm border border-border'
                       : 'text-muted-foreground hover:text-foreground',
@@ -229,35 +217,33 @@ export default function QuestionStudio({
           </div>
 
           {/* Question prompt */}
-          <div className="space-y-2">
+          <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                 Question Prompt
               </Label>
-              <span className="text-[10px] text-muted-foreground font-medium uppercase">
+              <span className="text-xs text-muted-foreground font-medium uppercase">
                 Required
               </span>
             </div>
             <textarea
               value={question.prompt}
-              onChange={(e) =>
-                onChange({ ...question, prompt: e.target.value })
-              }
+              onChange={(e) => onChange({ ...question, prompt: e.target.value })}
               placeholder="Enter the question text here..."
-              className="w-full min-h-[120px] p-4 bg-muted/30 border border-border rounded-md text-sm text-foreground placeholder:text-muted-foreground resize-none leading-relaxed focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+              className="w-full min-h-[140px] p-4 bg-muted/30 border border-border rounded-lg text-base text-foreground placeholder:text-muted-foreground resize-none leading-relaxed focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
         </div>
       </div>
 
       {/* Response configuration */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden shadow-sm">
-        <div className="px-5 py-3 border-b border-border bg-muted/30">
-          <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+      <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-border bg-muted/20">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Response Configuration
           </h3>
         </div>
-        <div className="p-5">
+        <div className="p-6">
           <QuestionTypeConfig
             type={question.type}
             data={question.data ?? {}}
@@ -266,49 +252,50 @@ export default function QuestionStudio({
         </div>
       </div>
 
-      {/* Supporting figure placeholder */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden shadow-sm">
-        <div className="px-5 py-3 border-b border-border bg-muted/30">
-          <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+      {/* Image upload placeholder */}
+      <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-border bg-muted/20">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Supporting Figure
           </h3>
         </div>
-        <div className="p-5">
-          <div className="relative border border-dashed border-border rounded-md p-6 flex flex-col items-center justify-center text-center bg-muted/20 min-h-[120px] cursor-not-allowed opacity-60">
-            <div className="w-10 h-10 bg-muted border border-border rounded-md flex items-center justify-center mb-2 text-muted-foreground">
-              <Upload className="h-4 w-4" />
-            </div>
-            <p className="text-xs font-medium text-muted-foreground">
-              Image Upload
+        <div className="p-6">
+          <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-muted-foreground/50 transition-colors cursor-pointer">
+            <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
+            <p className="text-sm font-medium text-foreground">
+              Attach Supporting Figure
             </p>
-            <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-              Coming soon — JPG, PNG, WebP
+            <p className="text-xs text-muted-foreground mt-1">
+              JPG, PNG, WebP (Max 5MB)
             </p>
           </div>
         </div>
       </div>
 
       {/* Grading & metadata */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden shadow-sm">
-        <div className="px-5 py-3 border-b border-border bg-muted/30">
-          <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Grading &amp; Metadata
+      <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-border bg-muted/20">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+            Grading & Metadata
           </h3>
         </div>
-        <div className="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-2">
-            <Label>Max Points</Label>
-            <Input
-              type="number"
-              min={0}
-              value={question.maxPoints}
-              onChange={(e) =>
-                onChange({
-                  ...question,
-                  maxPoints: Number(e.target.value) || 0,
-                })
-              }
-            />
+            <Label>Point Value</Label>
+            <div className="relative">
+              <Input
+                type="number"
+                min={0}
+                value={question.maxPoints}
+                onChange={(e) =>
+                  onChange({ ...question, maxPoints: Number(e.target.value) || 0 })
+                }
+                className="pr-12 font-mono font-bold"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground uppercase">
+                pts
+              </span>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -342,10 +329,7 @@ export default function QuestionStudio({
               <Select
                 value={question.gradingStrategy ?? 'AUTO'}
                 onValueChange={(v) =>
-                  onChange({
-                    ...question,
-                    gradingStrategy: v as GradingStrategy,
-                  })
+                  onChange({ ...question, gradingStrategy: v as GradingStrategy })
                 }
               >
                 <SelectTrigger>
