@@ -5,7 +5,6 @@ import {
   Trash2,
   ChevronUp,
   ChevronDown,
-  Upload,
   Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -27,6 +26,7 @@ import type {
   GradingStrategy,
 } from '@/lib/assessment-api';
 import { cn } from '@/lib/utils';
+import ImagePicker from '@/components/media/ImagePicker';
 import QuestionTypeConfig from './QuestionTypeConfig';
 
 type BuilderGradingMode = 'AUTO' | 'MANUAL' | 'HYBRID';
@@ -252,7 +252,7 @@ export default function QuestionStudio({
         </div>
       </div>
 
-      {/* Image upload placeholder */}
+      {/* Supporting figure / image */}
       <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-border bg-muted/20">
           <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
@@ -260,15 +260,15 @@ export default function QuestionStudio({
           </h3>
         </div>
         <div className="p-6">
-          <div className="border-2 border-dashed border-border rounded-lg p-8 text-center hover:border-muted-foreground/50 transition-colors cursor-pointer">
-            <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
-            <p className="text-sm font-medium text-foreground">
-              Attach Supporting Figure
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              JPG, PNG, WebP (Max 5MB)
-            </p>
-          </div>
+          <ImagePicker
+            image={null}
+            onSelect={() => {
+              // TODO: wire to question image API once QuestionImage endpoints exist
+            }}
+            onRemove={() => {
+              // TODO: wire to question image API
+            }}
+          />
         </div>
       </div>
 

@@ -82,7 +82,7 @@ export default function McqFields({ data, onChange }: McqFieldsProps) {
           </p>
 
           <div className="rounded-lg border border-border overflow-hidden">
-            <div className="grid grid-cols-[minmax(0,1fr)_140px_48px] bg-muted border-b border-border text-xs uppercase tracking-wider font-semibold text-muted-foreground">
+            <div className="grid grid-cols-[minmax(0,1fr)_170px_48px] bg-muted border-b border-border text-xs uppercase tracking-wider font-semibold text-muted-foreground">
               <div className="px-3 py-2.5">Choice Text</div>
               <div className="px-3 py-2.5">Points</div>
               <div className="px-3 py-2.5 text-right"> </div>
@@ -99,7 +99,7 @@ export default function McqFields({ data, onChange }: McqFieldsProps) {
                 <div
                   key={i}
                   data-choice-row="true"
-                  className={`relative grid grid-cols-[minmax(0,1fr)_140px_48px] items-center gap-2 py-2 pr-1 ${
+                  className={`relative grid grid-cols-[minmax(0,1fr)_170px_48px] items-center gap-2 py-2 pr-1 ${
                     dragOverChoiceIndex === i && draggingChoiceIndex !== i
                       ? 'bg-accent/40 outline outline-1 outline-primary'
                       : 'bg-card'
@@ -168,7 +168,23 @@ export default function McqFields({ data, onChange }: McqFieldsProps) {
                     />
                   </div>
 
-                  <div className="relative">
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex flex-col gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => updateChoice(i, { ...choice, score: choice.score + 1 })}
+                        className="h-5 w-7 flex items-center justify-center rounded border border-border bg-muted hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <ChevronUp className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateChoice(i, { ...choice, score: Math.max(0, choice.score - 1) })}
+                        className="h-5 w-7 flex items-center justify-center rounded border border-border bg-muted hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <ChevronDown className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                     <Input
                       type="number"
                       placeholder="0"
@@ -176,11 +192,9 @@ export default function McqFields({ data, onChange }: McqFieldsProps) {
                       onChange={(e) =>
                         updateChoice(i, { ...choice, score: Number(e.target.value) || 0 })
                       }
-                      className="h-10 pr-10 text-sm text-right [&::-webkit-inner-spin-button]:h-6 [&::-webkit-inner-spin-button]:w-5 [&::-webkit-inner-spin-button]:opacity-100"
+                      className="h-10 text-sm text-center font-mono font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs uppercase tracking-wide text-muted-foreground">
-                      pts
-                    </span>
+                    <span className="text-xs text-muted-foreground font-medium shrink-0">pts</span>
                   </div>
 
                   <Button
