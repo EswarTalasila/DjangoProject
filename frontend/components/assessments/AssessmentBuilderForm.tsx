@@ -92,17 +92,17 @@ function formatQuestionKind(kind: QuestionKind): string {
       return 'Short Answer';
     case 'NUMBER_SCALE':
       return 'Number Scale';
+    case 'MOOD_METER':
+      return 'Mood Meter';
     default:
       return kind;
   }
 }
 
 function normalizeQuestionKind(kind: string): QuestionKind {
-  if (kind === 'MULTIPLE_CHOICE' || kind === 'SHORT_ANSWER' || kind === 'NUMBER_SCALE') {
+  if (kind === 'MULTIPLE_CHOICE' || kind === 'SHORT_ANSWER' || kind === 'NUMBER_SCALE' || kind === 'MOOD_METER') {
     return kind;
   }
-  // Legacy types (e.g. MOOD_METER / REFLECTION) are no longer supported.
-  // Treat them as short-answer prompts so existing assessments remain editable.
   return 'SHORT_ANSWER';
 }
 

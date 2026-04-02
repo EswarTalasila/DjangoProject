@@ -22,6 +22,7 @@ _REQUIRED_KEYS: dict[str, set[str]] = {
     "MULTIPLE_CHOICE": {"selected"},
     "SHORT_ANSWER": {"text"},
     "NUMBER_SCALE": {"val"},
+    "MOOD_METER": {"quadrant", "moodName"},
 }
 
 
@@ -83,6 +84,17 @@ class AnswerSerializer(serializers.Serializer):
             if not _is_plain_int(value):
                 raise serializers.ValidationError(
                     {"data": "'val' must be an integer"}
+                )
+        elif answer_type == "MOOD_METER":
+            quadrant = data.get("quadrant")
+            mood_name = data.get("moodName")
+            if not isinstance(quadrant, str) or not quadrant:
+                raise serializers.ValidationError(
+                    {"data": "'quadrant' must be a non-empty string"}
+                )
+            if not isinstance(mood_name, str) or not mood_name:
+                raise serializers.ValidationError(
+                    {"data": "'moodName' must be a non-empty string"}
                 )
         return attrs
 

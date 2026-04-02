@@ -40,6 +40,7 @@ _ANSWER_SUBTYPE_PREFETCHES = [
     "answers__multiple_choice__selected",
     "answers__short_answer",
     "answers__number_scale",
+    "answers__mood_meter",
 ]
 
 # Extended prefetch paths that also pull question + mcq_choices for scoring.
@@ -168,6 +169,13 @@ def answer_to_dto(answer: Answer) -> AnswerDTO:
         data = {"text": answer.short_answer.text}
     elif answer.answer_type == AnswerType.NUMBER_SCALE:
         data = {"val": answer.number_scale.val}
+    elif answer.answer_type == AnswerType.MOOD_METER:
+        data = {
+            "quadrant": answer.mood_meter.quadrant,
+            "moodName": answer.mood_meter.mood_name,
+            "row": answer.mood_meter.row,
+            "col": answer.mood_meter.col,
+        }
     else:
         data = {}
     return AnswerDTO(
@@ -519,6 +527,15 @@ def _create_answer(submission: Submission, payload: dict) -> Answer:
         ShortAnswerAnswer.objects.create(answer=answer, text=data.get("text", ""))
     elif answer_type == AnswerType.NUMBER_SCALE:
         NumberScaleAnswer.objects.create(answer=answer, val=data.get("val"))
+    elif answer_type == AnswerType.MOOD_METER:
+        from .models import MoodMeterAnswer
+        MoodMeterAnswer.objects.create(
+            answer=answer,
+            quadrant=data.get("quadrant", ""),
+            mood_name=data.get("moodName", ""),
+            row=data.get("row"),
+            col=data.get("col"),
+        )
     return answer
 
 

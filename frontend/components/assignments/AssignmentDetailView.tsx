@@ -37,10 +37,18 @@ type AssignmentDetailViewProps = {
 };
 
 type PreviewMode = 'teacher' | 'student';
+type MoodSelection = {
+  quadrant: string;
+  moodName: string;
+  row: number;
+  col: number;
+};
+
 type StudentAttemptAnswer = {
   selectedChoiceIndexes: number[];
   textResponse: string;
   numericResponse: number | null;
+  moodSelection: MoodSelection | null;
 };
 type StudentFlowStage = 'attempt' | 'submitted';
 
@@ -82,6 +90,7 @@ function defaultStudentAnswer(question: Question): StudentAttemptAnswer {
     selectedChoiceIndexes: [],
     textResponse: '',
     numericResponse: null,
+    moodSelection: null,
   };
 }
 
@@ -166,6 +175,18 @@ function toAnswerPayloads(
     if (q.type === 'SHORT_ANSWER') {
       return { questionId: q.questionId, type: 'SHORT_ANSWER', data: { text: answer.textResponse } };
     }
+    if (q.type === 'MOOD_METER') {
+      return {
+        questionId: q.questionId,
+        type: 'MOOD_METER',
+        data: {
+          quadrant: answer.moodSelection?.quadrant ?? '',
+          moodName: answer.moodSelection?.moodName ?? '',
+          row: answer.moodSelection?.row ?? 0,
+          col: answer.moodSelection?.col ?? 0,
+        },
+      };
+    }
     return { questionId: q.questionId, type: 'NUMBER_SCALE', data: { val: answer.numericResponse } };
   });
 }
@@ -182,6 +203,14 @@ function hydrateStudentAnswers(
         selectedChoiceIndexes: backendAnswer.data?.selected ?? [],
         textResponse: backendAnswer.data?.text ?? '',
         numericResponse: backendAnswer.data?.val ?? null,
+        moodSelection: backendAnswer.data?.quadrant
+          ? {
+              quadrant: backendAnswer.data.quadrant as string,
+              moodName: backendAnswer.data.moodName as string,
+              row: backendAnswer.data.row as number,
+              col: backendAnswer.data.col as number,
+            }
+          : null,
       };
     } else {
       result[q.questionId] = defaultStudentAnswer(q);

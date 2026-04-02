@@ -5,7 +5,7 @@ import api from '@/lib/api';
 export type GradingMode = 'AUTO' | 'MANUAL' | 'HYBRID';
 export type GradingStrategy = 'AUTO' | 'MANUAL';
 export type ScoringPolicy = 'STANDARD' | 'COMPLETION';
-export type QuestionKind = 'MULTIPLE_CHOICE' | 'SHORT_ANSWER' | 'NUMBER_SCALE';
+export type QuestionKind = 'MULTIPLE_CHOICE' | 'SHORT_ANSWER' | 'NUMBER_SCALE' | 'MOOD_METER';
 
 export type McqChoice = {
   prompt: string;

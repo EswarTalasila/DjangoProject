@@ -149,6 +149,7 @@ class AnswerType(models.TextChoices):
     MULTIPLE_CHOICE = "MULTIPLE_CHOICE", "Multiple Choice"
     SHORT_ANSWER = "SHORT_ANSWER", "Short Answer"
     NUMBER_SCALE = "NUMBER_SCALE", "Number Scale"
+    MOOD_METER = "MOOD_METER", "Mood Meter"
 
 
 class Answer(models.Model):
@@ -337,6 +338,41 @@ class NumberScaleAnswer(models.Model):
     def __str__(self):
         """Return a readable string representation."""
         return f"NumberScaleAnswer({self.answer_id})"
+
+
+class MoodMeterAnswer(models.Model):
+    """
+    Extension model for MOOD_METER responses.
+
+    Stores the selected mood as a quadrant + mood name from the Yale RULER
+    mood meter grid. Quadrants represent energy (high/low) × pleasantness (high/low).
+
+    Attributes:
+        answer: One-to-one link to base Answer (also primary key)
+        quadrant: Which quadrant the selected mood belongs to
+        mood_name: The specific mood label selected (e.g., "Excited", "Calm")
+        row: Grid row position (0-9)
+        col: Grid column position (0-9)
+    """
+
+    answer = models.OneToOneField(
+        Answer,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        db_column="id",
+        related_name="mood_meter",
+    )
+
+    quadrant = models.CharField(max_length=64, blank=True, default="")
+    mood_name = models.CharField(max_length=64, blank=True, default="")
+    row = models.IntegerField(null=True, blank=True)
+    col = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        db_table = "mood_meter_answer"
+
+    def __str__(self):
+        return f"MoodMeterAnswer({self.answer_id}: {self.mood_name})"
 
 
 class ImageStatus(models.TextChoices):

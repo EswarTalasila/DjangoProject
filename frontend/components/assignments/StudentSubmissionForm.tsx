@@ -14,14 +14,23 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import MoodMeterInput from '@/components/questions/MoodMeterInput';
 import type { Question } from '@/lib/assessment-api';
 import type { SubmissionStatus, SubmissionDTO } from '@/lib/submission-api';
 import AssignmentStatusBanner from './AssignmentStatusBanner';
+
+type MoodSelection = {
+  quadrant: string;
+  moodName: string;
+  row: number;
+  col: number;
+};
 
 type StudentAttemptAnswer = {
   selectedChoiceIndexes: number[];
   textResponse: string;
   numericResponse: number | null;
+  moodSelection: MoodSelection | null;
 };
 
 type StudentFlowStage = 'attempt' | 'submitted';
@@ -53,6 +62,8 @@ function formatQuestionKind(kind: Question['type']): string {
       return 'Short Answer';
     case 'NUMBER_SCALE':
       return 'Number Scale';
+    case 'MOOD_METER':
+      return 'Mood Meter';
     default:
       return kind;
   }
@@ -63,6 +74,7 @@ function defaultStudentAnswer(_question: Question): StudentAttemptAnswer {
     selectedChoiceIndexes: [],
     textResponse: '',
     numericResponse: null,
+    moodSelection: null,
   };
 }
 
@@ -75,6 +87,9 @@ function isQuestionAnswered(question: Question, answer: StudentAttemptAnswer): b
   }
   if (question.type === 'NUMBER_SCALE') {
     return answer.numericResponse !== null;
+  }
+  if (question.type === 'MOOD_METER') {
+    return answer.moodSelection !== null;
   }
   return false;
 }
@@ -107,6 +122,9 @@ function renderStudentResponse(question: Question, answer: StudentAttemptAnswer)
   if (question.type === 'NUMBER_SCALE') {
     return answer.numericResponse == null ? 'No value selected' : String(answer.numericResponse);
   }
+  if (question.type === 'MOOD_METER') {
+    return answer.moodSelection ? answer.moodSelection.moodName : 'No mood selected';
+  }
   return 'No response';
 }
 
@@ -116,12 +134,14 @@ function StudentQuestionPreview({
   onSelectChoice,
   onTextChange,
   onNumberChange,
+  onMoodChange,
 }: {
   question: Question;
   answer: StudentAttemptAnswer;
   onSelectChoice: (choiceIndex: number, checked: boolean) => void;
   onTextChange: (nextValue: string) => void;
   onNumberChange: (nextValue: number) => void;
+  onMoodChange: (selection: MoodSelection) => void;
 }) {
   const data = question.data;
 
@@ -181,6 +201,15 @@ function StudentQuestionPreview({
             : `Drag the slider to select a value between ${min} and ${max}`}
         </p>
       </div>
+    );
+  }
+
+  if (question.type === 'MOOD_METER') {
+    return (
+      <MoodMeterInput
+        value={answer.moodSelection}
+        onChange={onMoodChange}
+      />
     );
   }
 
@@ -382,6 +411,12 @@ export default function StudentSubmissionForm({
                         onUpdateStudentAnswer(activeStudentQuestion, (curr) => ({
                           ...curr,
                           numericResponse: nextValue,
+                        }));
+                      }}
+                      onMoodChange={(selection) => {
+                        onUpdateStudentAnswer(activeStudentQuestion, (curr) => ({
+                          ...curr,
+                          moodSelection: selection,
                         }));
                       }}
                     />

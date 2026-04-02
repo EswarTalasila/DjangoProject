@@ -6,8 +6,16 @@ export type SubmissionStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED' | 'GR
 
 export type AnswerPayload = {
   questionId: number;
-  type: 'MULTIPLE_CHOICE' | 'SHORT_ANSWER' | 'NUMBER_SCALE';
-  data: { selected?: number[]; text?: string; val?: number | null };
+  type: 'MULTIPLE_CHOICE' | 'SHORT_ANSWER' | 'NUMBER_SCALE' | 'MOOD_METER';
+  data: {
+    selected?: number[];
+    text?: string;
+    val?: number | null;
+    quadrant?: string;
+    moodName?: string;
+    row?: number;
+    col?: number;
+  };
   score?: number | null;
 };
 

@@ -38,6 +38,7 @@ const TYPE_DEFAULTS: Record<QuestionKind, QuestionData> = {
   MULTIPLE_CHOICE: { choices: [{ prompt: '', score: 0 }], selectAll: false },
   SHORT_ANSWER: { caseSensitive: false, trim: true },
   NUMBER_SCALE: { min: 1, max: 5, target: null },
+  MOOD_METER: {},
 };
 
 export default function QuestionBlock({
@@ -90,6 +91,7 @@ export default function QuestionBlock({
               <SelectItem value="MULTIPLE_CHOICE">Multiple Choice</SelectItem>
               <SelectItem value="SHORT_ANSWER">Short Answer</SelectItem>
               <SelectItem value="NUMBER_SCALE">Number Scale</SelectItem>
+              <SelectItem value="MOOD_METER">Mood Meter</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -171,6 +173,14 @@ export default function QuestionBlock({
       )}
       {question.type === 'NUMBER_SCALE' && (
         <NumberScaleFields data={question.data ?? {}} onChange={handleDataChange} />
+      )}
+      {question.type === 'MOOD_METER' && (
+        <div className="rounded-md border border-border bg-muted/20 p-4">
+          <p className="text-sm text-muted-foreground">
+            Students will see the Yale RULER Mood Meter — a 4-quadrant grid of 20 emotions
+            organized by energy level and pleasantness. No additional configuration needed.
+          </p>
+        </div>
       )}
     </div>
   );

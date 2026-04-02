@@ -108,6 +108,7 @@ class QuestionKind(models.TextChoices):
     MULTIPLE_CHOICE = "MULTIPLE_CHOICE", "Multiple Choice"
     SHORT_ANSWER = "SHORT_ANSWER", "Short Answer"
     NUMBER_SCALE = "NUMBER_SCALE", "Number Scale"
+    MOOD_METER = "MOOD_METER", "Mood Meter"
 
 
 class Question(models.Model):
