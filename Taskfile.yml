@@ -147,6 +147,7 @@ tasks:
         print_cmd "task django:createsuperuser" "interactive superuser creation"
         print_cmd "task django:graph-models" "generate model graph (Graphviz)"
         print_cmd "task seed:account -- <researcher|teacher|student|all>" "provision role account via real registration pipeline"
+        print_cmd "task seed:data" "seed deterministic demo data (accounts, rubrics, assessments, assignments, submissions)"
         printf "\n"
 
         print_section "${C_MAGENTA}" "Docs & Diagrams"
@@ -1065,6 +1066,18 @@ tasks:
           exit 1;
         fi;
         {{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py provision_account --role "$role" --force-password'
+
+  seed:data:
+    desc: "Seed deterministic demo data for local testing (accounts, rubrics, assessments, assignments, submissions)"
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - "{{.DOCKER_COMPOSE}} exec {{.BACKEND_CONTAINER}} python src/manage.py seed_demo_data"
+
+  seed:demo:
+    desc: "Alias for seed:data"
+    deps: [_check:docker, _check:backend-running]
+    cmds:
+      - task: seed:data
 
   django:shell:
     desc: Open Django shell

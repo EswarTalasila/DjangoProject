@@ -1,4 +1,4 @@
-import api from '@/lib/api';
+import api, { type ApiRequestOptions } from '@/lib/api';
 
 // -- Types --
 
@@ -22,6 +22,15 @@ export type QuestionData = {
   target?: number | null;
 };
 
+export type QuestionImage = {
+  id: string;
+  storageKey: string;
+  url: string;
+  originalFilename: string;
+  mimeType: string;
+  sizeBytes: number;
+};
+
 export type QuestionGroup = {
   id: number;
   name: string;
@@ -37,6 +46,7 @@ export type Question = {
   maxPoints: number;
   autoGradable: boolean;
   graded: boolean;
+  image: QuestionImage | null;
   data: QuestionData | null;
   selectAll: boolean | null;
   min: number | null;
@@ -46,7 +56,7 @@ export type Question = {
   gradingStrategy: GradingStrategy;
 };
 
-export type AssessmentStatus = 'ACTIVE' | 'ARCHIVED';
+export type AssessmentStatus = 'ACTIVE' | 'ARCHIVED' | 'DRAFT';
 
 export type Assessment = {
   id: number;
@@ -75,6 +85,8 @@ export type QuestionInput = {
   groupClientKey?: string;
   rubricId?: number | null;
   gradingStrategy?: GradingStrategy;
+  /** Image metadata (structured locally, serialized for backend) */
+  questionImage?: QuestionImage | null;
 };
 
 export type AssessmentInput = {
@@ -82,6 +94,7 @@ export type AssessmentInput = {
   category?: string | null;
   gradingMode: GradingMode;
   scoringPolicy?: ScoringPolicy;
+  rubricId?: number | null;
   questions: QuestionInput[];
   questionGroups?: QuestionGroupInput[];
 };
@@ -114,8 +127,12 @@ export async function createAssessment(payload: AssessmentInput): Promise<Assess
 }
 
 /** PATCH /assessments/:id — Partially update an existing assessment. */
-export async function updateAssessment(id: number, payload: AssessmentInput): Promise<Assessment> {
-  const response = await api.patch<Assessment>(`/assessments/${id}`, payload);
+export async function updateAssessment(
+  id: number,
+  payload: AssessmentInput,
+  options?: ApiRequestOptions,
+): Promise<Assessment> {
+  const response = await api.patch<Assessment>(`/assessments/${id}`, payload, options);
   return response.data;
 }
 
@@ -134,4 +151,42 @@ export async function archiveAssessment(id: number): Promise<Assessment> {
 export async function restoreAssessment(id: number): Promise<Assessment> {
   const response = await api.post<Assessment>(`/assessments/${id}/restore`, {});
   return response.data;
+}
+
+/** POST /assessments/?draft=true — Create an empty draft assessment. */
+export async function createDraft(): Promise<Assessment> {
+  const response = await api.post<Assessment>('/assessments/?draft=true', {});
+  return response.data;
+}
+
+/** POST /assessments/:id/publish — Publish a draft assessment. */
+export async function publishAssessment(id: number): Promise<Assessment> {
+  const response = await api.post<Assessment>(`/assessments/${id}/publish`, {});
+  return response.data;
+}
+
+/** POST /assessments/:assessmentId/questions/:questionId/image — Upload question image. */
+export async function uploadQuestionImage(
+  assessmentId: number,
+  questionId: number,
+  file: File,
+): Promise<QuestionImage> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await api.post<QuestionImage>(
+    `/assessments/${assessmentId}/questions/${questionId}/image`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return response.data;
+}
+
+/** DELETE /assessments/:assessmentId/questions/:questionId/image — Remove question image. */
+export async function deleteQuestionImage(
+  assessmentId: number,
+  questionId: number,
+): Promise<void> {
+  await api.delete(
+    `/assessments/${assessmentId}/questions/${questionId}/image`,
+  );
 }

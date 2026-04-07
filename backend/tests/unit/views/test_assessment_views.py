@@ -258,7 +258,7 @@ class TestDetailView:
         from assessments.views import detail
 
         mock_is_ra.return_value.has_permission.return_value = True
-        fake_assessment = SimpleNamespace(id=1)
+        fake_assessment = SimpleNamespace(id=1, status="ACTIVE")
         mock_assessment_model.objects.filter.return_value.first.return_value = (
             fake_assessment
         )

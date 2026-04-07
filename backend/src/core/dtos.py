@@ -63,6 +63,17 @@ class ChoiceDTO(BaseModel):
     score: int
 
 
+class QuestionImageDTO(BaseModel):
+    """Image attached to a question (supporting figure)."""
+
+    id: str
+    storageKey: str
+    url: str
+    originalFilename: str
+    mimeType: str
+    sizeBytes: int
+
+
 class QuestionDTO(BaseModel):
     """Question representation with type-specific data."""
 
@@ -75,6 +86,7 @@ class QuestionDTO(BaseModel):
     maxPoints: float
     autoGradable: bool
     graded: bool
+    image: QuestionImageDTO | None = None
     data: dict[str, Any] | None = None
     selectAll: bool | None = None
     min: int | None = None
@@ -103,6 +115,7 @@ class AssessmentDTO(BaseModel):
     category: str | None
     gradingMode: str
     scoringPolicy: str = "STANDARD"
+    status: str = "ACTIVE"
     rubricId: int | None = None
     questions: list[QuestionDTO]
     questionGroups: list[QuestionGroupDTO] = []
@@ -207,6 +220,9 @@ class SubmissionCompactDTO(BaseModel):
 
     id: int
     assignmentId: int
+    studentName: str | None = None
+    courseName: str | None = None
+    assignmentTitle: str | None = None
     submittedAt: datetime | None
     score: float | None
     status: str

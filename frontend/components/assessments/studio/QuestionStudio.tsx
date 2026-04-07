@@ -1,5 +1,6 @@
 'use client';
 
+import { memo, useEffect, useRef, useState } from 'react';
 import {
   Copy,
   Trash2,
@@ -8,28 +9,18 @@ import {
   Plus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { HelpTip } from '@/components/ui/help-tip';
 import type {
   QuestionInput,
   QuestionKind,
   QuestionData,
-  QuestionGroupInput,
-  GradingStrategy,
+  QuestionImage,
 } from '@/lib/assessment-api';
 import { cn } from '@/lib/utils';
-import ImagePicker from '@/components/media/ImagePicker';
+import ImagePicker, { type PickedImage } from '@/components/media/ImagePicker';
 import QuestionTypeConfig from './QuestionTypeConfig';
-
-type BuilderGradingMode = 'AUTO' | 'MANUAL' | 'HYBRID';
+import type { StudioValidationIssue } from './validation';
 
 const TYPE_DEFAULTS: Record<QuestionKind, QuestionData> = {
   MULTIPLE_CHOICE: { choices: [{ prompt: '', score: 0 }], selectAll: false },
@@ -42,12 +33,16 @@ const TYPE_DEFAULTS: Record<QuestionKind, QuestionData> = {
 type QuestionStudioProps = {
   question: QuestionInput | undefined;
   questionIndex: number;
-  questionsCount: number;
-  gradingMode: BuilderGradingMode;
-  questionGroups: QuestionGroupInput[];
   selectedEffectiveRubricName: string | null;
   selectedGroupName: string | null;
-  rubricSource: 'Question' | 'Group' | 'N/A';
+  rubricSource: 'Question' | 'Group' | 'Assessment' | 'N/A';
+  activeIssue: StudioValidationIssue | null;
+  /** The current question's image from the API response (null if none) */
+  questionImage: QuestionImage | null;
+  /** Upload an image for this question. Returns the new image metadata. */
+  onUploadImage?: (file: File) => Promise<PickedImage>;
+  /** Remove the image from this question. */
+  onRemoveImage?: () => void;
   onChange: (updated: QuestionInput) => void;
   onRemove: () => void;
   onDuplicate: () => void;
@@ -56,15 +51,16 @@ type QuestionStudioProps = {
   onAddQuestion: () => void;
 };
 
-export default function QuestionStudio({
+function QuestionStudio({
   question,
   questionIndex,
-  questionsCount,
-  gradingMode,
-  questionGroups,
   selectedEffectiveRubricName,
   selectedGroupName,
   rubricSource,
+  activeIssue,
+  questionImage,
+  onUploadImage,
+  onRemoveImage,
   onChange,
   onRemove,
   onDuplicate,
@@ -72,6 +68,40 @@ export default function QuestionStudio({
   onMoveDown,
   onAddQuestion,
 }: QuestionStudioProps) {
+  const promptRef = useRef<HTMLTextAreaElement>(null);
+  const promptSectionRef = useRef<HTMLElement>(null);
+  const responseSectionRef = useRef<HTMLElement>(null);
+  const [highlightedSection, setHighlightedSection] = useState<
+    'prompt' | 'responseConfig' | null
+  >(null);
+
+  useEffect(() => {
+    if (!question || !activeIssue || activeIssue.questionIndex !== questionIndex) {
+      return;
+    }
+
+    let target: HTMLElement | null = null;
+    let section: typeof highlightedSection = null;
+
+    if (activeIssue.section === 'prompt') {
+      target = promptRef.current ?? promptSectionRef.current;
+      section = 'prompt';
+    } else if (activeIssue.section === 'responseConfig') {
+      target = responseSectionRef.current;
+      section = 'responseConfig';
+    }
+
+    if (!target || !section) return;
+
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (activeIssue.section === 'prompt') {
+      promptRef.current?.focus();
+    }
+    setHighlightedSection(section);
+    const timeout = window.setTimeout(() => setHighlightedSection(null), 1800);
+    return () => window.clearTimeout(timeout);
+  }, [activeIssue?.id, activeIssue?.questionIndex, activeIssue?.section, questionIndex]);
+
   if (!question) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -99,6 +129,18 @@ export default function QuestionStudio({
   function handleDataChange(data: QuestionData) {
     onChange({ ...question!, data });
   }
+
+  const isFileUploadQuestion = question.type === 'FILE_UPLOAD';
+
+  const pickedImage: PickedImage | null = questionImage
+    ? {
+        id: questionImage.id,
+        url: questionImage.url,
+        originalFilename: questionImage.originalFilename,
+        mimeType: questionImage.mimeType,
+        sizeBytes: questionImage.sizeBytes,
+      }
+    : null;
 
   return (
     <div className="space-y-6 pb-16">
@@ -156,7 +198,7 @@ export default function QuestionStudio({
 
       {/* Rubric context bar */}
       <div className="rounded-lg border border-border bg-muted/30 p-4">
-        <dl className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+        <dl className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-sm">
           <div>
             <dt className="text-muted-foreground text-xs mb-0.5">Rubric</dt>
             <dd className="font-medium text-foreground">
@@ -179,6 +221,12 @@ export default function QuestionStudio({
               />
             </dt>
             <dd className="font-medium text-foreground">{rubricSource}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground text-xs mb-0.5">Question Value</dt>
+            <dd className="font-medium text-foreground">
+              {question.maxPoints} pt{question.maxPoints === 1 ? '' : 's'}
+            </dd>
           </div>
         </dl>
       </div>
@@ -219,7 +267,13 @@ export default function QuestionStudio({
           </div>
 
           {/* Question prompt */}
-          <div className="space-y-3">
+          <section
+            ref={promptSectionRef}
+            className={cn(
+              'space-y-3 rounded-lg transition-shadow',
+              highlightedSection === 'prompt' && 'ring-2 ring-amber-400/70 ring-offset-2 ring-offset-card',
+            )}
+          >
             <div className="flex items-center justify-between">
               <Label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                 Question Prompt
@@ -228,124 +282,94 @@ export default function QuestionStudio({
                 Required
               </span>
             </div>
+            {highlightedSection === 'prompt' && (
+              <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                This question needs prompt text before the assessment can be saved.
+              </p>
+            )}
             <textarea
+              ref={promptRef}
               value={question.prompt}
               onChange={(e) => onChange({ ...question, prompt: e.target.value })}
               placeholder="Enter the question text here..."
               className="w-full min-h-[140px] p-4 bg-muted/30 border border-border rounded-lg text-base text-foreground placeholder:text-muted-foreground resize-none leading-relaxed focus:outline-none focus:ring-2 focus:ring-ring"
             />
-          </div>
+          </section>
         </div>
       </div>
 
       {/* Response configuration */}
-      <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
+      <section
+        ref={responseSectionRef}
+        className={cn(
+          'bg-card border border-border rounded-lg shadow-sm overflow-hidden transition-shadow',
+          highlightedSection === 'responseConfig' && 'ring-2 ring-amber-400/70 ring-offset-2 ring-offset-background',
+        )}
+      >
         <div className="px-6 py-4 border-b border-border bg-muted/20">
           <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Response Configuration
           </h3>
         </div>
         <div className="p-6">
+          {highlightedSection === 'responseConfig' && (
+            <p className="mb-4 text-xs font-medium text-amber-700 dark:text-amber-400">
+              Review this question’s response settings. One or more required options need attention.
+            </p>
+          )}
           <QuestionTypeConfig
             type={question.type}
             data={question.data ?? {}}
             onChange={handleDataChange}
           />
         </div>
-      </div>
+      </section>
 
       {/* Supporting figure / image */}
       <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-border bg-muted/20">
           <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-            Supporting Figure
+            {isFileUploadQuestion ? 'Upload Configuration' : 'Supporting Figure'}
           </h3>
         </div>
         <div className="p-6">
           <ImagePicker
-            image={null}
+            image={pickedImage}
             onSelect={() => {
-              // TODO: wire to question image API once QuestionImage endpoints exist
+              // Selection happens automatically via onUpload callback
             }}
-            onRemove={() => {
-              // TODO: wire to question image API
-            }}
+            onRemove={() => onRemoveImage?.()}
+            onUpload={onUploadImage}
+            emptyLabel={
+              isFileUploadQuestion
+                ? 'Drop a file here or click to upload'
+                : 'Drop an image here or click to upload'
+            }
+            emptyHint={
+              isFileUploadQuestion
+                ? 'This area will hold the uploaded file for this question.'
+                : 'JPG, PNG, WebP (Max 10MB)'
+            }
+            browseLabel={
+              isFileUploadQuestion
+                ? 'Browse Uploaded Files'
+                : 'Browse Uploaded Images'
+            }
+            browseDialogTitle={
+              isFileUploadQuestion ? 'Select a File' : 'Select an Image'
+            }
+            emptyBrowseLabel={
+              isFileUploadQuestion
+                ? 'No files uploaded yet'
+                : 'No images uploaded yet'
+            }
+            replaceLabel={isFileUploadQuestion ? 'Replace File' : 'Replace'}
           />
         </div>
       </div>
 
-      {/* Grading & metadata */}
-      <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-border bg-muted/20">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-            Grading & Metadata
-          </h3>
-        </div>
-        <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="space-y-2">
-            <Label>Point Value</Label>
-            <div className="relative">
-              <Input
-                type="number"
-                min={0}
-                value={question.maxPoints}
-                onChange={(e) =>
-                  onChange({ ...question, maxPoints: Number(e.target.value) || 0 })
-                }
-                className="pr-12 font-mono font-bold"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground uppercase">
-                pts
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Question Group</Label>
-            <Select
-              value={question.groupClientKey ?? '__NONE__'}
-              onValueChange={(v) =>
-                onChange({
-                  ...question,
-                  groupClientKey: v === '__NONE__' ? undefined : v,
-                })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="No group" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__NONE__">No group</SelectItem>
-                {questionGroups.map((group) => (
-                  <SelectItem key={group.clientKey} value={group.clientKey}>
-                    {group.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {gradingMode === 'HYBRID' && (
-            <div className="space-y-2">
-              <Label>Grading Strategy</Label>
-              <Select
-                value={question.gradingStrategy ?? 'AUTO'}
-                onValueChange={(v) =>
-                  onChange({ ...question, gradingStrategy: v as GradingStrategy })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="AUTO">Auto</SelectItem>
-                  <SelectItem value="MANUAL">Manual</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
+
+export default memo(QuestionStudio);

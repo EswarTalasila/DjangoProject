@@ -1,7 +1,7 @@
 import type { APIRequestContext } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
-const API_BASE_URL = process.env.E2E_API_URL || "http://localhost:8000/api/v1";
+const API_BASE_URL = process.env.E2E_API_URL || "http://localhost:8080/api/v1";
 const teacherIdentifier = process.env.E2E_TEACHER_USERNAME || "e2e-teacher";
 const teacherPassword = process.env.E2E_TEACHER_PASSWORD || "teacherpass";
 

@@ -6,6 +6,7 @@ All database access is mocked so tests run without a live database.
 from __future__ import annotations
 
 from types import SimpleNamespace
+from django.core.exceptions import ObjectDoesNotExist
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -51,7 +52,11 @@ def _mock_submission(
     sub.assignment_id = assignment_id
     sub.assignment.assessment_id = assessment_id
     sub.student_id = student_id
+    sub.student = SimpleNamespace(name="Test Student", username="test-student") if student_id else None
     sub.teacher_id = teacher_id
+    sub.teacher = None
+    sub.assignment.title = "Mock Assignment"
+    sub.assignment.course = SimpleNamespace(name="Mock Course")
     sub.submitted_at = submitted_at
     sub.score = score
     sub.status = status
@@ -231,6 +236,25 @@ class TestAnswerToDto:
         dto = answer_to_dto(ans)
 
         assert dto.data == {"val": 7}
+
+    def test_short_answer_missing_subrecord_returns_empty_data(self):
+        """Missing short-answer subtype should not crash DTO conversion."""
+        from submissions.services import answer_to_dto
+
+        class BrokenShortAnswer:
+            answer_type = AnswerType.SHORT_ANSWER
+            question_id = 4
+            score = None
+
+            @property
+            def short_answer(self):
+                raise ObjectDoesNotExist("err")
+
+        ans = BrokenShortAnswer()
+
+        dto = answer_to_dto(ans)
+
+        assert dto.data == {}
 
     def test_unknown_type_returns_empty_data(self):
         """Unrecognized answer type yields an empty dict."""
@@ -460,7 +484,9 @@ class TestGetByFilters:
         from submissions.services import get_by_assignment
 
         subs = [_mock_submission(id=1), _mock_submission(id=2)]
-        mock_model.objects.filter.return_value = subs
+        qs = MagicMock()
+        qs.select_related.return_value = subs
+        mock_model.objects.filter.return_value = qs
 
         result = get_by_assignment(10)
         assert len(result) == 2
@@ -471,7 +497,9 @@ class TestGetByFilters:
         from submissions.services import get_by_student
 
         subs = [_mock_submission(id=3)]
-        mock_model.objects.filter.return_value = subs
+        qs = MagicMock()
+        qs.select_related.return_value = subs
+        mock_model.objects.filter.return_value = qs
 
         result = get_by_student(100)
         assert len(result) == 1
@@ -783,6 +811,80 @@ class TestOverrideScore:
         # total = 5.0 (from answer) + 3.0 (bonus, scores[-1])
         assert result.score == 8.0
 
+    @patch("submissions.services.Question")
+    @patch("submissions.services.Answer")
+    @patch("submissions.services.Submission")
+    def test_manual_mode_uses_question_order_not_raw_answer_order(
+        self,
+        mock_sub_model,
+        mock_answer_model,
+        mock_question,
+    ):
+        """Score payloads align with sorted question order, not arbitrary DB row order."""
+        from submissions.services import override_score
+
+        a_scale = _mock_answer(
+            answer_type=AnswerType.NUMBER_SCALE,
+            question_id=14,
+            score=None,
+            max_points=5.0,
+        )
+        a_mcq = _mock_answer(
+            answer_type=AnswerType.MULTIPLE_CHOICE,
+            question_id=13,
+            score=None,
+            max_points=2.0,
+        )
+        a_select_all = _mock_answer(
+            answer_type=AnswerType.MULTIPLE_CHOICE,
+            question_id=15,
+            score=None,
+            max_points=2.0,
+        )
+
+        sub = _mock_submission(answers=[a_scale, a_mcq, a_select_all])
+        sub.assignment = _mock_assignment(assessment_id=20)
+        assessment = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        assessment.scoring_policy = "STANDARD"
+        sub.assignment.assessment = assessment
+        mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
+
+        mock_question.objects.filter.return_value.values_list.return_value = [
+            (13, 2.0),
+            (14, 5.0),
+            (15, 2.0),
+        ]
+
+        result = override_score(1, [2.0, 5.0, 1.0])
+
+        assert a_mcq.score == 2.0
+        assert a_scale.score == 5.0
+        assert a_select_all.score == 1.0
+        assert result.score == 8.0
+
+    @patch("submissions.services.Submission")
+    def test_error_uses_relative_question_label(self, mock_sub_model):
+        """Validation errors should refer to the question position, not the DB id."""
+        from submissions.services import override_score
+
+        answer = _mock_answer(
+            answer_type=AnswerType.MULTIPLE_CHOICE,
+            question_id=13,
+            score=None,
+            max_points=2.0,
+        )
+        answer.question.prompt = "Which classroom supports helped most?"
+
+        sub = _mock_submission(answers=[answer])
+        sub.assignment = _mock_assignment(assessment_id=20)
+        assessment = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        assessment.scoring_policy = "STANDARD"
+        sub.assignment.assessment = assessment
+        mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
+
+        with pytest.raises(ValueError, match=r"Question 1"):
+            override_score(1, [5.0])
+
 
 # ============================================================================
 # _find_existing_submission
@@ -999,7 +1101,7 @@ class TestAutoScoreMcq:
         """Correct score is the sum of points for selected choices."""
         from submissions.services import _auto_score_mcq
 
-        q = _mock_question(auto_gradable=True)
+        q = _mock_question(auto_gradable=True, max_points=10.0)
         choice_a = SimpleNamespace(points=0)
         choice_b = SimpleNamespace(points=5)
         choice_c = SimpleNamespace(points=3)
@@ -1052,6 +1154,31 @@ class TestAutoScoreMcq:
 
         total = _auto_score_mcq(ans, q)
         assert total == 0.0
+
+    def test_caps_score_at_max_points(self):
+        """Select-all totals should never exceed the question max_points."""
+        from submissions.services import _auto_score_mcq
+
+        q = _mock_question(max_points=2.0)
+        q.mcq_choices.all.return_value = [
+            SimpleNamespace(points=1),
+            SimpleNamespace(points=1),
+            SimpleNamespace(points=1),
+        ]
+
+        ans = _mock_answer(answer_type=AnswerType.MULTIPLE_CHOICE)
+        mc = MagicMock()
+        mc.selected.all.return_value = [
+            SimpleNamespace(choice_index=0),
+            SimpleNamespace(choice_index=1),
+            SimpleNamespace(choice_index=2),
+        ]
+        ans.multiple_choice = mc
+
+        total = _auto_score_mcq(ans, q)
+
+        assert total == 2.0
+        assert ans.score == 2.0
 
 
 # ============================================================================

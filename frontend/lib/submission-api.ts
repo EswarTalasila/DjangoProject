@@ -37,6 +37,9 @@ export type SubmissionDTO = {
 export type SubmissionCompactDTO = {
   id: number;
   assignmentId: number;
+  studentName: string | null;
+  courseName: string | null;
+  assignmentTitle: string | null;
   submittedAt: string | null;
   score: number | null;
   status: SubmissionStatus;

@@ -22,6 +22,29 @@ type MoodCell = {
   quadrant: QuadrantKey;
 };
 
+const MOOD_EMOJI: Record<string, string> = {
+  Angry: '😠',
+  Frustrated: '😤',
+  Anxious: '😰',
+  Irritated: '😒',
+  Stressed: '😖',
+  Excited: '🤩',
+  Energized: '⚡',
+  Motivated: '💪',
+  Proud: '😊',
+  Joyful: '😄',
+  Sad: '😢',
+  Tired: '😴',
+  Bored: '😐',
+  Lonely: '😔',
+  Down: '☹️',
+  Calm: '😌',
+  Relaxed: '🙂',
+  Content: '😌',
+  Grateful: '🙏',
+  Peaceful: '🕊️',
+};
+
 const MOODS_BY_QUADRANT: Record<QuadrantKey, MoodCell[]> = {
   highEnergyLowPleasantness: [
     { name: "Angry", row: 0, col: 0, quadrant: "highEnergyLowPleasantness" },
@@ -103,7 +126,7 @@ function Quadrant({
   disabled?: boolean;
 }) {
   return (
-    <div className={`rounded-xl p-3 ${config.bgClass}`}>
+    <div className={`rounded-lg p-3 ${config.bgClass}`}>
       <div className={`text-center font-semibold text-xs mb-2 ${config.textClass}`}>
         {config.title}
       </div>
@@ -113,6 +136,7 @@ function Quadrant({
           const isSelected = selectedKey === key;
           const localRow = (mood.row % 5) + 1;
           const localCol = (mood.col % 5) + 1;
+          const emoji = MOOD_EMOJI[mood.name] ?? '•';
 
           return (
             <button
@@ -121,13 +145,17 @@ function Quadrant({
               disabled={disabled}
               onClick={() => onSelect(mood)}
               style={{ gridRow: localRow, gridColumn: localCol }}
-              className={`rounded-lg px-1 py-2 text-xs font-medium border transition-all ${
+              className={`rounded-md px-1 py-2 text-[11px] font-medium border transition-colors ${
                 isSelected
-                  ? "bg-foreground text-background border-foreground shadow-md scale-105"
-                  : `bg-background/60 hover:bg-background/90 ${config.textClass} border-border/50 hover:border-border`
+                  ? "bg-foreground text-background border-foreground shadow-sm"
+                  : `bg-background/70 hover:bg-background ${config.textClass} border-border/50 hover:border-border`
               } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+              aria-label={mood.name}
             >
-              {mood.name}
+              <span className="flex flex-col items-center gap-0.5 leading-none">
+                <span className="text-base">{emoji}</span>
+                <span className="text-[10px] font-medium">{mood.name}</span>
+              </span>
             </button>
           );
         })}
@@ -176,7 +204,7 @@ export default function MoodMeterInput({
       </div>
       {value && (
         <div className="text-center text-sm font-medium text-foreground mt-2">
-          Selected: <span className="font-bold">{value.moodName}</span>
+          Selected: <span className="font-bold">{MOOD_EMOJI[value.moodName] ?? ''} {value.moodName}</span>
         </div>
       )}
     </div>

@@ -8,7 +8,7 @@ from .models import GradingMode, QuestionKind, ScoringPolicy
 class MCQChoiceSerializer(serializers.Serializer):
     """Serializer for a single multiple-choice option with its point value."""
 
-    prompt = serializers.CharField(max_length=255)
+    prompt = serializers.CharField(max_length=255, allow_blank=True)
     score = serializers.FloatField()
 
 
@@ -29,8 +29,8 @@ class ShortAnswerDataSerializer(serializers.Serializer):
 class NumberScaleDataSerializer(serializers.Serializer):
     """Serializer for number-scale question data: min/max range and optional target."""
 
-    min = serializers.IntegerField()
-    max = serializers.IntegerField()
+    min = serializers.IntegerField(required=False, allow_null=True)
+    max = serializers.IntegerField(required=False, allow_null=True)
     target = serializers.IntegerField(required=False, allow_null=True)
 
 
@@ -39,7 +39,7 @@ class QuestionSerializer(serializers.Serializer):
 
     questionId = serializers.IntegerField(required=False, allow_null=True)
     type = serializers.ChoiceField(choices=QuestionKind.choices)
-    prompt = serializers.CharField()
+    prompt = serializers.CharField(allow_blank=True)
     maxPoints = serializers.FloatField()
     data = serializers.DictField(required=False)  # type: ignore[assignment]
     groupClientKey = serializers.CharField(required=False, allow_null=True, allow_blank=True)
@@ -49,6 +49,7 @@ class QuestionSerializer(serializers.Serializer):
         required=False,
         default="AUTO",
     )
+    image = serializers.CharField(required=False, allow_null=True, allow_blank=True)
 
 
 class QuestionGroupSerializer(serializers.Serializer):
@@ -63,7 +64,7 @@ class AssessmentSerializer(serializers.Serializer):
     """Top-level serializer for creating/updating an assessment with questions and groups."""
 
     id = serializers.IntegerField(required=False)
-    title = serializers.CharField()
+    title = serializers.CharField(allow_blank=True)
     category = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     gradingMode = serializers.ChoiceField(choices=GradingMode.choices)
     scoringPolicy = serializers.ChoiceField(
@@ -71,16 +72,17 @@ class AssessmentSerializer(serializers.Serializer):
         required=False,
         default=ScoringPolicy.STANDARD,
     )
+    rubricId = serializers.IntegerField(required=False, allow_null=True)
     questions = QuestionSerializer(many=True, required=False)
     questionGroups = QuestionGroupSerializer(many=True, required=False)
 
     def validate(self, attrs):
         # Fail fast if legacy rubric fields are sent
         if self.initial_data and isinstance(self.initial_data, dict):
-            legacy_fields = {"rubricId", "rubricAssessmentIds"}
+            legacy_fields = {"rubricAssessmentIds"}
             sent = legacy_fields & set(self.initial_data.keys())
             if sent:
                 raise serializers.ValidationError(
-                    {f: "Legacy field removed. Use per-question rubricId instead." for f in sent}
+                    {f: "Legacy field removed." for f in sent}
                 )
         return attrs

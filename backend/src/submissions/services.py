@@ -13,6 +13,7 @@ Submission lifecycle:
 
 from collections.abc import Iterable
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
@@ -113,6 +114,10 @@ def submission_to_dto(submission: Submission) -> SubmissionDTO:
         SubmissionDTO with id, assignmentId, studentId, teacherId, submittedAt,
         score, status, and answers.
     """
+    ordered_answers = sorted(
+        list(submission.answers.all()),
+        key=lambda answer: (answer.question_id, getattr(answer, "id", 0)),
+    )
     return SubmissionDTO(
         id=submission.id,
         assignmentId=submission.assignment_id,
@@ -121,7 +126,7 @@ def submission_to_dto(submission: Submission) -> SubmissionDTO:
         submittedAt=submission.submitted_at,
         score=submission.score,
         status=submission.status,
-        answers=[answer_to_dto(answer) for answer in submission.answers.all()],
+        answers=[answer_to_dto(answer) for answer in ordered_answers],
     )
 
 
@@ -137,9 +142,38 @@ def submission_to_compact_dto(submission: Submission) -> SubmissionCompactDTO:
     Returns:
         SubmissionCompactDTO with id, assignmentId, submittedAt, score, status (no answers)
     """
+    # Resolve student name
+    student_name = None
+    if submission.student_id:
+        student = getattr(submission, 'student', None)
+        if student:
+            student_name = student.name or student.username
+        else:
+            from accounts.models import User
+            student = User.objects.filter(id=submission.student_id).only('name', 'username').first()
+            if student:
+                student_name = student.name or student.username
+    elif submission.teacher_id:
+        teacher = getattr(submission, 'teacher', None)
+        if teacher:
+            student_name = f"{teacher.name or teacher.username} (teacher)"
+
+    # Resolve course and assignment title
+    assignment = getattr(submission, 'assignment', None)
+    assignment_title = None
+    course_name = None
+    if assignment:
+        assignment_title = assignment.title
+        course = getattr(assignment, 'course', None)
+        if course:
+            course_name = course.name
+
     return SubmissionCompactDTO(
         id=submission.id,
         assignmentId=submission.assignment_id,
+        studentName=student_name,
+        courseName=course_name,
+        assignmentTitle=assignment_title,
         submittedAt=submission.submitted_at,
         score=submission.score,
         status=submission.status,
@@ -162,29 +196,32 @@ def answer_to_dto(answer: Answer) -> AnswerDTO:
         AnswerDTO with questionId, type, data, and score
     """
     data: dict
-    if answer.answer_type == AnswerType.MULTIPLE_CHOICE:
-        # Use .all() to leverage prefetch cache instead of values_list() which always queries.
-        selected = [sel.choice_index for sel in answer.multiple_choice.selected.all()]
-        data = {"selected": selected}
-    elif answer.answer_type == AnswerType.SHORT_ANSWER:
-        data = {"text": answer.short_answer.text}
-    elif answer.answer_type == AnswerType.NUMBER_SCALE:
-        data = {"val": answer.number_scale.val}
-    elif answer.answer_type == AnswerType.MOOD_METER:
-        data = {
-            "quadrant": answer.mood_meter.quadrant,
-            "moodName": answer.mood_meter.mood_name,
-            "row": answer.mood_meter.row,
-            "col": answer.mood_meter.col,
-        }
-    elif answer.answer_type == AnswerType.FILE_UPLOAD:
-        data = {
-            "storageKey": answer.file_upload.storage_key,
-            "originalFilename": answer.file_upload.original_filename,
-            "mimeType": answer.file_upload.mime_type,
-            "sizeBytes": answer.file_upload.size_bytes,
-        }
-    else:
+    try:
+        if answer.answer_type == AnswerType.MULTIPLE_CHOICE:
+            # Use .all() to leverage prefetch cache instead of values_list() which always queries.
+            selected = [sel.choice_index for sel in answer.multiple_choice.selected.all()]
+            data = {"selected": selected}
+        elif answer.answer_type == AnswerType.SHORT_ANSWER:
+            data = {"text": answer.short_answer.text}
+        elif answer.answer_type == AnswerType.NUMBER_SCALE:
+            data = {"val": answer.number_scale.val}
+        elif answer.answer_type == AnswerType.MOOD_METER:
+            data = {
+                "quadrant": answer.mood_meter.quadrant,
+                "moodName": answer.mood_meter.mood_name,
+                "row": answer.mood_meter.row,
+                "col": answer.mood_meter.col,
+            }
+        elif answer.answer_type == AnswerType.FILE_UPLOAD:
+            data = {
+                "storageKey": answer.file_upload.storage_key,
+                "originalFilename": answer.file_upload.original_filename,
+                "mimeType": answer.file_upload.mime_type,
+                "sizeBytes": answer.file_upload.size_bytes,
+            }
+        else:
+            data = {}
+    except ObjectDoesNotExist:
         data = {}
     return AnswerDTO(
         questionId=answer.question_id,
@@ -263,12 +300,16 @@ def get_submission(submission_id: int) -> Submission:
 
 def get_by_assignment(assignment_id: int):
     """Get all submissions for an assignment (returns lazy queryset for pagination)."""
-    return Submission.objects.filter(assignment_id=assignment_id)
+    return Submission.objects.filter(
+        assignment_id=assignment_id,
+    ).select_related('student', 'teacher', 'assignment__course')
 
 
 def get_by_student(student_id: int):
     """Get all submissions by a student across all assignments (returns lazy queryset)."""
-    return Submission.objects.filter(student_id=student_id)
+    return Submission.objects.filter(
+        student_id=student_id,
+    ).select_related('assignment__course')
 
 
 def get_by_student_and_assignment(student_id: int, assignment_id: int) -> Submission:
@@ -316,7 +357,9 @@ def list_me(user_id: int, status: str | None) -> QuerySet[Submission]:
     qs = Submission.objects.filter(Q(student_id=user_id) | Q(teacher_id=user_id))
     if status:
         qs = qs.filter(status=status)
-    return qs.order_by(F("submitted_at").desc(nulls_last=True))
+    return qs.order_by(F("submitted_at").desc(nulls_last=True)).select_related(
+        "student", "teacher", "assignment__course"
+    )
 
 
 @transaction.atomic
@@ -408,13 +451,23 @@ def override_score(submission_id: int, scores: list) -> Submission:
             "Completion-scored assessments always award full credit and cannot be manually overridden"
         )
 
-    answers = list(submission.answers.select_related("question"))
+    answers = sorted(
+        list(submission.answers.select_related("question")),
+        key=lambda answer: (answer.question_id, getattr(answer, "id", 0)),
+    )
 
-    def _validate_score(answer, score_val):
+    def _question_label(answer, display_index):
+        prompt = (answer.question.prompt or "").strip()
+        prompt_snippet = ""
+        if prompt:
+            prompt_snippet = f" ({prompt[:48]}{'...' if len(prompt) > 48 else ''})"
+        return f"Question {display_index + 1}{prompt_snippet}"
+
+    def _validate_score(answer, score_val, display_index):
         cap = answer.question.max_points
         if cap is not None and score_val > cap:
             raise ValueError(
-                f"Score {score_val} exceeds max points ({cap}) for question {answer.question_id}"
+                f"Score {score_val} exceeds max points ({cap}) for {_question_label(answer, display_index)}"
             )
 
     def _apply_scores(answers, scores, *, scorable_filter=None):
@@ -429,10 +482,14 @@ def override_score(submission_id: int, scores: list) -> Submission:
         """
         total = 0.0
         score_index = 0
-        for answer in answers:
+        for display_index, answer in enumerate(answers):
+            cap = answer.question.max_points
+            if cap is not None and answer.score is not None and answer.score > cap:
+                # Repair legacy auto-scores created before max-point capping.
+                answer.score = float(cap)
             should_score = scorable_filter(answer) if scorable_filter else True
             if should_score and score_index < len(scores):
-                _validate_score(answer, scores[score_index])
+                _validate_score(answer, scores[score_index], display_index)
                 answer.score = scores[score_index]
                 score_index += 1
             total += answer.score or 0.0
@@ -613,6 +670,8 @@ def _auto_score_mcq(answer: Answer, question: Question) -> float:
         if idx is None or idx < 0 or idx >= len(choices):
             continue
         score += choices[idx].points
+    if question.max_points is not None:
+        score = min(score, float(question.max_points))
     answer.score = score
     answer.save(update_fields=["score"])
     return score

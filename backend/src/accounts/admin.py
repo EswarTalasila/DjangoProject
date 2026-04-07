@@ -97,13 +97,15 @@ def _build_permission_fieldsets():
     fieldsets = []
     for group_name, permission_values in PERMISSION_GROUPS:
         fieldsets.append((group_name, {"fields": _rows(permission_values)}))
-    fieldsets.append((
-        "Delegation Powers",
-        {
-            "fields": ("perm_can_grant_sudo",),
-            "description": SUDO_CAPABILITY_NOTE,
-        },
-    ))
+    fieldsets.append(
+        (
+            "Delegation Powers",
+            {
+                "fields": ("perm_can_grant_sudo",),
+                "description": SUDO_CAPABILITY_NOTE,
+            },
+        )
+    )
     return tuple(fieldsets)
 
 
@@ -171,16 +173,14 @@ class ResearcherProfileAdmin(admin.ModelAdmin):
         "created_at",
     )
     list_filter = (
-        ("user__sudo_grant__id", admin.EmptyFieldListFilter),
+        ("user__sudo_grant", admin.EmptyFieldListFilter),
         "user__sudo_grant__can_grant_sudo",
     )
     search_fields = ("user__username", "user__name")
     list_select_related = ("user", "user__sudo_grant", "user__sudo_grant__granted_by")
     readonly_fields = ("manage_sudo",)
     search_help_text = "Search by researcher username or display name."
-    fieldsets = (
-        (None, {"fields": ("user", "created_at", "manage_sudo")}),
-    )
+    fieldsets = ((None, {"fields": ("user", "created_at", "manage_sudo")}),)
 
     @admin.display(description="Sudo Status")
     def sudo_status(self, obj):
@@ -193,7 +193,9 @@ class ResearcherProfileAdmin(admin.ModelAdmin):
         grant = getattr(obj.user, "sudo_grant", None)
         if not grant or not grant.permissions:
             return "—"
-        rendered = [PERMISSION_LABELS.get(permission, permission) for permission in grant.permissions]
+        rendered = [
+            PERMISSION_LABELS.get(permission, permission) for permission in grant.permissions
+        ]
         if grant.can_grant_sudo:
             rendered.append("Grant Sudo Delegation")
         if len(rendered) <= 2:
@@ -219,7 +221,7 @@ class ResearcherProfileAdmin(admin.ModelAdmin):
         if grant:
             url = reverse("admin:accounts_sudogrant_change", args=[grant.pk])
             return format_html('<a class="button" href="{}">Edit sudo permissions</a>', url)
-        url = f'{reverse("admin:accounts_sudogrant_add")}?user={obj.user_id}'
+        url = f"{reverse('admin:accounts_sudogrant_add')}?user={obj.user_id}"
         return format_html('<a class="button" href="{}">Create sudo grant</a>', url)
 
 
@@ -227,17 +229,39 @@ class SudoGrantAdminForm(forms.ModelForm):
     """Admin form with researcher-only target selection and per-category permission checkboxes."""
 
     # Declare permission BooleanFields at class level so modelform_factory sees them.
-    perm_ISSUE_RESEARCHER_REG_CODE = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.ISSUE_RESEARCHER_REG_CODE.value], required=False)
-    perm_ISSUE_STUDENT_REG_CODE = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.ISSUE_STUDENT_REG_CODE.value], required=False)
-    perm_ISSUE_STUDENT_RESET_CODE = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.ISSUE_STUDENT_RESET_CODE.value], required=False)
-    perm_ISSUE_RESEARCHER_RESET_CODE = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.ISSUE_RESEARCHER_RESET_CODE.value], required=False)
-    perm_CREATE_TEACHER = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.CREATE_TEACHER.value], required=False)
-    perm_CREATE_STUDENT = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.CREATE_STUDENT.value], required=False)
-    perm_EDIT_USER = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.EDIT_USER.value], required=False)
-    perm_DELETE_USER = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.DELETE_USER.value], required=False)
-    perm_VIEW_SUBMISSIONS = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.VIEW_SUBMISSIONS.value], required=False)
-    perm_VIEW_IDENTIFIABLE_VIZ = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.VIEW_IDENTIFIABLE_VIZ.value], required=False)
-    perm_EXPORT_IDENTIFIABLE = forms.BooleanField(label=PERMISSION_LABELS[SudoPermission.EXPORT_IDENTIFIABLE.value], required=False)
+    perm_ISSUE_RESEARCHER_REG_CODE = forms.BooleanField(
+        label=PERMISSION_LABELS[SudoPermission.ISSUE_RESEARCHER_REG_CODE.value], required=False
+    )
+    perm_ISSUE_STUDENT_REG_CODE = forms.BooleanField(
+        label=PERMISSION_LABELS[SudoPermission.ISSUE_STUDENT_REG_CODE.value], required=False
+    )
+    perm_ISSUE_STUDENT_RESET_CODE = forms.BooleanField(
+        label=PERMISSION_LABELS[SudoPermission.ISSUE_STUDENT_RESET_CODE.value], required=False
+    )
+    perm_ISSUE_RESEARCHER_RESET_CODE = forms.BooleanField(
+        label=PERMISSION_LABELS[SudoPermission.ISSUE_RESEARCHER_RESET_CODE.value], required=False
+    )
+    perm_CREATE_TEACHER = forms.BooleanField(
+        label=PERMISSION_LABELS[SudoPermission.CREATE_TEACHER.value], required=False
+    )
+    perm_CREATE_STUDENT = forms.BooleanField(
+        label=PERMISSION_LABELS[SudoPermission.CREATE_STUDENT.value], required=False
+    )
+    perm_EDIT_USER = forms.BooleanField(
+        label=PERMISSION_LABELS[SudoPermission.EDIT_USER.value], required=False
+    )
+    perm_DELETE_USER = forms.BooleanField(
+        label=PERMISSION_LABELS[SudoPermission.DELETE_USER.value], required=False
+    )
+    perm_VIEW_SUBMISSIONS = forms.BooleanField(
+        label=PERMISSION_LABELS[SudoPermission.VIEW_SUBMISSIONS.value], required=False
+    )
+    perm_VIEW_IDENTIFIABLE_VIZ = forms.BooleanField(
+        label=PERMISSION_LABELS[SudoPermission.VIEW_IDENTIFIABLE_VIZ.value], required=False
+    )
+    perm_EXPORT_IDENTIFIABLE = forms.BooleanField(
+        label=PERMISSION_LABELS[SudoPermission.EXPORT_IDENTIFIABLE.value], required=False
+    )
     perm_can_grant_sudo = forms.BooleanField(label="Grant sudo delegation", required=False)
 
     class Meta:
@@ -254,12 +278,12 @@ class SudoGrantAdminForm(forms.ModelForm):
             .distinct()
             .order_by("name", "username")
         )
-        self.fields["user"].help_text = (
-            "Target researcher. To change this selection, create a new grant and delete the old one."
-        )
-        self.fields["granted_by"].help_text = (
-            "Admin or researcher with 'Grant Sudo Delegation'. Defaults to current admin."
-        )
+        self.fields[
+            "user"
+        ].help_text = "Target researcher. To change this selection, create a new grant and delete the old one."
+        self.fields[
+            "granted_by"
+        ].help_text = "Admin or researcher with 'Grant Sudo Delegation'. Defaults to current admin."
 
         current_perms = list(self.instance.permissions or []) if self.instance.pk else []
         for _group_name, permission_values in PERMISSION_GROUPS:
@@ -459,9 +483,7 @@ class RegistrationCodeAdmin(admin.ModelAdmin):
                         uses_per_code=form.cleaned_data["uses_per_code"],
                         expires_at=form.cleaned_data["expires_at"],
                         course_id=(
-                            form.cleaned_data["course"].id
-                            if form.cleaned_data["course"]
-                            else None
+                            form.cleaned_data["course"].id if form.cleaned_data["course"] else None
                         ),
                     )
                     codes = [record.plaintext_code for record in created]

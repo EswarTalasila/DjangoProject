@@ -69,6 +69,8 @@ def create_assignment(creator_user, payload: dict) -> Assignment:
         raise ValueError("Assessment not found")
     if assessment.status == AssessmentStatus.ARCHIVED:
         raise ConflictError("Cannot create assignment from an archived assessment.")
+    if assessment.status == AssessmentStatus.DRAFT:
+        raise ConflictError("Cannot create assignment from a draft assessment. Publish it first.")
 
     # ASGN-CN-10: Course ownership gate
     if audience == AudienceType.COURSE:

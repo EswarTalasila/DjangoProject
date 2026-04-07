@@ -36,7 +36,10 @@ from .services import (
     archive_assessment,
     assessment_to_dto,
     create_assessment,
+    create_draft,
+    delete_draft,
     list_assessments,
+    publish_assessment,
     purge_assessment,
     restore_assessment,
     update_assessment,
@@ -71,6 +74,13 @@ def list_or_create(request):
     if request.method == "POST":
         if not IsResearcherOrAdmin().has_permission(request, None):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+        # Draft creation: POST with ?draft=true creates an empty draft
+        if request.query_params.get("draft", "").lower() == "true":
+            assessment = create_draft(request.user)
+            assessment = _assessment_with_related(assessment.id)
+            return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_201_CREATED)
+
         serializer = AssessmentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
@@ -84,7 +94,12 @@ def list_or_create(request):
     include_archived, include_archived_error = parse_include_archived(request)
     if include_archived_error is not None:
         return include_archived_error
-    assessments = list_assessments(include_archived=include_archived)
+    # Researchers/admins see their drafts; teachers never see drafts
+    include_drafts = IsResearcherOrAdmin().has_permission(request, None)
+    assessments = list_assessments(
+        include_archived=include_archived,
+        include_drafts=include_drafts,
+    )
     return paginate(assessments, request, transform_fn=lambda a: assessment_to_dto(a).model_dump())
 
 
@@ -135,6 +150,15 @@ def detail(request, assessment_id: int):
 
     if not IsResearcherOrAdmin().has_permission(request, None):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+    # DRAFT assessments can be deleted directly
+    from .models import AssessmentStatus as AStatus
+    if assessment.status == AStatus.DRAFT:
+        try:
+            delete_draft(assessment)
+        except ConflictError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     # DELETE with ?purge=true — admin-only hard delete of archived assessment
     if request.query_params.get("purge", "").lower() == "true":
@@ -220,5 +244,24 @@ def restore(request, assessment_id: int):
         return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
     complete_audit(audit_id, AuditOutcome.SUCCESS)
     # Re-fetch with prefetches for efficient DTO serialization.
+    assessment = _assessment_with_related(assessment.id)
+    return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def publish(request, assessment_id: int):
+    """Publish a draft assessment, making it available for assignment creation."""
+    assessment = Assessment.objects.filter(id=assessment_id).first()
+    if not assessment:
+        return Response({"detail": "Assessment not found"}, status=status.HTTP_404_NOT_FOUND)
+    if not IsResearcherOrAdmin().has_permission(request, None):
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        assessment = publish_assessment(assessment)
+    except ConflictError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+    except ValueError as exc:
+        return error_response(exc)
     assessment = _assessment_with_related(assessment.id)
     return Response(assessment_to_dto(assessment).model_dump(), status=status.HTTP_200_OK)

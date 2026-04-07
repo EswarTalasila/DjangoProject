@@ -30,6 +30,7 @@ class GradingStrategy(models.TextChoices):
 
 
 class AssessmentStatus(models.TextChoices):
+    DRAFT = "DRAFT", "Draft"
     ACTIVE = "ACTIVE", "Active"
     ARCHIVED = "ARCHIVED", "Archived"
 

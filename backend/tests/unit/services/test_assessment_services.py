@@ -54,6 +54,8 @@ class TestAssessmentToDto:
         assessment.category = "General"
         assessment.grading_mode = GradingMode.AUTO
         assessment.scoring_policy = "STANDARD"
+        assessment.status = "ACTIVE"
+        assessment.rubric_id = None
         assessment.questions.all.return_value = []
         assessment.question_groups.all.return_value = []
 
@@ -77,6 +79,8 @@ class TestAssessmentToDto:
         assessment.category = None
         assessment.grading_mode = GradingMode.MANUAL
         assessment.scoring_policy = "COMPLETION"
+        assessment.status = "ACTIVE"
+        assessment.rubric_id = None
         assessment.questions.all.return_value = []
         assessment.question_groups.all.return_value = []
 
@@ -247,6 +251,7 @@ class TestCreateAssessment(_NoopAtomicMixin):
             scoring_policy="STANDARD",
             created_by_admin=user,
             category="Math",
+            rubric_id=None,
         )
         mock_replace.assert_called_once()
         mock_validate.assert_called_once_with(fake_assessment)
@@ -302,6 +307,7 @@ class TestUpdateAssessment(_NoopAtomicMixin):
         assessment.category = "Old Cat"
         assessment.grading_mode = GradingMode.AUTO
         assessment.scoring_policy = "STANDARD"
+        assessment.rubric_id = None
 
         payload = {
             "title": "New Title",
@@ -317,6 +323,7 @@ class TestUpdateAssessment(_NoopAtomicMixin):
         assert result.category == "New Cat"
         assert result.grading_mode == GradingMode.MANUAL
         assert result.scoring_policy == "COMPLETION"
+        assert result.rubric_id is None
         assessment.save.assert_called_once()
         mock_replace.assert_called_once()
         mock_validate.assert_called_once()
@@ -339,6 +346,7 @@ class TestUpdateAssessment(_NoopAtomicMixin):
         assessment.title = "Keep Me"
         assessment.grading_mode = GradingMode.AUTO
         assessment.scoring_policy = "STANDARD"
+        assessment.rubric_id = None
 
         payload = {"category": "New"}
 
@@ -412,16 +420,31 @@ class TestListAssessments:
 
     @patch("assessments.services.Assessment")
     def test_returns_all_when_include_archived(self, mock_assessment_model):
-        """Returns all assessments when include_archived=True."""
+        """Returns ACTIVE + ARCHIVED assessments when include_archived=True."""
         from assessments.services import list_assessments
 
         sentinel = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
         qs = MagicMock()
         mock_assessment_model.objects.all.return_value = qs
-        # Chain: .prefetch_related() -> iterable that yields sentinel (no filter)
-        qs.prefetch_related.return_value = sentinel
+        # Chain: .filter().prefetch_related() -> iterable that yields sentinel
+        qs.filter.return_value.prefetch_related.return_value = sentinel
 
         result = list_assessments(include_archived=True)
+
+        assert result == sentinel
+        qs.filter.assert_called_once()
+
+    @patch("assessments.services.Assessment")
+    def test_returns_all_statuses_when_both_flags_set(self, mock_assessment_model):
+        """Returns all assessments (including drafts and archived) when both flags set."""
+        from assessments.services import list_assessments
+
+        sentinel = [SimpleNamespace(id=1)]
+        qs = MagicMock()
+        mock_assessment_model.objects.all.return_value = qs
+        qs.prefetch_related.return_value = sentinel
+
+        result = list_assessments(include_archived=True, include_drafts=True)
 
         assert result == sentinel
 
@@ -522,10 +545,44 @@ class TestCreateQuestion:
         result = _create_question(SimpleNamespace(id=1), payload, {})
 
         assert result is fake_question
+        create_call = mock_q_model.objects.create.call_args
+        assert create_call.kwargs["max_points"] == 5.0
         mock_mcq_model.objects.create.assert_called_once_with(
             question=fake_question, select_all=True
         )
         assert mock_choice_model.objects.create.call_count == 2
+
+    @patch("assessments.services.MultipleChoiceQuestion")
+    @patch("assessments.services.McqChoice")
+    @patch("assessments.services.Question")
+    def test_single_select_mcq_uses_highest_choice_value_for_max_points(
+        self, mock_q_model, mock_choice_model, mock_mcq_model
+    ):
+        """Single-select MCQs derive question max points from the highest choice value."""
+        from assessments.services import _create_question
+
+        mock_q_model.objects.create.return_value = SimpleNamespace(id=10)
+
+        _create_question(
+            SimpleNamespace(id=1),
+            {
+                "type": QuestionKind.MULTIPLE_CHOICE,
+                "prompt": "Pick one",
+                "maxPoints": 100,
+                "data": {
+                    "selectAll": False,
+                    "choices": [
+                        {"prompt": "A", "score": 1},
+                        {"prompt": "B", "score": 4},
+                        {"prompt": "C", "score": 2},
+                    ],
+                },
+            },
+            {},
+        )
+
+        create_call = mock_q_model.objects.create.call_args
+        assert create_call.kwargs["max_points"] == 4.0
 
     @patch("assessments.services.ShortAnswerQuestion")
     @patch("assessments.services.Question")
@@ -789,6 +846,7 @@ class TestValidateRubricRules:
 
         assessment = MagicMock()
         assessment.grading_mode = GradingMode.AUTO
+        assessment.rubric_id = None
         q = MagicMock()
         q.rubric_id = 1
         q.question_group = None
@@ -804,6 +862,7 @@ class TestValidateRubricRules:
 
         assessment = MagicMock()
         assessment.grading_mode = "MANUAL"
+        assessment.rubric_id = None
         q = MagicMock()
         q.rubric_id = None
         q.question_group = None
@@ -820,6 +879,7 @@ class TestValidateRubricRules:
 
         assessment = MagicMock()
         assessment.grading_mode = "MANUAL"
+        assessment.rubric_id = None
         q = MagicMock()
         q.rubric_id = 1
         q.question_group = None
@@ -834,6 +894,7 @@ class TestValidateRubricRules:
 
         assessment = MagicMock()
         assessment.grading_mode = "HYBRID"
+        assessment.rubric_id = None
         q = MagicMock()
         q.rubric_id = None
         q.question_group = None
@@ -850,6 +911,7 @@ class TestValidateRubricRules:
 
         assessment = MagicMock()
         assessment.grading_mode = "HYBRID"
+        assessment.rubric_id = None
         q = MagicMock()
         q.rubric_id = 1
         q.question_group = None
@@ -866,6 +928,7 @@ class TestValidateRubricRules:
 
         assessment = MagicMock()
         assessment.grading_mode = "HYBRID"
+        assessment.rubric_id = None
         q = MagicMock()
         q.rubric_id = None
         q.question_group = None
@@ -880,6 +943,7 @@ class TestValidateRubricRules:
 
         assessment = MagicMock()
         assessment.grading_mode = "MANUAL"
+        assessment.rubric_id = None
         q = MagicMock()
         q.rubric_id = None
         q.question_group = MagicMock(rubric_id=5)
@@ -887,3 +951,37 @@ class TestValidateRubricRules:
         assessment.questions.all.return_value = [q]
 
         _validate_rubric_rules(assessment)  # should not raise (group rubric)
+
+    def test_assessment_rubric_counts_as_has_rubric(self):
+        """Treats an assessment-level rubric as satisfying the rubric requirement."""
+        from assessments.services import _validate_rubric_rules
+
+        assessment = MagicMock()
+        assessment.grading_mode = "MANUAL"
+        assessment.rubric_id = 7
+        q = MagicMock()
+        q.rubric_id = None
+        q.question_group = None
+        q.grading_strategy = "MANUAL"
+        assessment.questions.all.return_value = [q]
+
+        _validate_rubric_rules(assessment)
+
+    def test_rejects_mixed_assessment_and_specific_rubrics(self):
+        """Assessment-level rubrics cannot be combined with question/group rubrics."""
+        from assessments.services import _validate_rubric_rules
+
+        assessment = MagicMock()
+        assessment.grading_mode = "MANUAL"
+        assessment.rubric_id = 7
+        q = MagicMock()
+        q.rubric_id = 9
+        q.question_group = None
+        q.grading_strategy = "MANUAL"
+        assessment.questions.all.return_value = [q]
+
+        with pytest.raises(
+            ValueError,
+            match="Assessment rubric cannot be combined with question or group rubrics",
+        ):
+            _validate_rubric_rules(assessment)

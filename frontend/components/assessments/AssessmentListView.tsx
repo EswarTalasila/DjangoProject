@@ -31,6 +31,7 @@ import {
   listAssessments,
   type Assessment,
 } from '@/lib/assessment-api';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { toErrorMessage } from '@/lib/utils';
 
 type AssessmentListViewProps = {
@@ -165,6 +166,9 @@ export default function AssessmentListView({ canManage }: AssessmentListViewProp
                   Category
                 </TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Status
+                </TableHead>
+                <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Grading Mode
                 </TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -196,6 +200,9 @@ export default function AssessmentListView({ canManage }: AssessmentListViewProp
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {assessment.category ?? '-'}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    <StatusBadge status={assessment.status ?? 'ACTIVE'} />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {assessment.gradingMode}

@@ -71,20 +71,23 @@ export default function McqFields({ data, onChange }: McqFieldsProps) {
 
       {!isChoicesOpen && (
         <p className="text-sm text-muted-foreground">
-          Choices hidden. Expand to edit order, text, and points.
+          Choices hidden. Expand to edit order, text, and scoring values.
         </p>
       )}
 
       {isChoicesOpen && (
         <>
           <p className="text-sm text-muted-foreground">
-            Drag by the handle to reorder. Points are awarded when that choice is selected.
+            Drag by the handle to reorder. These values determine the question's point value.
+            {data.selectAll
+              ? ' For select-all questions, the question value is the sum of all positive choice values.'
+              : ' For single-select questions, the question value is the highest choice value.'}
           </p>
 
           <div className="rounded-lg border border-border overflow-hidden">
             <div className="grid grid-cols-[minmax(0,1fr)_170px_48px] bg-muted border-b border-border text-xs uppercase tracking-wider font-semibold text-muted-foreground">
               <div className="px-3 py-2.5">Choice Text</div>
-              <div className="px-3 py-2.5">Points</div>
+              <div className="px-3 py-2.5">Value</div>
               <div className="px-3 py-2.5 text-right"> </div>
             </div>
 
@@ -194,7 +197,7 @@ export default function McqFields({ data, onChange }: McqFieldsProps) {
                       }
                       className="h-10 text-sm text-center font-mono font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
-                    <span className="text-xs text-muted-foreground font-medium shrink-0">pts</span>
+                    <span className="text-xs text-muted-foreground font-medium shrink-0">val</span>
                   </div>
 
                   <Button
@@ -224,6 +227,9 @@ export default function McqFields({ data, onChange }: McqFieldsProps) {
         />
         <Label htmlFor="selectAll" className="text-sm">Select all that apply</Label>
       </div>
+      <p className="text-xs text-muted-foreground">
+        Assessment totals are built from question values, and multiple choice question values are derived from these choice values automatically.
+      </p>
     </div>
   );
 }

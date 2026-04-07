@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { memo, useState, useRef, useEffect } from 'react';
 import {
   Plus,
   FolderPlus,
@@ -9,6 +9,7 @@ import {
   FileText,
   ChevronDown,
   ChevronRight,
+  ArrowLeft,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -62,6 +63,7 @@ type StructureRailProps = {
   questionGroups: QuestionGroupInput[];
   selectedIndex: number;
   onSelectQuestion: (index: number) => void;
+  onBackToEditor?: () => void;
   onAddQuestion: () => void;
   onAddGroup: (name?: string) => void;
   onRenameGroup: (clientKey: string, newName: string) => void;
@@ -73,6 +75,7 @@ type StructureRailProps = {
   onDrop: (from: number, to: number) => void;
   onDragEnd: () => void;
   groupByKey: Map<string, QuestionGroupInput>;
+  highlightQuestionListSignal?: number;
 };
 
 function isQuestionValid(q: QuestionInput): boolean {
@@ -90,11 +93,12 @@ function isQuestionValid(q: QuestionInput): boolean {
   return true;
 }
 
-export default function StructureRail({
+function StructureRail({
   questions,
   questionGroups,
   selectedIndex,
   onSelectQuestion,
+  onBackToEditor,
   onAddQuestion,
   onAddGroup,
   onRenameGroup,
@@ -106,6 +110,7 @@ export default function StructureRail({
   onDrop,
   onDragEnd,
   groupByKey,
+  highlightQuestionListSignal,
 }: StructureRailProps) {
   const totalPoints = questions.reduce((sum, q) => sum + (q.maxPoints || 0), 0);
   const ungroupedQuestions = questions
@@ -123,13 +128,23 @@ export default function StructureRail({
   // New group dialog
   const [newGroupDialogOpen, setNewGroupDialogOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
+  const [highlightAddQuestion, setHighlightAddQuestion] = useState(false);
   const newGroupInputRef = useRef<HTMLInputElement>(null);
+  const addQuestionButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (newGroupDialogOpen) {
       setTimeout(() => newGroupInputRef.current?.focus(), 100);
     }
   }, [newGroupDialogOpen]);
+
+  useEffect(() => {
+    if (!highlightQuestionListSignal) return;
+    addQuestionButtonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightAddQuestion(true);
+    const timeout = window.setTimeout(() => setHighlightAddQuestion(false), 1800);
+    return () => window.clearTimeout(timeout);
+  }, [highlightQuestionListSignal]);
   // "ungrouped" is tracked as "__UNGROUPED__"
   const UNGROUPED_KEY = '__UNGROUPED__';
 
@@ -193,7 +208,7 @@ export default function StructureRail({
           data-question-row="true"
           onClick={() => onSelectQuestion(globalIndex)}
           className={cn(
-            'w-full group flex items-center gap-2.5 p-2 rounded-md transition-all text-left relative border',
+            'w-full group flex items-center gap-2.5 p-2 rounded-md transition-colors text-left relative border',
             isActive
               ? 'bg-accent border-border shadow-sm'
               : 'hover:bg-accent/50 border-transparent',
@@ -302,6 +317,22 @@ export default function StructureRail({
 
   return (
     <div className="flex flex-col h-full">
+      <div className="lg:hidden p-3 border-b border-border bg-card flex items-center justify-between">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onBackToEditor}
+          className="gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </Button>
+        <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          Structure
+        </span>
+      </div>
+
       {/* Header */}
       <div className="p-3 border-b border-border bg-card">
         <div className="flex items-center justify-between mb-3">
@@ -315,10 +346,14 @@ export default function StructureRail({
 
         <div className="grid grid-cols-2 gap-2">
           <Button
+            ref={addQuestionButtonRef}
             type="button"
             size="sm"
             onClick={onAddQuestion}
-            className="gap-1.5 text-sm"
+            className={cn(
+              'gap-1.5 text-sm transition-shadow',
+              highlightAddQuestion && 'ring-2 ring-amber-400/70 ring-offset-2 ring-offset-card',
+            )}
           >
             <Plus className="h-4 w-4" />
             Question
@@ -526,3 +561,5 @@ export default function StructureRail({
     </div>
   );
 }
+
+export default memo(StructureRail);

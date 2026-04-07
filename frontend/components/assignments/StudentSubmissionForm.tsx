@@ -350,6 +350,15 @@ export default function StudentSubmissionForm({
                     <p className="text-xs text-muted-foreground">
                       {formatQuestionKind(question.type)} • {formatPoints(question.maxPoints)} pts
                     </p>
+                    {question.image && (
+                      <figure className="mt-2 rounded-lg border border-border overflow-hidden bg-muted/20">
+                        <img
+                          src={question.image.url}
+                          alt={question.image.originalFilename}
+                          className="w-full h-auto max-h-64 object-contain"
+                        />
+                      </figure>
+                    )}
                     <p className="text-sm text-foreground">
                       <span className="font-medium">Response:</span> {renderStudentResponse(question, answer)}
                     </p>
@@ -372,6 +381,18 @@ export default function StudentSubmissionForm({
                   {formatQuestionKind(activeStudentQuestion.type)} •{' '}
                   {formatPoints(activeStudentQuestion.maxPoints)} pts
                 </p>
+                {activeStudentQuestion.image && (
+                  <figure className="mt-3 rounded-lg border border-border overflow-hidden bg-muted/20">
+                    <img
+                      src={activeStudentQuestion.image.url}
+                      alt={activeStudentQuestion.image.originalFilename}
+                      className="w-full h-auto max-h-80 object-contain"
+                    />
+                    <figcaption className="text-[10px] text-muted-foreground px-3 py-1.5 border-t border-border">
+                      {activeStudentQuestion.image.originalFilename}
+                    </figcaption>
+                  </figure>
+                )}
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto p-5">

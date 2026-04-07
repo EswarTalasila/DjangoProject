@@ -104,6 +104,9 @@ function isQuestionAnswered(question: Question, answer: StudentAttemptAnswer): b
   if (question.type === 'NUMBER_SCALE') {
     return answer.numericResponse !== null;
   }
+  if (question.type === 'MOOD_METER') {
+    return answer.moodSelection !== null;
+  }
   return false;
 }
 

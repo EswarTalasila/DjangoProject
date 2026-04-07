@@ -348,6 +348,7 @@ def get_by_student_id(request, student_id: int):
         )
         if not owned_qs.exists():
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        owned_qs = owned_qs.select_related("student", "teacher", "assignment__course")
         return paginate(
             owned_qs,
             request,

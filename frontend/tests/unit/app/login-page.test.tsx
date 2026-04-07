@@ -43,7 +43,8 @@ async function loadLoginPage() {
 describe("Login page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.NEXT_PUBLIC_API_URL = "http://localhost:8000/api/v1";
+    process.env.NEXT_PUBLIC_API_URL = "/api/v1";
+    window.history.replaceState({}, "", "/login");
   });
 
   it("shows the updated identifier guidance text", async () => {

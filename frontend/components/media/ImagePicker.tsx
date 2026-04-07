@@ -10,6 +10,7 @@ import {
   FolderOpen,
   Check,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -41,6 +42,13 @@ type ImagePickerProps = {
   onUpload?: (file: File) => Promise<PickedImage>;
   /** Whether the picker is disabled */
   disabled?: boolean;
+  /** Optional copy overrides for the empty/upload UI */
+  emptyLabel?: string;
+  emptyHint?: string;
+  browseLabel?: string;
+  browseDialogTitle?: string;
+  emptyBrowseLabel?: string;
+  replaceLabel?: string;
 };
 
 function formatSize(bytes: number): string {
@@ -56,6 +64,12 @@ export default function ImagePicker({
   onBrowse,
   onUpload,
   disabled = false,
+  emptyLabel = 'Drop an image here or click to upload',
+  emptyHint = 'JPG, PNG, WebP (Max 10MB)',
+  browseLabel = 'Browse Uploaded Images',
+  browseDialogTitle = 'Select an Image',
+  emptyBrowseLabel = 'No images uploaded yet',
+  replaceLabel = 'Replace',
 }: ImagePickerProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -64,9 +78,20 @@ export default function ImagePicker({
   const [browseLoading, setBrowseLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const openFileDialog = () => {
+    if (disabled || isUploading) return;
+    fileInputRef.current?.click();
+  };
+
   const handleFile = async (file: File) => {
-    if (!file.type.startsWith('image/')) return;
-    if (!onUpload) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Only image files are supported (JPG, PNG, WebP).');
+      return;
+    }
+    if (!onUpload) {
+      toast.error('Save the assessment first to enable image uploads.');
+      return;
+    }
 
     setIsUploading(true);
     try {
@@ -79,10 +104,19 @@ export default function ImagePicker({
     }
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      void handleFile(file);
+    }
+    e.target.value = '';
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (disabled || !e.dataTransfer.files?.[0]) return;
+    if (!e.dataTransfer.files?.[0]) return;
+    if (disabled) return;
     handleFile(e.dataTransfer.files[0]);
   };
 
@@ -105,6 +139,16 @@ export default function ImagePicker({
     return (
       <div className="space-y-3">
         <div
+          role="button"
+          tabIndex={disabled ? -1 : 0}
+          aria-label={emptyLabel}
+          onClick={openFileDialog}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              openFileDialog();
+            }
+          }}
           onDragOver={(e) => {
             e.preventDefault();
             if (!disabled) setIsDragging(true);
@@ -123,10 +167,11 @@ export default function ImagePicker({
           <input
             ref={fileInputRef}
             type="file"
-            className="absolute inset-0 opacity-0 cursor-pointer"
-            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+            className="hidden"
+            onChange={handleInputChange}
             accept="image/jpeg,image/png,image/webp"
             disabled={disabled}
+            aria-label="Upload image file"
           />
 
           {isUploading ? (
@@ -137,11 +182,25 @@ export default function ImagePicker({
           ) : (
             <>
               <Upload className="h-8 w-8 mx-auto mb-3 text-muted-foreground" />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mb-3 gap-2"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openFileDialog();
+                }}
+                disabled={disabled}
+              >
+                <FolderOpen className="h-4 w-4" />
+                Choose File
+              </Button>
               <p className="text-sm font-medium text-foreground">
-                Drop an image here or click to upload
+                {emptyLabel}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                JPG, PNG, WebP (Max 5MB)
+                {emptyHint}
               </p>
             </>
           )}
@@ -159,12 +218,12 @@ export default function ImagePicker({
                 disabled={disabled}
               >
                 <FolderOpen className="h-4 w-4" />
-                Browse Uploaded Images
+                {browseLabel}
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[70vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>Select an Image</DialogTitle>
+                <DialogTitle>{browseDialogTitle}</DialogTitle>
               </DialogHeader>
               {browseLoading ? (
                 <div className="flex items-center justify-center py-12">
@@ -173,7 +232,7 @@ export default function ImagePicker({
               ) : browseImages.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <ImageIcon className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm">No images uploaded yet</p>
+                  <p className="text-sm">{emptyBrowseLabel}</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-3 gap-3">
@@ -234,9 +293,9 @@ export default function ImagePicker({
             accept="image/jpeg,image/png,image/webp"
             disabled={disabled}
           />
-          <Button type="button" size="sm" className="gap-2">
+          <Button type="button" size="sm" className="gap-2" disabled={disabled}>
             <RefreshCw className="h-4 w-4" />
-            Replace
+            {replaceLabel}
           </Button>
         </div>
         <Button

@@ -48,6 +48,11 @@ class TestMCQChoiceSerializer:
         s = MCQChoiceSerializer(data={"prompt": "Wrong", "score": 0.0})
         assert s.is_valid()
 
+    def test_accepts_blank_prompt(self):
+        """Allows blank prompts for in-progress draft choices."""
+        s = MCQChoiceSerializer(data={"prompt": "", "score": 0.0})
+        assert s.is_valid()
+
     def test_accepts_negative_score(self):
         """Accepts negative score for penalty choices."""
         s = MCQChoiceSerializer(data={"prompt": "Penalty", "score": -1.0})
@@ -136,16 +141,16 @@ class TestNumberScaleDataSerializer:
         assert s.is_valid()
 
     def test_rejects_missing_min(self):
-        """Rejects data without min."""
+        """Allows missing min for incomplete drafts."""
         s = NumberScaleDataSerializer(data={"max": 10})
-        assert not s.is_valid()
-        assert "min" in s.errors
+        assert s.is_valid()
+        assert "min" not in s.validated_data
 
     def test_rejects_missing_max(self):
-        """Rejects data without max."""
+        """Allows missing max for incomplete drafts."""
         s = NumberScaleDataSerializer(data={"min": 1})
-        assert not s.is_valid()
-        assert "max" in s.errors
+        assert s.is_valid()
+        assert "max" not in s.validated_data
 
 
 
@@ -207,6 +212,16 @@ class TestQuestionSerializer:
         assert not s.is_valid()
         assert "prompt" in s.errors
 
+    def test_accepts_blank_prompt(self):
+        """Allows blank question prompts for in-progress drafts."""
+        data = {
+            "type": QuestionKind.SHORT_ANSWER,
+            "prompt": "",
+            "maxPoints": 5.0,
+        }
+        s = QuestionSerializer(data=data)
+        assert s.is_valid()
+
     def test_rejects_missing_max_points(self):
         """Rejects question without maxPoints."""
         data = {"type": QuestionKind.SHORT_ANSWER, "prompt": "Q"}
@@ -266,6 +281,11 @@ class TestAssessmentSerializer:
         assert not s.is_valid()
         assert "title" in s.errors
 
+    def test_accepts_blank_title(self):
+        """Allows blank titles for in-progress drafts."""
+        s = AssessmentSerializer(data={"title": "", "gradingMode": GradingMode.AUTO})
+        assert s.is_valid(), s.errors
+
     def test_rejects_missing_grading_mode(self):
         """Rejects assessment without gradingMode."""
         s = AssessmentSerializer(data={"title": "Quiz"})
@@ -303,15 +323,15 @@ class TestAssessmentSerializer:
         s = AssessmentSerializer(data=data)
         assert s.is_valid()
 
-    def test_rejects_legacy_rubric_id_field(self):
-        """Rejects legacy rubricId field with validation error."""
+    def test_accepts_rubric_id_field(self):
+        """rubricId is now a real field for assessment-level rubrics."""
         data = {
             "title": "Quiz",
             "gradingMode": GradingMode.AUTO,
             "rubricId": None,
         }
         s = AssessmentSerializer(data=data)
-        assert not s.is_valid()
+        assert s.is_valid(), s.errors
 
     def test_rejects_legacy_rubric_assessment_ids_field(self):
         """Rejects legacy rubricAssessmentIds field with validation error."""

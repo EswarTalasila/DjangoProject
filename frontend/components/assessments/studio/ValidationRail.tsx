@@ -1,5 +1,6 @@
 'use client';
 
+import { memo, useEffect, useRef, useState } from 'react';
 import {
   Settings,
   BarChart3,
@@ -11,7 +12,8 @@ import {
   Eye,
   Pencil,
   Trash2,
-  Layers,
+  ArrowLeft,
+  Unlink2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,12 +29,13 @@ import { HelpTip } from '@/components/ui/help-tip';
 import type {
   QuestionInput,
   QuestionGroupInput,
-  GradingMode,
   ScoringPolicy,
   QuestionKind,
+  GradingStrategy,
 } from '@/lib/assessment-api';
 import type { Rubric } from '@/lib/rubric-api';
 import { cn } from '@/lib/utils';
+import type { StudioValidationIssue } from './validation';
 
 type BuilderGradingMode = 'AUTO' | 'MANUAL' | 'HYBRID';
 
@@ -55,19 +58,22 @@ type ValidationRailProps = {
   onScoringPolicyChange: (policy: ScoringPolicy) => void;
   // Active question context
   activeQuestion: QuestionInput | undefined;
-  activeQuestionIndex: number;
+  onActiveQuestionPointsChange: (points: number) => void;
+  onActiveQuestionGradingStrategyChange: (strategy: GradingStrategy) => void;
   // Validation
-  title: string;
   questions: QuestionInput[];
   questionsError: string | null;
-  onNavigateToQuestion: (index: number) => void;
+  issues: StudioValidationIssue[];
+  activeIssue: StudioValidationIssue | null;
+  onNavigateToIssue: (issue: StudioValidationIssue) => void;
   // Rubric binding
   isRubricEnabled: boolean;
   isRubricsLoading: boolean;
   rubrics: Rubric[];
-  rubricApplyId: string;
-  onRubricApplyIdChange: (value: string) => void;
-  onApplyRubricToSelected: () => void;
+  assessmentRubricId: number | null;
+  onAssessmentRubricChange: (rubricId: number | null) => void;
+  activeQuestionRubricId: number | null;
+  onActiveQuestionRubricChange: (rubricId: number | null) => void;
   onOpenQuickRubric: () => void;
   onOpenInlineRubricEditor: (rubricId: number | null | undefined) => void;
   onOpenRubricPreview: (rubricId: number | null | undefined) => void;
@@ -86,10 +92,9 @@ type ValidationRailProps = {
     patch: Partial<QuestionGroupInput>,
   ) => void;
   onRemoveQuestionGroup: (clientKey: string) => void;
-  onAssignGroupToSelected: () => void;
+  onUngroupActiveQuestion: () => void;
   // Category
   category: string;
-  onCategoryChange: (category: string) => void;
   categoryOptions: string[];
   isCategoryComposerOpen: boolean;
   onCategoryComposerOpenChange: (open: boolean) => void;
@@ -99,6 +104,7 @@ type ValidationRailProps = {
   onCancelCategoryComposer: () => void;
   onChooseCategoryFromBank: (category: string) => void;
   onClearCategory: () => void;
+  onBackToEditor?: () => void;
 };
 
 function formatQuestionKind(kind: QuestionKind): string {
@@ -116,53 +122,26 @@ function formatQuestionKind(kind: QuestionKind): string {
   }
 }
 
-function isQuestionValid(q: QuestionInput): boolean {
-  if (!q.prompt.trim()) return false;
-  if (q.type === 'MULTIPLE_CHOICE') {
-    const choices = q.data?.choices;
-    if (!choices || choices.length < 2) return false;
-    if (choices.some((c) => !c.prompt.trim())) return false;
-  }
-  if (q.type === 'NUMBER_SCALE') {
-    const min = q.data?.min ?? 0;
-    const max = q.data?.max ?? 0;
-    if (min >= max) return false;
-  }
-  return true;
-}
-
-function getIssueDescription(q: QuestionInput): string {
-  if (!q.prompt.trim()) return 'Missing prompt text';
-  if (q.type === 'MULTIPLE_CHOICE') {
-    const choices = q.data?.choices;
-    if (!choices || choices.length < 2) return 'Needs at least 2 choices';
-    if (choices.some((c) => !c.prompt.trim())) return 'Empty choice text';
-  }
-  if (q.type === 'NUMBER_SCALE') {
-    const min = q.data?.min ?? 0;
-    const max = q.data?.max ?? 0;
-    if (min >= max) return 'Min must be less than max';
-  }
-  return 'Configuration issue';
-}
-
-export default function ValidationRail({
+function ValidationRail({
   gradingMode,
   onGradingModeChange,
   scoringPolicy,
   onScoringPolicyChange,
   activeQuestion,
-  activeQuestionIndex,
-  title,
+  onActiveQuestionPointsChange,
+  onActiveQuestionGradingStrategyChange,
   questions,
   questionsError,
-  onNavigateToQuestion,
+  issues,
+  activeIssue,
+  onNavigateToIssue,
   isRubricEnabled,
   isRubricsLoading,
   rubrics,
-  rubricApplyId,
-  onRubricApplyIdChange,
-  onApplyRubricToSelected,
+  assessmentRubricId,
+  onAssessmentRubricChange,
+  activeQuestionRubricId,
+  onActiveQuestionRubricChange,
   onOpenQuickRubric,
   onOpenInlineRubricEditor,
   onOpenRubricPreview,
@@ -177,9 +156,8 @@ export default function ValidationRail({
   rubricById,
   onUpdateQuestionGroup,
   onRemoveQuestionGroup,
-  onAssignGroupToSelected,
+  onUngroupActiveQuestion,
   category,
-  onCategoryChange,
   categoryOptions,
   isCategoryComposerOpen,
   onCategoryComposerOpenChange,
@@ -189,14 +167,33 @@ export default function ValidationRail({
   onCancelCategoryComposer,
   onChooseCategoryFromBank,
   onClearCategory,
+  onBackToEditor,
 }: ValidationRailProps) {
-  const invalidQuestions = questions
-    .map((q, i) => ({ question: q, index: i }))
-    .filter(({ question }) => !isQuestionValid(question));
+  const rubricSectionRef = useRef<HTMLElement>(null);
+  const groupSectionRef = useRef<HTMLElement>(null);
+  const [highlightedSection, setHighlightedSection] = useState<
+    'rubricBinding' | 'groupManager' | null
+  >(null);
 
-  const hasTitleIssue = !title.trim();
-  const hasNoQuestions = questions.length === 0;
-  const totalIssues = invalidQuestions.length + (hasTitleIssue ? 1 : 0) + (hasNoQuestions ? 1 : 0);
+  useEffect(() => {
+    if (!activeIssue || activeIssue.panel !== 'settings') return;
+
+    let target: HTMLElement | null = null;
+    let nextSection: typeof highlightedSection = null;
+    if (activeIssue.section === 'rubricBinding') {
+      target = rubricSectionRef.current;
+      nextSection = 'rubricBinding';
+    } else if (activeIssue.section === 'groupManager') {
+      target = groupSectionRef.current;
+      nextSection = 'groupManager';
+    }
+    if (!target || !nextSection) return;
+
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightedSection(nextSection);
+    const timeout = window.setTimeout(() => setHighlightedSection(null), 1800);
+    return () => window.clearTimeout(timeout);
+  }, [activeIssue]);
 
   const totalPoints = questions.reduce(
     (sum, q) => sum + (q.maxPoints || 0),
@@ -205,6 +202,22 @@ export default function ValidationRail({
 
   return (
     <div className="flex flex-col h-full gap-6 p-4 overflow-y-auto">
+      <div className="lg:hidden -m-4 mb-2 p-3 border-b border-border bg-card flex items-center justify-between">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onBackToEditor}
+          className="gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </Button>
+        <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          Settings
+        </span>
+      </div>
+
       {/* Assessment Configuration */}
       <section>
         <div className="flex items-center gap-2 mb-3">
@@ -374,10 +387,12 @@ export default function ValidationRail({
       {activeQuestion && (
         <section className="p-3 bg-muted/30 rounded-lg border border-border">
           <div className="flex items-center gap-2 mb-2">
-            <Info className="h-3.5 w-3.5 text-primary" />
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-foreground">
-              Active Question
-            </h3>
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-foreground">
+                Active Question
+              </h3>
+              <HelpTip text="Shows the currently selected question's type, relative weight in this assessment, and whether it can be graded automatically." />
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -410,11 +425,72 @@ export default function ValidationRail({
               />
             </div>
           </div>
+
+          <div className="mt-3 pt-3 border-t border-border/70 space-y-2">
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
+                Question Value
+              </Label>
+              {activeQuestion.type === 'MULTIPLE_CHOICE' ? (
+                <div className="rounded border border-border bg-card px-2.5 py-2">
+                  <p className="text-sm font-mono font-semibold text-foreground">
+                    {activeQuestion.maxPoints} pts
+                  </p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    Derived automatically from this question&apos;s choice values.
+                  </p>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Input
+                    type="number"
+                    min={0}
+                    value={activeQuestion.maxPoints}
+                    onChange={(e) =>
+                      onActiveQuestionPointsChange(Number(e.target.value) || 0)
+                    }
+                    className="h-8 pr-10 text-xs font-mono font-semibold"
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground uppercase">
+                    pts
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {gradingMode === 'HYBRID' && (
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
+                  Grading Strategy
+                </Label>
+                <Select
+                  value={activeQuestion.gradingStrategy ?? 'AUTO'}
+                  onValueChange={(value) =>
+                    onActiveQuestionGradingStrategyChange(value as GradingStrategy)
+                  }
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="AUTO">Auto</SelectItem>
+                    <SelectItem value="MANUAL">Manual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
         </section>
       )}
 
       {/* Rubric Binding */}
-      <section>
+      <section
+        ref={rubricSectionRef}
+        className={cn(
+          'rounded-lg transition-shadow',
+          highlightedSection === 'rubricBinding' && 'ring-2 ring-amber-400/70 ring-offset-2 ring-offset-muted/30',
+        )}
+      >
         <div className="flex items-center justify-between gap-2 mb-2">
           <div className="flex items-center gap-1.5">
             <h3 className="text-xs font-bold text-foreground">Rubric Binding</h3>
@@ -440,22 +516,103 @@ export default function ValidationRail({
           </div>
         ) : (
           <div className="space-y-2">
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
+                Assessment Default
+              </Label>
+              <div className="grid grid-cols-[1fr_auto_auto] gap-1.5">
+                <Select
+                  value={
+                    assessmentRubricId != null
+                      ? String(assessmentRubricId)
+                      : '__NONE__'
+                  }
+                  onValueChange={(value) =>
+                    onAssessmentRubricChange(
+                      value === '__NONE__' ? null : Number(value),
+                    )
+                  }
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue placeholder="No assessment rubric" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__NONE__">No assessment rubric</SelectItem>
+                    {rubrics.map((rubric) => (
+                      <SelectItem
+                        key={rubric.id}
+                        value={String(rubric.id)}
+                        disabled={rubric.status !== 'ACTIVE'}
+                      >
+                        {rubric.title}
+                        {rubric.status !== 'ACTIVE' ? ' (Archived)' : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  disabled={assessmentRubricId == null}
+                  onClick={() => onOpenInlineRubricEditor(assessmentRubricId)}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  disabled={assessmentRubricId == null}
+                  onClick={() => onOpenRubricPreview(assessmentRubricId)}
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                {assessmentRubricId != null
+                  ? `Default rubric: ${
+                      rubricById.get(assessmentRubricId)?.title ?? 'Unavailable'
+                    }`
+                  : 'No assessment-level default rubric'}
+              </p>
+              {assessmentRubricId != null && (
+                <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                  Assessment-level rubric is active. Question and group rubrics must remain clear.
+                </p>
+              )}
+            </div>
+
             {isRubricsLoading ? (
               <p className="text-[10px] text-muted-foreground">
                 Loading rubrics...
               </p>
             ) : (
               <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
+                  Active Question
+                </Label>
                 <div className="grid grid-cols-[1fr_auto_auto] gap-1.5">
                   <Select
-                    value={rubricApplyId}
-                    onValueChange={onRubricApplyIdChange}
+                    value={
+                      activeQuestionRubricId != null
+                        ? String(activeQuestionRubricId)
+                        : '__NONE__'
+                    }
+                    onValueChange={(value) =>
+                      onActiveQuestionRubricChange(
+                        value === '__NONE__' ? null : Number(value),
+                      )
+                    }
+                    disabled={assessmentRubricId != null || !activeQuestion}
                   >
                     <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Select rubric" />
+                      <SelectValue placeholder="No question rubric" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__NONE__">No rubric</SelectItem>
+                      <SelectItem value="__NONE__">No question rubric</SelectItem>
                       {rubrics.map((rubric) => (
                         <SelectItem
                           key={rubric.id}
@@ -473,12 +630,10 @@ export default function ValidationRail({
                     variant="outline"
                     size="icon"
                     className="h-8 w-8"
-                    disabled={rubricApplyId === '__NONE__'}
+                    disabled={activeQuestionRubricId == null || assessmentRubricId != null}
                     onClick={() =>
                       onOpenInlineRubricEditor(
-                        rubricApplyId === '__NONE__'
-                          ? null
-                          : Number(rubricApplyId),
+                        activeQuestionRubricId,
                       )
                     }
                   >
@@ -489,27 +644,23 @@ export default function ValidationRail({
                     variant="outline"
                     size="icon"
                     className="h-8 w-8"
-                    disabled={rubricApplyId === '__NONE__'}
+                    disabled={activeQuestionRubricId == null || assessmentRubricId != null}
                     onClick={() =>
-                      onOpenRubricPreview(
-                        rubricApplyId === '__NONE__'
-                          ? null
-                          : Number(rubricApplyId),
-                      )
+                      onOpenRubricPreview(activeQuestionRubricId)
                     }
                   >
                     <Eye className="h-3.5 w-3.5" />
                   </Button>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="w-full text-xs"
-                  onClick={onApplyRubricToSelected}
-                >
-                  Apply to Active/Selected
-                </Button>
+                <p className="text-[10px] text-muted-foreground">
+                  {activeQuestion
+                    ? activeQuestionRubricId != null
+                      ? `Rubric for active question: ${
+                          rubricById.get(activeQuestionRubricId)?.title ?? 'Unavailable'
+                        }`
+                      : 'No question-level rubric on the active question'
+                    : 'Select a question to assign a question-level rubric'}
+                </p>
               </div>
             )}
           </div>
@@ -517,7 +668,13 @@ export default function ValidationRail({
       </section>
 
       {/* Group Manager */}
-      <section>
+      <section
+        ref={groupSectionRef}
+        className={cn(
+          'rounded-lg transition-shadow',
+          highlightedSection === 'groupManager' && 'ring-2 ring-amber-400/70 ring-offset-2 ring-offset-muted/30',
+        )}
+      >
         <div className="flex items-center gap-1.5 mb-2">
           <h3 className="text-xs font-bold text-foreground">Groups</h3>
           <HelpTip text="Group questions to share rubric settings." />
@@ -581,17 +738,6 @@ export default function ValidationRail({
                   {questionCountByGroupKey.get(selectedAssignGroup.clientKey) ??
                     0}
                 </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-destructive"
-                  onClick={() =>
-                    onRemoveQuestionGroup(selectedAssignGroup.clientKey)
-                  }
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
               </div>
 
               {isRubricEnabled && (
@@ -608,6 +754,7 @@ export default function ValidationRail({
                           value === '__NONE__' ? null : Number(value),
                       })
                     }
+                    disabled={assessmentRubricId != null}
                   >
                     <SelectTrigger className="h-8 text-xs">
                       <SelectValue placeholder="Group rubric" />
@@ -633,7 +780,7 @@ export default function ValidationRail({
                     variant="outline"
                     size="icon"
                     className="h-8 w-8"
-                    disabled={selectedAssignGroup.rubricId == null}
+                    disabled={selectedAssignGroup.rubricId == null || assessmentRubricId != null}
                     onClick={() =>
                       onOpenInlineRubricEditor(selectedAssignGroup.rubricId)
                     }
@@ -645,7 +792,7 @@ export default function ValidationRail({
                     variant="outline"
                     size="icon"
                     className="h-8 w-8"
-                    disabled={selectedAssignGroup.rubricId == null}
+                    disabled={selectedAssignGroup.rubricId == null || assessmentRubricId != null}
                     onClick={() =>
                       onOpenRubricPreview(selectedAssignGroup.rubricId)
                     }
@@ -663,17 +810,39 @@ export default function ValidationRail({
                     }`
                   : 'No rubric attached'}
               </p>
+              {assessmentRubricId != null && (
+                <p className="text-[10px] text-amber-700 dark:text-amber-400">
+                  Clear the assessment rubric before assigning a group rubric.
+                </p>
+              )}
 
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full text-xs"
-                onClick={onAssignGroupToSelected}
-              >
-                <Layers className="mr-1 h-3.5 w-3.5" />
-                Apply Group
-              </Button>
+              {activeQuestion?.groupClientKey === selectedAssignGroup.clientKey && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs"
+                  onClick={onUngroupActiveQuestion}
+                >
+                  <Unlink2 className="mr-1 h-3.5 w-3.5" />
+                  Remove Active Question From Group
+                </Button>
+              )}
+
+              {(questionCountByGroupKey.get(selectedAssignGroup.clientKey) ?? 0) === 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-xs text-destructive hover:text-destructive"
+                  onClick={() =>
+                    onRemoveQuestionGroup(selectedAssignGroup.clientKey)
+                  }
+                >
+                  <Trash2 className="mr-1 h-3.5 w-3.5" />
+                  Delete Empty Group
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -688,15 +857,15 @@ export default function ValidationRail({
               Validation
             </h3>
           </div>
-          <span
+            <span
             className={cn(
               'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold',
-              (totalIssues === 0)
+              issues.length === 0
                 ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
                 : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
             )}
           >
-            {totalIssues} issue{totalIssues !== 1 ? 's' : ''}
+            {issues.length} issue{issues.length !== 1 ? 's' : ''}
           </span>
         </div>
 
@@ -709,59 +878,28 @@ export default function ValidationRail({
         )}
 
         <div className="space-y-2">
-          {/* Title validation */}
-          {!title.trim() && (
-            <div className="w-full flex items-center gap-3 p-3 bg-card border border-amber-200 dark:border-amber-800/50 rounded-lg text-left">
-              <AlertCircle className="h-5 w-5 text-amber-500 dark:text-amber-400 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground">
-                  Assessment Title
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Title is required before saving
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Question issues */}
-          {invalidQuestions.map(({ question, index }) => (
+          {issues.map((issue) => (
             <button
-              key={index}
+              key={issue.id}
               type="button"
-              onClick={() => onNavigateToQuestion(index)}
+              onClick={() => onNavigateToIssue(issue)}
               className="w-full flex items-center gap-3 p-3 bg-card border border-border rounded-lg text-left hover:border-amber-300 dark:hover:border-amber-700 transition-colors group"
             >
               <AlertCircle className="h-5 w-5 text-amber-500 dark:text-amber-400 shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-foreground">
-                  Question {index + 1}
+                  {issue.title}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {getIssueDescription(question)}
+                  {issue.detail}
                 </p>
               </div>
               <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-amber-500 transition-colors shrink-0" />
             </button>
           ))}
 
-          {/* No questions added */}
-          {questions.length === 0 && (
-            <div className="w-full flex items-center gap-3 p-3 bg-card border border-amber-200 dark:border-amber-800/50 rounded-lg text-left">
-              <AlertCircle className="h-5 w-5 text-amber-500 dark:text-amber-400 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground">
-                  No Questions
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Add at least one question
-                </p>
-              </div>
-            </div>
-          )}
-
           {/* All good */}
-          {totalIssues === 0 && questions.length > 0 && (
+          {issues.length === 0 && questions.length > 0 && (
             <div className="p-4 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800/30 rounded-lg text-center">
               <p className="text-sm font-bold text-green-700 dark:text-green-400">
                 All checks passed
@@ -776,3 +914,5 @@ export default function ValidationRail({
     </div>
   );
 }
+
+export default memo(ValidationRail);

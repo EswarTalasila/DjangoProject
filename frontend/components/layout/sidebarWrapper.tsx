@@ -88,7 +88,6 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "header", label: "Assignments & Grading" },
     { type: "link", label: "Assignments", href: "/dashboard/assignments" },
     { type: "link", label: "Submissions", href: "/dashboard/submissions" },
-    { type: "link", label: "Create Assignment", href: "/dashboard/assignments/new" },
     { type: "link", label: "Gradebook", href: "/dashboard/courses" },
 
     { type: "divider" },

@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from accounts.models import User
 from assignments.models import Assignment
-from core.dtos import AssessmentDTO, QuestionDTO, QuestionGroupDTO
+from core.dtos import AssessmentDTO, QuestionDTO, QuestionGroupDTO, QuestionImageDTO
 
 from core.lifecycle import ConflictError
 
@@ -73,6 +73,7 @@ def assessment_to_dto(assessment: Assessment) -> AssessmentDTO:
         category=assessment.category,
         gradingMode=assessment.grading_mode,
         scoringPolicy=assessment.scoring_policy,
+        status=assessment.status,
         rubricId=assessment.rubric_id,
         questions=[question_to_dto(question) for question in assessment.questions.all()],
         questionGroups=groups,
@@ -85,6 +86,8 @@ def question_to_dto(question: Question) -> QuestionDTO:
     Expects question.mcq_choices, question.multiple_choice, question.short_answer,
     and question.number_scale to be prefetched by the caller for optimal performance.
     """
+    from .image_services import question_image_to_dto
+
     data: dict | None = None
     select_all = None
     min_value = None
@@ -113,6 +116,10 @@ def question_to_dto(question: Question) -> QuestionDTO:
     except ObjectDoesNotExist:
         pass
 
+    # Build image DTO if present
+    image_dto_dict = question_image_to_dto(question)
+    image_dto = QuestionImageDTO(**image_dto_dict) if image_dto_dict else None
+
     return QuestionDTO(
         questionId=question.id,
         id=question.id,
@@ -121,6 +128,7 @@ def question_to_dto(question: Question) -> QuestionDTO:
         maxPoints=question.max_points,
         autoGradable=question.auto_gradable,
         graded=question.graded,
+        image=image_dto,
         selectAll=select_all,
         min=min_value,
         max=max_value,
@@ -129,6 +137,34 @@ def question_to_dto(question: Question) -> QuestionDTO:
         rubricId=question.rubric_id,
         gradingStrategy=question.grading_strategy,
     )
+
+
+@transaction.atomic
+def create_draft(request_user: User) -> Assessment:
+    """Create an empty DRAFT assessment with one placeholder question.
+
+    Returns the assessment immediately so the frontend gets IDs for
+    image uploads and autosave.
+    """
+    assessment = Assessment.objects.create(
+        title="",
+        grading_mode=GradingMode.AUTO,
+        scoring_policy=ScoringPolicy.STANDARD,
+        created_by_admin=request_user,
+        status=AssessmentStatus.DRAFT,
+    )
+    # Create a single empty question so the frontend has a question ID
+    Question.objects.create(
+        assessment=assessment,
+        question_type=QuestionKind.MULTIPLE_CHOICE,
+        kind=QuestionKind.MULTIPLE_CHOICE,
+        prompt="",
+        max_points=0,
+        auto_gradable=True,
+        graded=False,
+        grading_strategy=GradingStrategy.AUTO,
+    )
+    return assessment
 
 
 @transaction.atomic
@@ -142,6 +178,7 @@ def create_assessment(request_user: User, payload: dict) -> Assessment:
         raise ValueError("title is required")
 
     questions_payload = payload.get("questions") or []
+    assessment_rubric_id = _resolve_assessment_rubric_id(payload.get("rubricId"))
 
     assessment = Assessment.objects.create(
         title=title,
@@ -149,6 +186,7 @@ def create_assessment(request_user: User, payload: dict) -> Assessment:
         scoring_policy=scoring_policy,
         created_by_admin=request_user,
         category=payload.get("category"),
+        rubric_id=assessment_rubric_id,
     )
     group_map = _create_question_groups(assessment, payload.get("questionGroups") or [])
     _replace_questions(assessment, questions_payload, group_map)
@@ -165,19 +203,67 @@ def update_assessment(assessment: Assessment, payload: dict) -> Assessment:
     grading_mode = payload.get("gradingMode", assessment.grading_mode)
     scoring_policy = payload.get("scoringPolicy", assessment.scoring_policy)
     questions_payload = payload.get("questions") or []
+    assessment_rubric_id = _resolve_assessment_rubric_id(
+        payload.get("rubricId", assessment.rubric_id)
+    )
 
     assessment.title = payload.get("title", assessment.title)
     assessment.category = payload.get("category")
     assessment.grading_mode = grading_mode
     assessment.scoring_policy = scoring_policy
+    assessment.rubric_id = assessment_rubric_id
     assessment.save()
 
     # Replace question groups
     AssessmentQuestionGroup.objects.filter(assessment=assessment).delete()
     group_map = _create_question_groups(assessment, payload.get("questionGroups") or [])
-    _replace_questions(assessment, questions_payload, group_map)
-    _validate_rubric_rules(assessment)
+    _replace_questions(
+        assessment,
+        questions_payload,
+        group_map,
+        allow_incomplete=assessment.status == AssessmentStatus.DRAFT,
+    )
+
+    # Only enforce rubric rules on non-draft assessments
+    if assessment.status != AssessmentStatus.DRAFT:
+        _validate_rubric_rules(assessment)
+
     return assessment
+
+
+@transaction.atomic
+def publish_assessment(assessment: Assessment) -> Assessment:
+    """Transition a DRAFT assessment to ACTIVE (published).
+
+    Validates the assessment is complete before publishing.
+    """
+    if assessment.status != AssessmentStatus.DRAFT:
+        raise ConflictError("Only draft assessments can be published.")
+
+    if not assessment.title.strip():
+        raise ValueError("Assessment title is required before publishing.")
+
+    questions = list(assessment.questions.all())
+    if not questions:
+        raise ValueError("Assessment must have at least one question.")
+
+    for q in questions:
+        if not q.prompt.strip():
+            raise ValueError(f"Question '{q.kind}' is missing prompt text.")
+
+    _validate_rubric_rules(assessment)
+
+    assessment.status = AssessmentStatus.ACTIVE
+    assessment.save(update_fields=["status"])
+    return assessment
+
+
+@transaction.atomic
+def delete_draft(assessment: Assessment) -> None:
+    """Hard-delete a DRAFT assessment. Only drafts can be deleted this way."""
+    if assessment.status != AssessmentStatus.DRAFT:
+        raise ConflictError("Only draft assessments can be deleted.")
+    assessment.delete()
 
 
 @transaction.atomic
@@ -187,14 +273,21 @@ def delete_assessment(assessment: Assessment) -> None:
     assessment.delete()
 
 
-def list_assessments(include_archived: bool = False) -> list[Assessment]:
+def list_assessments(
+    include_archived: bool = False,
+    include_drafts: bool = False,
+) -> list[Assessment]:
     """List assessments with related data prefetched for DTO conversion.
 
-    By default only ACTIVE; set include_archived=True for all.
+    By default only ACTIVE; set include_archived/include_drafts for more.
     """
     qs = Assessment.objects.all()
-    if not include_archived:
+    if not include_archived and not include_drafts:
         qs = qs.filter(status=AssessmentStatus.ACTIVE)
+    elif include_drafts and not include_archived:
+        qs = qs.filter(status__in=[AssessmentStatus.ACTIVE, AssessmentStatus.DRAFT])
+    elif include_archived and not include_drafts:
+        qs = qs.filter(status__in=[AssessmentStatus.ACTIVE, AssessmentStatus.ARCHIVED])
     return list(
         qs.prefetch_related(
             Prefetch(
@@ -271,28 +364,65 @@ def _create_question_groups(
     return group_map
 
 
+def _resolve_assessment_rubric_id(rubric_id: int | None) -> int | None:
+    from rubrics.models import Rubric, RubricStatus
+
+    if rubric_id is None:
+        return None
+
+    rubric = Rubric.objects.filter(id=rubric_id).first()
+    if not rubric:
+        raise ValueError(f"Rubric {rubric_id} not found")
+    if rubric.status == RubricStatus.ARCHIVED:
+        raise ValueError(f"Cannot attach archived rubric {rubric_id}")
+    return rubric.id
+
+
 def _replace_questions(
     assessment: Assessment,
     questions: Iterable[dict],
     group_map: dict[str, AssessmentQuestionGroup] | None = None,
+    allow_incomplete: bool = False,
 ) -> None:
     Question.objects.filter(assessment=assessment).delete()
     for question_payload in questions:
-        _create_question(assessment, question_payload, group_map or {})
+        _create_question(
+            assessment,
+            question_payload,
+            group_map or {},
+            allow_incomplete=allow_incomplete,
+        )
+
+
+def _derive_question_max_points(kind: str, data: dict, fallback: float | int | None) -> float:
+    if kind == QuestionKind.MULTIPLE_CHOICE:
+        positive_scores = [
+            float(choice.get("score") or 0)
+            for choice in data.get("choices", [])
+            if (choice.get("score") or 0) > 0
+        ]
+        if not positive_scores:
+            return 0.0
+        if data.get("selectAll"):
+            return float(sum(positive_scores))
+        return float(max(positive_scores))
+
+    return float(fallback or 0)
 
 
 def _create_question(
     assessment: Assessment,
     payload: dict,
     group_map: dict[str, AssessmentQuestionGroup],
+    allow_incomplete: bool = False,
 ) -> Question:
     from rubrics.models import Rubric, RubricStatus
 
     kind = payload.get("type")
     if not kind:
         raise ValueError("Question type is required")
-    prompt = payload.get("prompt")
-    if not prompt:
+    prompt = payload.get("prompt", "")
+    if not prompt and not allow_incomplete:
         raise ValueError("Question prompt is required")
 
     # Resolve question group
@@ -310,19 +440,24 @@ def _create_question(
 
     grading_strategy = payload.get("gradingStrategy", GradingStrategy.AUTO)
 
+    # Carry forward image metadata if present in the payload
+    image_json = payload.get("image")
+    data = payload.get("data") or {}
+    max_points = _derive_question_max_points(kind, data, payload.get("maxPoints"))
+
     question = Question.objects.create(
         assessment=assessment,
         question_type=kind,
         kind=kind,
         prompt=prompt,
-        max_points=payload.get("maxPoints") or 0,
+        max_points=max_points,
         auto_gradable=kind in (QuestionKind.MULTIPLE_CHOICE, QuestionKind.NUMBER_SCALE),
         graded=False,
+        image=image_json if isinstance(image_json, str) else None,
         question_group=question_group,
         rubric_id=rubric_id,
         grading_strategy=grading_strategy,
     )
-    data = payload.get("data") or {}
 
     if kind == QuestionKind.MULTIPLE_CHOICE:
         MultipleChoiceQuestion.objects.create(
@@ -343,8 +478,12 @@ def _create_question(
     elif kind == QuestionKind.NUMBER_SCALE:
         min_value = data.get("min")
         max_value = data.get("max")
-        if min_value is None or max_value is None:
+        if (min_value is None or max_value is None) and not allow_incomplete:
             raise ValueError("min and max are required for number scale questions")
+        if allow_incomplete and min_value is None:
+            min_value = 1
+        if allow_incomplete and max_value is None:
+            max_value = 5
         if min_value is not None and max_value is not None and min_value > max_value:
             min_value, max_value = max_value, min_value
         NumberScaleQuestion.objects.create(
@@ -359,11 +498,24 @@ def _create_question(
 def _validate_rubric_rules(assessment: Assessment) -> None:
     """Validate rubric linkage rules based on grading mode."""
     mode = assessment.grading_mode
-    questions = assessment.questions.all()
+    questions = list(assessment.questions.all())
+    has_assessment_rubric = assessment.rubric_id is not None
+    has_specific_rubrics = any(
+        q.rubric_id is not None
+        or (q.question_group and q.question_group.rubric_id is not None)
+        for q in questions
+    )
+
+    if has_assessment_rubric and has_specific_rubrics:
+        raise ValueError(
+            "Assessment rubric cannot be combined with question or group rubrics"
+        )
 
     for q in questions:
-        has_rubric = q.rubric_id is not None or (
-            q.question_group and q.question_group.rubric_id is not None
+        has_rubric = (
+            q.rubric_id is not None
+            or (q.question_group and q.question_group.rubric_id is not None)
+            or assessment.rubric_id is not None
         )
         strategy = q.grading_strategy
 

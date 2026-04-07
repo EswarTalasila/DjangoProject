@@ -27,22 +27,31 @@ def _make_assessment(user, **overrides):
 # ===========================================================================
 @pytest.mark.django_db
 class TestLegacyFieldRejection:
-    """Old payloads with rubricId/rubricAssessmentIds fail fast 400."""
+    """Current and legacy rubric payload behavior."""
 
-    def test_create_with_rubricId_returns_400(self, api_client, admin_user):
-        """Sending legacy rubricId on create returns 400."""
+    def test_create_with_assessment_rubric_succeeds(self, api_client, admin_user):
+        """Top-level rubricId now binds a default rubric to the assessment."""
+        r = _make_rubric(admin_user)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
             "/api/v1/assessments/",
             {
                 "title": "Test",
-                "gradingMode": "AUTO",
-                "questions": [],
-                "rubricId": 1,
+                "gradingMode": "MANUAL",
+                "rubricId": r.id,
+                "questions": [
+                    {
+                        "type": "SHORT_ANSWER",
+                        "prompt": "Explain",
+                        "maxPoints": 10,
+                        "data": {"trim": True, "caseSensitive": False},
+                    }
+                ],
             },
             format="json",
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 201
+        assert resp.json()["rubricId"] == r.id
 
     def test_create_with_rubricAssessmentIds_returns_400(self, api_client, admin_user):
         """Sending legacy rubricAssessmentIds on create returns 400."""
@@ -140,6 +149,30 @@ class TestArchivedRubricAttachment:
                         "maxPoints": 10,
                         "groupClientKey": "g1",
                         "gradingStrategy": "MANUAL",
+                        "data": {"trim": True, "caseSensitive": False},
+                    }
+                ],
+            },
+            format="json",
+        )
+        assert resp.status_code == 400
+        assert "archived" in resp.json()["detail"].lower()
+
+    def test_archived_rubric_on_assessment_returns_400(self, api_client, admin_user):
+        """Attaching archived rubric to the assessment returns 400."""
+        r = _make_rubric(admin_user, status=RubricStatus.ARCHIVED)
+        api_client.force_authenticate(user=admin_user)
+        resp = api_client.post(
+            "/api/v1/assessments/",
+            {
+                "title": "Test",
+                "gradingMode": "MANUAL",
+                "rubricId": r.id,
+                "questions": [
+                    {
+                        "type": "SHORT_ANSWER",
+                        "prompt": "Q",
+                        "maxPoints": 10,
                         "data": {"trim": True, "caseSensitive": False},
                     }
                 ],
@@ -375,6 +408,59 @@ class TestQuestionGroups:
         # Second question should not be in a group
         assert data["questions"][1]["groupId"] is None
 
+    def test_manual_with_assessment_rubric_succeeds(self, api_client, admin_user):
+        """Assessment-level rubric satisfies MANUAL rubric requirements."""
+        r = _make_rubric(admin_user)
+        api_client.force_authenticate(user=admin_user)
+        resp = api_client.post(
+            "/api/v1/assessments/",
+            {
+                "title": "Manual Assessment Rubric",
+                "gradingMode": "MANUAL",
+                "rubricId": r.id,
+                "questions": [
+                    {
+                        "type": "SHORT_ANSWER",
+                        "prompt": "Explain",
+                        "maxPoints": 10,
+                        "data": {"trim": True, "caseSensitive": False},
+                    }
+                ],
+            },
+            format="json",
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["rubricId"] == r.id
+        assert data["questions"][0]["rubricId"] is None
+
+    def test_hybrid_manual_question_inherits_assessment_rubric(
+        self, api_client, admin_user
+    ):
+        """HYBRID MANUAL questions can inherit the assessment-level rubric."""
+        r = _make_rubric(admin_user)
+        api_client.force_authenticate(user=admin_user)
+        resp = api_client.post(
+            "/api/v1/assessments/",
+            {
+                "title": "Hybrid Assessment Rubric",
+                "gradingMode": "HYBRID",
+                "rubricId": r.id,
+                "questions": [
+                    {
+                        "type": "SHORT_ANSWER",
+                        "prompt": "Explain",
+                        "maxPoints": 10,
+                        "gradingStrategy": "MANUAL",
+                        "data": {"trim": True, "caseSensitive": False},
+                    }
+                ],
+            },
+            format="json",
+        )
+        assert resp.status_code == 201
+        assert resp.json()["rubricId"] == r.id
+
 
 # ===========================================================================
 # AUTO mode rubric linkage rejection
@@ -398,6 +484,33 @@ class TestAutoModeRubricRejection:
                         "prompt": "Pick",
                         "maxPoints": 5,
                         "rubricId": r.id,
+                        "data": {
+                            "choices": [{"prompt": "A", "score": 1}],
+                            "selectAll": False,
+                        },
+                    }
+                ],
+            },
+            format="json",
+        )
+        assert resp.status_code == 400
+        assert "auto" in resp.json()["detail"].lower()
+
+    def test_auto_with_assessment_rubric_returns_400(self, api_client, admin_user):
+        """AUTO mode with an assessment-level rubric returns 400."""
+        r = _make_rubric(admin_user)
+        api_client.force_authenticate(user=admin_user)
+        resp = api_client.post(
+            "/api/v1/assessments/",
+            {
+                "title": "Assessment Rubric in Auto",
+                "gradingMode": "AUTO",
+                "rubricId": r.id,
+                "questions": [
+                    {
+                        "type": "MULTIPLE_CHOICE",
+                        "prompt": "Pick",
+                        "maxPoints": 5,
                         "data": {
                             "choices": [{"prompt": "A", "score": 1}],
                             "selectAll": False,

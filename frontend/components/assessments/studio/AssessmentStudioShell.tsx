@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useDeferredValue, useRef } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -9,14 +9,19 @@ import {
   type Assessment,
   type AssessmentInput,
   type QuestionInput,
+  type QuestionImage,
   type GradingMode,
   type ScoringPolicy,
   type QuestionKind,
   type QuestionGroupInput,
   getAssessment,
-  createAssessment,
+  createDraft,
   listAssessments,
   updateAssessment,
+  deleteAssessment,
+  publishAssessment,
+  uploadQuestionImage,
+  deleteQuestionImage,
 } from '@/lib/assessment-api';
 import { listRubrics, type Rubric } from '@/lib/rubric-api';
 import { toErrorMessage, cn } from '@/lib/utils';
@@ -26,6 +31,11 @@ import StructureRail from './StructureRail';
 import QuestionStudio from './QuestionStudio';
 import ValidationRail from './ValidationRail';
 import AssessmentActionBar from '../AssessmentActionBar';
+import {
+  buildStudioValidationIssues,
+  type StudioValidationIssue,
+} from './validation';
+import { syncDerivedQuestionPoints } from './scoring';
 
 // -- Error handling --
 
@@ -38,17 +48,58 @@ function getStatusCode(error: unknown): number | undefined {
 type BuilderGradingMode = 'AUTO' | 'MANUAL' | 'HYBRID';
 
 function emptyMcqQuestion(): QuestionInput {
-  return {
+  return syncDerivedQuestionPoints({
     type: 'MULTIPLE_CHOICE' as QuestionKind,
     prompt: '',
     maxPoints: 0,
     data: { choices: [{ prompt: '', score: 0 }], selectAll: false },
     gradingStrategy: 'AUTO',
-  };
+  });
 }
 
 function makeGroupKey(nextIndex: number): string {
   return `group-${Date.now()}-${nextIndex}`;
+}
+
+function remapQuestionIdMapAfterMove(
+  current: Map<number, number>,
+  from: number,
+  to: number,
+): Map<number, number> {
+  const next = new Map<number, number>();
+  current.forEach((questionId, index) => {
+    let remappedIndex = index;
+    if (index === from) {
+      remappedIndex = to;
+    } else if (from < to && index > from && index <= to) {
+      remappedIndex = index - 1;
+    } else if (from > to && index >= to && index < from) {
+      remappedIndex = index + 1;
+    }
+    next.set(remappedIndex, questionId);
+  });
+  return next;
+}
+
+function remapQuestionIdMapAfterRemoval(
+  current: Map<number, number>,
+  removedIndex: number,
+): Map<number, number> {
+  const next = new Map<number, number>();
+  current.forEach((questionId, index) => {
+    if (index === removedIndex) return;
+    next.set(index > removedIndex ? index - 1 : index, questionId);
+  });
+  return next;
+}
+
+function remapQuestionIdMapAfterAppend(
+  current: Map<number, number>,
+  nextLength: number,
+): Map<number, number> {
+  const next = new Map(current);
+  next.delete(nextLength - 1);
+  return next;
 }
 
 function normalizeBuilderMode(mode: GradingMode): BuilderGradingMode {
@@ -61,7 +112,8 @@ function normalizeQuestionKind(kind: string): QuestionKind {
     kind === 'MULTIPLE_CHOICE' ||
     kind === 'SHORT_ANSWER' ||
     kind === 'NUMBER_SCALE' ||
-    kind === 'MOOD_METER'
+    kind === 'MOOD_METER' ||
+    kind === 'FILE_UPLOAD'
   ) {
     return kind;
   }
@@ -90,6 +142,9 @@ export default function AssessmentStudioShell({
   const [isCategoryComposerOpen, setIsCategoryComposerOpen] = useState(false);
   const [gradingMode, setGradingMode] = useState<BuilderGradingMode>('AUTO');
   const [scoringPolicy, setScoringPolicy] = useState<ScoringPolicy>('STANDARD');
+  const [assessmentRubricId, setAssessmentRubricId] = useState<number | null>(
+    null,
+  );
   const [questions, setQuestions] = useState<QuestionInput[]>([
     emptyMcqQuestion(),
   ]);
@@ -100,11 +155,7 @@ export default function AssessmentStudioShell({
 
   // Selection / editor state
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState(0);
-  const [selectedQuestionIndices, setSelectedQuestionIndices] = useState<
-    number[]
-  >([]);
   const [assignGroupKey, setAssignGroupKey] = useState('__NONE__');
-  const [rubricApplyId, setRubricApplyId] = useState('__NONE__');
   const [newGroupName, setNewGroupName] = useState('');
   const [draggingQuestionIndex, setDraggingQuestionIndex] = useState<
     number | null
@@ -128,13 +179,43 @@ export default function AssessmentStudioShell({
   const [titleError, setTitleError] = useState<string | null>(null);
   const [questionsError, setQuestionsError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(mode === 'edit');
-  const [assessmentStatus, setAssessmentStatus] = useState<string>('ACTIVE');
+  const [isLoading, setIsLoading] = useState(true);
+  const [assessmentStatus, setAssessmentStatus] = useState<string>(
+    mode === 'create' ? 'DRAFT' : 'ACTIVE',
+  );
+  // The resolved backend assessment ID (set after draft creation or edit load)
+  const [resolvedId, setResolvedId] = useState<number | undefined>(assessmentId);
+  // Maps frontend question array index → backend question ID
+  const [questionIdMap, setQuestionIdMap] = useState<Map<number, number>>(
+    new Map(),
+  );
+  const [activeValidationIssue, setActiveValidationIssue] =
+    useState<StudioValidationIssue | null>(null);
+  const [validationFocusSignal, setValidationFocusSignal] = useState(0);
+
+  // Autosave state
+  type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+  const [saveState, setSaveState] = useState<SaveState>('idle');
+  const [isPublishing, setIsPublishing] = useState(false);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autosavePrimedRef = useRef(false);
+  const isDraft = assessmentStatus === 'DRAFT';
 
   // Mobile tab state
   const [mobileView, setMobileView] = useState<
     'structure' | 'editor' | 'settings'
   >('editor');
+
+  const deferredTitle = useDeferredValue(title);
+  const deferredAssessmentRubricId = useDeferredValue(assessmentRubricId);
+  const deferredQuestions = useDeferredValue(questions);
+  const deferredQuestionGroups = useDeferredValue(questionGroups);
+
+  const clearValidationAttention = useCallback(() => {
+    setActiveValidationIssue(null);
+    setTitleError(null);
+    setQuestionsError(null);
+  }, []);
 
   const rubricById = useMemo(() => {
     const map = new Map<number, Rubric>();
@@ -146,15 +227,15 @@ export default function AssessmentStudioShell({
 
   const groupByKey = useMemo(() => {
     const map = new Map<string, QuestionGroupInput>();
-    for (const group of questionGroups) {
+    for (const group of deferredQuestionGroups) {
       map.set(group.clientKey, group);
     }
     return map;
-  }, [questionGroups]);
+  }, [deferredQuestionGroups]);
 
   const questionCountByGroupKey = useMemo(() => {
     const map = new Map<string, number>();
-    for (const question of questions) {
+    for (const question of deferredQuestions) {
       if (!question.groupClientKey) continue;
       map.set(
         question.groupClientKey,
@@ -162,29 +243,29 @@ export default function AssessmentStudioShell({
       );
     }
     return map;
-  }, [questions]);
+  }, [deferredQuestions]);
 
   const isRubricEnabled = gradingMode !== 'AUTO';
+  const hasSpecificRubrics = useMemo(
+    () =>
+      questionGroups.some((group) => group.rubricId != null) ||
+      questions.some((question) => question.rubricId != null),
+    [questionGroups, questions],
+  );
 
-  function isManualQuestion(
-    q: QuestionInput,
-    modeValue: BuilderGradingMode,
-  ): boolean {
-    if (modeValue === 'MANUAL') return true;
-    if (modeValue === 'HYBRID') {
-      return (q.gradingStrategy ?? 'AUTO') === 'MANUAL';
-    }
-    return false;
-  }
-
-  function effectiveRubricId(q: QuestionInput): number | null {
-    if (q.rubricId != null) return q.rubricId;
-    if (!q.groupClientKey) return null;
-    const group = questionGroups.find(
-      (g) => g.clientKey === q.groupClientKey,
-    );
-    return group?.rubricId ?? null;
-  }
+  const effectiveRubricId = useCallback(
+    (q: QuestionInput): number | null => {
+      if (q.rubricId != null) return q.rubricId;
+      if (q.groupClientKey) {
+        const group = questionGroups.find(
+          (g) => g.clientKey === q.groupClientKey,
+        );
+        if (group?.rubricId != null) return group.rubricId;
+      }
+      return assessmentRubricId;
+    },
+    [questionGroups, assessmentRubricId],
+  );
 
   // -- Load rubrics --
 
@@ -246,59 +327,90 @@ export default function AssessmentStudioShell({
     }
   }, [category, isCategoryComposerOpen]);
 
-  // -- Edit mode: fetch existing assessment --
+  // -- Load or create draft --
+
+  function applyAssessmentData(a: Assessment) {
+    setTitle(a.title);
+    setCategory(a.category ?? '');
+    setGradingMode(normalizeBuilderMode(a.gradingMode));
+    setScoringPolicy(a.scoringPolicy ?? 'STANDARD');
+    setAssessmentRubricId(a.rubricId ?? null);
+    setAssessmentStatus(a.status ?? 'ACTIVE');
+    setResolvedId(a.id);
+
+    const mappedGroups: QuestionGroupInput[] = (
+      a.questionGroups ?? []
+    ).map((group, index) => ({
+      clientKey: `group-${group.id}-${index}`,
+      name: group.name,
+      rubricId: group.rubricId,
+    }));
+    setQuestionGroups(mappedGroups);
+
+    const groupKeyById = new Map<number, string>();
+    for (let i = 0; i < (a.questionGroups ?? []).length; i += 1) {
+      groupKeyById.set(a.questionGroups[i].id, mappedGroups[i].clientKey);
+    }
+
+    if (a.questions.length > 0) {
+      setQuestions(
+        a.questions.map((q) => ({
+          ...syncDerivedQuestionPoints({
+            type: normalizeQuestionKind(String(q.type)),
+            prompt: q.prompt,
+            maxPoints: q.maxPoints,
+            data: q.data ?? undefined,
+            gradingStrategy: q.gradingStrategy,
+            rubricId: q.rubricId,
+            groupClientKey:
+              q.groupId != null ? groupKeyById.get(q.groupId) : undefined,
+            questionImage: q.image ?? null,
+          }),
+        })),
+      );
+      const idMap = new Map<number, number>();
+      a.questions.forEach((q, idx) => idMap.set(idx, q.id));
+      setQuestionIdMap(idMap);
+
+      setSelectedQuestionIndex(0);
+      const firstQuestionGroupKey =
+        a.questions[0].groupId != null
+          ? groupKeyById.get(a.questions[0].groupId) ?? '__NONE__'
+          : '__NONE__';
+      setAssignGroupKey(firstQuestionGroupKey);
+    } else {
+      setQuestions([emptyMcqQuestion()]);
+      setSelectedQuestionIndex(0);
+      setAssignGroupKey('__NONE__');
+      setQuestionIdMap(new Map());
+    }
+  }
 
   useEffect(() => {
-    if (mode !== 'edit' || !assessmentId) return;
-
     let cancelled = false;
 
-    async function load() {
+    async function init() {
       try {
-        const a: Assessment = await getAssessment(assessmentId!);
-        if (cancelled) return;
-
-        setTitle(a.title);
-        setCategory(a.category ?? '');
-        setGradingMode(normalizeBuilderMode(a.gradingMode));
-        setScoringPolicy(a.scoringPolicy ?? 'STANDARD');
-        setAssessmentStatus(a.status ?? 'ACTIVE');
-
-        const mappedGroups: QuestionGroupInput[] = (
-          a.questionGroups ?? []
-        ).map((group, index) => ({
-          clientKey: `group-${group.id}-${index}`,
-          name: group.name,
-          rubricId: group.rubricId,
-        }));
-        setQuestionGroups(mappedGroups);
-
-        const groupKeyById = new Map<number, string>();
-        for (let i = 0; i < (a.questionGroups ?? []).length; i += 1) {
-          groupKeyById.set(a.questionGroups[i].id, mappedGroups[i].clientKey);
-        }
-
-        if (a.questions.length > 0) {
-          setQuestions(
-            a.questions.map((q) => ({
-              type: normalizeQuestionKind(String(q.type)),
-              prompt: q.prompt,
-              maxPoints: q.maxPoints,
-              data: q.data ?? undefined,
-              gradingStrategy: q.gradingStrategy,
-              rubricId: q.rubricId,
-              groupClientKey:
-                q.groupId != null ? groupKeyById.get(q.groupId) : undefined,
-            })),
-          );
-          setSelectedQuestionIndex(0);
+        if (mode === 'edit' && assessmentId) {
+          // Load existing assessment
+          const a = await getAssessment(assessmentId);
+          if (cancelled) return;
+          applyAssessmentData(a);
         } else {
-          setQuestions([emptyMcqQuestion()]);
-          setSelectedQuestionIndex(0);
+          // Create mode: immediately create a DRAFT
+          const a = await createDraft();
+          if (cancelled) return;
+          applyAssessmentData(a);
+          // Replace URL so browser back works and we don't create another draft
+          window.history.replaceState(
+            null,
+            '',
+            `/dashboard/assessments/${a.id}/edit`,
+          );
         }
       } catch {
         if (!cancelled) {
-          toast.error('Failed to load assessment');
+          toast.error('Failed to initialize assessment');
           router.push('/dashboard/assessments');
         }
       } finally {
@@ -306,19 +418,22 @@ export default function AssessmentStudioShell({
       }
     }
 
-    void load();
+    void init();
     return () => {
       cancelled = true;
     };
-  }, [mode, assessmentId, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // -- Question array helpers --
 
   const handleQuestionChange = useCallback(
     (index: number, updated: QuestionInput) => {
-      setQuestions((prev) => prev.map((q, i) => (i === index ? updated : q)));
+      clearValidationAttention();
+      const normalized = syncDerivedQuestionPoints(updated);
+      setQuestions((prev) => prev.map((q, i) => (i === index ? normalized : q)));
     },
-    [],
+    [clearValidationAttention],
   );
 
   const handleQuestionRemove = useCallback(
@@ -330,12 +445,7 @@ export default function AssessmentStudioShell({
         }
         return next;
       });
-
-      setSelectedQuestionIndices((prev) =>
-        prev
-          .filter((i) => i !== index)
-          .map((i) => (i > index ? i - 1 : i)),
-      );
+      setQuestionIdMap((prev) => remapQuestionIdMapAfterRemoval(prev, index));
 
       setSelectedQuestionIndex((prev) => {
         if (prev === index) {
@@ -357,14 +467,6 @@ export default function AssessmentStudioShell({
       return copy;
     });
 
-    setSelectedQuestionIndices((prev) =>
-      prev.map((i) => {
-        if (i === index) return index - 1;
-        if (i === index - 1) return index;
-        return i;
-      }),
-    );
-
     setSelectedQuestionIndex((prev) => {
       if (prev === index) return index - 1;
       if (prev === index - 1) return index;
@@ -381,14 +483,6 @@ export default function AssessmentStudioShell({
         return copy;
       });
 
-      setSelectedQuestionIndices((prev) =>
-        prev.map((i) => {
-          if (i === index) return index + 1;
-          if (i === index + 1) return index;
-          return i;
-        }),
-      );
-
       setSelectedQuestionIndex((prev) => {
         if (prev === index) return index + 1;
         if (prev === index + 1) return index;
@@ -401,6 +495,9 @@ export default function AssessmentStudioShell({
   function addQuestion() {
     setQuestions((prev) => {
       const next = [...prev, emptyMcqQuestion()];
+      setQuestionIdMap((current) =>
+        remapQuestionIdMapAfterAppend(current, next.length),
+      );
       setSelectedQuestionIndex(next.length - 1);
       return next;
     });
@@ -434,12 +531,7 @@ export default function AssessmentStudioShell({
       next.splice(to, 0, moved);
       return next;
     });
-
-    setSelectedQuestionIndices((prev) =>
-      prev
-        .map((idx) => remapIndexAfterMove(idx, from, to))
-        .sort((a, b) => a - b),
-    );
+    setQuestionIdMap((prev) => remapQuestionIdMapAfterMove(prev, from, to));
     setSelectedQuestionIndex((prev) =>
       remapIndexAfterMove(prev, from, to),
     );
@@ -452,9 +544,13 @@ export default function AssessmentStudioShell({
       ...q,
       prompt: `${q.prompt} (Copy)`,
       data: q.data ? { ...q.data } : undefined,
+      questionImage: null,
     };
     setQuestions((prev) => {
       const next = [...prev, duplicated];
+      setQuestionIdMap((current) =>
+        remapQuestionIdMapAfterAppend(current, next.length),
+      );
       setSelectedQuestionIndex(next.length - 1);
       return next;
     });
@@ -493,68 +589,104 @@ export default function AssessmentStudioShell({
     );
   }
 
-  function assignGroupToSelected() {
-    if (
-      assignGroupKey !== '__NONE__' &&
-      !questionGroups.some((group) => group.clientKey === assignGroupKey)
-    ) {
-      toast.error('Select a valid group first.');
+  const handleAssignGroupKeyChange = useCallback(
+    (value: string) => {
+      setAssignGroupKey(value);
+
+      const nextGroupClientKey = value === '__NONE__' ? undefined : value;
+      const question = questions[selectedQuestionIndex];
+      if (!question) return;
+      if (question.groupClientKey === nextGroupClientKey) return;
+
+      clearValidationAttention();
+      setQuestions((prev) =>
+        prev.map((q, i) =>
+          i === selectedQuestionIndex
+            ? { ...q, groupClientKey: nextGroupClientKey }
+            : q,
+        ),
+      );
+    },
+    [
+      clearValidationAttention,
+      questions,
+      selectedQuestionIndex,
+    ],
+  );
+
+  const handleUngroupActiveQuestion = useCallback(() => {
+    const question = questions[selectedQuestionIndex];
+    if (!question?.groupClientKey) return;
+
+    clearValidationAttention();
+    setAssignGroupKey('__NONE__');
+    setQuestions((prev) =>
+      prev.map((q, i) =>
+        i === selectedQuestionIndex ? { ...q, groupClientKey: undefined } : q,
+      ),
+    );
+  }, [clearValidationAttention, questions, selectedQuestionIndex]);
+
+  const handleActiveQuestionRubricChange = useCallback((rubricId: number | null) => {
+    if (!isRubricEnabled) {
+      toast.error('Switch to MANUAL or HYBRID to attach rubrics.');
+      return;
+    }
+    if (assessmentRubricId != null && rubricId != null) {
+      toast.error(
+        'Clear the assessment rubric before applying question-level rubrics.',
+      );
       return;
     }
 
-    const targetIndices =
-      selectedQuestionIndices.length > 0
-        ? selectedQuestionIndices
-        : [selectedQuestionIndex];
-
+    clearValidationAttention();
     setQuestions((prev) =>
-      prev.map((q, i) => {
-        if (!targetIndices.includes(i)) return q;
-        return {
-          ...q,
-          groupClientKey:
-            assignGroupKey === '__NONE__' ? undefined : assignGroupKey,
-        };
-      }),
-    );
-
-    toast.success(
-      assignGroupKey === '__NONE__'
-        ? 'Removed selected question(s) from group.'
-        : 'Assigned selected question(s) to group.',
-    );
-  }
-
-  function applyRubricToIndices(indices: number[], rubricId: number | null) {
-    setQuestions((prev) =>
-      prev.map((q, i) => {
-        if (!indices.includes(i)) return q;
-        const next: QuestionInput = { ...q, rubricId };
+      prev.map((question, index) => {
+        if (index !== selectedQuestionIndex) return question;
+        const next: QuestionInput = { ...question, rubricId };
         if (gradingMode === 'HYBRID' && rubricId != null) {
           next.gradingStrategy = 'MANUAL';
         }
         return next;
       }),
     );
-  }
+  }, [
+    assessmentRubricId,
+    clearValidationAttention,
+    gradingMode,
+    isRubricEnabled,
+    selectedQuestionIndex,
+  ]);
 
-  function applyRubricToSelectedQuestions() {
-    if (!isRubricEnabled) {
-      toast.error('Switch to MANUAL or HYBRID to attach rubrics.');
-      return;
-    }
-    const targetIndices =
-      selectedQuestionIndices.length > 0
-        ? selectedQuestionIndices
-        : [selectedQuestionIndex];
+  const handleActiveQuestionPointsChange = useCallback((value: number) => {
+    const question = questions[selectedQuestionIndex];
+    if (!question || question.type === 'MULTIPLE_CHOICE') return;
 
-    const rubricId =
-      rubricApplyId === '__NONE__' ? null : Number(rubricApplyId);
+    clearValidationAttention();
+    const nextPoints = Math.max(0, value);
+    setQuestions((prev) =>
+      prev.map((current, index) =>
+        index === selectedQuestionIndex
+          ? { ...current, maxPoints: nextPoints }
+          : current,
+      ),
+    );
+  }, [clearValidationAttention, questions, selectedQuestionIndex]);
 
-    applyRubricToIndices(targetIndices, rubricId);
+  const handleActiveQuestionGradingStrategyChange = useCallback((strategy: 'AUTO' | 'MANUAL') => {
+    if (gradingMode !== 'HYBRID') return;
+    const question = questions[selectedQuestionIndex];
+    if (!question) return;
 
-    toast.success('Applied rubric to selected question(s).');
-  }
+    clearValidationAttention();
+    setQuestions((prev) =>
+      prev.map((current, index) =>
+        index === selectedQuestionIndex
+          ? { ...current, gradingStrategy: strategy }
+          : current,
+      ),
+    );
+  }, [clearValidationAttention, gradingMode, questions, selectedQuestionIndex]);
 
   function createGroupFromInput() {
     if (!newGroupName.trim()) {
@@ -565,6 +697,93 @@ export default function AssessmentStudioShell({
     setNewGroupName('');
     toast.success('Group created.');
   }
+
+  const handleAssessmentRubricChange = useCallback(
+    (rubricId: number | null) => {
+      if (rubricId != null && hasSpecificRubrics) {
+        toast.error(
+          'Clear question and group rubrics before setting an assessment rubric.',
+        );
+        return;
+      }
+      setAssessmentRubricId(rubricId);
+    },
+    [hasSpecificRubrics],
+  );
+
+  const handleUpdateQuestionGroup = useCallback(
+    (clientKey: string, patch: Partial<QuestionGroupInput>) => {
+      if (patch.rubricId != null && assessmentRubricId != null) {
+        toast.error(
+          'Clear the assessment rubric before applying group rubrics.',
+        );
+        return;
+      }
+      updateQuestionGroup(clientKey, patch);
+    },
+    [assessmentRubricId],
+  );
+
+  // -- Image upload/remove handlers --
+
+  const handleUploadQuestionImage = useCallback(
+    async (questionIdx: number, file: File) => {
+      if (!resolvedId) {
+        toast.error('Assessment is still initializing. Try again in a moment.');
+        throw new Error('No resolved assessment ID');
+      }
+      const backendQuestionId = questionIdMap.get(questionIdx);
+      if (backendQuestionId == null) {
+        // Trigger an autosave first to get question IDs
+        toast.error(
+          'Saving assessment to assign question IDs. Please try again.',
+        );
+        void performAutosave();
+        throw new Error('Question has no backend ID yet');
+      }
+      const result = await uploadQuestionImage(
+        resolvedId,
+        backendQuestionId,
+        file,
+      );
+      setQuestions((prev) =>
+        prev.map((q, i) =>
+          i === questionIdx ? { ...q, questionImage: result } : q,
+        ),
+      );
+      toast.success('Image uploaded');
+      return {
+        id: result.id,
+        url: result.url,
+        originalFilename: result.originalFilename,
+        mimeType: result.mimeType,
+        sizeBytes: result.sizeBytes,
+      };
+    },
+    [resolvedId, questionIdMap],
+  );
+
+  const handleRemoveQuestionImage = useCallback(
+    async (questionIdx: number) => {
+      if (!resolvedId) return;
+      const backendQuestionId = questionIdMap.get(questionIdx);
+      if (backendQuestionId == null) return;
+
+      try {
+        await deleteQuestionImage(resolvedId, backendQuestionId);
+      } catch {
+        toast.error('Failed to remove image');
+        return;
+      }
+      setQuestions((prev) =>
+        prev.map((q, i) =>
+          i === questionIdx ? { ...q, questionImage: null } : q,
+        ),
+      );
+      toast.success('Image removed');
+    },
+    [questionIdMap, resolvedId],
+  );
 
   function applyCategoryDraft() {
     const next = categoryDraft.trim();
@@ -602,15 +821,10 @@ export default function AssessmentStudioShell({
 
   function handleQuickRubricCreated(rubric: Rubric) {
     upsertRubric(rubric);
-    setRubricApplyId(String(rubric.id));
 
-    if (isRubricEnabled) {
-      const targetIndices =
-        selectedQuestionIndices.length > 0
-          ? selectedQuestionIndices
-          : [selectedQuestionIndex];
-      applyRubricToIndices(targetIndices, rubric.id);
-      toast.success('Rubric attached to active/selected question(s).');
+    if (isRubricEnabled && assessmentRubricId == null && questions[selectedQuestionIndex]) {
+      handleActiveQuestionRubricChange(rubric.id);
+      toast.success('Rubric attached to the active question.');
     }
   }
 
@@ -645,118 +859,247 @@ export default function AssessmentStudioShell({
     );
   }
 
+  const validationIssues = useMemo(
+    () =>
+      buildStudioValidationIssues({
+        title,
+        questions,
+        questionGroups,
+        gradingMode,
+        assessmentRubricId,
+        effectiveRubricId,
+      }),
+    [title, questions, questionGroups, gradingMode, assessmentRubricId, effectiveRubricId],
+  );
+
+  const deferredValidationIssues = useMemo(
+    () =>
+      buildStudioValidationIssues({
+        title: deferredTitle,
+        questions: deferredQuestions,
+        questionGroups: deferredQuestionGroups,
+        gradingMode,
+        assessmentRubricId: deferredAssessmentRubricId,
+        effectiveRubricId,
+      }),
+    [
+      deferredTitle,
+      deferredQuestions,
+      deferredQuestionGroups,
+      gradingMode,
+      deferredAssessmentRubricId,
+      effectiveRubricId,
+    ],
+  );
+
+  function navigateToIssue(issue: StudioValidationIssue) {
+    if (issue.questionIndex != null) {
+      setSelectedQuestionIndex(issue.questionIndex);
+    }
+
+    if (issue.panel === 'structure') {
+      setMobileView('structure');
+    } else if (issue.panel === 'settings') {
+      setMobileView('settings');
+    } else {
+      setMobileView('editor');
+    }
+
+    setActiveValidationIssue(issue);
+    setValidationFocusSignal((prev) => prev + 1);
+  }
+
   // -- Validation --
 
   function validate(): boolean {
-    let valid = true;
+    const titleIssue = validationIssues.find((issue) => issue.section === 'title');
+    setTitleError(titleIssue?.detail ?? null);
+    setQuestionsError(
+      validationIssues.length > 0
+        ? 'Review the validation issues before saving this assessment.'
+        : null,
+    );
 
-    if (!title.trim()) {
-      setTitleError('Title is required');
-      valid = false;
-    } else {
-      setTitleError(null);
+    if (validationIssues.length > 0) {
+      navigateToIssue(validationIssues[0]);
+      return false;
     }
 
-    if (questions.length === 0) {
-      setQuestionsError('At least one question is required');
-      valid = false;
-    } else if (questions.some((q) => !q.prompt.trim())) {
-      setQuestionsError('Every question must have a non-empty prompt');
-      valid = false;
-    } else {
-      if (gradingMode === 'AUTO') {
-        const hasAnyRubric =
-          questionGroups.some((g) => g.rubricId != null) ||
-          questions.some((q) => effectiveRubricId(q) != null);
-        if (hasAnyRubric) {
-          setQuestionsError('AUTO mode does not allow rubric linkage.');
-          valid = false;
-        } else {
-          setQuestionsError(null);
-        }
-      } else if (gradingMode === 'MANUAL') {
-        const missingRubric = questions.find(
-          (q) => effectiveRubricId(q) == null,
-        );
-        if (missingRubric) {
-          setQuestionsError(
-            'MANUAL mode requires a rubric for every question (directly or via group).',
-          );
-          valid = false;
-        } else {
-          setQuestionsError(null);
-        }
-      } else {
-        const invalid = questions.find((q) => {
-          const strategy = q.gradingStrategy ?? 'AUTO';
-          const hasRubric = effectiveRubricId(q) != null;
-          if (strategy === 'MANUAL') return !hasRubric;
-          return hasRubric;
-        });
-        if (invalid) {
-          setQuestionsError(
-            'HYBRID mode requires rubrics only on MANUAL strategy questions.',
-          );
-          valid = false;
-        } else {
-          setQuestionsError(null);
-        }
-      }
-    }
-
-    if (questionGroups.some((g) => !g.name.trim())) {
-      setQuestionsError('Question group names cannot be empty.');
-      valid = false;
-    }
-
-    return valid;
+    return true;
   }
 
-  // -- Submit --
+  // -- Build save payload --
+
+  function buildPayload(): AssessmentInput {
+    return {
+      title: title.trim() || 'Untitled Assessment',
+      category: category.trim() || null,
+      gradingMode: gradingMode as GradingMode,
+      scoringPolicy,
+      rubricId: assessmentRubricId,
+      questions: questions.map((q) => {
+        const imageJson = q.questionImage
+          ? JSON.stringify({
+              assetId: q.questionImage.id,
+              storageKey: q.questionImage.storageKey,
+              originalFilename: q.questionImage.originalFilename,
+              mimeType: q.questionImage.mimeType,
+              sizeBytes: q.questionImage.sizeBytes,
+            })
+          : null;
+
+        return {
+          type: normalizeQuestionKind(String(q.type)),
+          prompt: q.prompt,
+          maxPoints: syncDerivedQuestionPoints(q).maxPoints,
+          data: q.data,
+          groupClientKey: q.groupClientKey,
+          rubricId: q.rubricId ?? null,
+          gradingStrategy:
+            gradingMode === 'HYBRID'
+              ? (q.gradingStrategy ?? 'AUTO')
+              : undefined,
+          image: imageJson,
+        };
+      }),
+      questionGroups: questionGroups.map((g) => ({
+        clientKey: g.clientKey,
+        name: g.name.trim() || 'Unnamed Group',
+        rubricId: g.rubricId ?? null,
+      })),
+    };
+  }
+
+  // -- Autosave (debounced) --
+
+  const [isReadOnly, setIsReadOnly] = useState(false);
+
+  async function performAutosave() {
+    if (!resolvedId || isReadOnly) return;
+    setSaveState('saving');
+    try {
+      const result = await updateAssessment(resolvedId, buildPayload(), {
+        suppressAuthRedirect: true,
+      });
+      // Refresh question IDs after save
+      const idMap = new Map<number, number>();
+      result.questions.forEach((q, idx) => idMap.set(idx, q.id));
+      setQuestionIdMap(idMap);
+      setSaveState('saved');
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } }).response?.status;
+      if (status === 409) {
+        // Assessment is referenced by assignments — mark read-only
+        setIsReadOnly(true);
+        setSaveState('idle');
+        toast.error('This assessment is linked to assignments and cannot be modified.');
+      } else {
+        setSaveState('error');
+      }
+    }
+  }
+
+  // Trigger autosave 3s after any content change (drafts only)
+  useEffect(() => {
+    if (isLoading || !resolvedId || isReadOnly || !isDraft) return;
+
+    if (!autosavePrimedRef.current) {
+      autosavePrimedRef.current = true;
+      return;
+    }
+
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+    }
+    autosaveTimerRef.current = setTimeout(() => {
+      void performAutosave();
+    }, 3000);
+
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    title,
+    category,
+    gradingMode,
+    scoringPolicy,
+    assessmentRubricId,
+    questions,
+    questionGroups,
+    resolvedId,
+    isLoading,
+  ]);
+
+  // -- Publish --
+
+  async function handlePublish() {
+    if (!resolvedId) return;
+    if (!validate()) {
+      toast.error('Fix validation issues before publishing.');
+      return;
+    }
+
+    setIsPublishing(true);
+    try {
+      // Save latest state first
+      await updateAssessment(resolvedId, buildPayload(), {
+        suppressAuthRedirect: true,
+      });
+      // Then publish
+      await publishAssessment(resolvedId);
+      toast.success('Assessment published');
+      router.push(`/dashboard/assessments/${resolvedId}`);
+    } catch (err: unknown) {
+      toast.error(toErrorMessage(err, 'Failed to publish'));
+    } finally {
+      setIsPublishing(false);
+    }
+  }
+
+  // -- Delete draft --
+
+  async function handleDeleteDraft() {
+    if (!resolvedId || !isDraft) return;
+    try {
+      await deleteAssessment(resolvedId);
+      toast.success('Draft deleted');
+      router.push('/dashboard/assessments');
+    } catch {
+      toast.error('Failed to delete draft');
+    }
+  }
+
+  // -- Submit (non-draft save for published assessments) --
 
   async function handleSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
+    if (isDraft) {
+      void handlePublish();
+      return;
+    }
+    if (isReadOnly) {
+      toast.error('This assessment is linked to assignments and cannot be modified.');
+      return;
+    }
     if (!validate()) {
       toast.error('Please fix the validation issues before saving.');
       return;
     }
 
     setIsSubmitting(true);
-
-    const payload: AssessmentInput = {
-      title: title.trim(),
-      category: category.trim() || null,
-      gradingMode: gradingMode as GradingMode,
-      scoringPolicy,
-      questions: questions.map((q) => ({
-        ...q,
-        type: normalizeQuestionKind(String(q.type)),
-        rubricId: q.rubricId ?? null,
-        gradingStrategy:
-          gradingMode === 'HYBRID' ? (q.gradingStrategy ?? 'AUTO') : undefined,
-      })),
-      questionGroups: questionGroups.map((g) => ({
-        clientKey: g.clientKey,
-        name: g.name.trim(),
-        rubricId: g.rubricId ?? null,
-      })),
-    };
-
     try {
-      if (mode === 'create') {
-        const created = await createAssessment(payload);
-        toast.success('Assessment created');
-        router.push(`/dashboard/assessments/${created.id}`);
-      } else {
-        await updateAssessment(assessmentId!, payload);
-        toast.success('Assessment updated');
-        router.replace(`/dashboard/assessments/${assessmentId}`);
-        router.refresh();
-      }
+      await updateAssessment(resolvedId!, buildPayload(), {
+        suppressAuthRedirect: true,
+      });
+      toast.success('Assessment updated');
     } catch (err: unknown) {
-      if (mode === 'edit' && getStatusCode(err) === 409) {
+      if (getStatusCode(err) === 409) {
+        setIsReadOnly(true);
         toast.error(
-          'This assessment is referenced by assignments and cannot be modified',
+          'This assessment is linked to assignments and cannot be modified.',
         );
       } else {
         toast.error(toErrorMessage(err, 'Failed to save assessment'));
@@ -767,8 +1110,8 @@ export default function AssessmentStudioShell({
   }
 
   function handleCancel() {
-    if (mode === 'edit' && assessmentId) {
-      router.push(`/dashboard/assessments/${assessmentId}`);
+    if (resolvedId && !isDraft) {
+      router.push(`/dashboard/assessments/${resolvedId}`);
     } else {
       router.push('/dashboard/assessments');
     }
@@ -777,11 +1120,6 @@ export default function AssessmentStudioShell({
   // -- Derived UI state --
 
   const selectedQuestion = questions[selectedQuestionIndex];
-  const selectedCount = selectedQuestionIndices.length;
-  const activeSelectionCount = selectedCount > 0 ? selectedCount : 1;
-  const ungroupedCount = questions.filter(
-    (q) => !q.groupClientKey,
-  ).length;
   const selectedAssignGroup =
     assignGroupKey !== '__NONE__'
       ? questionGroups.find(
@@ -813,20 +1151,39 @@ export default function AssessmentStudioShell({
   return (
     <form
       onSubmit={handleSubmit}
+      onKeyDownCapture={(event) => {
+        if (event.key !== 'Enter') return;
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) return;
+        if (['button', 'submit', 'checkbox', 'radio', 'file'].includes(target.type)) {
+          return;
+        }
+        event.preventDefault();
+      }}
       className="flex flex-col h-[calc(100vh-64px)] overflow-hidden -m-8 -mt-8"
     >
       {/* Top header bar */}
       <AssessmentStudioHeader
         title={title}
         onTitleChange={(t) => {
+          clearValidationAttention();
           setTitle(t);
-          if (titleError) setTitleError(null);
         }}
         titleError={titleError}
+        titleHighlightSignal={
+          activeValidationIssue?.section === 'title'
+            ? validationFocusSignal
+            : undefined
+        }
         status={assessmentStatus}
-        mode={mode}
-        isSubmitting={isSubmitting}
+        isDraft={isDraft}
+        isReadOnly={isReadOnly}
+        saveState={saveState}
+        isPublishing={isPublishing}
+        isSaving={isSubmitting}
+        onPublish={() => void handlePublish()}
         onSave={() => void handleSubmit()}
+        onDeleteDraft={() => void handleDeleteDraft()}
         onCancel={handleCancel}
       />
 
@@ -868,13 +1225,15 @@ export default function AssessmentStudioShell({
           )}
         >
           <StructureRail
-            questions={questions}
-            questionGroups={questionGroups}
+            questions={deferredQuestions}
+            questionGroups={deferredQuestionGroups}
             selectedIndex={selectedQuestionIndex}
             onSelectQuestion={(idx) => {
               setSelectedQuestionIndex(idx);
+              setAssignGroupKey(questions[idx]?.groupClientKey ?? '__NONE__');
               setMobileView('editor');
             }}
+            onBackToEditor={() => setMobileView('editor')}
             onAddQuestion={addQuestion}
             onAddGroup={(name) => addQuestionGroup(name)}
             onRenameGroup={(clientKey, newName) => updateQuestionGroup(clientKey, { name: newName })}
@@ -893,13 +1252,22 @@ export default function AssessmentStudioShell({
             onAssignGroup={(questionIndex, groupClientKey) => {
               const question = questions[questionIndex];
               if (question) {
+                clearValidationAttention();
                 handleQuestionChange(questionIndex, {
                   ...question,
                   groupClientKey: groupClientKey,
                 });
+                setAssignGroupKey(groupClientKey ?? '__NONE__');
+                setSelectedQuestionIndex(questionIndex);
+                setMobileView('editor');
               }
             }}
             groupByKey={groupByKey}
+            highlightQuestionListSignal={
+              activeValidationIssue?.section === 'questionList'
+                ? validationFocusSignal
+                : undefined
+            }
           />
         </aside>
 
@@ -914,17 +1282,39 @@ export default function AssessmentStudioShell({
             <QuestionStudio
               question={selectedQuestion}
               questionIndex={selectedQuestionIndex}
-              questionsCount={questions.length}
-              gradingMode={gradingMode}
-              questionGroups={questionGroups}
               selectedEffectiveRubricName={selectedEffectiveRubricName}
               selectedGroupName={selectedGroup?.name ?? null}
               rubricSource={
                 selectedQuestion?.rubricId != null
                   ? 'Question'
-                  : selectedEffectiveRubricId != null
+                  : selectedQuestion?.groupClientKey &&
+                      selectedGroup?.rubricId != null
                     ? 'Group'
+                    : selectedEffectiveRubricId != null
+                      ? 'Assessment'
                     : 'N/A'
+              }
+              activeIssue={
+                activeValidationIssue &&
+                activeValidationIssue.panel === 'editor'
+                  ? {
+                      ...activeValidationIssue,
+                      id: `${activeValidationIssue.id}:${validationFocusSignal}`,
+                    }
+                  : null
+              }
+              questionImage={selectedQuestion?.questionImage ?? null}
+              onUploadImage={
+                resolvedId && !isReadOnly
+                  ? (file) =>
+                      handleUploadQuestionImage(selectedQuestionIndex, file)
+                  : undefined
+              }
+              onRemoveImage={
+                resolvedId && !isReadOnly
+                  ? () =>
+                      handleRemoveQuestionImage(selectedQuestionIndex)
+                  : undefined
               }
               onChange={(updated) =>
                 handleQuestionChange(selectedQuestionIndex, updated)
@@ -962,37 +1352,43 @@ export default function AssessmentStudioShell({
             scoringPolicy={scoringPolicy}
             onScoringPolicyChange={setScoringPolicy}
             activeQuestion={selectedQuestion}
-            activeQuestionIndex={selectedQuestionIndex}
-            title={title}
-            questions={questions}
+            onActiveQuestionPointsChange={handleActiveQuestionPointsChange}
+            onActiveQuestionGradingStrategyChange={handleActiveQuestionGradingStrategyChange}
+            questions={deferredQuestions}
             questionsError={questionsError}
-            onNavigateToQuestion={(idx) => {
-              setSelectedQuestionIndex(idx);
-              setMobileView('editor');
-            }}
+            issues={deferredValidationIssues}
+            activeIssue={
+              activeValidationIssue && activeValidationIssue.panel === 'settings'
+                ? {
+                    ...activeValidationIssue,
+                    id: `${activeValidationIssue.id}:${validationFocusSignal}`,
+                  }
+                : null
+            }
+            onNavigateToIssue={navigateToIssue}
             isRubricEnabled={isRubricEnabled}
             isRubricsLoading={isRubricsLoading}
             rubrics={rubrics}
-            rubricApplyId={rubricApplyId}
-            onRubricApplyIdChange={setRubricApplyId}
-            onApplyRubricToSelected={applyRubricToSelectedQuestions}
+            assessmentRubricId={assessmentRubricId}
+            onAssessmentRubricChange={handleAssessmentRubricChange}
+            activeQuestionRubricId={selectedQuestion?.rubricId ?? null}
+            onActiveQuestionRubricChange={handleActiveQuestionRubricChange}
             onOpenQuickRubric={() => setIsQuickRubricOpen(true)}
             onOpenInlineRubricEditor={openInlineRubricEditor}
             onOpenRubricPreview={openRubricPreview}
-            questionGroups={questionGroups}
+            questionGroups={deferredQuestionGroups}
             newGroupName={newGroupName}
             onNewGroupNameChange={setNewGroupName}
             onCreateGroup={createGroupFromInput}
             assignGroupKey={assignGroupKey}
-            onAssignGroupKeyChange={setAssignGroupKey}
+            onAssignGroupKeyChange={handleAssignGroupKeyChange}
             selectedAssignGroup={selectedAssignGroup}
             questionCountByGroupKey={questionCountByGroupKey}
             rubricById={rubricById}
-            onUpdateQuestionGroup={updateQuestionGroup}
+            onUpdateQuestionGroup={handleUpdateQuestionGroup}
             onRemoveQuestionGroup={removeQuestionGroup}
-            onAssignGroupToSelected={assignGroupToSelected}
+            onUngroupActiveQuestion={handleUngroupActiveQuestion}
             category={category}
-            onCategoryChange={setCategory}
             categoryOptions={categoryOptions}
             isCategoryComposerOpen={isCategoryComposerOpen}
             onCategoryComposerOpenChange={setIsCategoryComposerOpen}
@@ -1002,6 +1398,7 @@ export default function AssessmentStudioShell({
             onCancelCategoryComposer={cancelCategoryComposer}
             onChooseCategoryFromBank={chooseCategoryFromBank}
             onClearCategory={clearCategory}
+            onBackToEditor={() => setMobileView('editor')}
           />
         </aside>
       </div>
