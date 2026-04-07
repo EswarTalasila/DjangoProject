@@ -143,3 +143,48 @@ export async function overrideSubmissionScore(
   const { data } = await api.patch(`/submissions/${submissionId}/override-score`, scores);
   return data;
 }
+
+// -- Submission Image APIs --
+
+export type SubmissionImageDTO = {
+  id: string;
+  originalFilename: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedByUserId: number | null;
+  status: string;
+  createdAt: string;
+};
+
+/** POST /submissions/:id/images — Upload an image to a submission. */
+export async function uploadSubmissionImage(
+  submissionId: number,
+  file: File,
+): Promise<SubmissionImageDTO> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await api.post<SubmissionImageDTO>(
+    `/submissions/${submissionId}/images`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return data;
+}
+
+/** GET /submissions/:id/images — List all READY images for a submission. */
+export async function listSubmissionImages(
+  submissionId: number,
+): Promise<SubmissionImageDTO[]> {
+  const { data } = await api.get<SubmissionImageDTO[]>(
+    `/submissions/${submissionId}/images`,
+  );
+  return data;
+}
+
+/** DELETE /submissions/:id/images/:imageId — Soft-delete a submission image. */
+export async function deleteSubmissionImage(
+  submissionId: number,
+  imageId: string,
+): Promise<void> {
+  await api.delete(`/submissions/${submissionId}/images/${imageId}`);
+}

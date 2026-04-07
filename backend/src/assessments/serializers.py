@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from .models import GradingMode, QuestionKind, ScoringPolicy
+from .models import GradingMode, QuestionKind, ScoringPolicy, SubmissionMode
 
 
 class MCQChoiceSerializer(serializers.Serializer):
@@ -71,6 +71,11 @@ class AssessmentSerializer(serializers.Serializer):
         choices=ScoringPolicy.choices,
         required=False,
         default=ScoringPolicy.STANDARD,
+    )
+    submissionMode = serializers.ChoiceField(
+        choices=SubmissionMode.choices,
+        required=False,
+        default=SubmissionMode.DIGITAL,
     )
     rubricId = serializers.IntegerField(required=False, allow_null=True)
     questions = QuestionSerializer(many=True, required=False)

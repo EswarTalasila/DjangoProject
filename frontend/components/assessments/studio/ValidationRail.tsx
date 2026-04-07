@@ -30,6 +30,7 @@ import type {
   QuestionInput,
   QuestionGroupInput,
   ScoringPolicy,
+  SubmissionMode,
   QuestionKind,
   GradingStrategy,
 } from '@/lib/assessment-api';
@@ -50,12 +51,20 @@ const SCORING_POLICIES: { value: ScoringPolicy; label: string }[] = [
   { value: 'COMPLETION', label: 'Completion (100 on submit)' },
 ];
 
+const SUBMISSION_MODES: { value: SubmissionMode; label: string; desc: string }[] = [
+  { value: 'DIGITAL', label: 'Digital', desc: 'Students answer questions in the app.' },
+  { value: 'UPLOAD_ONLY', label: 'Upload Only', desc: 'Students upload files as their submission.' },
+  { value: 'DIGITAL_WITH_UPLOAD', label: 'Digital + Upload', desc: 'Students answer questions and upload files.' },
+];
+
 type ValidationRailProps = {
   // Assessment-level settings
   gradingMode: BuilderGradingMode;
   onGradingModeChange: (mode: BuilderGradingMode) => void;
   scoringPolicy: ScoringPolicy;
   onScoringPolicyChange: (policy: ScoringPolicy) => void;
+  submissionMode: SubmissionMode;
+  onSubmissionModeChange: (mode: SubmissionMode) => void;
   // Active question context
   activeQuestion: QuestionInput | undefined;
   onActiveQuestionPointsChange: (points: number) => void;
@@ -127,6 +136,8 @@ function ValidationRail({
   onGradingModeChange,
   scoringPolicy,
   onScoringPolicyChange,
+  submissionMode,
+  onSubmissionModeChange,
   activeQuestion,
   onActiveQuestionPointsChange,
   onActiveQuestionGradingStrategyChange,
@@ -240,6 +251,7 @@ function ValidationRail({
               onValueChange={(v) =>
                 onGradingModeChange(v as BuilderGradingMode)
               }
+              disabled={submissionMode === 'UPLOAD_ONLY' || submissionMode === 'DIGITAL_WITH_UPLOAD'}
             >
               <SelectTrigger className="h-9">
                 <SelectValue />
@@ -253,7 +265,9 @@ function ValidationRail({
               </SelectContent>
             </Select>
             <p className="text-[10px] text-muted-foreground leading-relaxed">
-              {GRADING_MODES.find((gm) => gm.value === gradingMode)?.desc}
+              {submissionMode === 'UPLOAD_ONLY' || submissionMode === 'DIGITAL_WITH_UPLOAD'
+                ? 'Upload submissions require manual grading.'
+                : GRADING_MODES.find((gm) => gm.value === gradingMode)?.desc}
             </p>
           </div>
 
@@ -278,6 +292,35 @@ function ValidationRail({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
+                Submission Mode
+              </Label>
+              <HelpTip text="DIGITAL: in-app answers only. UPLOAD ONLY: file uploads only. DIGITAL + UPLOAD: both." />
+            </div>
+            <Select
+              value={submissionMode}
+              onValueChange={(v) =>
+                onSubmissionModeChange(v as SubmissionMode)
+              }
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SUBMISSION_MODES.map((sm) => (
+                  <SelectItem key={sm.value} value={sm.value}>
+                    {sm.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              {SUBMISSION_MODES.find((sm) => sm.value === submissionMode)?.desc}
+            </p>
           </div>
 
           {/* Category */}

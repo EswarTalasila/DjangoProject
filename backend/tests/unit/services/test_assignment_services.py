@@ -905,16 +905,18 @@ class TestDeleteAssignmentEdgeCases(_NoopAtomicMixin):
             delete_assignment(assignment, SimpleNamespace(id=2))
 
     @patch("assignments.services._mutations.Submission")
-    def test_raises_when_progressed_submissions(self, mock_sub):
-        """Raises ConflictError when assignment has progressed submissions on delete."""
-        from assignments.services._mutations import ConflictError, delete_assignment
+    def test_cascades_submissions_on_delete(self, mock_sub):
+        """Deletes all submissions when deleting assignment."""
+        from assignments.services._mutations import delete_assignment
 
         assignment = MagicMock()
         assignment.created_by_id = 1
-        mock_sub.objects.filter.return_value.exclude.return_value.exists.return_value = True
 
-        with pytest.raises(ConflictError, match="progressed"):
-            delete_assignment(assignment, SimpleNamespace(id=1))
+        delete_assignment(assignment, SimpleNamespace(id=1))
+
+        mock_sub.objects.filter.assert_called_once_with(assignment=assignment)
+        mock_sub.objects.filter.return_value.delete.assert_called_once()
+        assignment.delete.assert_called_once()
 
     @patch("assignments.services._mutations.Submission")
     def test_allows_delete_without_caller(self, mock_sub):
@@ -922,7 +924,6 @@ class TestDeleteAssignmentEdgeCases(_NoopAtomicMixin):
         from assignments.services._mutations import delete_assignment
 
         assignment = MagicMock()
-        mock_sub.objects.filter.return_value.exclude.return_value.exists.return_value = False
 
         delete_assignment(assignment, caller_user=None)
 

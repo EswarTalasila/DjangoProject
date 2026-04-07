@@ -1,6 +1,7 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Loader2, Upload, X, ImageIcon } from 'lucide-react';
 
 import {
   AlertDialog,
@@ -15,8 +16,17 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import MoodMeterInput from '@/components/questions/MoodMeterInput';
-import type { Question } from '@/lib/assessment-api';
-import type { SubmissionStatus, SubmissionDTO } from '@/lib/submission-api';
+import type { Question, SubmissionMode } from '@/lib/assessment-api';
+import type {
+  SubmissionStatus,
+  SubmissionDTO,
+  SubmissionImageDTO,
+} from '@/lib/submission-api';
+import {
+  uploadSubmissionImage,
+  listSubmissionImages,
+  deleteSubmissionImage,
+} from '@/lib/submission-api';
 import AssignmentStatusBanner from './AssignmentStatusBanner';
 
 type MoodSelection = {
@@ -131,6 +141,7 @@ function renderStudentResponse(question: Question, answer: StudentAttemptAnswer)
 function StudentQuestionPreview({
   question,
   answer,
+  readOnly,
   onSelectChoice,
   onTextChange,
   onNumberChange,
@@ -138,6 +149,7 @@ function StudentQuestionPreview({
 }: {
   question: Question;
   answer: StudentAttemptAnswer;
+  readOnly?: boolean;
   onSelectChoice: (choiceIndex: number, checked: boolean) => void;
   onTextChange: (nextValue: string) => void;
   onNumberChange: (nextValue: number) => void;
@@ -149,28 +161,39 @@ function StudentQuestionPreview({
     const isSelectAll = Boolean(data?.selectAll);
     return (
       <div className="space-y-2">
-        <p className="text-xs text-muted-foreground">
-          {isSelectAll ? 'Select all that apply.' : 'Select one option.'}
-        </p>
+        {!readOnly && (
+          <p className="text-xs text-muted-foreground">
+            {isSelectAll ? 'Select all that apply.' : 'Select one option.'}
+          </p>
+        )}
         {(data?.choices ?? []).map((choice, idx) => (
-          <label
+          <div
             key={`${choice.prompt}-${idx}`}
             className="flex items-center gap-2 rounded border border-border bg-muted/20 px-3 py-2 text-sm"
           >
-            <input
-              type={isSelectAll ? 'checkbox' : 'radio'}
-              name={`student-preview-q-${question.questionId}`}
-              checked={answer.selectedChoiceIndexes.includes(idx)}
-              onChange={(event) => onSelectChoice(idx, event.target.checked)}
-            />
-            <span>{choice.prompt || '(empty choice)'}</span>
-          </label>
+            {!readOnly && (
+              <input
+                type={isSelectAll ? 'checkbox' : 'radio'}
+                name={`student-preview-q-${question.questionId}`}
+                checked={answer.selectedChoiceIndexes.includes(idx)}
+                onChange={(event) => onSelectChoice(idx, event.target.checked)}
+              />
+            )}
+            <span className="text-foreground">{choice.prompt || '(empty choice)'}</span>
+          </div>
         ))}
       </div>
     );
   }
 
   if (question.type === 'SHORT_ANSWER') {
+    if (readOnly) {
+      return (
+        <div className="w-full min-h-16 rounded border border-border bg-muted/10 px-3 py-2 text-sm text-muted-foreground italic">
+          Response will be provided in uploaded file.
+        </div>
+      );
+    }
     return (
       <textarea
         className="w-full min-h-24 rounded border border-border bg-muted/20 px-3 py-2 text-sm text-muted-foreground"
@@ -184,6 +207,13 @@ function StudentQuestionPreview({
   if (question.type === 'NUMBER_SCALE') {
     const min = data?.min ?? question.min ?? 1;
     const max = data?.max ?? question.max ?? 10;
+    if (readOnly) {
+      return (
+        <p className="text-xs text-muted-foreground">
+          Scale: {min} – {max}{data?.target != null ? ` (target: ${data.target})` : ''}
+        </p>
+      );
+    }
     const hasSelected = answer.numericResponse !== null;
     return (
       <div className="space-y-2">
@@ -209,6 +239,7 @@ function StudentQuestionPreview({
       <MoodMeterInput
         value={answer.moodSelection}
         onChange={onMoodChange}
+        disabled={readOnly}
       />
     );
   }
@@ -221,6 +252,7 @@ export type StudentSubmissionFormProps = {
   assignmentArchived: boolean;
   assignmentNotOpen: boolean;
   openAt: string | null;
+  submissionMode: SubmissionMode;
   flatQuestions: Question[];
   studentAnswers: Record<number, StudentAttemptAnswer>;
   studentFlowStage: StudentFlowStage;
@@ -250,6 +282,7 @@ export default function StudentSubmissionForm({
   assignmentArchived,
   assignmentNotOpen,
   openAt,
+  submissionMode,
   flatQuestions,
   studentAnswers,
   studentFlowStage,
@@ -273,6 +306,60 @@ export default function StudentSubmissionForm({
   onSetFlowStage,
   onSetSubmittedAt,
 }: StudentSubmissionFormProps) {
+  const showUploadPanel = submissionMode === 'UPLOAD_ONLY' || submissionMode === 'DIGITAL_WITH_UPLOAD';
+  const isUploadOnly = submissionMode === 'UPLOAD_ONLY';
+
+  // Upload state
+  const [uploadedImages, setUploadedImages] = useState<SubmissionImageDTO[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load existing images when submission is available
+  useEffect(() => {
+    if (!submission?.id || !showUploadPanel) return;
+    let cancelled = false;
+    listSubmissionImages(submission.id)
+      .then((images) => {
+        if (!cancelled) setUploadedImages(images);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [submission?.id, showUploadPanel]);
+
+  const handleFileSelect = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0 || !submission?.id) return;
+    setIsUploading(true);
+    setUploadError(null);
+    try {
+      for (const file of Array.from(files)) {
+        const image = await uploadSubmissionImage(submission.id, file);
+        setUploadedImages((prev) => [...prev, image]);
+      }
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setUploadError(detail || 'Upload failed. Please try again.');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }, [submission?.id]);
+
+  const handleRemoveImage = useCallback(async (imageId: string) => {
+    if (!submission?.id) return;
+    try {
+      await deleteSubmissionImage(submission.id, imageId);
+      setUploadedImages((prev) => prev.filter((img) => img.id !== imageId));
+    } catch {
+      setUploadError('Failed to remove image.');
+    }
+  }, [submission?.id]);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    void handleFileSelect(e.dataTransfer.files);
+  }, [handleFileSelect]);
+
   return (
     <div className="rounded-sm border border-border bg-card overflow-hidden">
       <AssignmentStatusBanner
@@ -288,8 +375,12 @@ export default function StudentSubmissionForm({
           </p>
           <p className="text-xs text-muted-foreground">
             {studentFlowStage === 'submitted'
-              ? `${answeredCount}/${flatQuestions.length} answered`
-              : `Question ${clampedStudentQuestionIndex + 1} of ${flatQuestions.length}`}
+              ? isUploadOnly
+                ? `${uploadedImages.length} file(s) uploaded`
+                : `${answeredCount}/${flatQuestions.length} answered`
+              : isUploadOnly
+                ? 'Upload your work below'
+                : `Question ${clampedStudentQuestionIndex + 1} of ${flatQuestions.length}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -312,7 +403,147 @@ export default function StudentSubmissionForm({
 
       <div className="grid min-h-[620px] lg:grid-cols-[minmax(0,1fr)_280px]">
         <section className="min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-border">
-          {studentFlowStage === 'submitted' ? (
+          {/* Upload panel for UPLOAD_ONLY and DIGITAL_WITH_UPLOAD modes */}
+          {showUploadPanel && studentFlowStage !== 'submitted' && (
+            <div className="p-5 space-y-4 border-b border-border">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Upload Your Work</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Upload images or files as your submission. Supports JPG, PNG, WebP (max 10MB each).
+                </p>
+              </div>
+
+              {uploadError && (
+                <p className="text-xs text-destructive">{uploadError}</p>
+              )}
+
+              {/* Drop zone */}
+              {!submissionLocked && !studentBlocked && (
+                <div
+                  onDrop={handleDrop}
+                  onDragOver={(e) => e.preventDefault()}
+                  className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-muted/20 py-8 px-4 cursor-pointer hover:border-primary/40 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="h-8 w-8 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    {isUploading ? 'Uploading...' : 'Drop files here or click to upload'}
+                  </p>
+                  {isUploading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => void handleFileSelect(e.target.files)}
+                  />
+                </div>
+              )}
+
+              {/* Uploaded images list */}
+              {uploadedImages.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Uploaded Files ({uploadedImages.length})
+                  </p>
+                  <div className="grid gap-2">
+                    {uploadedImages.map((img) => (
+                      <div
+                        key={img.id}
+                        className="flex items-center gap-3 rounded border border-border bg-muted/10 px-3 py-2"
+                      >
+                        <ImageIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-foreground truncate">{img.originalFilename}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(img.sizeBytes / 1024).toFixed(0)} KB
+                          </p>
+                        </div>
+                        {!submissionLocked && !studentBlocked && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={() => void handleRemoveImage(img.id)}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Submit button for upload modes */}
+              {showUploadPanel && viewerRole === 'STUDENT' && (
+                <div className="flex items-center gap-2 pt-2">
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        type="button"
+                        disabled={submissionLocked || studentBlocked || isSubmitting || uploadedImages.length === 0}
+                      >
+                        {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Submit
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Submit Assignment</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Once submitted, you cannot change your uploads.
+                          You have uploaded {uploadedImages.length} file(s).
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={(event) => {
+                            event.preventDefault();
+                            onSubmit();
+                          }}
+                          disabled={isSubmitting}
+                        >
+                          Confirm Submit
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Upload summary in submitted view */}
+          {showUploadPanel && studentFlowStage === 'submitted' && uploadedImages.length > 0 && (
+            <div className="p-5 border-b border-border space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Uploaded Files ({uploadedImages.length})
+              </p>
+              <div className="grid gap-2">
+                {uploadedImages.map((img) => (
+                  <div
+                    key={img.id}
+                    className="flex items-center gap-3 rounded border border-border bg-muted/10 px-3 py-2"
+                  >
+                    <ImageIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-foreground truncate">{img.originalFilename}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(img.sizeBytes / 1024).toFixed(0)} KB
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Question answering flow — hidden for UPLOAD_ONLY */}
+          {!isUploadOnly && studentFlowStage === 'submitted' ? (
             <div className="min-h-0 flex-1 overflow-y-auto p-5 space-y-4">
               <div className="rounded-sm border border-border bg-muted/10 p-4 grid gap-3 sm:grid-cols-3">
                 <div>
@@ -401,6 +632,7 @@ export default function StudentSubmissionForm({
                     <StudentQuestionPreview
                       question={activeStudentQuestion}
                       answer={activeStudentAnswer}
+                      readOnly={showUploadPanel}
                       onSelectChoice={(choiceIndex, checked) => {
                         onUpdateStudentAnswer(activeStudentQuestion, (curr) => {
                           const isSelectAll = Boolean(activeStudentQuestion.data?.selectAll);
@@ -469,7 +701,7 @@ export default function StudentSubmissionForm({
                   >
                     Next
                   </Button>
-                  {viewerRole === 'STUDENT' ? (
+                  {viewerRole === 'STUDENT' && !showUploadPanel && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
@@ -502,7 +734,8 @@ export default function StudentSubmissionForm({
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
-                  ) : (
+                  )}
+                  {viewerRole !== 'STUDENT' && (
                     <Button
                       type="button"
                       onClick={() => {

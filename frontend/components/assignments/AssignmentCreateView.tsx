@@ -162,6 +162,7 @@ export default function AssignmentCreateView() {
             id="assignment-title"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
+            onKeyDown={(event) => event.stopPropagation()}
             placeholder="e.g. Week 3 Check-In"
           />
         </div>

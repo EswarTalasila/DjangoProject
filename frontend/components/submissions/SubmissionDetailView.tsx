@@ -11,8 +11,10 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import {
   getSubmission,
   overrideSubmissionScore,
+  listSubmissionImages,
   type AnswerPayload,
   type SubmissionDTO,
+  type SubmissionImageDTO,
 } from '@/lib/submission-api';
 import { getAssignment, getAssignmentTemplate, type Assignment } from '@/lib/assignment-api';
 import type { Assessment, GradingMode, Question, QuestionGroup } from '@/lib/assessment-api';
@@ -145,6 +147,7 @@ export default function SubmissionDetailView({ submissionId, viewerRole }: Submi
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isSavingScores, setIsSavingScores] = useState(false);
+  const [uploadedImages, setUploadedImages] = useState<SubmissionImageDTO[]>([]);
 
   const canOverride = viewerRole === 'TEACHER' || viewerRole === 'ADMIN';
 
@@ -161,6 +164,14 @@ export default function SubmissionDetailView({ submissionId, viewerRole }: Submi
       setAssignment(assignmentRecord);
       setAssessmentTemplate(template);
       setRubricById(new Map(rubrics.map((rubric) => [rubric.id, rubric])));
+
+      // Load uploaded images for this submission
+      try {
+        const images = await listSubmissionImages(currentSubmission.id);
+        setUploadedImages(images);
+      } catch {
+        setUploadedImages([]);
+      }
 
       const nextInputs: Record<number, string> = {};
       for (const answer of currentSubmission.answers) {
@@ -415,6 +426,40 @@ export default function SubmissionDetailView({ submissionId, viewerRole }: Submi
           </div>
         )}
       </section>
+
+      {/* Uploaded Files Section */}
+      {uploadedImages.length > 0 && (
+        <section className="rounded-sm border border-border bg-card p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Uploaded Files</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              {uploadedImages.length} file(s) uploaded by the student.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {uploadedImages.map((img) => (
+              <div
+                key={img.id}
+                className="rounded-sm border border-border bg-muted/10 overflow-hidden"
+              >
+                {img.mimeType.startsWith('image/') && (
+                  <img
+                    src={`/api/v1/submissions/${submission.id}/images/${img.id}`}
+                    alt={img.originalFilename}
+                    className="w-full h-auto max-h-64 object-contain bg-muted/20"
+                  />
+                )}
+                <div className="p-3 space-y-0.5">
+                  <p className="text-sm font-medium text-foreground truncate">{img.originalFilename}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {img.mimeType} • {(img.sizeBytes / 1024).toFixed(0)} KB
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="rounded-sm border border-border bg-card p-6 space-y-4">
         <div className="flex items-center justify-between gap-4">

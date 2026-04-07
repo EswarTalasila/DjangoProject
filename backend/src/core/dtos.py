@@ -115,6 +115,7 @@ class AssessmentDTO(BaseModel):
     category: str | None
     gradingMode: str
     scoringPolicy: str = "STANDARD"
+    submissionMode: str = "DIGITAL"
     status: str = "ACTIVE"
     rubricId: int | None = None
     questions: list[QuestionDTO]

@@ -631,7 +631,7 @@ export default function AssignmentDetailView({
           </span>
         </div>
 
-        {!assessmentTemplate || assessmentTemplate.questions.length === 0 ? (
+        {!assessmentTemplate || (assessmentTemplate.questions.length === 0 && assessmentTemplate.submissionMode === 'DIGITAL') ? (
           <p className="text-sm text-muted-foreground">No questions in this assignment template.</p>
         ) : previewMode === 'student' ? (
           <StudentSubmissionForm
@@ -639,6 +639,7 @@ export default function AssignmentDetailView({
             assignmentArchived={assignmentArchived}
             assignmentNotOpen={assignmentNotOpen}
             openAt={assignment?.openAt ?? null}
+            submissionMode={assessmentTemplate?.submissionMode ?? 'DIGITAL'}
             flatQuestions={flatQuestions}
             studentAnswers={studentAnswers}
             studentFlowStage={studentFlowStage}

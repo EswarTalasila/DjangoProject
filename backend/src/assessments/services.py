@@ -26,6 +26,7 @@ from .models import (
     QuestionKind,
     ScoringPolicy,
     ShortAnswerQuestion,
+    SubmissionMode,
 )
 
 
@@ -73,6 +74,7 @@ def assessment_to_dto(assessment: Assessment) -> AssessmentDTO:
         category=assessment.category,
         gradingMode=assessment.grading_mode,
         scoringPolicy=assessment.scoring_policy,
+        submissionMode=assessment.submission_mode,
         status=assessment.status,
         rubricId=assessment.rubric_id,
         questions=[question_to_dto(question) for question in assessment.questions.all()],
@@ -150,6 +152,7 @@ def create_draft(request_user: User) -> Assessment:
         title="",
         grading_mode=GradingMode.AUTO,
         scoring_policy=ScoringPolicy.STANDARD,
+        submission_mode=SubmissionMode.DIGITAL,
         created_by_admin=request_user,
         status=AssessmentStatus.DRAFT,
     )
@@ -171,11 +174,16 @@ def create_draft(request_user: User) -> Assessment:
 def create_assessment(request_user: User, payload: dict) -> Assessment:
     grading_mode = payload.get("gradingMode")
     scoring_policy = payload.get("scoringPolicy", ScoringPolicy.STANDARD)
+    submission_mode = payload.get("submissionMode", SubmissionMode.DIGITAL)
     title = payload.get("title")
     if not grading_mode:
         raise ValueError("gradingMode is required")
     if not title:
         raise ValueError("title is required")
+
+    # Upload modes require manual grading
+    if submission_mode in (SubmissionMode.UPLOAD_ONLY, SubmissionMode.DIGITAL_WITH_UPLOAD):
+        grading_mode = GradingMode.MANUAL
 
     questions_payload = payload.get("questions") or []
     assessment_rubric_id = _resolve_assessment_rubric_id(payload.get("rubricId"))
@@ -184,6 +192,7 @@ def create_assessment(request_user: User, payload: dict) -> Assessment:
         title=title,
         grading_mode=grading_mode,
         scoring_policy=scoring_policy,
+        submission_mode=submission_mode,
         created_by_admin=request_user,
         category=payload.get("category"),
         rubric_id=assessment_rubric_id,
@@ -202,15 +211,21 @@ def update_assessment(assessment: Assessment, payload: dict) -> Assessment:
 
     grading_mode = payload.get("gradingMode", assessment.grading_mode)
     scoring_policy = payload.get("scoringPolicy", assessment.scoring_policy)
+    submission_mode = payload.get("submissionMode", assessment.submission_mode)
     questions_payload = payload.get("questions") or []
     assessment_rubric_id = _resolve_assessment_rubric_id(
         payload.get("rubricId", assessment.rubric_id)
     )
 
+    # Upload modes require manual grading
+    if submission_mode in (SubmissionMode.UPLOAD_ONLY, SubmissionMode.DIGITAL_WITH_UPLOAD):
+        grading_mode = GradingMode.MANUAL
+
     assessment.title = payload.get("title", assessment.title)
     assessment.category = payload.get("category")
     assessment.grading_mode = grading_mode
     assessment.scoring_policy = scoring_policy
+    assessment.submission_mode = submission_mode
     assessment.rubric_id = assessment_rubric_id
     assessment.save()
 
@@ -244,14 +259,15 @@ def publish_assessment(assessment: Assessment) -> Assessment:
         raise ValueError("Assessment title is required before publishing.")
 
     questions = list(assessment.questions.all())
-    if not questions:
+    if not questions and assessment.submission_mode != SubmissionMode.UPLOAD_ONLY:
         raise ValueError("Assessment must have at least one question.")
 
     for q in questions:
         if not q.prompt.strip():
             raise ValueError(f"Question '{q.kind}' is missing prompt text.")
 
-    _validate_rubric_rules(assessment)
+    if questions:
+        _validate_rubric_rules(assessment)
 
     assessment.status = AssessmentStatus.ACTIVE
     assessment.save(update_fields=["status"])

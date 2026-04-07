@@ -40,10 +40,21 @@ class ScoringPolicy(models.TextChoices):
     COMPLETION = "COMPLETION", "Completion"
 
 
+class SubmissionMode(models.TextChoices):
+    DIGITAL = "DIGITAL", "Digital"
+    UPLOAD_ONLY = "UPLOAD_ONLY", "Upload Only"
+    DIGITAL_WITH_UPLOAD = "DIGITAL_WITH_UPLOAD", "Digital with Upload"
+
+
 class Assessment(models.Model):
     title = models.CharField(max_length=255)
     category = models.CharField(max_length=255, null=True, blank=True)
     grading_mode = models.CharField(max_length=255, choices=GradingMode.choices)
+    submission_mode = models.CharField(
+        max_length=32,
+        choices=SubmissionMode.choices,
+        default=SubmissionMode.DIGITAL,
+    )
     scoring_policy = models.CharField(
         max_length=32,
         choices=ScoringPolicy.choices,
@@ -248,4 +259,3 @@ class McqCorrectAnswer(models.Model):
 
     def __str__(self):
         return f"Correct({self.question_id}:{self.correct_index})"
-

@@ -54,6 +54,7 @@ class TestAssessmentToDto:
         assessment.category = "General"
         assessment.grading_mode = GradingMode.AUTO
         assessment.scoring_policy = "STANDARD"
+        assessment.submission_mode = "DIGITAL"
         assessment.status = "ACTIVE"
         assessment.rubric_id = None
         assessment.questions.all.return_value = []
@@ -66,6 +67,7 @@ class TestAssessmentToDto:
         assert dto.category == "General"
         assert dto.gradingMode == GradingMode.AUTO
         assert dto.scoringPolicy == "STANDARD"
+        assert dto.submissionMode == "DIGITAL"
         assert dto.questions == []
         assert dto.questionGroups == []
 
@@ -79,6 +81,7 @@ class TestAssessmentToDto:
         assessment.category = None
         assessment.grading_mode = GradingMode.MANUAL
         assessment.scoring_policy = "COMPLETION"
+        assessment.submission_mode = "DIGITAL"
         assessment.status = "ACTIVE"
         assessment.rubric_id = None
         assessment.questions.all.return_value = []
@@ -249,6 +252,7 @@ class TestCreateAssessment(_NoopAtomicMixin):
             title="Quiz 1",
             grading_mode=GradingMode.AUTO,
             scoring_policy="STANDARD",
+            submission_mode="DIGITAL",
             created_by_admin=user,
             category="Math",
             rubric_id=None,

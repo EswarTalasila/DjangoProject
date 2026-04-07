@@ -38,6 +38,7 @@ from .services import (
     archive_assignment,
     assignment_to_dto,
     create_assignment,
+    delete_assignment,
     get_assignment,
     list_by_course,
     list_for_user,
@@ -143,11 +144,12 @@ def detail(request, assignment_id: int):
         complete_audit(audit_id, AuditOutcome.SUCCESS)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    # Regular DELETE not supported — use archive instead
-    return Response(
-        {"detail": "Use POST /archive to archive, or DELETE ?purge=true to hard-delete."},
-        status=status.HTTP_409_CONFLICT,
-    )
+    # Regular DELETE — creator-only, cascades through submissions
+    try:
+        delete_assignment(assignment, caller_user=request.user)
+    except ForbiddenError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(["GET"])

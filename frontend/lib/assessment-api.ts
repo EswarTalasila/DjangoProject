@@ -6,6 +6,7 @@ export type GradingMode = 'AUTO' | 'MANUAL' | 'HYBRID';
 export type GradingStrategy = 'AUTO' | 'MANUAL';
 export type ScoringPolicy = 'STANDARD' | 'COMPLETION';
 export type QuestionKind = 'MULTIPLE_CHOICE' | 'SHORT_ANSWER' | 'NUMBER_SCALE' | 'MOOD_METER' | 'FILE_UPLOAD';
+export type SubmissionMode = 'DIGITAL' | 'UPLOAD_ONLY' | 'DIGITAL_WITH_UPLOAD';
 
 export type McqChoice = {
   prompt: string;
@@ -64,6 +65,7 @@ export type Assessment = {
   category: string | null;
   gradingMode: GradingMode;
   scoringPolicy: ScoringPolicy;
+  submissionMode: SubmissionMode;
   questions: Question[];
   questionGroups: QuestionGroup[];
   rubricId: number | null;
@@ -94,6 +96,7 @@ export type AssessmentInput = {
   category?: string | null;
   gradingMode: GradingMode;
   scoringPolicy?: ScoringPolicy;
+  submissionMode?: SubmissionMode;
   rubricId?: number | null;
   questions: QuestionInput[];
   questionGroups?: QuestionGroupInput[];

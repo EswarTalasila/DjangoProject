@@ -16,6 +16,7 @@ from assessments.models import (
     GradingStrategy,
     QuestionKind,
     ScoringPolicy,
+    SubmissionMode,
 )
 from assessments.services import (
     archive_assessment,
@@ -257,14 +258,8 @@ class Command(BaseCommand):
                     "category": "Intake",
                     "gradingMode": GradingMode.MANUAL,
                     "scoringPolicy": ScoringPolicy.STANDARD,
+                    "submissionMode": SubmissionMode.UPLOAD_ONLY,
                     "questions": [
-                        {
-                            "type": QuestionKind.FILE_UPLOAD,
-                            "prompt": "Upload the supporting intake packet.",
-                            "maxPoints": 0,
-                            "gradingStrategy": GradingStrategy.MANUAL,
-                            "data": {},
-                        },
                         {
                             "type": QuestionKind.MOOD_METER,
                             "prompt": "Select the mood shown in the student check-in.",

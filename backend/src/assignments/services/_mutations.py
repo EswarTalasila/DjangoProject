@@ -155,16 +155,7 @@ def delete_assignment(assignment: Assignment, caller_user=None) -> None:
     if caller_user is not None and assignment.created_by_id != caller_user.id:
         raise ForbiddenError("Only the assignment creator can delete it.")
 
-    # ASGN-CN-06: Check submission status
-    has_progressed = Submission.objects.filter(
-        assignment=assignment,
-    ).exclude(status=SubmissionStatus.NOT_STARTED).exists()
-    if has_progressed:
-        raise ConflictError(
-            "Cannot delete assignment: submissions have progressed beyond NOT_STARTED."
-        )
-
-    # Safe to delete — only NOT_STARTED submissions exist
+    # Delete all submissions and the assignment itself
     Submission.objects.filter(assignment=assignment).delete()
     assignment.delete()
 

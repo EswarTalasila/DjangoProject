@@ -22,12 +22,11 @@ import ImagePicker, { type PickedImage } from '@/components/media/ImagePicker';
 import QuestionTypeConfig from './QuestionTypeConfig';
 import type { StudioValidationIssue } from './validation';
 
-const TYPE_DEFAULTS: Record<QuestionKind, QuestionData> = {
+const TYPE_DEFAULTS: Record<string, QuestionData> = {
   MULTIPLE_CHOICE: { choices: [{ prompt: '', score: 0 }], selectAll: false },
   SHORT_ANSWER: { caseSensitive: false, trim: true },
   NUMBER_SCALE: { min: 1, max: 5, target: null },
   MOOD_METER: {},
-  FILE_UPLOAD: {},
 };
 
 type QuestionStudioProps = {
@@ -129,8 +128,6 @@ function QuestionStudio({
   function handleDataChange(data: QuestionData) {
     onChange({ ...question!, data });
   }
-
-  const isFileUploadQuestion = question.type === 'FILE_UPLOAD';
 
   const pickedImage: PickedImage | null = questionImage
     ? {
@@ -246,7 +243,6 @@ function QuestionStudio({
                   { value: 'SHORT_ANSWER', label: 'Short Answer' },
                   { value: 'NUMBER_SCALE', label: 'Number Scale' },
                   { value: 'MOOD_METER', label: 'Mood Meter' },
-                  { value: 'FILE_UPLOAD', label: 'File Upload' },
                 ] as { value: QuestionKind; label: string }[]
               ).map(({ value, label }) => (
                 <button
@@ -329,7 +325,7 @@ function QuestionStudio({
       <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-border bg-muted/20">
           <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-            {isFileUploadQuestion ? 'Upload Configuration' : 'Supporting Figure'}
+            Supporting Figure
           </h3>
         </div>
         <div className="p-6">
@@ -340,30 +336,12 @@ function QuestionStudio({
             }}
             onRemove={() => onRemoveImage?.()}
             onUpload={onUploadImage}
-            emptyLabel={
-              isFileUploadQuestion
-                ? 'Drop a file here or click to upload'
-                : 'Drop an image here or click to upload'
-            }
-            emptyHint={
-              isFileUploadQuestion
-                ? 'This area will hold the uploaded file for this question.'
-                : 'JPG, PNG, WebP (Max 10MB)'
-            }
-            browseLabel={
-              isFileUploadQuestion
-                ? 'Browse Uploaded Files'
-                : 'Browse Uploaded Images'
-            }
-            browseDialogTitle={
-              isFileUploadQuestion ? 'Select a File' : 'Select an Image'
-            }
-            emptyBrowseLabel={
-              isFileUploadQuestion
-                ? 'No files uploaded yet'
-                : 'No images uploaded yet'
-            }
-            replaceLabel={isFileUploadQuestion ? 'Replace File' : 'Replace'}
+            emptyLabel="Drop an image here or click to upload"
+            emptyHint="JPG, PNG, WebP (Max 10MB)"
+            browseLabel="Browse Uploaded Images"
+            browseDialogTitle="Select an Image"
+            emptyBrowseLabel="No images uploaded yet"
+            replaceLabel="Replace"
           />
         </div>
       </div>

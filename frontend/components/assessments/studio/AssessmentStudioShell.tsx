@@ -12,6 +12,7 @@ import {
   type QuestionImage,
   type GradingMode,
   type ScoringPolicy,
+  type SubmissionMode,
   type QuestionKind,
   type QuestionGroupInput,
   getAssessment,
@@ -112,11 +113,11 @@ function normalizeQuestionKind(kind: string): QuestionKind {
     kind === 'MULTIPLE_CHOICE' ||
     kind === 'SHORT_ANSWER' ||
     kind === 'NUMBER_SCALE' ||
-    kind === 'MOOD_METER' ||
-    kind === 'FILE_UPLOAD'
+    kind === 'MOOD_METER'
   ) {
     return kind;
   }
+  // Legacy FILE_UPLOAD questions fall back to SHORT_ANSWER
   return 'SHORT_ANSWER';
 }
 
@@ -142,6 +143,13 @@ export default function AssessmentStudioShell({
   const [isCategoryComposerOpen, setIsCategoryComposerOpen] = useState(false);
   const [gradingMode, setGradingMode] = useState<BuilderGradingMode>('AUTO');
   const [scoringPolicy, setScoringPolicy] = useState<ScoringPolicy>('STANDARD');
+  const [submissionMode, setSubmissionModeRaw] = useState<SubmissionMode>('DIGITAL');
+  const setSubmissionMode = useCallback((mode: SubmissionMode) => {
+    setSubmissionModeRaw(mode);
+    if (mode === 'UPLOAD_ONLY' || mode === 'DIGITAL_WITH_UPLOAD') {
+      setGradingMode('MANUAL');
+    }
+  }, []);
   const [assessmentRubricId, setAssessmentRubricId] = useState<number | null>(
     null,
   );
@@ -334,6 +342,7 @@ export default function AssessmentStudioShell({
     setCategory(a.category ?? '');
     setGradingMode(normalizeBuilderMode(a.gradingMode));
     setScoringPolicy(a.scoringPolicy ?? 'STANDARD');
+    setSubmissionModeRaw(a.submissionMode ?? 'DIGITAL');
     setAssessmentRubricId(a.rubricId ?? null);
     setAssessmentStatus(a.status ?? 'ACTIVE');
     setResolvedId(a.id);
@@ -866,10 +875,11 @@ export default function AssessmentStudioShell({
         questions,
         questionGroups,
         gradingMode,
+        submissionMode,
         assessmentRubricId,
         effectiveRubricId,
       }),
-    [title, questions, questionGroups, gradingMode, assessmentRubricId, effectiveRubricId],
+    [title, questions, questionGroups, gradingMode, submissionMode, assessmentRubricId, effectiveRubricId],
   );
 
   const deferredValidationIssues = useMemo(
@@ -879,6 +889,7 @@ export default function AssessmentStudioShell({
         questions: deferredQuestions,
         questionGroups: deferredQuestionGroups,
         gradingMode,
+        submissionMode,
         assessmentRubricId: deferredAssessmentRubricId,
         effectiveRubricId,
       }),
@@ -887,6 +898,7 @@ export default function AssessmentStudioShell({
       deferredQuestions,
       deferredQuestionGroups,
       gradingMode,
+      submissionMode,
       deferredAssessmentRubricId,
       effectiveRubricId,
     ],
@@ -936,6 +948,7 @@ export default function AssessmentStudioShell({
       category: category.trim() || null,
       gradingMode: gradingMode as GradingMode,
       scoringPolicy,
+      submissionMode,
       rubricId: assessmentRubricId,
       questions: questions.map((q) => {
         const imageJson = q.questionImage
@@ -1351,6 +1364,8 @@ export default function AssessmentStudioShell({
             onGradingModeChange={setGradingMode}
             scoringPolicy={scoringPolicy}
             onScoringPolicyChange={setScoringPolicy}
+            submissionMode={submissionMode}
+            onSubmissionModeChange={setSubmissionMode}
             activeQuestion={selectedQuestion}
             onActiveQuestionPointsChange={handleActiveQuestionPointsChange}
             onActiveQuestionGradingStrategyChange={handleActiveQuestionGradingStrategyChange}

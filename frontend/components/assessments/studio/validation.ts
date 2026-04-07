@@ -3,6 +3,7 @@
 import type {
   QuestionGroupInput,
   QuestionInput,
+  SubmissionMode,
 } from '@/lib/assessment-api';
 
 export type BuilderGradingMode = 'AUTO' | 'MANUAL' | 'HYBRID';
@@ -32,6 +33,7 @@ type BuildValidationIssuesArgs = {
   questions: QuestionInput[];
   questionGroups: QuestionGroupInput[];
   gradingMode: BuilderGradingMode;
+  submissionMode: SubmissionMode;
   assessmentRubricId: number | null;
   effectiveRubricId: (question: QuestionInput) => number | null;
 };
@@ -41,6 +43,7 @@ export function buildStudioValidationIssues({
   questions,
   questionGroups,
   gradingMode,
+  submissionMode,
   assessmentRubricId,
   effectiveRubricId,
 }: BuildValidationIssuesArgs): StudioValidationIssue[] {
@@ -60,7 +63,7 @@ export function buildStudioValidationIssues({
     });
   }
 
-  if (questions.length === 0) {
+  if (questions.length === 0 && submissionMode !== 'UPLOAD_ONLY') {
     issues.push({
       id: 'question-list-empty',
       level: 'error',

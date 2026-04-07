@@ -34,8 +34,6 @@ function formatQuestionKind(kind: QuestionKind): string {
       return 'NS';
     case 'MOOD_METER':
       return 'MM';
-    case 'FILE_UPLOAD':
-      return 'FU';
     default:
       return kind;
   }
@@ -51,8 +49,6 @@ function questionTypeColor(kind: QuestionKind): string {
       return 'text-amber-600 dark:text-amber-400';
     case 'MOOD_METER':
       return 'text-purple-600 dark:text-purple-400';
-    case 'FILE_UPLOAD':
-      return 'text-rose-600 dark:text-rose-400';
     default:
       return 'text-muted-foreground';
   }
