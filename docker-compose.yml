@@ -141,6 +141,7 @@ services:
       dockerfile: Dockerfile
     container_name: eel-backend
     restart: unless-stopped
+    user: root
     profiles:
       - development
       - testing
@@ -175,6 +176,7 @@ services:
       - ./.pre-commit-config.yaml:/app/.pre-commit-config.yaml:ro
       - ./Deployment:/app/Deployment:ro
       - ./backend/Dockerfile:/app/Dockerfile:ro
+      - ./scripts/runtime/backend_start.sh:/app/scripts/runtime/backend_start.sh:ro
       - ./backend/media:/app/media:cached
     expose:
       - "8000"
@@ -184,11 +186,7 @@ services:
     networks:
       - eel-network
     command: >
-      sh -c "python src/manage.py migrate &&
-             if [ \"$${ENVIRONMENT}\" = \"production\" ]; then python src/manage.py collectstatic --noinput; fi &&
-             python src/manage.py ensure_admin &&
-             if [ \"$${ENVIRONMENT}\" = \"testing\" ]; then python src/manage.py seed_e2e; fi &&
-             python src/manage.py runserver 0.0.0.0:8000"
+      sh /app/scripts/runtime/backend_start.sh
 
   # ==========================================================================
   # Frontend (Next.js) - Development
