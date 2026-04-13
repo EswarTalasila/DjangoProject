@@ -29,6 +29,7 @@ class TestTaskSurface:
     """The public Task surface must match the prompt contract."""
 
     def test_public_task_surface_kept(self):
+        """All prompt-specified public task targets exist in Taskfile.yml."""
         taskfile = _read_text("Taskfile.yml")
         for task_name in [
             "env:local:",
@@ -60,6 +61,7 @@ class TestTaskSurface:
             assert task_name in taskfile
 
     def test_legacy_public_tasks_removed(self):
+        """Removed legacy tasks no longer appear in Taskfile.yml."""
         taskfile = _read_text("Taskfile.yml")
         for removed in [
             "\n  up:\n",
@@ -85,9 +87,11 @@ class TestEnvContract:
     """The repo now has one canonical env template and checked-in env policy."""
 
     def test_root_env_template_exists(self):
+        """Root .env.template is the only checked-in env template."""
         assert (PROJECT_ROOT / ".env.template").exists()
 
     def test_old_profile_env_templates_removed(self):
+        """Per-profile .env.*.template files have been deleted."""
         for relpath in [
             "env/.env.development.template",
             "env/.env.testing.template",
@@ -96,6 +100,7 @@ class TestEnvContract:
             assert not (PROJECT_ROOT / relpath).exists()
 
     def test_env_policy_exists(self):
+        """Checked-in env_policy.yml contains targets, profiles, and validation."""
         policy = _load_yaml("scripts/config/env_policy.yml")
         assert "targets" in policy
         assert "profiles" in policy
@@ -106,6 +111,7 @@ class TestComposeLayout:
     """Compose has been split into proxy/dev/test/prod files."""
 
     def test_compose_files_exist(self):
+        """Four separate compose files exist in docker/ directory."""
         for relpath in [
             "docker/compose.proxy.yml",
             "docker/compose.dev.yml",
@@ -115,13 +121,16 @@ class TestComposeLayout:
             assert (PROJECT_ROOT / relpath).exists()
 
     def test_legacy_monolithic_compose_removed(self):
+        """The old single docker-compose.yml has been deleted."""
         assert not (PROJECT_ROOT / "docker-compose.yml").exists()
 
     def test_proxy_compose_has_only_proxy_service(self):
+        """Proxy compose file defines only the proxy service."""
         services = _services("docker/compose.proxy.yml")
         assert set(services) == {"proxy"}
 
     def test_app_compose_files_have_db_backend_frontend(self):
+        """Each app compose file defines exactly db, backend, frontend."""
         expected = {"db", "backend", "frontend"}
         for relpath in [
             "docker/compose.dev.yml",
@@ -131,6 +140,7 @@ class TestComposeLayout:
             assert set(_services(relpath)) == expected
 
     def test_no_service_uses_container_name(self):
+        """No compose service uses manual container_name."""
         for relpath in [
             "docker/compose.proxy.yml",
             "docker/compose.dev.yml",
@@ -145,10 +155,12 @@ class TestComposeNamesAndVolumes:
     """Networks, aliases, and volumes must use explicit EElab naming."""
 
     def test_proxy_network_name(self):
+        """Shared proxy network is named eelab-proxy."""
         config = _load_yaml("docker/compose.proxy.yml")
         assert config["networks"]["eelab-proxy"]["name"] == "eelab-proxy"
 
     def test_app_network_names(self):
+        """Each app stack has a profile-scoped private network plus shared proxy."""
         expectations = {
             "docker/compose.dev.yml": "eelab-dev-app",
             "docker/compose.test.yml": "eelab-test-app",
@@ -161,6 +173,7 @@ class TestComposeNamesAndVolumes:
             assert config["networks"]["eelab-proxy"]["name"] == "eelab-proxy"
 
     def test_service_aliases_are_explicit(self):
+        """Backend and frontend expose stable proxy aliases per profile."""
         expectations = {
             "docker/compose.dev.yml": ("eelab-dev-backend", "eelab-dev-frontend"),
             "docker/compose.test.yml": ("eelab-test-backend", "eelab-test-frontend"),
@@ -172,6 +185,7 @@ class TestComposeNamesAndVolumes:
             assert frontend_alias in services["frontend"]["networks"]["eelab-proxy"]["aliases"]
 
     def test_named_volumes_are_profile_specific(self):
+        """Named volumes use eelab-{profile}-{purpose} naming convention."""
         expectations = {
             "docker/compose.dev.yml": {
                 "db-data": "eelab-dev-db-data",
@@ -199,6 +213,7 @@ class TestProxyRouting:
     """The shared proxy must own the public ports and route each profile explicitly."""
 
     def test_proxy_ports_cover_prod_dev_test(self):
+        """Proxy exposes ports 80/443, 8080/8443, 9080/9443."""
         proxy = _services("docker/compose.proxy.yml")["proxy"]
         assert proxy["ports"] == [
             "80:80",
@@ -210,6 +225,7 @@ class TestProxyRouting:
         ]
 
     def test_proxy_templates_exist(self):
+        """Nginx config and per-profile server-block templates exist."""
         for relpath in [
             "proxy/nginx.conf",
             "proxy/templates/dev.conf.template",
@@ -219,6 +235,7 @@ class TestProxyRouting:
             assert (PROJECT_ROOT / relpath).exists()
 
     def test_dev_proxy_template_routes_expected_aliases(self):
+        """Dev proxy routes to eelab-dev-backend/frontend on 8080/8443."""
         text = _read_text("proxy/templates/dev.conf.template")
         assert "eelab-dev-backend:8000" in text
         assert "eelab-dev-frontend:3000" in text
@@ -228,6 +245,7 @@ class TestProxyRouting:
             assert path in text
 
     def test_test_proxy_template_routes_expected_aliases(self):
+        """Test proxy routes to eelab-test-backend/frontend on 9080/9443."""
         text = _read_text("proxy/templates/test.conf.template")
         assert "eelab-test-backend:8000" in text
         assert "eelab-test-frontend:3000" in text
@@ -235,6 +253,7 @@ class TestProxyRouting:
         assert "listen 9443 ssl;" in text
 
     def test_prod_proxy_template_routes_expected_aliases(self):
+        """Prod proxy routes to eelab-prod-backend/frontend on 80/443."""
         text = _read_text("proxy/templates/prod.conf.template")
         assert "eelab-prod-backend:8000" in text
         assert "eelab-prod-frontend:3000" in text
@@ -246,6 +265,7 @@ class TestTaskScripts:
     """The new scripts/tasks entrypoints must exist."""
 
     def test_required_task_scripts_exist(self):
+        """All 11 required task workflow scripts are present."""
         for relpath in [
             "scripts/tasks/prepare-env.sh",
             "scripts/tasks/check-env.sh",
@@ -262,6 +282,7 @@ class TestTaskScripts:
             assert (PROJECT_ROOT / relpath).exists()
 
     def test_legacy_runtime_scripts_removed(self):
+        """Old backend_start.sh and profile_guard.py are deleted."""
         for relpath in [
             "scripts/runtime/backend_start.sh",
             "scripts/runtime/profile_guard.py",

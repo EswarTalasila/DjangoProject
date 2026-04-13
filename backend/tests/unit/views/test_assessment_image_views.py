@@ -42,6 +42,7 @@ class TestFindQuestionByStorageKey:
     @patch("assessments.image_views.parse_question_image")
     @patch("assessments.image_views.Question")
     def test_returns_exact_storage_key_match(self, mock_question_model, mock_parse):
+        """Finds the question whose parsed storageKey matches exactly."""
         from assessments.image_views import _find_question_by_storage_key
 
         wrong = MagicMock()
@@ -68,6 +69,7 @@ class TestCanReadQuestionImage:
         mock_assignment_model,
         mock_enrollment_model,
     ):
+        """Student enrolled in assignment's course can read the question image."""
         from assessments.image_views import _can_read_question_image
 
         user = _user(role=Role.STUDENT)
@@ -86,6 +88,7 @@ class TestCanReadQuestionImage:
         mock_assignment_model,
         mock_can_view_course,
     ):
+        """Teacher who can view the course can read the question image."""
         from assessments.image_views import _can_read_question_image
 
         user = _user(role=Role.TEACHER)
@@ -107,6 +110,7 @@ class TestUploadOrDeleteView:
         mock_assessment_model,
         mock_locked,
     ):
+        """Returns 409 when assessment is referenced by assignments."""
         from assessments.image_views import upload_or_delete
 
         mock_assessment_model.objects.filter.return_value.first.return_value = (
@@ -132,6 +136,7 @@ class TestServeImageView:
         mock_find_question,
         mock_can_read,
     ):
+        """Returns 403 when user lacks permission to view the image."""
         from assessments.image_views import serve_image
 
         mock_find_question.return_value = SimpleNamespace(id=5)
@@ -156,6 +161,7 @@ class TestServeImageView:
         mock_parse,
         mock_get_storage_backend,
     ):
+        """Returns 200 with streamed image bytes for authorized user."""
         from assessments.image_views import serve_image
 
         mock_find_question.return_value = SimpleNamespace(id=5)
