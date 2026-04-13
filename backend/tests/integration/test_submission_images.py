@@ -779,6 +779,8 @@ class TestConstraints:
     ):
         """Purge assignment removes images and blobs."""
         settings.MEDIA_ROOT = str(tmp_path)
+        settings.IMAGE_ROOT = tmp_path / "images"
+        settings.SUBMISSION_IMAGE_DIR = tmp_path / "images" / "submissions"
         assignment, submission, _ = _setup_course_assignment(teacher_user, student_user, admin_user)
 
         # Reset to NOT_STARTED so purge is allowed
@@ -796,7 +798,7 @@ class TestConstraints:
         # Get storage key for blob verification
         img = SubmissionImage.objects.get(id=image_id)
         storage_key = img.storage_key
-        blob_path = tmp_path / storage_key
+        blob_path = tmp_path / "images" / storage_key
         assert blob_path.exists()
 
         # Reset to NOT_STARTED and archive for purge
