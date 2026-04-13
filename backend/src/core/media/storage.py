@@ -32,10 +32,10 @@ class ImageStorageBackend(ABC):
 
 
 class LocalStorageBackend(ImageStorageBackend):
-    """Local filesystem storage using MEDIA_ROOT."""
+    """Local filesystem storage using the configured image root."""
 
     def __init__(self, base_path: Path | None = None):
-        self._base = base_path or Path(settings.MEDIA_ROOT)
+        self._base = base_path or Path(settings.IMAGE_ROOT)
 
     def _full_path(self, key: str) -> Path:
         return self._base / key

@@ -17,9 +17,6 @@ DEFAULT_APPS = "accounts,courses,assessments,assignments,submissions,visualizati
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--apps", default=DEFAULT_APPS)
-    parser.add_argument(
-        "--trace", default=os.environ.get("OTEL_TRACE_FILE", ""), help="OTEL JSONL file"
-    )
     parser.add_argument("--out-dir", default="Docs/diagrams/plantuml")
     args = parser.parse_args()
 
@@ -29,12 +26,9 @@ def main() -> int:
     backend_class_dir = class_dir / "backend"
     frontend_class_dir = class_dir / "frontend"
     entity_dir = uml_dir / "entity" / "postgres"
-    sequence_dir = out_dir / "sequence" / "api"
-
     backend_class_dir.mkdir(parents=True, exist_ok=True)
     frontend_class_dir.mkdir(parents=True, exist_ok=True)
     entity_dir.mkdir(parents=True, exist_ok=True)
-    sequence_dir.mkdir(parents=True, exist_ok=True)
 
     apps = [name.strip() for name in args.apps.split(",") if name.strip()]
     python_cmd = sys.executable or "python3"
@@ -101,30 +95,6 @@ def main() -> int:
         )
     else:
         print("Skipping frontend diagrams (node or typescript not available).")
-
-    trace_path = args.trace or os.environ.get("OTEL_TRACE_FILE", "")
-    if not trace_path:
-        default_trace = Path("Docs/diagrams/otel/trace.jsonl")
-        if default_trace.exists():
-            trace_path = str(default_trace)
-    if trace_path and Path(trace_path).exists():
-        run(
-            [
-                python_cmd,
-                "scripts/diagrams/trace_to_plantuml.py",
-                "--input",
-                trace_path,
-                "--out",
-                str(sequence_dir),
-                "--group-by",
-                "route",
-                "--route-depth",
-                "1",
-                "--status-folders",
-            ]
-        )
-    else:
-        print("Skipping sequence diagrams (no OTEL trace file provided).")
 
     return 0
 

@@ -4,7 +4,7 @@
 - Angular SPA (unchanged UI) served as static assets.
 - Django REST API (new backend).
 - PostgreSQL database.
-- Reverse proxy (Traefik recommended, but nginx or other proxies supported).
+- Shared nginx proxy for ingress, TLS termination, and profile routing.
 
 ## Service boundaries
 - Frontend: presentation and routing only; no business logic changes.
@@ -39,7 +39,6 @@
 - `frontend/`: Angular project (unchanged UI).
   - `frontend/src`: existing UI.
   - `frontend/tests/unit`: Angular unit tests.
-  - `frontend/tests/e2e`: end-to-end tests (Playwright/Cypress).
 - `docs/`: spec sheets and diagrams (PlantUML).
   - `docs/diagrams/plantuml`: generated class/ER/sequence diagrams.
 

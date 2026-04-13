@@ -6,7 +6,7 @@ Provide a complete rewrite specification for the EEL Data Dashboard using a Pyth
 ## Goals
 - Preserve current user workflows, UI behavior, and observable functionality (no new features).
 - Apply targeted fixes needed to safely operate and maintain the system; not all known issues are in scope for the initial rewrite.
-- Make hosting proxy-agnostic (Traefik, Nginx, or other reverse proxies).
+- Keep the application proxy-aware while standardizing the repo on a shared nginx proxy.
 - Support a fully self-hosted deployment with Docker and PostgreSQL.
 - Make PlantUML-first architecture documentation a built-in part of development (class, ER, and runtime sequence diagrams on demand).
 
@@ -19,7 +19,7 @@ Provide a complete rewrite specification for the EEL Data Dashboard using a Pyth
 - Backend: Python 3.12, Django + Django REST Framework (DRF).
 - Frontend: Angular (TypeScript) with existing routes, guards, and API calls preserved (same screens and behaviors).
 - Database: PostgreSQL 15+.
-- Proxy/TLS: Traefik for TLS/Let's Encrypt and reverse proxy, but app must remain proxy-agnostic.
+- Proxy/TLS: shared nginx proxy for TLS termination and routing, while the app remains proxy-aware and honors forwarded headers.
 - Containers: Docker Compose for local and self-hosted deployment.
 
 ## Known constraints

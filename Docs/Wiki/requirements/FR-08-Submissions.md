@@ -39,7 +39,7 @@
 - Paper submission upload (not in current system).
 - Due-date enforcement at submission time (`due_at` is a visibility filter in FR-07 `ASGN-CN-08`, not a submission blocker; archive is the hard deadline mechanism).
 - Bulk grading across multiple submissions.
-- Wireframes and Playwright E2E scripts (tracked separately).
+- UI wireframes and future browser smoke flows (tracked separately).
 
 ### Core Intent
 - Manage submission lifecycle from pre-creation through draft, submit, and grading with role-appropriate access controls.

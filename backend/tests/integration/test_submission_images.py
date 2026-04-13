@@ -383,14 +383,15 @@ class TestRetrieveImage:
     def test_IMG_UC_03_STUDENT_own_submission(
         self, api_client, teacher_user, student_user, admin_user, tmp_path
     ):
-        """Student retrieves own image — 200 with X-Accel-Redirect."""
+        """Student retrieves own image — 200 with backend-streamed bytes."""
         settings.MEDIA_ROOT = str(tmp_path)
         _, submission, _ = _setup_course_assignment(teacher_user, student_user, admin_user)
         image_id = self._upload_and_get_id(api_client, submission, student_user, tmp_path)
 
         r = api_client.get(f"/api/v1/submissions/{submission.id}/images/{image_id}")
         assert r.status_code == 200
-        assert "X-Accel-Redirect" in r
+        assert r.content
+        assert "X-Accel-Redirect" not in r
         assert r["Cache-Control"] == "private"
 
     def test_IMG_UC_03_TEACHER_visible_submission(

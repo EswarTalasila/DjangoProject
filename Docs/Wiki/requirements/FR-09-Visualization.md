@@ -35,7 +35,7 @@
 - Student-facing dashboards (students cannot access VIZ endpoints).
 - Server-side chart/image/SVG generation.
 - Trend-over-time charts (future enhancement; current spec covers point-in-time aggregates).
-- Wireframes and Playwright E2E scripts (tracked separately).
+- UI wireframes and future browser smoke flows (tracked separately).
 
 ### Removals
 - `POST /api/v1/visualization/` — current raw-data endpoint. This endpoint returns raw `VisualizationSubmissionDTO` arrays and is replaced entirely by the aggregate endpoints defined in this spec. To be removed when FR-09 aggregate endpoints are implemented. Raw submission data remains available through FR-08 SUB endpoints (`GET /api/v1/assignments/{id}/submissions`, `GET /api/v1/students/{id}/submissions`, etc.).

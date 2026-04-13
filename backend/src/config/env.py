@@ -100,21 +100,6 @@ class EnvSettings(BaseSettings):
         description="Bootstrap admin password",
     )
 
-    # OTel settings
-    otel_enabled: bool | None = Field(
-        default=None,
-        validation_alias="OTEL_ENABLED",
-        description="Optional tracing toggle. Defaults vary by environment profile.",
-    )
-    otel_exporter_otlp_endpoint: str = Field(
-        default="",
-        description="OTLP collector endpoint URL",
-    )
-    otel_trace_file: str = Field(
-        default="",
-        description="Local trace file path (development/testing only)",
-    )
-
     # Image upload settings (FR-15)
     img_allow_unscanned_uploads: bool = Field(
         default=False,
@@ -157,14 +142,6 @@ class EnvSettings(BaseSettings):
         return self.is_development and self.debug
 
     @property
-    def seed_on_startup(self) -> bool:
-        return self.is_testing
-
-    @property
-    def manual_seed_allowed(self) -> bool:
-        return not self.is_production
-
-    @property
     def ssl_redirect_enabled(self) -> bool:
         if self.django_secure_ssl_redirect is not None:
             return bool(self.django_secure_ssl_redirect)
@@ -181,17 +158,6 @@ class EnvSettings(BaseSettings):
         if self.django_csrf_cookie_secure is not None:
             return bool(self.django_csrf_cookie_secure)
         return self.is_testing or self.is_production
-
-    @property
-    def effective_otel_enabled(self) -> bool:
-        # development: default true, configurable
-        if self.is_development:
-            return True if self.otel_enabled is None else self.otel_enabled
-        # testing: default true for deterministic tracing in integration/e2e
-        if self.is_testing:
-            return True if self.otel_enabled is None else self.otel_enabled
-        # production: opt-in only, default false
-        return bool(self.otel_enabled)
 
     # Computed properties for convenience
     @property
@@ -232,7 +198,6 @@ class EnvSettings(BaseSettings):
             self._validate_csrf_trusted_origins,
             self._validate_database_url,
             self._validate_oauth,
-            self._validate_otel_export_policy,
         ]:
             try:
                 validator()
@@ -330,19 +295,6 @@ class EnvSettings(BaseSettings):
                 "Invalid production OAuth config: GOOGLE_CLIENT_ID and "
                 "GOOGLE_CLIENT_SECRET are required."
             )
-
-    def _validate_otel_export_policy(self) -> None:
-        if not self.effective_otel_enabled:
-            return
-        if not self.otel_exporter_otlp_endpoint.strip():
-            raise ValueError(
-                "Invalid production OTEL config: OTLP endpoint is required when OTEL is enabled."
-            )
-        if self.otel_trace_file.strip():
-            raise ValueError(
-                "Invalid production OTEL config: local trace file export is not allowed."
-            )
-
 
 @lru_cache
 def get_env_settings() -> EnvSettings:

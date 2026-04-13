@@ -39,7 +39,7 @@
 - Assessment subset selection for assignments (FR-07 decision).
 - Rubric as a standalone entity (current model uses assessment-linked fields; standalone rubric entity is a future architectural decision).
 - Future question types: `TRUE_FALSE`, `REFLECTION` (planned extensions; not in current backend contract).
-- Wireframes and Playwright E2E scripts (tracked separately).
+- UI wireframes and future browser smoke flows (tracked separately).
 
 ### Deprecations
 - `POST /api/v1/assessments/{assessment_id}/teacher-self-assess` — deprecated. Route still exists in codebase; removal target: next FR-06 implementation release.

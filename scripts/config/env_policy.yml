@@ -1,0 +1,92 @@
+{
+  "targets": {
+    "local": {
+      "public_host": "localhost",
+      "public_scheme": "https"
+    },
+    "server": {
+      "public_host": "domain.com",
+      "public_scheme": "https"
+    }
+  },
+  "profiles": {
+    "dev": {
+      "environment": "development",
+      "http_port": 8080,
+      "https_port": 8443,
+      "media_root": "/srv/eelab-dev/media",
+      "db_defaults": {
+        "POSTGRES_DB": "eelab_dev",
+        "POSTGRES_USER": "eelab_dev",
+        "POSTGRES_PASSWORD": "change-me"
+      },
+      "app_defaults": {
+        "DJANGO_SECRET_KEY": "dev-only-secret-change-me",
+        "ADMIN_USERNAME": "Admin",
+        "ADMIN_EMAIL": "admin@example.com",
+        "ADMIN_PASSWORD": "change-me"
+      }
+    },
+    "test": {
+      "environment": "testing",
+      "http_port": 9080,
+      "https_port": 9443,
+      "media_root": "/srv/eelab-test/media",
+      "db_defaults": {
+        "POSTGRES_DB": "eelab_test",
+        "POSTGRES_USER": "eelab_test",
+        "POSTGRES_PASSWORD": "change-me"
+      },
+      "app_defaults": {
+        "DJANGO_SECRET_KEY": "test-only-secret-change-me",
+        "ADMIN_USERNAME": "Admin",
+        "ADMIN_EMAIL": "admin@example.com",
+        "ADMIN_PASSWORD": "change-me"
+      }
+    },
+    "prod": {
+      "environment": "production",
+      "http_port": 80,
+      "https_port": 443,
+      "media_root": "/srv/eelab-prod/media"
+    }
+  },
+  "validation": {
+    "keys": {
+      "DJANGO_SECRET_KEY": {
+        "placeholder": "CHANGE_ME_DJANGO_SECRET_KEY",
+        "min_length": 32
+      },
+      "POSTGRES_PASSWORD": {
+        "placeholder": "CHANGE_ME_POSTGRES_PASSWORD",
+        "min_length": 12
+      },
+      "GOOGLE_CLIENT_ID": {
+        "placeholder": "CHANGE_ME_GOOGLE_CLIENT_ID"
+      },
+      "GOOGLE_CLIENT_SECRET": {
+        "placeholder": "CHANGE_ME_GOOGLE_CLIENT_SECRET"
+      },
+      "ADMIN_EMAIL": {
+        "placeholder": "CHANGE_ME_ADMIN_EMAIL@example.com",
+        "validator": "email"
+      },
+      "ADMIN_PASSWORD": {
+        "placeholder": "CHANGE_ME_ADMIN_PASSWORD",
+        "min_length": 12
+      }
+    },
+    "internal_hosts": [
+      "backend",
+      "frontend",
+      "db",
+      "proxy",
+      "eelab-dev-backend",
+      "eelab-dev-frontend",
+      "eelab-test-backend",
+      "eelab-test-frontend",
+      "eelab-prod-backend",
+      "eelab-prod-frontend"
+    ]
+  }
+}

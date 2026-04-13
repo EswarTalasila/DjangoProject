@@ -165,8 +165,8 @@ All NFR entries specify one of these five verification methods. Each method defi
 **When to use:** NFRs that require production runtime verification (distributed tracing pipeline health, log aggregation success, performance under real load).
 
 **Examples:**
-- **NFR-OPS-05 (Observability Instrumentation):** Monitoring verifies trace data reaches OTLP collector and spans appear in Jaeger/Tempo with correct W3C Trace Context headers.
-- **NFR-OPS-07 (Log-Trace Correlation):** Monitoring confirms log entries include otelTraceID and otelSpanID fields that match exported trace data.
+- **NFR-OPS-05 (Observability Instrumentation):** Monitoring remains deferred until observability is intentionally rebuilt against the current task and compose surface.
+- **NFR-OPS-07 (Runtime Observability):** Monitoring confirms logs and task diagnostics remain readable and actionable; distributed tracing is deferred until rebuilt intentionally.
 - (Note: Performance thresholds (NFR-PERF-01) use "Automated test" during baseline establishment, but may use "Monitoring" for production SLA verification in future.)
 
 ### Audit

@@ -3,27 +3,31 @@
 | Field | Value |
 |-------|-------|
 | **Status** | Active |
-| **Scope** | Local developer startup and profile env workflow |
+| **Scope** | Local developer startup and generated env workflow |
 
 ---
 
-## 1) Initialize Environment Files
+## 1) Choose Topology and Initialize Env
 
 ```bash
+task env:local
 task env:init
 ```
 
-This creates missing runtime env files (gitignored):
+This workflow:
 
-- `env/.env.development`
-- `env/.env.testing`
-- `env/.env.production`
+- ensures root `.env` exists
+- sets localhost topology in root `.env`
+- rewrites runtime env files:
+  - `env/.env.development`
+  - `env/.env.testing`
+  - `env/.env.production`
 
-Edit values as needed for your machine.
+Edit root `.env` only. Do not edit generated profile env files directly.
 
 ## 2) Start Profiles
 
-### Development (minimal)
+### Development
 
 ```bash
 task up:dev
@@ -31,11 +35,17 @@ task up:dev
 
 Runs:
 
-- `database`
+- shared `proxy`
+- `db`
 - `backend`
 - `frontend`
 
-### Testing (full validation stack)
+Access through proxy:
+
+- `http://localhost:8080`
+- `https://localhost:8443`
+
+### Testing
 
 ```bash
 task up:test
@@ -43,23 +53,31 @@ task up:test
 
 Runs:
 
-- `database`
+- shared `proxy`
+- `db`
 - `backend`
 - `frontend`
-- `pgadmin`
-- `otel-collector`
-- `jaeger`
 
-## 3) Readiness and Diagnostics
+Access through proxy:
 
-Startup tasks run `scripts/runtime/profile_guard.py` to verify backend diagnostics before continuing.
+- `http://localhost:9080`
+- `https://localhost:9443`
 
-Testing commands also wait for backend readiness in the testing profile before running pytest.
+## 3) Readiness and Validation
+
+Startup tasks:
+
+- check Docker
+- prepare generated env files
+- validate env policy for the chosen profile
+- ensure the shared proxy is running
+- start the target stack and wait for health
 
 ## 4) Stop Services
 
 ```bash
-task down
+task down:dev
+task down:test
 ```
 
-Stops all profile stacks and removes orphans.
+These commands stop only the requested stack and preserve volumes.

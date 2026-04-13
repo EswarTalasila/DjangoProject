@@ -85,7 +85,7 @@ def upload_question_image(
 
     # 5. Storage key
     storage_key = generate_storage_key(
-        f"assessments/questions/{question.id}", mime_type
+        f"questions/{question.id}", mime_type
     )
 
     # 6. Store blob

@@ -40,7 +40,7 @@
 - Grading and scoring execution (FR-08 SUB).
 - Assessment template management (FR-06 ASMT).
 - Bulk assignment creation.
-- Wireframes and Playwright E2E scripts (tracked separately).
+- UI wireframes and future browser smoke flows (tracked separately).
 
 ### Deprecations
 - `TEACHER` audience type — deprecated. Still present in `models.py` (`AudienceType` enum) and `serializers.py` (validation logic). Removal target: next FR-07 implementation release.

@@ -34,7 +34,7 @@
 - Assessment template export (FR-06 ASMT domain).
 - Cross-course roster export (roster is always course-scoped).
 - Server-side chart or visualization generation.
-- Wireframes and Playwright E2E scripts (tracked separately).
+- UI wireframes and future browser smoke flows (tracked separately).
 
 ### Removals
 - `POST /api/v1/export/` — current 501 stub endpoint. Replaced entirely by the GET endpoints defined in this spec. Associated code to remove: `exports/views.py::export_stub`, `exports/urls.py` route. URL mount in `config/urls.py` updated from `api/v1/export/` to `api/v1/exports/`.

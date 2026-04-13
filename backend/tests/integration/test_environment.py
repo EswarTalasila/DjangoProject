@@ -33,7 +33,6 @@ _VALID_PROD = dict(
     google_client_secret="GOCSPX-real-secret",
     admin_email="admin@mycompany.com",
     admin_password="SecureAdminP@ss123",
-    otel_trace_file="",
 )
 
 
@@ -130,46 +129,6 @@ class TestENV_UC_03_Integration:
 
 
 # ===================================================================
-# ENV-UC-04 — Seed Behavior (Integration)
-# ===================================================================
-
-
-@pytest.mark.django_db
-@pytest.mark.integration
-class TestENV_UC_04_Integration:
-    """Seed command behavior by profile."""
-
-    def test_ENV_UC_04_testing_auto_seed(self, monkeypatch):
-        """In testing profile, seed_on_startup is True (auto seed allowed)."""
-        settings = EnvSettings(environment="testing")
-        assert settings.seed_on_startup is True
-
-        # seed_e2e actually runs without error
-        monkeypatch.setattr(
-            "accounts.management.commands.seed_e2e.env",
-            SimpleNamespace(is_production=False),
-        )
-        out = StringIO()
-        call_command("seed_e2e", stdout=out)
-        assert "E2E seed completed" in out.getvalue()
-
-    def test_ENV_UC_04_development_manual_seed(self, monkeypatch):
-        """In development profile, manual seed allowed but not auto."""
-        settings = EnvSettings(environment="development")
-        assert settings.seed_on_startup is False
-        assert settings.manual_seed_allowed is True
-
-        # Manual invocation works
-        monkeypatch.setattr(
-            "accounts.management.commands.seed_e2e.env",
-            SimpleNamespace(is_production=False),
-        )
-        out = StringIO()
-        call_command("seed_e2e", stdout=out)
-        assert "E2E seed completed" in out.getvalue()
-
-
-# ===================================================================
 # ENV-UC-05 — Route Gating by Profile (Integration)
 # ===================================================================
 
@@ -200,24 +159,13 @@ class TestENV_UC_05_Integration:
 
 
 # ===================================================================
-# ENV-UC-06 — Tracing Mode / OAuth Validation (Integration)
+# ENV-UC-06 — OAuth Validation (Integration)
 # ===================================================================
 
 
 @pytest.mark.integration
 class TestENV_UC_06_Integration:
-    """Tracing and OAuth validation integration."""
-
-    def test_ENV_UC_06_tracing_mode_by_profile(self):
-        """effective_otel_enabled produces correct defaults per environment."""
-        dev = EnvSettings(environment="development")
-        assert dev.effective_otel_enabled is True
-
-        testing = EnvSettings(environment="testing")
-        assert testing.effective_otel_enabled is True
-
-        prod = EnvSettings(**_VALID_PROD)
-        assert prod.effective_otel_enabled is False
+    """OAuth validation integration."""
 
     def test_ENV_UC_06_oauth_required_validation(self):
         """Production startup fails when OAuth config is missing."""

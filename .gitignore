@@ -36,13 +36,9 @@ backend/src/media/
 
 # Environment variables
 .env
-.env.local
-.env.prod
-.env.production
-.env.*.local
+.env.bak
 !.env.template
 env/.env.*
-!env/.env.*.template
 
 # IDE
 .idea/

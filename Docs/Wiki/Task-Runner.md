@@ -2,133 +2,116 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | DRAFT |
-| **Scope** | Task command contract and environment-aware testing interface |
-| **Applies To** | Development workflow, test orchestration, environment profiles |
-| **Related FRs** | FR-01, FR-02, FR-12 |
+| **Status** | Active |
+| **Scope** | Task command contract and environment-aware runtime/testing interface |
+| **Applies To** | Development workflow, test orchestration, profile startup |
+| **Related FRs** | FR-01, FR-02, FR-12, FR-13 |
 
 ---
 
 ## 1) Purpose
 
-Define a clean Task command interface that:
-- maps to environment profile behavior (`development`, `testing`, `production`)
-- supports granular test execution by layer and role
-- avoids command bloat by composing commands from a small stable set
-
-This is a contract/spec page for cleanup work; it is not a line-by-line mirror of current `Taskfile.yml`.
+Define a small, literal Task command interface that:
+- maps directly to environment profile behavior (`development`, `testing`, `production`)
+- keeps orchestration visible in `Taskfile.yml`
+- delegates workflow implementation to `scripts/tasks/*`
+- removes legacy aliases and task sprawl
 
 ---
 
-## 2) Environment-Aware Command Groups
+## 2) Public Command Surface
 
-### Profile startup
-
-| Command | Profile | Intent |
-|---|---|---|
-| `task up:dev` | development | Start local developer stack with debug-friendly defaults |
-| `task up:test` | testing | Start test profile stack with deterministic testing behavior |
-| `task up:prod` | production | Start production-like stack with strict guards |
-
-Rules:
-- Each profile command must bind to an explicit env file:
-  - `env/.env.development`
-  - `env/.env.testing`
-  - `env/.env.production`
-- Implicit profile startup without env-file selection is non-compliant with FR-12.
-
-### Profile teardown
+### Environment
 
 | Command | Intent |
 |---|---|
-| `task down` | Stop running services across all profiles |
-| `task down:proxy` | Stop services including proxy profile containers |
+| `task env:local` | Set root `.env` topology for localhost routing |
+| `task env:server` | Set root `.env` topology for deployed host/domain routing |
+| `task env:init` | Verify root `.env` and rewrite generated runtime env files |
 
----
+Rules:
+- Root `.env` is the only human-edited env source.
+- Generated env files are runtime artifacts only:
+  - `env/.env.development`
+  - `env/.env.testing`
+  - `env/.env.production`
 
-## 3) Testing Interface Contract
+### Startup / Shutdown
 
-### Unit test commands
-
-| Command | Scope |
+| Command | Intent |
 |---|---|
-| `task test:unit` | Run frontend + backend unit tests |
-| `task test:unit:backend` | Backend unit only |
-| `task test:unit:frontend` | Frontend unit only |
+| `task up:dev` | Validate env, ensure proxy, start dev stack |
+| `task up:test` | Validate env, ensure proxy, start test stack |
+| `task up:prod` | Validate env, ensure proxy, start prod stack |
+| `task down:dev` | Stop dev stack without removing volumes |
+| `task down:test` | Stop test stack without removing volumes |
+| `task down:prod` | Stop prod stack without removing volumes |
 
-### Integration test commands
+Rules:
+- `up:*` is non-destructive by default.
+- `down:*` is non-destructive by default.
+- Proxy is shared and internal; app stacks do not own ingress.
 
-| Command | Scope |
+### Runtime
+
+| Command | Intent |
 |---|---|
-| `task test:integration` | Run all integration suites |
-| `task test:integration:backend` | Backend integration only |
-| `task test:integration:frontend` | Frontend integration deferred to E2E |
-| `task test:integration:role -- <role>` | Role-filtered integration tests (`admin`, `teacher`, `student`, `error`) |
+| `task status:dev|test|prod` | Show stack state |
+| `task logs:dev|test|prod` | Follow stack logs |
+| `task restart:dev|test|prod` | Restart profile containers |
+| `task rebuild:dev|test|prod` | Rebuild/recreate app containers without destroying data |
 
-### Security, E2E, and system tests
+### Testing
 
-| Command | Scope |
+| Command | Intent |
 |---|---|
-| `task test:security` | Security tests (authz, abuse, validation) |
-| `task test:coverage` | Backend coverage report |
-| `task test:coverage:frontend` | Frontend coverage report |
-| `task test:e2e` | Playwright full-flow tests |
-| `task test:system` | Black-box scripted system tests (ST-* tracing) |
-| `task test:all` | Full pipeline (unit + integration + security + e2e + system where applicable) |
+| `task test` | Ensure testing stack and run backend + frontend tests |
+| `task test:backend` | Ensure testing stack and run backend tests |
+| `task test:frontend` | Ensure testing stack and run frontend tests |
 
-### Testing behavior policy
+Rules:
+- Tests run against the testing stack, never the dev stack.
+- `scripts/tasks/test.sh` owns orchestration.
+- Coverage is a final reporting concern and stays under `scripts/coverage`.
 
-- Frontend unit and frontend integration tests may use API mocking.
-- Frontend async Server Component integration stays E2E-first; unit coverage focuses on Client Components and shared libs.
-- Backend unit and backend integration tests must run against real backend logic.
-- Role-filtered integration commands should map directly to requirement role stand-ins.
-- E2E seeding should default to deterministic seed values; env overrides are optional.
+### Destructive
 
----
-
-## 4) Database Policy for Testing
-
-Testing environment must differentiate between developer data and test data.
-
-| Context | Database policy |
+| Command | Intent |
 |---|---|
-| development | Persistent local dev DB (manual reset) |
-| testing | Isolated test DB instance/namespace with deterministic seed baseline |
-| production | Production data only; seed commands blocked |
+| `CONFIRM_DESTROY_EELAB=EELAB task destroy:all` | Wipe all EElab containers, volumes, and proxy state |
 
-Requirements:
-- `task up:test` must not reuse development DB state.
-- Integration and E2E runs must be reproducible from a known baseline.
-- Test teardown/reset command should be explicit (`task test:reset-db` or equivalent).
+Rules:
+- The exact confirmation token is required.
+- No hidden destructive cleanup is allowed in normal startup/shutdown tasks.
 
 ---
 
-## 5) Command Naming and Stability Rules
+## 3) Internal Task Conventions
 
-- Keep command names explicit and composable; avoid aliases that hide profile or layer.
-- Prefer depth `group:subgroup[:filter]` rather than ad-hoc names.
-- New task commands must map to at least one requirement/testing artifact (FR/UC/CN/ST).
-- Deprecate commands by documenting replacement and removal timeline.
+- `_check:*` tasks validate state and may fail fast.
+- `_ensure:*` tasks are idempotent and may create/fix required runtime state.
+- The actual implementation lives in `scripts/tasks/*`.
 
----
-
-## 6) Minimum Command Set (Target)
-
-This set is the baseline to keep as stable public interface:
-
-- `up:dev`, `up:test`, `up:prod`, `down`, `down:proxy`
-- `test:unit`, `test:unit:backend`, `test:unit:frontend`
-- `test:integration`, `test:integration:backend`, `test:integration:frontend`, `test:integration:role`
-- `test:security`, `test:e2e`, `test:system`, `test:all`
-- `test:reset-db`
-
-Everything else is optional/internal and should not be part of the core developer contract.
+Examples:
+- `_check:docker`
+- `_check:env:dev`
+- `_check:env:test`
+- `_check:env:prod`
+- `_ensure:proxy`
+- `_ensure:test-stack`
 
 ---
 
-## 7) Traceability Notes
+## 4) Stability Rules
 
-- FR-12 governs profile selection, startup guards, and tooling gates.
-- FR-01 and FR-02 govern auth/registration test scenarios that these commands execute.
-- `Testing-Index.md` remains source of truth for layer definitions and naming conventions.
-- `Diagnostics-Index.md` is the source of truth for startup diagnostics code meanings, severities, and FR/NFR trace mappings (`ENV-*`, `ENV-P*`).
+- If a task is not explicitly kept in this contract, it should be removed or replaced.
+- Legacy aliases such as `task up`, `task down`, `task up:prod:local`, old `docker:*` cleanup wrappers, proxy overlay tasks, OTEL toggles, and E2E task families are not part of the kept public surface.
+- `task help` remains the human-facing grouped command index.
+
+---
+
+## 5) Traceability Notes
+
+- FR-12 governs env selection, validation, and startup gating.
+- FR-13 governs compose/proxy/runtime orchestration.
+- `Diagnostics-Index.md` is the source of truth for env validation diagnostics.

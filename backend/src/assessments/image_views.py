@@ -174,7 +174,6 @@ def serve_image(request, storage_key: str):
             status=status.HTTP_404_NOT_FOUND,
         )
 
-    # Serve directly for development; in production use X-Accel-Redirect
     backend = get_storage_backend()
     try:
         data = backend.retrieve(storage_key)

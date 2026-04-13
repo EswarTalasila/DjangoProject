@@ -7,7 +7,7 @@
  * - Public endpoints (login, registration, password reset) skip the refresh cycle.
  *
  * Browser API base: always relative "/api/v1" (resolved by nginx/proxy).
- * Server-side code uses BACKEND_INTERNAL_URL instead (see auth-session.ts).
+ * Server-side code resolves an absolute proxy URL separately in auth-session.ts.
  */
 import axios from 'axios';
 import Cookies from 'js-cookie';

@@ -152,20 +152,23 @@ try:
 except PermissionError:
     logging.warning("Could not create MEDIA_ROOT at %s — ensure it exists and is writable", MEDIA_ROOT)
 
-# Package build storage — profile-driven base directory.
-# Testing uses /tmp so builds don't depend on bind-mounted MEDIA_ROOT permissions.
-import os as _os
-import tempfile as _tempfile
+# Media and artifact directories must follow the profile-scoped runtime layout
+# documented in Prompt.md.
+IMAGE_ROOT = MEDIA_ROOT / "images"
+QUESTION_IMAGE_DIR = IMAGE_ROOT / "questions"
+SUBMISSION_IMAGE_DIR = IMAGE_ROOT / "submissions"
+ARTIFACT_ROOT = MEDIA_ROOT / "artifacts"
+PACKAGE_ARTIFACT_DIR = ARTIFACT_ROOT / "packages"
+PACKAGE_SNAPSHOT_DIR = ARTIFACT_ROOT / "snapshots"
 
-if ENVIRONMENT == "testing":
-    _PKG_BASE = Path(_tempfile.gettempdir()) / "eel-package-builds" / _os.getenv("PYTEST_XDIST_WORKER", "main")
-else:
-    _PKG_BASE = MEDIA_ROOT
-PACKAGE_ARTIFACT_DIR = _PKG_BASE / "package_artifacts"
-PACKAGE_SNAPSHOT_DIR = _PKG_BASE / "snapshots"
-SUBMISSION_IMAGE_DIR = MEDIA_ROOT / "submissions"
-
-for directory in (PACKAGE_ARTIFACT_DIR, PACKAGE_SNAPSHOT_DIR, SUBMISSION_IMAGE_DIR):
+for directory in (
+    IMAGE_ROOT,
+    QUESTION_IMAGE_DIR,
+    SUBMISSION_IMAGE_DIR,
+    ARTIFACT_ROOT,
+    PACKAGE_ARTIFACT_DIR,
+    PACKAGE_SNAPSHOT_DIR,
+):
     try:
         directory.mkdir(parents=True, exist_ok=True)
     except PermissionError:

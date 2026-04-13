@@ -31,7 +31,7 @@
 - Automatic legal retention policy by jurisdiction.
 - Backup/restore infrastructure (FR-13 INFRA).
 - Historical data anonymization job.
-- UI wireframes and Playwright flows.
+- UI wireframes and future browser smoke flows.
 
 ### Core intent
 - Replace unsafe hard-delete behavior with explicit lifecycle transitions.

@@ -101,26 +101,14 @@ Dangerous operations (test data seeding, debug tooling) must be prevented in pro
 
 ---
 
-## NFR-OPS-05: Observability Instrumentation
+## NFR-OPS-05: Observability Instrumentation — DEFERRED
 
 **Category:** Distributed Tracing
 
 **Requirement:**
 Application must have distributed tracing with W3C Trace Context propagation for end-to-end request correlation across services.
 
-**Acceptance Criteria:**
-- [ ] OpenTelemetry SDK configured with W3C Trace Context propagator
-- [ ] Backend extracts traceparent headers from incoming requests
-- [ ] Backend spans include parent context from frontend-initiated requests
-- [ ] HTTP requests and database queries automatically instrumented with spans
-- [ ] Trace data exportable to OTLP-compatible collectors (Jaeger, Tempo)
-- [ ] File export mode supported for offline diagram generation
-
-**Verification Method:** Automated test - integration tests verify trace context propagation and span hierarchy
-
-**Applicable FRs:** All domains, OBS (OBS-CN-02), ENV (ENV-CN-11)
-
-**Status:** Defined
+**Status:** Deferred. OpenTelemetry runtime code has been removed. If reintroduced later it will be rebuilt intentionally with a clean interface.
 
 ---
 
@@ -137,7 +125,7 @@ System must maintain structured logs with consistent format and trace correlatio
 - [ ] HTTP request logs include method, path, status code, and response time
 - [ ] Database query logs include statement type and execution time
 - [ ] Log retention: 30 days for development, 90 days for production
-- [ ] Logs aggregated to centralized collection in production (OTLP collector or equivalent)
+- [ ] Logs aggregated to centralized collection in production
 
 **Verification Method:** Manual review - log format inspection and aggregation pipeline verification
 
@@ -147,21 +135,19 @@ System must maintain structured logs with consistent format and trace correlatio
 
 ---
 
-## NFR-OPS-07: Log-Trace Correlation
+## NFR-OPS-07: Runtime Observability
 
-**Category:** Distributed Tracing
+**Category:** Operations
 
 **Requirement:**
-Backend logs must include trace and span IDs to enable correlation between log entries and distributed traces for debugging.
+Application logs and diagnostics must remain readable and actionable during local and server operation. Distributed tracing is currently deferred until it is rebuilt intentionally.
 
 **Acceptance Criteria:**
-- [ ] LoggingInstrumentor configured to inject trace context into log records
-- [ ] All backend log entries include otelTraceID field when request is traced
-- [ ] All backend log entries include otelSpanID field when request is traced
-- [ ] Trace IDs in logs match trace IDs in exported trace data
-- [ ] Log-trace correlation works in both OTLP export mode and file export mode
+- [ ] Backend logs remain structured and readable during startup, shutdown, and testing
+- [ ] Task-driven diagnostics surface enough information to debug stack failures
+- [ ] Observability additions are introduced only through an explicit future rebuild
 
-**Verification Method:** Automated test - instrumentation tests verify trace ID injection into logs
+**Verification Method:** Automated test + operator review
 
 **Applicable FRs:** All domains (infrastructure requirement)
 

@@ -11,49 +11,13 @@
 - Archive vs delete behavior and data retention.
 - API compatibility tests to ensure `/api/*` and `/api/v1/*` return identical payload shapes.
 
-## End-to-end tests
-- Admin creates assessments and users.
-- Teacher creates course, enrolls students, assigns assessments.
-- Student submits assignment; teacher grades; admin exports data.
-- Browser E2E tests run with Playwright (multi-role workflow coverage).
-
-## Playwright E2E setup
-### Prereqs
-- Backend and frontend running (or use `E2E_START_SERVER=true` to auto-start the frontend).
-- Seed an admin account for UI login tests.
-
-### Seed baseline users
-```bash
-./scripts/e2e/seed_e2e.sh
-```
-
-### Seeded user fixtures
-- Frontend: `frontend/tests/e2e/fixtures/seeded-users.json`
-- Backend: `backend/tests/fixtures/seeded-users.json`
-- Override defaults via `E2E_*` env vars when seeding.
-
-### Run E2E tests
-```bash
-cd frontend
-E2E_BASE_URL=http://localhost:4200 \
-E2E_API_URL=http://localhost:8000/api/v1 \
-npm run e2e
-```
-
-### Optional env vars
-- `E2E_ADMIN_USERNAME`, `E2E_ADMIN_PASSWORD`, `E2E_ADMIN_NAME`
-- `E2E_TEACHER_PASSWORD`, `E2E_STUDENT_PASSWORD`
-- `E2E_START_SERVER=true` (starts `npm start` during tests)
-- `E2E_USE_DOCKER=false` (runs seed command without docker)
-
 ## TODO / open testing gaps
 - TODO: Add full workflow integration tests that go from account creation -> login -> course -> assessment -> assignment -> submission -> grading for teacher and student roles.
 - TODO: Add spec-first tests for known audit items (first-login tokenization, check-email privacy, stricter access pre-checks) before changing behavior.
-- TODO: Expand Playwright coverage for all CRUD screens and error cases.
+- TODO: Reintroduce browser-driven end-to-end coverage only after a dedicated testing harness is rebuilt intentionally.
 
 ## Automated frontend tests
 - Angular unit tests for guards, services, and shared components.
-- E2E tests for critical workflows (login, assignment flow, grading, exports).
 - Visual regression tests for key screens (optional, if stable snapshots can be maintained).
 
 ## Security tests

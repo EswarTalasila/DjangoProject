@@ -9,7 +9,6 @@ Django REST Framework API backend for the EE Lab Data Dashboard.
 - Django REST Framework
 - PostgreSQL 16
 - JWT Authentication (SimpleJWT)
-- OpenTelemetry instrumentation
 
 ## Project Structure
 
@@ -23,7 +22,7 @@ backend/
 │   ├── submissions/       # Submission lifecycle, grading, score override
 │   ├── visualizations/    # Dashboard data aggregation
 │   ├── exports/           # CSV/PDF export (stub)
-│   ├── core/              # Shared permissions, error handlers, otel
+│   ├── core/              # Shared permissions, error handlers, media/storage
 │   ├── config/            # Django settings, URL routing, WSGI/ASGI
 │   └── manage.py
 ├── tests/
@@ -125,9 +124,6 @@ python src/manage.py ensure_admin
 # Create superuser
 python src/manage.py createsuperuser
 
-# Seed E2E test data
-python src/manage.py seed_e2e
-
 # Environment diagnostics report (profile-aware)
 python src/manage.py env_report --profile development
 python src/manage.py env_report --profile testing
@@ -177,9 +173,6 @@ Quick auth/registration snapshot:
 | `DJANGO_CORS_ALLOWED_ORIGINS` | Comma-separated CORS origins | `http://localhost:3000` |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID | Required in production |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | Required in production |
-| `OTEL_ENABLED` | Enable OpenTelemetry | Profile-driven default |
-| `OTEL_SERVICE_NAME` | Service name for traces | `eel-backend` |
-| `OTEL_TRACE_FILE` | Path for trace output | `traces.jsonl` |
 
 ## Architecture Notes
 

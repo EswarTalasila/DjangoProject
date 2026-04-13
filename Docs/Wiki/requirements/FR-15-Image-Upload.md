@@ -7,7 +7,7 @@
 | **Domain** | IMG |
 | **Applies To** | ADMIN, RESEARCHER, TEACHER, STUDENT |
 | **Related Issues** | TBD |
-| **Dependencies** | FR-07 ASGN, FR-08 SUB, FR-11 OBS, FR-13 INFRA, FR-14 ARCH |
+| **Dependencies** | FR-07 ASGN, FR-08 SUB, FR-13 INFRA, FR-14 ARCH |
 
 ---
 
@@ -17,15 +17,15 @@
 - Image upload for submission answers (SUB domain attachment).
 - Student self-upload to own submission.
 - Teacher proxy upload on behalf of students in teacher-owned courses/assignments.
-- Image retrieval via protected API endpoint with Nginx internal redirect (X-Accel-Redirect).
+- Image retrieval via protected API endpoint with backend-streamed responses after auth.
 - Standalone `SubmissionImage` model with FK to Submission.
-- Filesystem storage abstraction: local disk in development, S3-compatible object store in production.
+- Filesystem storage abstraction with backend streaming and profile-scoped media roots.
 - Upload validation: MIME allowlist with magic byte verification, max file size, max images per submission, SHA-256 duplicate detection.
 - EXIF metadata stripping on upload for privacy.
 - Scan hook interface (auto-promotes to READY in non-production; production requires real scanner or explicit override flag).
 - Soft-delete for user-initiated image removal (before submission only).
 - Cascade hard-delete of images on parent submission purge (FR-14 ARCH).
-- Audit events for all image mutations (FR-11 OBS).
+- Audit events for all image mutations.
 
 ### Out of Scope
 - Profile avatar uploads.
@@ -34,7 +34,7 @@
 - CDN edge caching (infrastructure upgrade, not API contract change).
 - Video or non-image file uploads.
 - Bulk upload endpoint.
-- UI wireframes and Playwright flows.
+- UI wireframes and future browser smoke flows.
 
 ### Core intent
 - Allow students and teachers to attach image evidence to submission answers.
@@ -158,8 +158,7 @@
 2. System validates submission exists and caller has SUB read visibility.
 3. System validates image exists, belongs to submission, and `status=READY`.
 4. System sets response headers: `ETag` (sha256), `Last-Modified` (created_at), `Cache-Control: private`, `Content-Type`, `Content-Disposition: inline`.
-5. Backend returns `X-Accel-Redirect` header pointing to internal Nginx location for the storage path.
-6. Nginx streams the file to the client.
+5. Backend reads the protected blob from storage and streams it to the client.
 
 **Errors:**
 - `IMG-UC-03-E1`: Submission not found (`404`).
@@ -274,7 +273,7 @@
 
 ### IMG-CN-02 — Max File Size
 - Per-image upload limit: 10 MB.
-- Enforced at Nginx level (`client_max_body_size`) and backend level.
+- Enforced at the proxy level (`client_max_body_size`) and backend level.
 - Oversized uploads rejected with `413`.
 - Applies to: IMG-UC-01, IMG-UC-02.
 
@@ -324,9 +323,9 @@
 - Original filename preserved in DB metadata only, never used in storage path.
 - Applies to: IMG-UC-01, IMG-UC-02.
 
-### IMG-CN-11 — Protected Serving via Nginx Internal Redirect
+### IMG-CN-11 — Protected Backend-Streamed Serving
 - Images served through protected API endpoint; backend validates auth and permissions.
-- Backend returns `X-Accel-Redirect` header to Nginx for file streaming.
+- Backend reads the storage blob directly and streams the bytes after permission checks.
 - Response includes `ETag` (sha256), `Last-Modified`, `Cache-Control: private`, `Content-Type`, `Content-Disposition: inline`.
 - No public URLs or direct storage access exposed to clients.
 - Applies to: IMG-UC-03.
@@ -404,12 +403,12 @@
 | GET | `/api/v1/submissions/{submission_id}/images/{image_id}` | SUB read visibility | IMG-UC-03 |
 | DELETE | `/api/v1/submissions/{submission_id}/images/{image_id}` | Submission owner or teacher proxy + pre-submit gate | IMG-UC-04 |
 
-### 6.4 Nginx Contract
+### 6.4 Proxy Contract
 
 | Directive | Value | Purpose |
 |-----------|-------|---------|
 | `client_max_body_size` | `10m` | Enforce upload size at reverse proxy |
-| `internal` location | `/internal/media/submissions/` | X-Accel-Redirect target for image serving |
+| `/api/v1/submissions/*/images/*` | routed to backend | Protected image requests stay behind backend auth and proxy routing |
 
 ### 6.5 Storage Contract
 
@@ -476,7 +475,7 @@ Audit payload minimum:
 
 ### Backend Integration
 - Full upload flow (student self, teacher proxy) with file storage and DB record creation.
-- Retrieve flow with X-Accel-Redirect header verification.
+- Retrieve flow with backend-streamed content verification.
 - Delete flow with soft-delete and blob cleanup.
 - Post-submit lock enforcement across upload and delete.
 - Duplicate detection across upload attempts.
@@ -522,8 +521,7 @@ Audit payload minimum:
 |--------|----------------|------------------|
 | FR-07 ASGN | Assignment ownership for teacher proxy gate | Teacher proxy upload requires assignment owned by calling teacher. |
 | FR-08 SUB | Submission ownership, status gates, read visibility | IMG inherits SUB visibility rules for read access. Post-submit lock uses SUB status. |
-| FR-11 OBS | Audit event emission | IMAGE_UPLOAD, IMAGE_PROXY_UPLOAD, IMAGE_DELETE actions emitted per OBS policy. |
-| FR-13 INFRA | Nginx config, storage backend, Docker volumes | X-Accel-Redirect Nginx location, S3/filesystem backend config, MEDIA_ROOT volume mount. |
+| FR-13 INFRA | Proxy config, storage backend, Docker volumes | Shared proxy routes protected image requests to backend; MEDIA_ROOT remains profile-scoped. |
 | FR-14 ARCH | Cascade delete on purge, archive status gates | Images follow submission lifecycle. Parent purge hard-deletes image metadata and blobs. Archived assignment blocks new uploads via SUB status gate. |
 
 ---
@@ -537,9 +535,9 @@ Implemented alignment:
 2. **Upload/retrieve/delete/list endpoints are implemented.** Student self-upload, teacher proxy upload, visibility-gated retrieval, and soft-delete are available under SUB routes.
 3. **Validation pipeline is implemented.** MIME allowlist + magic-byte checks, file size limits, per-submission count limits, duplicate detection, and post-submit lock are enforced.
 4. **EXIF stripping is implemented.** Uploads are normalized via Pillow prior to storage and hashing.
-5. **Storage abstraction is implemented.** Local storage backend abstraction exists with idempotent delete behavior; serving uses protected `X-Accel-Redirect`.
+5. **Storage abstraction is implemented.** Local storage backend abstraction exists with idempotent delete behavior; protected reads are streamed by backend after auth.
 6. **Scan hook behavior is implemented.** Non-production (or explicit override) auto-promotes to `READY`; production-safe pending behavior is supported.
 7. **Audit events are implemented.** `IMAGE_UPLOAD`, `IMAGE_PROXY_UPLOAD`, and `IMAGE_DELETE` actions are emitted with two-phase audit completion.
 8. **Purge cascade is wired.** FR-14 assignment purge flow cleans up submission image metadata and blobs.
-9. **Infrastructure wiring is in place.** `MEDIA_ROOT` settings, env toggles, Docker media mount, and Nginx internal media location are configured.
+9. **Infrastructure wiring is in place.** `MEDIA_ROOT` settings, env toggles, Docker media mount, and proxy routing are configured.
 10. **IMG integration coverage exists.** FR-traceable IMG UC/CN integration tests are present and passing in the backend suite.

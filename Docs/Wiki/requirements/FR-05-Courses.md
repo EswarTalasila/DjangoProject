@@ -36,7 +36,7 @@
 - User account lifecycle as a standalone domain (FR-04).
 - Assignment/submission authoring and grading flows (FR-06/FR-07/FR-08).
 - Course data archive/export system (future requirement dependency; see CRS-CN-12).
-- Wireframes and Playwright E2E scripts (tracked separately).
+- UI wireframes and future browser smoke flows (tracked separately).
 
 ### Core Intent
 - Provide teacher-owned course lifecycle with ownership-bounded CRUD operations.

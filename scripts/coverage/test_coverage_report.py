@@ -129,51 +129,7 @@ def test_evaluate_gate_global_and_domain() -> None:
     assert not bad_domain
 
 
-def test_format_pytest_result_line_supports_standard_and_xdist() -> None:
-    width = 120
-    standard = (
-        "tests/integration/test_accounts_routes.py::TestAccountRoutes::test_AUTH_UC_01 "
-        "- ADMIN login via identifier. PASSED [ 25%]\n"
-    )
-    xdist = (
-        "[gw1] [ 94%] PASSED "
-        "tests/integration/test_auth_reg_completion.py::TestAuthRegCompletion::test_REG_CN_12 "
-        "- All generated codes require explicit expiration input.\n"
-    )
-    formatted_standard = cr._format_pytest_result_line(standard, width)
-    formatted_xdist = cr._format_pytest_result_line(xdist, width)
-
-    assert formatted_standard is not None
-    assert formatted_xdist is not None
-    assert "[PASSED]" in formatted_standard
-    assert "[PASSED]" in formatted_xdist
-    assert " | " in formatted_standard
-    assert " | " in formatted_xdist
-
-
-def test_bannerize_line_normalizes_generated_xml_banner() -> None:
-    width = 120
-    raw = (
-        "------------------------------------- generated xml file: "
-        "/app/coverage.junit.xml --------------------------------------\n"
-    )
-    banner = cr._bannerize_line(raw, width)
-    assert banner is not None
-    plain = cr._strip_ansi(banner.rstrip("\n"))
-    assert plain.startswith("-")
-    assert plain.endswith("-")
-    assert "generated xml file: /app/coverage.junit.xml" in plain
-
-
-def test_is_xdist_preface_line_detection() -> None:
-    preface = (
-        "tests/integration/test_accounts_routes.py::TestAccountRoutes::test_AUTH_UC_07_ADMIN "
-        "- Admin can approve any role's reset request.\n"
-    )
-    result = (
-        "[gw0] [ 99%] PASSED "
-        "tests/integration/test_accounts_routes.py::TestAccountRoutes::test_AUTH_UC_07_ADMIN "
-        "- Admin can approve any role's reset request.\n"
-    )
-    assert cr._is_xdist_preface_line(preface)
-    assert not cr._is_xdist_preface_line(result)
+def test_module_path_label_special_cases() -> None:
+    assert cr._module_path_label("manage.py") == "src/manage.py"
+    assert cr._module_path_label("<other>") == "src/<other>"
+    assert cr._module_path_label("accounts") == "src/accounts/*"

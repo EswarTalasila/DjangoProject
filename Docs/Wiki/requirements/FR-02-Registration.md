@@ -568,15 +568,6 @@ Exhausted / Expired / Revoked → Archived (visibility-only)
 - test_REG_UC_03_revoke_confirm
 - test_REG_UC_03_archive_action
 
-### E2E (Playwright)
-- test_REG_UC_01_e2e_local
-- test_REG_UC_01_e2e_oauth
-- test_REG_UC_01a_e2e_join_course
-- test_REG_UC_02_e2e_generate_teacher_codes
-- test_REG_UC_02_e2e_generate_student_codes
-- test_REG_UC_03_e2e_revoke
-- test_REG_UC_03_e2e_archive
-
 ### System Tests (Black Box)
 - ST-REG-UC-01
 - ST-REG-UC-01-E1

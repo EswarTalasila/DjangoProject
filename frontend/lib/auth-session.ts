@@ -27,34 +27,35 @@ const EMPTY_SUDO_CAPABILITIES: SudoCapabilities = {
 };
 
 /** Resolve the API base URL for server-side fetches.
- *  Priority: BACKEND_INTERNAL_URL > PROXY_TARGET > NEXT_PUBLIC_API_URL.
+ *  Priority: SERVER_PROXY_ORIGIN + NEXT_PUBLIC_API_URL > NEXT_PUBLIC_API_URL.
  *  Browser code uses same-origin "/api/v1" through nginx. Server-side fetches
  *  need an absolute URL, so local fallback points at the proxy entrypoint. */
 function resolveApiBaseUrl() {
-  // Prefer explicit internal URL for server-side calls (works in both dev and prod containers)
-  if (process.env.BACKEND_INTERNAL_URL) {
-    return process.env.BACKEND_INTERNAL_URL.replace(/\/$/, "");
+  const configured = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+  const normalizedConfigured = configured.replace(/\/$/, "");
+  let configuredPath = normalizedConfigured;
+
+  try {
+    const url = new URL(normalizedConfigured);
+    configuredPath = url.pathname.replace(/\/$/, "") || "/api/v1";
+  } catch {
+    if (!configuredPath.startsWith("/")) {
+      configuredPath = `/${configuredPath}`;
+    }
   }
 
-  const configured = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+  // Prefer an explicit proxy origin so SSR traverses the same proxy layer as browser traffic.
+  if (process.env.SERVER_PROXY_ORIGIN) {
+    return `${process.env.SERVER_PROXY_ORIGIN.replace(/\/$/, "")}${configuredPath}`;
+  }
+
   try {
-    const url = new URL(configured);
-    if (
-      (url.hostname === "localhost" || url.hostname === "127.0.0.1") &&
-      process.env.PROXY_TARGET
-    ) {
-      const proxyTarget = process.env.PROXY_TARGET.replace(/\/$/, "");
-      return `${proxyTarget}/api/v1`;
-    }
+    const url = new URL(normalizedConfigured);
     return url.toString().replace(/\/$/, "");
   } catch {
-    // configured is a relative path (e.g. "/api/v1") — unusable for server-side fetch.
-    // Fall back to Docker-internal backend URL when available, otherwise the
-    // local proxy entrypoint.
-    if (process.env.PROXY_TARGET) {
-      return `${process.env.PROXY_TARGET.replace(/\/$/, "")}/api/v1`;
-    }
-    return `http://localhost:8080${configured}`;
+    // configured is a relative path (e.g. "/api/v1") — unusable for server-side fetch
+    // without a proxy origin. Fall back to the local proxy listener.
+    return `http://localhost:8080${normalizedConfigured}`;
   }
 }
 
