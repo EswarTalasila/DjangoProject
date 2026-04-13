@@ -219,23 +219,27 @@ class TestDetailView:
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    @pytest.mark.django_db
+    @patch("assignments.views.delete_assignment")
     @patch("assignments.views.get_assignment")
     @patch("assignments.views.IsAuthenticated.has_permission", return_value=True)
-    def test_delete_without_purge_returns_409(
-        self, mock_perm, mock_get
+    def test_delete_without_purge_succeeds(
+        self, mock_perm, mock_get, mock_delete
     ):
-        """DELETE without ?purge=true returns 409 (use archive instead)."""
+        """DELETE without ?purge=true calls delete_assignment and returns 204."""
         from assignments.views import detail
 
-        fake_assignment = SimpleNamespace(id=1, status="ACTIVE")
+        fake_assignment = SimpleNamespace(id=1, status="ACTIVE", created_by_id=99)
         mock_get.return_value = fake_assignment
 
         user = MagicMock(is_authenticated=True, is_staff=False)
+        user.id = 99
         request = _authed_request("delete", "/api/v1/assignments/1", user=user)
 
         response = detail(request, assignment_id=1)
 
-        assert response.status_code == status.HTTP_409_CONFLICT
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        mock_delete.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
