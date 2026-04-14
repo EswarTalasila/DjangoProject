@@ -16,21 +16,21 @@ class TestAssignmentSerializer:
     def test_valid_course_assignment(self):
         """Accepts valid COURSE-type assignment payload."""
         data = {
-            "assessmentId": 1,
+            "assignmentTemplateId": 1,
             "audienceType": "COURSE",
             "courseId": 10,
             "openAt": "2025-06-01T12:00:00Z",
         }
         s = AssignmentSerializer(data=data)
         assert s.is_valid(), s.errors
-        assert s.validated_data["assessmentId"] == 1
+        assert s.validated_data["assignmentTemplateId"] == 1
         assert s.validated_data["audienceType"] == "COURSE"
         assert s.validated_data["courseId"] == 10
 
     def test_teacher_audience_type_rejected(self):
         """Rejects TEACHER audience type (deprecated)."""
         data = {
-            "assessmentId": 2,
+            "assignmentTemplateId": 2,
             "audienceType": "TEACHER",
             "targetTeacherId": 42,
             "openAt": "2025-06-01T12:00:00Z",
@@ -39,23 +39,23 @@ class TestAssignmentSerializer:
         assert not s.is_valid()
         assert "audienceType" in s.errors
 
-    def test_rejects_missing_assessment_id(self):
-        """Rejects payload without assessmentId."""
+    def test_rejects_missing_assignment_template_id(self):
+        """Rejects payload without assignmentTemplateId."""
         data = {"audienceType": "COURSE", "openAt": "2025-06-01T12:00:00Z"}
         s = AssignmentSerializer(data=data)
         assert not s.is_valid()
-        assert "assessmentId" in s.errors
+        assert "assignmentTemplateId" in s.errors
 
     def test_rejects_missing_audience_type(self):
         """Rejects payload without audienceType."""
-        data = {"assessmentId": 1, "openAt": "2025-06-01T12:00:00Z"}
+        data = {"assignmentTemplateId": 1, "openAt": "2025-06-01T12:00:00Z"}
         s = AssignmentSerializer(data=data)
         assert not s.is_valid()
         assert "audienceType" in s.errors
 
     def test_rejects_missing_open_at(self):
         """Rejects payload without openAt."""
-        data = {"assessmentId": 1, "audienceType": "COURSE"}
+        data = {"assignmentTemplateId": 1, "audienceType": "COURSE"}
         s = AssignmentSerializer(data=data)
         assert not s.is_valid()
         assert "openAt" in s.errors
@@ -63,7 +63,7 @@ class TestAssignmentSerializer:
     def test_rejects_invalid_audience_type(self):
         """Rejects invalid audience type value."""
         data = {
-            "assessmentId": 1,
+            "assignmentTemplateId": 1,
             "audienceType": "INVALID",
             "openAt": "2025-06-01T12:00:00Z",
         }
@@ -74,7 +74,7 @@ class TestAssignmentSerializer:
     def test_rejects_invalid_date_format(self):
         """Rejects invalid date format for openAt."""
         data = {
-            "assessmentId": 1,
+            "assignmentTemplateId": 1,
             "audienceType": "COURSE",
             "openAt": "not-a-date",
         }
@@ -85,7 +85,7 @@ class TestAssignmentSerializer:
     def test_id_is_optional(self):
         """id field is optional."""
         data = {
-            "assessmentId": 1,
+            "assignmentTemplateId": 1,
             "audienceType": "COURSE",
             "openAt": "2025-06-01T12:00:00Z",
         }
@@ -96,7 +96,7 @@ class TestAssignmentSerializer:
     def test_course_id_is_optional_and_nullable(self):
         """courseId is optional and allows null."""
         data = {
-            "assessmentId": 1,
+            "assignmentTemplateId": 1,
             "audienceType": "COURSE",
             "courseId": None,
             "openAt": "2025-06-01T12:00:00Z",
@@ -108,7 +108,7 @@ class TestAssignmentSerializer:
     def test_due_at_is_optional_and_nullable(self):
         """dueAt is optional and allows null."""
         data = {
-            "assessmentId": 1,
+            "assignmentTemplateId": 1,
             "audienceType": "COURSE",
             "courseId": 10,
             "openAt": "2025-06-01T12:00:00Z",
@@ -120,7 +120,7 @@ class TestAssignmentSerializer:
     def test_accepts_valid_due_at(self):
         """Accepts a valid dueAt datetime."""
         data = {
-            "assessmentId": 1,
+            "assignmentTemplateId": 1,
             "audienceType": "COURSE",
             "courseId": 10,
             "openAt": "2025-06-01T12:00:00Z",
@@ -133,7 +133,7 @@ class TestAssignmentSerializer:
     def test_target_teacher_id_is_optional_and_nullable(self):
         """targetTeacherId is optional and allows null."""
         data = {
-            "assessmentId": 1,
+            "assignmentTemplateId": 1,
             "audienceType": "COURSE",
             "courseId": 10,
             "targetTeacherId": None,

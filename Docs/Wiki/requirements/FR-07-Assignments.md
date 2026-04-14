@@ -7,7 +7,7 @@
 | **Domain** | ASGN |
 | **Applies To** | ADMIN (system role), RESEARCHER, TEACHER, STUDENT |
 | **Related Issues** | TBD |
-| **Dependencies** | FR-05 CRS (course ownership), FR-06 ASMT (assessment templates), FR-08 SUB (submission data), FR-14 ARCH (archive lifecycle) |
+| **Dependencies** | FR-05 CRS (course ownership), FR-06 ATMPL (assignment templates), FR-08 SUB (submission data), FR-14 ARCH (archive lifecycle) |
 
 ---
 
@@ -15,30 +15,30 @@
 
 ### In Scope
 - Assignment lifecycle for teacher-created, course-scoped assignments:
-  - create assignment from assessment template
+  - create assignment from assignment template
   - list assignments by course
   - list assignments for user (role-aware)
   - read assignment detail
   - update assignment scheduling (`open_at`, `due_at`)
   - delete assignment (when no submissions exist)
   - archive assignment (acts as hard deadline)
-- `COURSE` audience type only — assignments distribute a full assessment template to all enrolled students in a course.
+- `COURSE` audience type only — assignments distribute a full assignment template to all enrolled students in a course.
 - Atomic submission pre-creation for enrolled students on assignment creation.
 - Scheduling: `open_at` and optional `due_at` with validation (`open_at` must precede `due_at`).
 - Creator-only mutation policy: only the teacher who created the assignment can update, delete, or archive it.
 - Two-tier delete policy: hard delete when no student work has been started (all submissions `NOT_STARTED`); `409 Conflict` when any submission has progressed beyond `NOT_STARTED`.
 - Assignment archive lifecycle (`ACTIVE`/`ARCHIVED`): archive blocks new submissions and hides assignment from active student lists.
-- Archived assessment check at creation time (enforces `ASMT-CN-13`).
+- Archived assignment template check at creation time (enforces `ATMPL-CN-13`).
 - Read access matrix:
   - ADMIN/RESEARCHER: all assignments globally and cross-user listing
   - TEACHER: assignments for own courses only (course ownership from FR-05 `CRS-CN-01`)
   - STUDENT: enrolled course assignments, time-filtered (`open_at <= now` and (`due_at` is null or `due_at >= now`))
 
 ### Out of Scope
-- `TEACHER` audience type for self-assessments (removed from FR-07 contract; see Deprecations).
-- Question subset selection (assignments use the full assessment template).
+- `TEACHER` audience type for self-assignment templates (removed from FR-07 contract; see Deprecations).
+- Question subset selection (assignments use the full assignment template).
 - Grading and scoring execution (FR-08 SUB).
-- Assessment template management (FR-06 ASMT).
+- AssignmentTemplate template management (FR-06 ATMPL).
 - Bulk assignment creation.
 - UI wireframes and future browser smoke flows (tracked separately).
 
@@ -69,7 +69,7 @@
 
 | ID | Roles | Story |
 |----|-------|-------|
-| ASGN-US-01 | TEACHER | As a teacher I can create an assignment from an assessment template for one of my courses so that enrolled students receive submissions to complete. |
+| ASGN-US-01 | TEACHER | As a teacher I can create an assignment from an assignment template for one of my courses so that enrolled students receive submissions to complete. |
 | ASGN-US-02 | ADMIN, RESEARCHER, TEACHER | As a privileged user I can view assignments for a course so that I can monitor what has been assigned. |
 | ASGN-US-03 | ADMIN, RESEARCHER, TEACHER, STUDENT | As any authenticated user I can view assignments relevant to me so that I know what work is available or assigned. |
 | ASGN-US-04 | TEACHER | As a teacher I can extend or adjust the deadline on my assignment so that students have more time if needed. |
@@ -86,23 +86,23 @@
 **Endpoint:** `POST /api/v1/assignments`
 
 **Main Flow:**
-1. Teacher submits assignment payload: `assessmentId`, `courseId`, `openAt`, optional `dueAt`.
+1. Teacher submits assignment payload: `assignmentTemplateId`, `courseId`, `openAt`, optional `dueAt`.
 2. System validates caller is a teacher.
 3. System validates caller owns the target course (`can_manage_course` from FR-05).
-4. System resolves assessment by `assessmentId`.
-5. System checks assessment status is not `ARCHIVED` (enforces `ASMT-CN-13`).
+4. System resolves assignment template by `assignmentTemplateId`.
+5. System checks assignment template status is not `ARCHIVED` (enforces `ATMPL-CN-13`).
 6. System validates scheduling: if `dueAt` is provided, `openAt` must precede `dueAt`.
-7. System creates assignment with `audience_type=COURSE`, `status=ACTIVE`, linking assessment to course.
+7. System creates assignment with `audience_type=COURSE`, `status=ACTIVE`, linking assignment template to course.
 8. System atomically pre-creates `NOT_STARTED` submissions with empty answer records for all enrolled students in the course.
-9. For `MOOD_METER` assessments, submission pre-creation is skipped (students create on demand).
+9. For `MOOD_METER` assignment templates, submission pre-creation is skipped (students create on demand).
 10. Returns assignment DTO.
 
 **Errors:**
 - `ASGN-UC-01-E1`: Missing or invalid payload.
 - `ASGN-UC-01-E2`: Caller is not a teacher.
 - `ASGN-UC-01-E3`: Caller does not own the target course.
-- `ASGN-UC-01-E4`: Assessment not found.
-- `ASGN-UC-01-E5`: Assessment is archived (enforces `ASMT-CN-13`).
+- `ASGN-UC-01-E4`: AssignmentTemplate not found.
+- `ASGN-UC-01-E5`: AssignmentTemplate is archived (enforces `ATMPL-CN-13`).
 - `ASGN-UC-01-E6`: `openAt` is not before `dueAt`.
 
 **Tests (representative):**
@@ -279,24 +279,24 @@
 - Applies to: ASGN-UC-05, ASGN-UC-06, ASGN-UC-07.
 
 ### ASGN-CN-02 — COURSE Audience Type Only
-- Assignments use `COURSE` audience type exclusively. The assignment links a full assessment template to a specific course.
+- Assignments use `COURSE` audience type exclusively. The assignment links a full assignment template to a specific course.
 - `TEACHER` audience type is deprecated and not part of the FR-07 contract.
 - Applies to: ASGN-UC-01.
 
-### ASGN-CN-03 — Full Assessment Template
-- Assignments use the complete assessment template. No question subset selection.
-- Submission pre-creation generates answer records for all questions in the assessment.
+### ASGN-CN-03 — Full AssignmentTemplate Template
+- Assignments use the complete assignment template. No question subset selection.
+- Submission pre-creation generates answer records for all questions in the assignment template.
 - Applies to: ASGN-UC-01.
 
-### ASGN-CN-04 — Archived Assessment Blocks Creation
-- Assignment creation is rejected with `409 Conflict` when the target assessment has `status=ARCHIVED`.
-- Enforces `ASMT-CN-13` from FR-06 at assignment creation time.
+### ASGN-CN-04 — Archived AssignmentTemplate Blocks Creation
+- Assignment creation is rejected with `409 Conflict` when the target assignment template has `status=ARCHIVED`.
+- Enforces `ATMPL-CN-13` from FR-06 at assignment creation time.
 - Applies to: ASGN-UC-01.
 
 ### ASGN-CN-05 — Atomic Submission Provisioning
 - Assignment creation and submission pre-creation for all enrolled students are wrapped in a database transaction.
 - For each enrolled student: one `Submission` (status `NOT_STARTED`) and one `Answer` record per question (with type-specific extension).
-- `MOOD_METER` assessments skip submission pre-creation (students create on demand).
+- `MOOD_METER` assignment templates skip submission pre-creation (students create on demand).
 - Applies to: ASGN-UC-01.
 
 ### ASGN-CN-06 — Deletion Blocked When Student Work Started
@@ -330,7 +330,7 @@
 
 ### ASGN-CN-10 — Course Ownership Gate on Creation
 - Assignment creation requires the caller to own the target course (`can_manage_course` from FR-05 `CRS-CN-01`).
-- Prevents teachers from assigning assessments to courses they do not own.
+- Prevents teachers from assigning assignment templates to courses they do not own.
 - Applies to: ASGN-UC-01.
 
 ### ASGN-CN-11 — TEACHER Audience Type Deprecated
@@ -372,7 +372,7 @@ Expected statuses by UC:
 - `400`: invalid payload/scheduling violation/deprecated audience type
 - `403`: forbidden by role or creator ownership
 - `404`: assignment/course/user not found
-- `409`: mutation blocked by submission references (`ASGN-UC-06-E3`), archived assessment (`ASGN-UC-01-E5`), or already archived (`ASGN-UC-07-E3`, `ASGN-UC-05-E3`)
+- `409`: mutation blocked by submission references (`ASGN-UC-06-E3`), archived assignment template (`ASGN-UC-01-E5`), or already archived (`ASGN-UC-07-E3`, `ASGN-UC-05-E3`)
 - `201`: create success
 - `200`: read/update success
 - `204`: delete success
@@ -402,7 +402,7 @@ Expected statuses by UC:
 - `ST-ASGN-UC-01` through `ST-ASGN-UC-07`
 - Required constraint checks:
   - `ST-ASGN-CN-01` (creator-only mutation)
-  - `ST-ASGN-CN-04` (archived assessment blocks creation)
+  - `ST-ASGN-CN-04` (archived assignment template blocks creation)
   - `ST-ASGN-CN-05` (atomic submission provisioning)
   - `ST-ASGN-CN-06` (delete blocked when submissions exist)
   - `ST-ASGN-CN-08` (student time-filtered visibility)
@@ -426,7 +426,7 @@ Expected statuses by UC:
 - **NFR-Maintainability**
   - Assignment domain behavior centralized in service layer (`assignments/services/`).
   - Creator ownership pattern consistent with FR-05 course ownership.
-  - Archive lifecycle consistent with FR-06 assessment archive pattern.
+  - Archive lifecycle consistent with FR-06 assignment template archive pattern.
 
 ---
 
@@ -435,7 +435,7 @@ Expected statuses by UC:
 | Domain | ASGN dependency | Integration note |
 |--------|-----------------|------------------|
 | FR-05 CRS | Course ownership gate on creation | ASGN-CN-10 requires `can_manage_course` from CRS-CN-01 for assignment creation |
-| FR-06 ASMT | Assessment template source | Assignments reference assessment templates; archived assessment check enforces ASMT-CN-13 |
+| FR-06 ATMPL | AssignmentTemplate template source | Assignments reference assignment templates; archived assignment template check enforces ATMPL-CN-13 |
 | FR-08 SUB | Submission pre-creation and lifecycle | ASGN-CN-05 atomic submission provisioning; ASGN-CN-06 blocks delete when submissions progressed |
 | FR-09 VIZ | Visualization aggregates per assignment | VIZ-UC-03 computes grade distribution from assignment submissions |
 | FR-14 ARCH | Assignment archive lifecycle | ARCH-UC-02 archives assignments; blocks new submissions and draft edits |
@@ -450,7 +450,7 @@ This draft defines the target FR-07 contract. Current code has known deltas that
 2. Add `PATCH /api/v1/assignments/{assignment_id}` endpoint for scheduling updates (ASGN-UC-05). Endpoint does not exist in current code.
 3. Add `POST /api/v1/assignments/{assignment_id}/archive` endpoint (ASGN-UC-07). Endpoint does not exist in current code.
 4. Add `status` field (`ACTIVE`/`ARCHIVED`) to Assignment model (ASGN-CN-09).
-5. Add archived assessment check at assignment creation time; reject with `409` if assessment `status=ARCHIVED` (ASGN-CN-04).
+5. Add archived assignment template check at assignment creation time; reject with `409` if assignment template `status=ARCHIVED` (ASGN-CN-04).
 6. Add scheduling validation (`openAt` before `dueAt`) on create and update paths (ASGN-CN-07).
 7. Change delete service to check submission status instead of cascade-deleting; reject with `409` when any submission is beyond `NOT_STARTED`, allow cascade-delete of `NOT_STARTED` submissions (ASGN-CN-06).
 8. Reject `audienceType=TEACHER` at assignment creation with `400`; deprecate `TEACHER` value in `AudienceType` enum in `models.py` and `serializers.py` (ASGN-CN-11).

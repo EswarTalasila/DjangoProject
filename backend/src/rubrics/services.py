@@ -120,10 +120,10 @@ def update_rubric(rubric: Rubric, payload: dict) -> Rubric:
     """Update a rubric's title, description, and/or criteria.
 
     Raises:
-        RubricReferencedError: If the rubric is referenced by assessment questions.
+        RubricReferencedError: If the rubric is referenced by assignment template questions.
     """
     if _is_referenced(rubric):
-        raise RubricReferencedError("Cannot update rubric referenced by assessments")
+        raise RubricReferencedError("Cannot update rubric referenced by assignment templates")
 
     rubric.title = payload.get("title", rubric.title)
     rubric.description = payload.get("description", rubric.description)
@@ -135,9 +135,9 @@ def update_rubric(rubric: Rubric, payload: dict) -> Rubric:
 
 @transaction.atomic
 def delete_rubric(rubric: Rubric) -> None:
-    """Hard-delete a rubric. Blocked if referenced by assessment questions."""
+    """Hard-delete a rubric. Blocked if referenced by assignment template questions."""
     if _is_referenced(rubric):
-        raise RubricReferencedError("Cannot delete rubric referenced by assessments")
+        raise RubricReferencedError("Cannot delete rubric referenced by assignment templates")
     rubric.delete()
 
 
@@ -153,11 +153,11 @@ def archive_rubric(rubric: Rubric) -> Rubric:
 
 def _is_referenced(rubric: Rubric) -> bool:
     """Check if any questions or question groups reference this rubric."""
-    from assessments.models import AssessmentQuestionGroup, Question
+    from assignment_templates.models import AssignmentTemplateQuestionGroup, Question
 
     if Question.objects.filter(rubric=rubric).exists():
         return True
-    if AssessmentQuestionGroup.objects.filter(rubric=rubric).exists():
+    if AssignmentTemplateQuestionGroup.objects.filter(rubric=rubric).exists():
         return True
     return False
 

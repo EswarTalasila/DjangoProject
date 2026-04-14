@@ -5,7 +5,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from assessments.models import Question
+from assignment_templates.models import Question
 
 
 def login(client: APIClient, username: str, password: str) -> dict:
@@ -146,8 +146,8 @@ class TestExtendedWorkflows:
     @pytest.mark.integration
     @pytest.mark.workflow
     @pytest.mark.workflow_admin
-    def test_assessment_crud_workflow(self):
-        """Test that assessment crud workflow."""
+    def test_assignment_template_crud_workflow(self):
+        """Test that assignment_template crud workflow."""
         step("Create admin and login")
         _, admin_client = create_admin_client("admin-assess@example.com", "adminpass")
 
@@ -156,17 +156,17 @@ class TestExtendedWorkflows:
             admin_client, "teacher-assess@example.com", "teacherpass"
         )
 
-        step("Teacher cannot create assessment")
+        step("Teacher cannot create assignment_template")
         teacher_response = teacher_client.post(
-            "/api/v1/assessments/",
+            "/api/v1/assignment-templates/",
             {"title": "Forbidden", "gradingMode": "AUTO", "questions": []},
             format="json",
         )
         assert teacher_response.status_code == 403
 
-        step("Admin creates assessment")
-        assessment_payload = {
-            "title": "Assessment A",
+        step("Admin creates assignment_template")
+        assignment_template_payload = {
+            "title": "AssignmentTemplate A",
             "gradingMode": "AUTO",
             "questions": [
                 {
@@ -184,14 +184,14 @@ class TestExtendedWorkflows:
             ],
         }
         create_response = admin_client.post(
-            "/api/v1/assessments/", assessment_payload, format="json"
+            "/api/v1/assignment-templates/", assignment_template_payload, format="json"
         )
         assert create_response.status_code == 201
-        assessment_id = create_response.json()["id"]
+        assignment_template_id = create_response.json()["id"]
 
-        step("Admin updates assessment")
+        step("Admin updates assignment_template")
         update_payload = {
-            "title": "Assessment A Updated",
+            "title": "AssignmentTemplate A Updated",
             "gradingMode": "AUTO",
             "questions": [
                 {
@@ -209,39 +209,39 @@ class TestExtendedWorkflows:
             ],
         }
         update_response = admin_client.patch(
-            f"/api/v1/assessments/{assessment_id}",
+            f"/api/v1/assignment-templates/{assignment_template_id}",
             update_payload,
             format="json",
         )
         assert update_response.status_code == 200
-        assert update_response.json()["title"] == "Assessment A Updated"
-        assert Question.objects.filter(assessment_id=assessment_id).count() == 1
+        assert update_response.json()["title"] == "AssignmentTemplate A Updated"
+        assert Question.objects.filter(assignment_template_id=assignment_template_id).count() == 1
 
-        step("Teacher lists assessments")
-        list_response = teacher_client.get("/api/v1/assessments/")
+        step("Teacher lists assignment_templates")
+        list_response = teacher_client.get("/api/v1/assignment-templates/")
         assert list_response.status_code == 200
-        assert any(item["id"] == assessment_id for item in list_response.json()["results"])
+        assert any(item["id"] == assignment_template_id for item in list_response.json()["results"])
 
-        step("Teacher cannot delete assessment")
-        forbidden_delete = teacher_client.delete(f"/api/v1/assessments/{assessment_id}")
+        step("Teacher cannot delete assignment_template")
+        forbidden_delete = teacher_client.delete(f"/api/v1/assignment-templates/{assignment_template_id}")
         assert forbidden_delete.status_code == 403
 
         step("Admin plain delete blocked by lifecycle policy")
-        delete_response = admin_client.delete(f"/api/v1/assessments/{assessment_id}")
+        delete_response = admin_client.delete(f"/api/v1/assignment-templates/{assignment_template_id}")
         assert delete_response.status_code == 409
 
-        step("Admin archives assessment")
-        archive_response = admin_client.post(f"/api/v1/assessments/{assessment_id}/archive")
+        step("Admin archives assignment_template")
+        archive_response = admin_client.post(f"/api/v1/assignment-templates/{assignment_template_id}/archive")
         assert archive_response.status_code == 200
 
-        step("Admin purges archived assessment")
-        purge_response = admin_client.delete(f"/api/v1/assessments/{assessment_id}?purge=true")
+        step("Admin purges archived assignment_template")
+        purge_response = admin_client.delete(f"/api/v1/assignment-templates/{assignment_template_id}?purge=true")
         assert purge_response.status_code == 204
 
-        step("Admin confirms assessment removed")
-        missing_response = admin_client.get(f"/api/v1/assessments/{assessment_id}")
+        step("Admin confirms assignment_template removed")
+        missing_response = admin_client.get(f"/api/v1/assignment-templates/{assignment_template_id}")
         assert missing_response.status_code == 404
-        assert b"Assessment not found" in missing_response.content
+        assert b"AssignmentTemplate not found" in missing_response.content
 
     @pytest.mark.integration
     @pytest.mark.workflow
@@ -263,9 +263,9 @@ class TestExtendedWorkflows:
             admin_client, "teacher-sub-alt@example.com", "teacherpass"
         )
 
-        step("Admin creates assessment")
-        assessment_payload = {
-            "title": "Submission Assessment",
+        step("Admin creates assignment_template")
+        assignment_template_payload = {
+            "title": "Submission AssignmentTemplate",
             "gradingMode": "AUTO",
             "questions": [
                 {
@@ -276,12 +276,12 @@ class TestExtendedWorkflows:
                 }
             ],
         }
-        assessment_response = admin_client.post(
-            "/api/v1/assessments/", assessment_payload, format="json"
+        assignment_template_response = admin_client.post(
+            "/api/v1/assignment-templates/", assignment_template_payload, format="json"
         )
-        assert assessment_response.status_code == 201
-        assessment_id = assessment_response.json()["id"]
-        question_id = assessment_response.json()["questions"][0]["id"]
+        assert assignment_template_response.status_code == 201
+        assignment_template_id = assignment_template_response.json()["id"]
+        question_id = assignment_template_response.json()["questions"][0]["id"]
 
         step("Teacher creates courses")
         course_response = teacher_client.post(
@@ -297,7 +297,7 @@ class TestExtendedWorkflows:
 
         step("Teacher creates assignment for Course A")
         assignment_payload = {
-            "assessmentId": assessment_id,
+            "assignmentTemplateId": assignment_template_id,
             "audienceType": "COURSE",
             "courseId": course_id,
             "openAt": timezone.now().isoformat(),

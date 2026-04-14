@@ -6,7 +6,7 @@ import pytest
 from django.utils import timezone
 
 from accounts.models import Role, StudentProfile, TeacherProfile, UserRole
-from assessments.models import Assessment, AssessmentStatus, GradingMode, Question, QuestionKind
+from assignment_templates.models import AssignmentTemplate, AssignmentTemplateStatus, GradingMode, Question, QuestionKind
 from assignments.models import Assignment, AssignmentStatus
 from courses.models import Course, Enrollment, EnrollmentStatus
 from submissions.models import Answer, Submission, SubmissionStatus
@@ -18,12 +18,12 @@ from tests.factories import UserFactory
 # ---------------------------------------------------------------------------
 
 
-def _make_assessment(admin_user, **kwargs):
-    return Assessment.objects.create(
-        title=kwargs.get("title", "Test Assessment"),
+def _make_assignment_template(admin_user, **kwargs):
+    return AssignmentTemplate.objects.create(
+        title=kwargs.get("title", "Test AssignmentTemplate"),
         grading_mode=kwargs.get("grading_mode", GradingMode.AUTO),
         created_by_admin=admin_user,
-        status=kwargs.get("status", AssessmentStatus.ACTIVE),
+        status=kwargs.get("status", AssignmentTemplateStatus.ACTIVE),
     )
 
 
@@ -31,10 +31,10 @@ def _make_course(teacher_user):
     return Course.objects.create(name="Test Course", teacher_profile=teacher_user.teacher_profile)
 
 
-def _make_assignment(assessment, course, teacher_user, **kwargs):
+def _make_assignment(assignment_template, course, teacher_user, **kwargs):
     return Assignment.objects.create(
         title=kwargs.get("title", None),
-        assessment=assessment,
+        assignment_template=assignment_template,
         audience_type="COURSE",
         course=course,
         created_by=teacher_user,
@@ -73,9 +73,9 @@ class TestCreateAssignment:
 
     def test_ASGN_UC_01_TEACHER(self, api_client, teacher_user, student_user, admin_user):
         """Teacher creates assignment; submissions are provisioned atomically."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         Question.objects.create(
-            assessment=assessment,
+            assignment_template=assignment_template,
             question_type=QuestionKind.NUMBER_SCALE,
             kind=QuestionKind.NUMBER_SCALE,
             prompt="Rate 1-5",
@@ -89,7 +89,7 @@ class TestCreateAssignment:
         api_client.force_authenticate(user=teacher_user)
         payload = {
             "title": "Week 1 Intro Check-in",
-            "assessmentId": assessment.id,
+            "assignmentTemplateId": assignment_template.id,
             "audienceType": "COURSE",
             "courseId": course.id,
             "openAt": timezone.now().isoformat(),
@@ -109,10 +109,10 @@ class TestCreateAssignment:
 
     def test_ASGN_UC_01_E2_not_teacher(self, api_client, student_user, admin_user):
         """Non-teacher cannot create assignments (403)."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         api_client.force_authenticate(user=student_user)
         payload = {
-            "assessmentId": assessment.id,
+            "assignmentTemplateId": assignment_template.id,
             "audienceType": "COURSE",
             "courseId": 999,
             "openAt": timezone.now().isoformat(),
@@ -122,13 +122,13 @@ class TestCreateAssignment:
 
     def test_ASGN_UC_01_E3_not_course_owner(self, api_client, teacher_user, admin_user):
         """Teacher who doesn't own the course gets 403 (ASGN-CN-10)."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         other_teacher = _second_teacher()
         course = _make_course(other_teacher)
 
         api_client.force_authenticate(user=teacher_user)
         payload = {
-            "assessmentId": assessment.id,
+            "assignmentTemplateId": assignment_template.id,
             "audienceType": "COURSE",
             "courseId": course.id,
             "openAt": timezone.now().isoformat(),
@@ -136,14 +136,14 @@ class TestCreateAssignment:
         resp = api_client.post("/api/v1/assignments/", payload, format="json")
         assert resp.status_code == 403
 
-    def test_ASGN_UC_01_E5_archived_assessment(self, api_client, teacher_user, admin_user):
-        """Creating assignment from archived assessment returns 409 (ASGN-CN-04)."""
-        assessment = _make_assessment(admin_user, status=AssessmentStatus.ARCHIVED)
+    def test_ASGN_UC_01_E5_archived_assignment_template(self, api_client, teacher_user, admin_user):
+        """Creating assignment from archived assignment_template returns 409 (ASGN-CN-04)."""
+        assignment_template = _make_assignment_template(admin_user, status=AssignmentTemplateStatus.ARCHIVED)
         course = _make_course(teacher_user)
 
         api_client.force_authenticate(user=teacher_user)
         payload = {
-            "assessmentId": assessment.id,
+            "assignmentTemplateId": assignment_template.id,
             "audienceType": "COURSE",
             "courseId": course.id,
             "openAt": timezone.now().isoformat(),
@@ -153,13 +153,13 @@ class TestCreateAssignment:
 
     def test_ASGN_UC_01_E6_invalid_scheduling(self, api_client, teacher_user, admin_user):
         """openAt >= dueAt returns 400 (ASGN-CN-07)."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         now = timezone.now()
 
         api_client.force_authenticate(user=teacher_user)
         payload = {
-            "assessmentId": assessment.id,
+            "assignmentTemplateId": assignment_template.id,
             "audienceType": "COURSE",
             "courseId": course.id,
             "openAt": now.isoformat(),
@@ -172,9 +172,9 @@ class TestCreateAssignment:
         self, api_client, teacher_user, student_user, admin_user
     ):
         """Submissions are created atomically for all enrolled students."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         Question.objects.create(
-            assessment=assessment,
+            assignment_template=assignment_template,
             question_type=QuestionKind.MULTIPLE_CHOICE,
             kind=QuestionKind.MULTIPLE_CHOICE,
             prompt="Pick one",
@@ -197,7 +197,7 @@ class TestCreateAssignment:
 
         api_client.force_authenticate(user=teacher_user)
         payload = {
-            "assessmentId": assessment.id,
+            "assignmentTemplateId": assignment_template.id,
             "audienceType": "COURSE",
             "courseId": course.id,
             "openAt": timezone.now().isoformat(),
@@ -211,9 +211,9 @@ class TestCreateAssignment:
         self, api_client, teacher_user, student_user, admin_user
     ):
         """Only ACTIVE enrollments receive placeholder submissions."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         Question.objects.create(
-            assessment=assessment,
+            assignment_template=assignment_template,
             question_type=QuestionKind.SHORT_ANSWER,
             kind=QuestionKind.SHORT_ANSWER,
             prompt="Describe your approach",
@@ -235,7 +235,7 @@ class TestCreateAssignment:
 
         api_client.force_authenticate(user=teacher_user)
         payload = {
-            "assessmentId": assessment.id,
+            "assignmentTemplateId": assignment_template.id,
             "audienceType": "COURSE",
             "courseId": course.id,
             "openAt": timezone.now().isoformat(),
@@ -253,10 +253,10 @@ class TestCreateAssignment:
         self, api_client, teacher_user, admin_user
     ):
         """TEACHER audience type is rejected with 400."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         api_client.force_authenticate(user=teacher_user)
         payload = {
-            "assessmentId": assessment.id,
+            "assignmentTemplateId": assignment_template.id,
             "audienceType": "TEACHER",
             "targetTeacherId": teacher_user.id,
             "openAt": timezone.now().isoformat(),
@@ -276,9 +276,9 @@ class TestListByCourse:
 
     def test_ASGN_UC_02_TEACHER(self, api_client, teacher_user, admin_user):
         """Teacher can list assignments for their own course."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
-        _make_assignment(assessment, course, teacher_user)
+        _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.get(f"/api/v1/assignments/courses/{course.id}")
@@ -287,9 +287,9 @@ class TestListByCourse:
 
     def test_ASGN_UC_02_ADMIN(self, api_client, teacher_user, admin_user):
         """Admin can list assignments for any course."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
-        _make_assignment(assessment, course, teacher_user)
+        _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=admin_user)
         resp = api_client.get(f"/api/v1/assignments/courses/{course.id}")
@@ -298,9 +298,9 @@ class TestListByCourse:
 
     def test_ASGN_UC_02_RESEARCHER(self, api_client, teacher_user, admin_user, researcher_user):
         """Researcher can list assignments for any course."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
-        _make_assignment(assessment, course, teacher_user)
+        _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=researcher_user)
         resp = api_client.get(f"/api/v1/assignments/courses/{course.id}")
@@ -310,9 +310,9 @@ class TestListByCourse:
     def test_ASGN_UC_02_E3_teacher_not_owner(self, api_client, teacher_user, admin_user):
         """Teacher cannot list assignments for a course they don't own (403)."""
         other_teacher = _second_teacher()
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(other_teacher)
-        _make_assignment(assessment, course, other_teacher)
+        _make_assignment(assignment_template, course, other_teacher)
 
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.get(f"/api/v1/assignments/courses/{course.id}")
@@ -330,10 +330,10 @@ class TestListForUser:
 
     def test_ASGN_UC_03_STUDENT(self, api_client, teacher_user, student_user, admin_user):
         """Student sees active assignments from enrolled courses."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         _enroll(course, student_user)
-        _make_assignment(assessment, course, teacher_user)
+        _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=student_user)
         resp = api_client.get(f"/api/v1/assignments/users/{student_user.id}")
@@ -342,9 +342,9 @@ class TestListForUser:
 
     def test_ASGN_UC_03_TEACHER(self, api_client, teacher_user, admin_user):
         """Teacher sees assignments they created."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
-        _make_assignment(assessment, course, teacher_user)
+        _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.get(f"/api/v1/assignments/users/{teacher_user.id}")
@@ -355,10 +355,10 @@ class TestListForUser:
         self, api_client, teacher_user, student_user, researcher_user, admin_user
     ):
         """Researcher can list assignments for other users."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         _enroll(course, student_user)
-        _make_assignment(assessment, course, teacher_user)
+        _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=researcher_user)
         resp = api_client.get(f"/api/v1/assignments/users/{student_user.id}")
@@ -377,14 +377,14 @@ class TestListForUser:
         self, api_client, teacher_user, student_user, admin_user
     ):
         """Student doesn't see future assignments or past-due assignments (ASGN-CN-08)."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         _enroll(course, student_user)
         now = timezone.now()
 
         # Future assignment (not yet open)
         Assignment.objects.create(
-            assessment=assessment,
+            assignment_template=assignment_template,
             audience_type="COURSE",
             course=course,
             created_by=teacher_user,
@@ -393,7 +393,7 @@ class TestListForUser:
         )
         # Past due assignment
         Assignment.objects.create(
-            assessment=assessment,
+            assignment_template=assignment_template,
             audience_type="COURSE",
             course=course,
             created_by=teacher_user,
@@ -401,7 +401,7 @@ class TestListForUser:
             due_at=now - timedelta(days=1),
         )
         # Currently open assignment
-        _make_assignment(assessment, course, teacher_user, open_at=now - timedelta(hours=1))
+        _make_assignment(assignment_template, course, teacher_user, open_at=now - timedelta(hours=1))
 
         api_client.force_authenticate(user=student_user)
         resp = api_client.get(f"/api/v1/assignments/users/{student_user.id}")
@@ -412,10 +412,10 @@ class TestListForUser:
         self, api_client, teacher_user, student_user, admin_user
     ):
         """Archived assignments are hidden from student lists (ASGN-CN-09)."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         _enroll(course, student_user)
-        _make_assignment(assessment, course, teacher_user, status=AssignmentStatus.ARCHIVED)
+        _make_assignment(assignment_template, course, teacher_user, status=AssignmentStatus.ARCHIVED)
 
         api_client.force_authenticate(user=student_user)
         resp = api_client.get(f"/api/v1/assignments/users/{student_user.id}")
@@ -434,22 +434,22 @@ class TestGetDetail:
 
     def test_ASGN_UC_04_ADMIN(self, api_client, teacher_user, admin_user):
         """Admin can view any assignment."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
-        assignment = _make_assignment(assessment, course, teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=admin_user)
         resp = api_client.get(f"/api/v1/assignments/{assignment.id}")
         assert resp.status_code == 200
         assert resp.json()["id"] == assignment.id
         assert resp.json()["status"] == "ACTIVE"
-        assert resp.json()["assessmentTitle"] == assessment.title
+        assert resp.json()["assignmentTemplateTitle"] == assignment_template.title
 
     def test_ASGN_UC_04_TEACHER(self, api_client, teacher_user, admin_user):
         """Teacher can view assignment for their own course."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
-        assignment = _make_assignment(assessment, course, teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.get(f"/api/v1/assignments/{assignment.id}")
@@ -460,10 +460,10 @@ class TestGetDetail:
         self, api_client, teacher_user, student_user, admin_user
     ):
         """Enrolled student can view assignment detail."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         _enroll(course, student_user)
-        assignment = _make_assignment(assessment, course, teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=student_user)
         resp = api_client.get(f"/api/v1/assignments/{assignment.id}")
@@ -473,9 +473,9 @@ class TestGetDetail:
         self, api_client, teacher_user, student_user, admin_user
     ):
         """Unenrolled student gets 403."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
-        assignment = _make_assignment(assessment, course, teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=student_user)
         resp = api_client.get(f"/api/v1/assignments/{assignment.id}")
@@ -485,14 +485,14 @@ class TestGetDetail:
         self, api_client, teacher_user, student_user, admin_user
     ):
         """Dropped students cannot view assignment detail."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         Enrollment.objects.create(
             course=course,
             student_profile=student_user.student_profile,
             status=EnrollmentStatus.DROPPED,
         )
-        assignment = _make_assignment(assessment, course, teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=student_user)
         resp = api_client.get(f"/api/v1/assignments/{assignment.id}")
@@ -501,9 +501,9 @@ class TestGetDetail:
     def test_ASGN_UC_04_E3_teacher_not_owner(self, api_client, teacher_user, admin_user):
         """Teacher cannot view assignment for a course they don't own (403)."""
         other_teacher = _second_teacher()
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(other_teacher)
-        assignment = _make_assignment(assessment, course, other_teacher)
+        assignment = _make_assignment(assignment_template, course, other_teacher)
 
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.get(f"/api/v1/assignments/{assignment.id}")
@@ -513,9 +513,9 @@ class TestGetDetail:
         self, api_client, teacher_user, student_user, admin_user
     ):
         """Enrolled student can fetch assignment template questions."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         Question.objects.create(
-            assessment=assessment,
+            assignment_template=assignment_template,
             question_type=QuestionKind.SHORT_ANSWER,
             kind=QuestionKind.SHORT_ANSWER,
             prompt="Explain your process",
@@ -525,12 +525,12 @@ class TestGetDetail:
         )
         course = _make_course(teacher_user)
         _enroll(course, student_user)
-        assignment = _make_assignment(assessment, course, teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=student_user)
         resp = api_client.get(f"/api/v1/assignments/{assignment.id}/template")
         assert resp.status_code == 200
-        assert resp.json()["id"] == assessment.id
+        assert resp.json()["id"] == assignment_template.id
         assert len(resp.json()["questions"]) == 1
         assert resp.json()["questions"][0]["prompt"] == "Explain your process"
 
@@ -538,9 +538,9 @@ class TestGetDetail:
         self, api_client, teacher_user, student_user, admin_user
     ):
         """Unenrolled student cannot fetch assignment template (403)."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
-        assignment = _make_assignment(assessment, course, teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=student_user)
         resp = api_client.get(f"/api/v1/assignments/{assignment.id}/template")
@@ -550,14 +550,14 @@ class TestGetDetail:
         self, api_client, teacher_user, student_user, admin_user
     ):
         """Dropped students cannot fetch assignment template."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         Enrollment.objects.create(
             course=course,
             student_profile=student_user.student_profile,
             status=EnrollmentStatus.DROPPED,
         )
-        assignment = _make_assignment(assessment, course, teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=student_user)
         resp = api_client.get(f"/api/v1/assignments/{assignment.id}/template")
@@ -575,11 +575,11 @@ class TestUpdateAssignment:
 
     def test_ASGN_UC_05_TEACHER_CREATOR(self, api_client, teacher_user, admin_user):
         """Creator can update scheduling."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         now = timezone.now()
         assignment = _make_assignment(
-            assessment, course, teacher_user, open_at=now, due_at=now + timedelta(days=7)
+            assignment_template, course, teacher_user, open_at=now, due_at=now + timedelta(days=7)
         )
 
         new_due = now + timedelta(days=14)
@@ -598,10 +598,10 @@ class TestUpdateAssignment:
 
     def test_ASGN_UC_05_E2_not_creator(self, api_client, teacher_user, admin_user):
         """Non-creator teacher gets 403."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         other_teacher = _second_teacher()
         course = _make_course(other_teacher)
-        assignment = _make_assignment(assessment, course, other_teacher)
+        assignment = _make_assignment(assignment_template, course, other_teacher)
 
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.patch(
@@ -613,10 +613,10 @@ class TestUpdateAssignment:
 
     def test_ASGN_UC_05_E3_archived(self, api_client, teacher_user, admin_user):
         """Archived assignment cannot be updated (409)."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         assignment = _make_assignment(
-            assessment, course, teacher_user, status=AssignmentStatus.ARCHIVED
+            assignment_template, course, teacher_user, status=AssignmentStatus.ARCHIVED
         )
 
         api_client.force_authenticate(user=teacher_user)
@@ -629,11 +629,11 @@ class TestUpdateAssignment:
 
     def test_ASGN_UC_05_E4_invalid_scheduling(self, api_client, teacher_user, admin_user):
         """openAt >= dueAt on update returns 400."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         now = timezone.now()
         assignment = _make_assignment(
-            assessment, course, teacher_user, open_at=now, due_at=now + timedelta(days=7)
+            assignment_template, course, teacher_user, open_at=now, due_at=now + timedelta(days=7)
         )
 
         api_client.force_authenticate(user=teacher_user)
@@ -658,9 +658,9 @@ class TestDeleteAssignment:
         self, api_client, teacher_user, student_user, admin_user
     ):
         """Creator can DELETE assignment with NOT_STARTED submissions."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
-        assignment = _make_assignment(assessment, course, teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
         Submission.objects.create(
             assignment=assignment, student=student_user, status=SubmissionStatus.NOT_STARTED
         )
@@ -673,9 +673,9 @@ class TestDeleteAssignment:
     def test_ASGN_UC_06_E2_not_creator(self, api_client, teacher_user, admin_user):
         """Non-creator teacher cannot delete (403)."""
         other_teacher = _second_teacher()
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(other_teacher)
-        assignment = _make_assignment(assessment, course, other_teacher)
+        assignment = _make_assignment(assignment_template, course, other_teacher)
 
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.delete(f"/api/v1/assignments/{assignment.id}")
@@ -685,9 +685,9 @@ class TestDeleteAssignment:
         self, api_client, teacher_user, student_user, admin_user
     ):
         """Creator can DELETE assignment even with progressed submissions."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
-        assignment = _make_assignment(assessment, course, teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
         Submission.objects.create(
             assignment=assignment, student=student_user, status=SubmissionStatus.IN_PROGRESS
         )
@@ -699,9 +699,9 @@ class TestDeleteAssignment:
 
     def test_ASGN_CN_06_creator_can_delete(self, api_client, teacher_user, admin_user):
         """Creator can DELETE an assignment."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
-        assignment = _make_assignment(assessment, course, teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.delete(f"/api/v1/assignments/{assignment.id}")
@@ -720,9 +720,9 @@ class TestArchiveAssignment:
 
     def test_ASGN_UC_07_TEACHER_CREATOR(self, api_client, teacher_user, admin_user):
         """Creator can archive an active assignment."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
-        assignment = _make_assignment(assessment, course, teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.post(f"/api/v1/assignments/{assignment.id}/archive")
@@ -734,9 +734,9 @@ class TestArchiveAssignment:
     def test_ASGN_UC_07_E2_not_creator(self, api_client, teacher_user, admin_user):
         """Non-creator teacher cannot archive (403)."""
         other_teacher = _second_teacher()
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(other_teacher)
-        assignment = _make_assignment(assessment, course, other_teacher)
+        assignment = _make_assignment(assignment_template, course, other_teacher)
 
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.post(f"/api/v1/assignments/{assignment.id}/archive")
@@ -744,10 +744,10 @@ class TestArchiveAssignment:
 
     def test_ASGN_UC_07_E3_already_archived(self, api_client, teacher_user, admin_user):
         """Already-archived assignment returns 409."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         assignment = _make_assignment(
-            assessment, course, teacher_user, status=AssignmentStatus.ARCHIVED
+            assignment_template, course, teacher_user, status=AssignmentStatus.ARCHIVED
         )
 
         api_client.force_authenticate(user=teacher_user)
@@ -758,10 +758,10 @@ class TestArchiveAssignment:
         self, api_client, teacher_user, admin_user
     ):
         """Archived assignments remain visible to teacher but status is ARCHIVED."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         assignment = _make_assignment(
-            assessment, course, teacher_user, status=AssignmentStatus.ARCHIVED
+            assignment_template, course, teacher_user, status=AssignmentStatus.ARCHIVED
         )
 
         api_client.force_authenticate(user=teacher_user)
@@ -784,9 +784,9 @@ class TestAssignmentConstraints:
     ):
         """Only the creator can update/delete/archive — tested as a bundle."""
         other_teacher = _second_teacher()
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(other_teacher)
-        assignment = _make_assignment(assessment, course, other_teacher)
+        assignment = _make_assignment(assignment_template, course, other_teacher)
 
         api_client.force_authenticate(user=teacher_user)
 
@@ -822,9 +822,9 @@ class TestAssignmentConstraints:
 
     def test_paginated_list_endpoints(self, api_client, teacher_user, admin_user):
         """List endpoints return paginated responses (ASGN item 13)."""
-        assessment = _make_assessment(admin_user)
+        assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
-        _make_assignment(assessment, course, teacher_user)
+        _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=teacher_user)
 

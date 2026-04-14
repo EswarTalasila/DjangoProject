@@ -10,12 +10,15 @@ import {
   archiveAssignment,
   deleteAssignment,
   getAssignment,
-  getAssignmentTemplate,
   updateAssignment,
   type Assignment,
   type AssignmentUpdateInput,
 } from '@/lib/assignment-api';
-import type { Assessment, Question } from '@/lib/assessment-api';
+import {
+  getAssignmentTemplate,
+  type AssignmentTemplate,
+  type Question,
+} from '@/lib/assignment-template-api';
 import { listCourses } from '@/lib/course-api';
 import {
   getStudentSubmission,
@@ -231,7 +234,7 @@ export default function AssignmentDetailView({
   const router = useRouter();
 
   const [assignment, setAssignment] = useState<Assignment | null>(null);
-  const [assessmentTemplate, setAssessmentTemplate] = useState<Assessment | null>(null);
+  const [assignmentTemplate, setAssignmentTemplate] = useState<AssignmentTemplate | null>(null);
   const [courseName, setCourseName] = useState<string>('');
   const [titleInput, setTitleInput] = useState('');
   const [openAtInput, setOpenAtInput] = useState('');
@@ -266,7 +269,7 @@ export default function AssignmentDetailView({
       ]);
 
       setAssignment(item);
-      setAssessmentTemplate(template);
+      setAssignmentTemplate(template);
       setTitleInput(item.title || template?.title || 'Untitled Assignment');
       setOpenAtInput(toLocalInputValue(item.openAt));
       setDueAtInput(toLocalInputValue(item.dueAt));
@@ -312,7 +315,7 @@ export default function AssignmentDetailView({
   }, [assignment?.status, canMutate]);
 
   const groupedQuestionBuckets = useMemo(() => {
-    if (!assessmentTemplate) {
+    if (!assignmentTemplate) {
       return [] as Array<{
         key: string;
         title: string;
@@ -323,7 +326,7 @@ export default function AssignmentDetailView({
     const byGroupId = new Map<number, Question[]>();
     const ungrouped: Question[] = [];
 
-    for (const question of assessmentTemplate.questions) {
+    for (const question of assignmentTemplate.questions) {
       if (question.groupId != null) {
         const arr = byGroupId.get(question.groupId) ?? [];
         arr.push(question);
@@ -335,7 +338,7 @@ export default function AssignmentDetailView({
 
     const buckets: Array<{ key: string; title: string; questions: Question[] }> = [];
 
-    for (const group of [...assessmentTemplate.questionGroups].sort((a, b) => a.orderIndex - b.orderIndex)) {
+    for (const group of [...assignmentTemplate.questionGroups].sort((a, b) => a.orderIndex - b.orderIndex)) {
       buckets.push({
         key: `group-${group.id}`,
         title: group.name,
@@ -348,16 +351,16 @@ export default function AssignmentDetailView({
     }
 
     return buckets;
-  }, [assessmentTemplate]);
+  }, [assignmentTemplate]);
 
   const totalPoints = useMemo(() => {
-    if (!assessmentTemplate) return 0;
-    return assessmentTemplate.questions.reduce((sum, q) => sum + q.maxPoints, 0);
-  }, [assessmentTemplate]);
+    if (!assignmentTemplate) return 0;
+    return assignmentTemplate.questions.reduce((sum, q) => sum + q.maxPoints, 0);
+  }, [assignmentTemplate]);
 
   const flatQuestions = useMemo(() => {
-    return assessmentTemplate?.questions ?? [];
-  }, [assessmentTemplate]);
+    return assignmentTemplate?.questions ?? [];
+  }, [assignmentTemplate]);
 
   const clampedStudentQuestionIndex = useMemo(() => {
     if (flatQuestions.length === 0) return 0;
@@ -397,7 +400,7 @@ export default function AssignmentDetailView({
       setStudentFlowStage('attempt');
       setStudentSubmittedAt(null);
     }
-  }, [assessmentTemplate?.id, previewMode, submission]);
+  }, [assignmentTemplate?.id, previewMode, submission]);
 
   useEffect(() => {
     if (flatQuestions.length === 0) {
@@ -602,7 +605,7 @@ export default function AssignmentDetailView({
 
       <AssignmentMetadataPanel
         assignment={assignment}
-        assessmentTemplate={assessmentTemplate}
+        assignmentTemplate={assignmentTemplate}
         courseName={courseName}
         totalPoints={totalPoints}
         canMutate={canMutate}
@@ -631,7 +634,7 @@ export default function AssignmentDetailView({
           </span>
         </div>
 
-        {!assessmentTemplate || (assessmentTemplate.questions.length === 0 && assessmentTemplate.submissionMode === 'DIGITAL') ? (
+        {!assignmentTemplate || (assignmentTemplate.questions.length === 0 && assignmentTemplate.submissionMode === 'DIGITAL') ? (
           <p className="text-sm text-muted-foreground">No questions in this assignment template.</p>
         ) : previewMode === 'student' ? (
           <StudentSubmissionForm
@@ -639,7 +642,7 @@ export default function AssignmentDetailView({
             assignmentArchived={assignmentArchived}
             assignmentNotOpen={assignmentNotOpen}
             openAt={assignment?.openAt ?? null}
-            submissionMode={assessmentTemplate?.submissionMode ?? 'DIGITAL'}
+            submissionMode={assignmentTemplate?.submissionMode ?? 'DIGITAL'}
             flatQuestions={flatQuestions}
             studentAnswers={studentAnswers}
             studentFlowStage={studentFlowStage}

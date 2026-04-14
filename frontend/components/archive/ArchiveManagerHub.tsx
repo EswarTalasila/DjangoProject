@@ -25,7 +25,7 @@ export default function ArchiveManagerHub({
         </h1>
         <p className="text-muted-foreground mt-1">
           Export data, build organized packages, and manage archived records.
-          <HelpTip text="Use Quick Export for one-off downloads, Package Builder to organize multi-file exports, and Data Archives to manage the lifecycle of courses, assessments, and assignments." />
+          <HelpTip text="Use Quick Export for one-off downloads, Package Builder to organize multi-file exports, and Data Archives to manage the lifecycle of courses, assignment templates, and assignments." />
         </p>
       </div>
 

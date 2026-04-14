@@ -50,12 +50,12 @@ class TestAssignmentToDto:
         from assignments.services._queries import assignment_to_dto
 
         now = datetime(2025, 6, 1, 12, 0, tzinfo=UTC)
-        assessment = SimpleNamespace(title="Test Assessment")
+        assignment_template = SimpleNamespace(title="Test AssignmentTemplate")
         assignment = SimpleNamespace(
             id=1,
             title="My Assignment",
-            assessment_id=10,
-            assessment=assessment,
+            assignment_template_id=10,
+            assignment_template=assignment_template,
             audience_type=AudienceType.COURSE,
             course_id=20,
             teacher_id=None,
@@ -68,8 +68,8 @@ class TestAssignmentToDto:
 
         assert dto.id == 1
         assert dto.title == "My Assignment"
-        assert dto.assessmentId == 10
-        assert dto.assessmentTitle == "Test Assessment"
+        assert dto.assignmentTemplateId == 10
+        assert dto.assignmentTemplateTitle == "Test AssignmentTemplate"
         assert dto.audienceType == AudienceType.COURSE
         assert dto.courseId == 20
         assert dto.targetTeacherId is None
@@ -82,12 +82,12 @@ class TestAssignmentToDto:
         from assignments.services._queries import assignment_to_dto
 
         now = datetime(2025, 6, 1, 12, 0, tzinfo=UTC)
-        assessment = SimpleNamespace(title="Teacher Assessment")
+        assignment_template = SimpleNamespace(title="Teacher AssignmentTemplate")
         assignment = SimpleNamespace(
             id=2,
-            title="Teacher Self-Assessment",
-            assessment_id=11,
-            assessment=assessment,
+            title="Teacher Self-AssignmentTemplate",
+            assignment_template_id=11,
+            assignment_template=assignment_template,
             audience_type=AudienceType.TEACHER,
             course_id=None,
             teacher_id=42,
@@ -234,11 +234,11 @@ class TestListForUser:
 class TestCreateAssignment:
     """Tests for create_assignment mutation."""
 
-    def test_raises_when_no_assessment_id(self):
-        """Raises ValueError when assessmentId is missing."""
+    def test_raises_when_no_assignment_template_id(self):
+        """Raises ValueError when assignmentTemplateId is missing."""
         from assignments.services._mutations import create_assignment
 
-        with pytest.raises(ValueError, match="assessmentId is required"):
+        with pytest.raises(ValueError, match="assignmentTemplateId is required"):
             create_assignment(
                 SimpleNamespace(id=1),
                 {"audienceType": "COURSE", "openAt": "now"},
@@ -251,7 +251,7 @@ class TestCreateAssignment:
         with pytest.raises(ValueError, match="audienceType is required"):
             create_assignment(
                 SimpleNamespace(id=1),
-                {"assessmentId": 1, "openAt": "now"},
+                {"assignmentTemplateId": 1, "openAt": "now"},
             )
 
     def test_raises_when_no_open_at(self):
@@ -261,7 +261,7 @@ class TestCreateAssignment:
         with pytest.raises(ValueError, match="openAt is required"):
             create_assignment(
                 SimpleNamespace(id=1),
-                {"assessmentId": 1, "audienceType": "COURSE"},
+                {"assignmentTemplateId": 1, "audienceType": "COURSE"},
             )
 
     def test_raises_when_course_type_missing_course_id(self):
@@ -272,7 +272,7 @@ class TestCreateAssignment:
             create_assignment(
                 SimpleNamespace(id=1),
                 {
-                    "assessmentId": 1,
+                    "assignmentTemplateId": 1,
                     "audienceType": AudienceType.COURSE,
                     "openAt": "2025-01-01",
                 },
@@ -286,7 +286,7 @@ class TestCreateAssignment:
             create_assignment(
                 SimpleNamespace(id=1),
                 {
-                    "assessmentId": 1,
+                    "assignmentTemplateId": 1,
                     "audienceType": AudienceType.TEACHER,
                     "openAt": "2025-01-01",
                 },
@@ -296,19 +296,21 @@ class TestCreateAssignment:
     @patch("assignments.services._mutations.Assignment")
     @patch("assignments.services._mutations.can_manage_course", return_value=True)
     @patch("assignments.services._mutations.Course")
-    @patch("assignments.services._mutations.Assessment")
+    @patch("assignments.services._mutations.AssignmentTemplate")
     def test_creates_course_assignment_with_submissions(
-        self, mock_assessment_model, mock_course_model, mock_can_manage,
+        self, mock_assignment_template_model, mock_course_model, mock_can_manage,
         mock_assignment_model, mock_create_subs
     ):
         """Creates COURSE assignment and triggers submission creation."""
         from assignments.services._mutations import create_assignment
-        from assessments.models import AssessmentStatus
+        from assignment_templates.models import AssignmentTemplateStatus
 
-        fake_assessment = SimpleNamespace(
-            id=5, title="Test", status=AssessmentStatus.ACTIVE,
+        fake_assignment_template = SimpleNamespace(
+            id=5, title="Test", status=AssignmentTemplateStatus.ACTIVE,
         )
-        mock_assessment_model.objects.filter.return_value.first.return_value = fake_assessment
+        mock_assignment_template_model.objects.filter.return_value.first.return_value = (
+            fake_assignment_template
+        )
         fake_course = SimpleNamespace(id=10, status="ACTIVE")
         mock_course_model.objects.filter.return_value.first.return_value = fake_course
 
@@ -317,7 +319,7 @@ class TestCreateAssignment:
 
         user = SimpleNamespace(id=1)
         payload = {
-            "assessmentId": 5,
+            "assignmentTemplateId": 5,
             "audienceType": AudienceType.COURSE,
             "courseId": 10,
             "openAt": "2025-01-01",
@@ -337,7 +339,7 @@ class TestCreateAssignment:
             create_assignment(
                 SimpleNamespace(id=1),
                 {
-                    "assessmentId": 1,
+                    "assignmentTemplateId": 1,
                     "audienceType": AudienceType.COURSE,
                     "courseId": 10,
                     "openAt": datetime(2025, 6, 2, tzinfo=UTC),
@@ -345,39 +347,39 @@ class TestCreateAssignment:
                 },
             )
 
-    @patch("assignments.services._mutations.Assessment")
-    def test_raises_when_assessment_not_found(self, mock_assessment):
-        """Raises ValueError when assessment doesn't exist."""
+    @patch("assignments.services._mutations.AssignmentTemplate")
+    def test_raises_when_assignment_template_not_found(self, mock_assignment_template):
+        """Raises ValueError when assignment_template doesn't exist."""
         from assignments.services._mutations import create_assignment
 
-        mock_assessment.objects.filter.return_value.first.return_value = None
+        mock_assignment_template.objects.filter.return_value.first.return_value = None
 
-        with pytest.raises(ValueError, match="Assessment not found"):
+        with pytest.raises(ValueError, match="AssignmentTemplate not found"):
             create_assignment(
                 SimpleNamespace(id=1),
                 {
-                    "assessmentId": 999,
+                    "assignmentTemplateId": 999,
                     "audienceType": AudienceType.COURSE,
                     "courseId": 10,
                     "openAt": datetime(2025, 1, 1, tzinfo=UTC),
                 },
             )
 
-    @patch("assignments.services._mutations.Assessment")
-    def test_raises_when_assessment_archived(self, mock_assessment):
-        """Raises ConflictError when assessment is archived."""
+    @patch("assignments.services._mutations.AssignmentTemplate")
+    def test_raises_when_assignment_template_archived(self, mock_assignment_template):
+        """Raises ConflictError when assignment_template is archived."""
         from assignments.services._mutations import ConflictError, create_assignment
-        from assessments.models import AssessmentStatus
+        from assignment_templates.models import AssignmentTemplateStatus
 
-        mock_assessment.objects.filter.return_value.first.return_value = SimpleNamespace(
-            id=1, status=AssessmentStatus.ARCHIVED
+        mock_assignment_template.objects.filter.return_value.first.return_value = SimpleNamespace(
+            id=1, status=AssignmentTemplateStatus.ARCHIVED
         )
 
-        with pytest.raises(ConflictError, match="archived assessment"):
+        with pytest.raises(ConflictError, match="archived assignment template"):
             create_assignment(
                 SimpleNamespace(id=1),
                 {
-                    "assessmentId": 1,
+                    "assignmentTemplateId": 1,
                     "audienceType": AudienceType.COURSE,
                     "courseId": 10,
                     "openAt": datetime(2025, 1, 1, tzinfo=UTC),
@@ -386,14 +388,19 @@ class TestCreateAssignment:
 
     @patch("assignments.services._mutations.can_manage_course", return_value=False)
     @patch("assignments.services._mutations.Course")
-    @patch("assignments.services._mutations.Assessment")
-    def test_raises_when_not_course_owner(self, mock_assessment, mock_course, mock_manage):
+    @patch("assignments.services._mutations.AssignmentTemplate")
+    def test_raises_when_not_course_owner(
+        self,
+        mock_assignment_template,
+        mock_course,
+        mock_manage,
+    ):
         """Raises ForbiddenError when user doesn't own the course."""
         from assignments.services._mutations import ForbiddenError, create_assignment
-        from assessments.models import AssessmentStatus
+        from assignment_templates.models import AssignmentTemplateStatus
 
-        mock_assessment.objects.filter.return_value.first.return_value = SimpleNamespace(
-            id=1, status=AssessmentStatus.ACTIVE
+        mock_assignment_template.objects.filter.return_value.first.return_value = SimpleNamespace(
+            id=1, status=AssignmentTemplateStatus.ACTIVE
         )
         mock_course.objects.filter.return_value.first.return_value = SimpleNamespace(
             id=10, status="ACTIVE"
@@ -403,7 +410,7 @@ class TestCreateAssignment:
             create_assignment(
                 SimpleNamespace(id=1),
                 {
-                    "assessmentId": 1,
+                    "assignmentTemplateId": 1,
                     "audienceType": AudienceType.COURSE,
                     "courseId": 10,
                     "openAt": datetime(2025, 1, 1, tzinfo=UTC),
@@ -411,14 +418,14 @@ class TestCreateAssignment:
             )
 
     @patch("assignments.services._mutations.Course")
-    @patch("assignments.services._mutations.Assessment")
-    def test_raises_when_course_not_found(self, mock_assessment, mock_course):
+    @patch("assignments.services._mutations.AssignmentTemplate")
+    def test_raises_when_course_not_found(self, mock_assignment_template, mock_course):
         """Raises ValueError when course doesn't exist."""
         from assignments.services._mutations import create_assignment
-        from assessments.models import AssessmentStatus
+        from assignment_templates.models import AssignmentTemplateStatus
 
-        mock_assessment.objects.filter.return_value.first.return_value = SimpleNamespace(
-            id=1, status=AssessmentStatus.ACTIVE
+        mock_assignment_template.objects.filter.return_value.first.return_value = SimpleNamespace(
+            id=1, status=AssignmentTemplateStatus.ACTIVE
         )
         mock_course.objects.filter.return_value.first.return_value = None
 
@@ -426,7 +433,7 @@ class TestCreateAssignment:
             create_assignment(
                 SimpleNamespace(id=1),
                 {
-                    "assessmentId": 1,
+                    "assignmentTemplateId": 1,
                     "audienceType": AudienceType.COURSE,
                     "courseId": 999,
                     "openAt": datetime(2025, 1, 1, tzinfo=UTC),
@@ -471,35 +478,40 @@ class TestDeleteAssignment(_NoopAtomicMixin):
 class TestCreateSubmissionsForCourse(_NoopAtomicMixin):
     """Tests for _create_submissions_for_course internal helper."""
 
-    @patch("assignments.services._mutations.Assessment")
-    def test_skips_when_assessment_not_found(self, mock_assessment_model):
-        """Skips when assessment does not exist."""
+    @patch("assignments.services._mutations.AssignmentTemplate")
+    def test_skips_when_assignment_template_not_found(self, mock_assignment_template_model):
+        """Skips when assignment_template does not exist."""
         from assignments.services._mutations import _create_submissions_for_course
 
-        mock_assessment_model.objects.filter.return_value.first.return_value = None
-        assignment = SimpleNamespace(assessment_id=999)
+        mock_assignment_template_model.objects.filter.return_value.first.return_value = None
+        assignment = SimpleNamespace(assignment_template_id=999)
 
         # Should not raise
         _create_submissions_for_course(assignment)
 
-    @patch("assignments.services._mutations.Assessment")
-    def test_skips_when_no_course_id_is_none(self, mock_assessment_model):
+    @patch("assignments.services._mutations.AssignmentTemplate")
+    def test_skips_when_no_course_id_is_none(self, mock_assignment_template_model):
         """Skips submission creation when assignment has no course_id."""
         from assignments.services._mutations import _create_submissions_for_course
 
-        fake_assessment = MagicMock()
-        mock_assessment_model.objects.filter.return_value.first.return_value = fake_assessment
-        assignment = SimpleNamespace(assessment_id=1, course_id=None)
+        fake_assignment_template = MagicMock()
+        mock_assignment_template_model.objects.filter.return_value.first.return_value = (
+            fake_assignment_template
+        )
+        assignment = SimpleNamespace(assignment_template_id=1, course_id=None)
 
         _create_submissions_for_course(assignment)
 
-    @patch("assignments.services._mutations.Assessment")
-    def test_skips_when_assessment_not_found_returns_early(self, mock_assessment_model):
-        """Skips when assessment does not exist (returns early)."""
+    @patch("assignments.services._mutations.AssignmentTemplate")
+    def test_skips_when_assignment_template_not_found_returns_early(
+        self,
+        mock_assignment_template_model,
+    ):
+        """Skips when assignment_template does not exist (returns early)."""
         from assignments.services._mutations import _create_submissions_for_course
 
-        mock_assessment_model.objects.filter.return_value.first.return_value = None
-        assignment = SimpleNamespace(assessment_id=999)
+        mock_assignment_template_model.objects.filter.return_value.first.return_value = None
+        assignment = SimpleNamespace(assignment_template_id=999)
 
         # Should not raise
         _create_submissions_for_course(assignment)
@@ -510,12 +522,12 @@ class TestCreateSubmissionsForCourse(_NoopAtomicMixin):
     @patch("assignments.services._mutations.Answer")
     @patch("assignments.services._mutations.Submission")
     @patch("assignments.services._mutations.Enrollment")
-    @patch("assignments.services._mutations.Assessment")
+    @patch("assignments.services._mutations.AssignmentTemplate")
     @patch("assignments.services._mutations.answer_type_from_question")
     def test_creates_submissions_for_enrolled_students(
         self,
         mock_answer_type,
-        mock_assessment_model,
+        mock_assignment_template_model,
         mock_enrollment_model,
         mock_submission_model,
         mock_answer_model,
@@ -524,19 +536,19 @@ class TestCreateSubmissionsForCourse(_NoopAtomicMixin):
         mock_nsa,
     ):
         """Creates submissions with answers for each enrolled student."""
-        from assessments.models import QuestionKind
+        from assignment_templates.models import QuestionKind
         from assignments.services._mutations import _create_submissions_for_course
 
         mc_question = SimpleNamespace(kind=QuestionKind.MULTIPLE_CHOICE)
         sa_question = SimpleNamespace(kind=QuestionKind.SHORT_ANSWER)
         ns_question = SimpleNamespace(kind=QuestionKind.NUMBER_SCALE)
 
-        fake_assessment = MagicMock()
-        fake_assessment.questions.all.return_value = [
+        fake_assignment_template = MagicMock()
+        fake_assignment_template.questions.all.return_value = [
             mc_question, sa_question, ns_question
         ]
-        mock_assessment_model.objects.filter.return_value.first.return_value = (
-            fake_assessment
+        mock_assignment_template_model.objects.filter.return_value.first.return_value = (
+            fake_assignment_template
         )
         mock_enrollment_model.objects.filter.return_value.values_list.return_value = [
             100, 200
@@ -548,7 +560,7 @@ class TestCreateSubmissionsForCourse(_NoopAtomicMixin):
         fake_answer = SimpleNamespace(id=10)
         mock_answer_model.objects.create.return_value = fake_answer
 
-        assignment = SimpleNamespace(id=1, assessment_id=5, course_id=10)
+        assignment = SimpleNamespace(id=1, assignment_template_id=5, course_id=10)
 
         _create_submissions_for_course(assignment)
 
@@ -559,7 +571,7 @@ class TestCreateSubmissionsForCourse(_NoopAtomicMixin):
 
     @patch("assignments.services._mutations.Submission")
     @patch("assignments.services._mutations.Enrollment")
-    @patch("assignments.services._mutations.Assessment")
+    @patch("assignments.services._mutations.AssignmentTemplate")
     def test_skips_existing_submissions(
         self,
         mock_assessment_model,
@@ -576,7 +588,7 @@ class TestCreateSubmissionsForCourse(_NoopAtomicMixin):
         mock_enrollment_model.objects.filter.return_value.values_list.return_value = [100]
         mock_submission_model.objects.filter.return_value.exists.return_value = True
 
-        assignment = SimpleNamespace(id=1, assessment_id=5, course_id=10)
+        assignment = SimpleNamespace(id=1, assignment_template_id=5, course_id=10)
 
         _create_submissions_for_course(assignment)
 
@@ -784,7 +796,7 @@ class TestRestoreAssignment(_NoopAtomicMixin):
         """Restores an archived assignment back to ACTIVE status."""
         from assignments.services._mutations import restore_assignment
         from assignments.models import AssignmentStatus
-        from assessments.models import AssessmentStatus
+        from assignment_templates.models import AssignmentTemplateStatus
 
         mock_tz.now.return_value = "2025-06-01"
 
@@ -792,7 +804,7 @@ class TestRestoreAssignment(_NoopAtomicMixin):
         assignment.created_by_id = 1
         assignment.status = AssignmentStatus.ARCHIVED
         assignment.course_id = None
-        assignment.assessment.status = AssessmentStatus.ACTIVE
+        assignment.assignment_template.status = AssignmentTemplateStatus.ACTIVE
 
         user = SimpleNamespace(id=1, is_staff=False)
         result = restore_assignment(user, assignment)
@@ -818,19 +830,19 @@ class TestRestoreAssignment(_NoopAtomicMixin):
 
     @patch("assignments.services._mutations.timezone")
     def test_raises_when_assessment_archived(self, mock_tz):
-        """Raises ConflictError when restoring an assignment whose assessment is archived."""
+        """Raises ConflictError when restoring an assignment whose assignment_template is archived."""
         from assignments.services._mutations import ConflictError, restore_assignment
         from assignments.models import AssignmentStatus
-        from assessments.models import AssessmentStatus
+        from assignment_templates.models import AssignmentTemplateStatus
 
         assignment = MagicMock()
         assignment.created_by_id = 1
         assignment.status = AssignmentStatus.ARCHIVED
         assignment.course_id = None
-        assignment.assessment.status = AssessmentStatus.ARCHIVED
+        assignment.assignment_template.status = AssignmentTemplateStatus.ARCHIVED
 
         user = SimpleNamespace(id=1, is_staff=False)
-        with pytest.raises(ConflictError, match="assessment is archived"):
+        with pytest.raises(ConflictError, match="source assignment template is archived"):
             restore_assignment(user, assignment)
 
 

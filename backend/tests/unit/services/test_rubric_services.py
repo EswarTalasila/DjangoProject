@@ -195,7 +195,7 @@ class TestUpdateRubric(_NoopAtomicMixin):
 
     @patch("rubrics.services._is_referenced", return_value=True)
     def test_raises_when_referenced(self, mock_ref):
-        """Raises RubricReferencedError when rubric is in use by an assessment."""
+        """Raises RubricReferencedError when rubric is in use by an assignment_template."""
         from rubrics.services import RubricReferencedError, update_rubric
 
         rubric = MagicMock()
@@ -321,8 +321,8 @@ class TestArchiveRubric(_NoopAtomicMixin):
 
 class TestIsReferenced:
 
-    @patch("assessments.models.AssessmentQuestionGroup")
-    @patch("assessments.models.Question")
+    @patch("assignment_templates.models.AssignmentTemplateQuestionGroup")
+    @patch("assignment_templates.models.Question")
     def test_returns_true_when_question_references(self, mock_q, mock_aqg):
         """Returns true when a question references the rubric."""
         from rubrics.services import _is_referenced
@@ -332,10 +332,10 @@ class TestIsReferenced:
 
         assert _is_referenced(rubric) is True
 
-    @patch("assessments.models.AssessmentQuestionGroup")
-    @patch("assessments.models.Question")
+    @patch("assignment_templates.models.AssignmentTemplateQuestionGroup")
+    @patch("assignment_templates.models.Question")
     def test_returns_true_when_group_references(self, mock_q, mock_aqg):
-        """Returns true when an assessment question group references the rubric."""
+        """Returns true when an assignment_template question group references the rubric."""
         from rubrics.services import _is_referenced
 
         mock_q.objects.filter.return_value.exists.return_value = False
@@ -344,8 +344,8 @@ class TestIsReferenced:
 
         assert _is_referenced(rubric) is True
 
-    @patch("assessments.models.AssessmentQuestionGroup")
-    @patch("assessments.models.Question")
+    @patch("assignment_templates.models.AssignmentTemplateQuestionGroup")
+    @patch("assignment_templates.models.Question")
     def test_returns_false_when_not_referenced(self, mock_q, mock_aqg):
         """Returns false when no questions or groups reference the rubric."""
         from rubrics.services import _is_referenced

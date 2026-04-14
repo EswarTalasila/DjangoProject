@@ -4,12 +4,12 @@ import pytest
 from django.utils import timezone
 
 from accounts.models import SudoGrant, SudoPermission
-from assessments.models import GradingMode
+from assignment_templates.models import GradingMode
 from courses.models import EnrollmentStatus
 from submissions.models import AnswerType, NumberScaleAnswer, SubmissionStatus
 from tests.factories import (
     AnswerFactory,
-    AssessmentFactory,
+    AssignmentTemplateFactory,
     AssignmentFactory,
     CourseFactory,
     EnrollmentFactory,
@@ -27,13 +27,13 @@ MOOD_URL = "/api/v1/visualizations/assignments/{}/mood-meter"
 def _seed_course(teacher_user, *, n_students=3, n_graded=2, score=80.0, admin_user=None):
     """Create a course with enrollments, an assignment, and graded submissions."""
     course = CourseFactory(teacher_profile=teacher_user.teacher_profile)
-    assessment = AssessmentFactory(
+    assignment_template = AssignmentTemplateFactory(
         grading_mode=GradingMode.AUTO,
         created_by_admin=admin_user or teacher_user,
         category="math",
     )
     assignment = AssignmentFactory(
-        assessment=assessment,
+        assignment_template=assignment_template,
         course=course,
         created_by=teacher_user,
         open_at=timezone.now(),
@@ -199,19 +199,19 @@ class TestVizCourseSummary:
         assert "courseName" not in data
         a = data["assignments"][0]
         assert "assignmentId" not in a
-        assert "assessmentTitle" not in a
-        assert "assessmentCategory" in a  # Non-identifying retained
+        assert "assignmentTemplateTitle" not in a
+        assert "assignmentTemplateCategory" in a  # Non-identifying retained
 
     def test_VIZ_UC_02_TEACHER_filter_by_category(self, api_client, teacher_user, admin_user):
         """Category filter works."""
         course, _, _ = _seed_course(teacher_user, admin_user=admin_user)
         # Create second assignment with different category
-        assessment2 = AssessmentFactory(
+        assignment_template2 = AssignmentTemplateFactory(
             grading_mode=GradingMode.AUTO,
             created_by_admin=admin_user,
             category="science",
         )
-        AssignmentFactory(assessment=assessment2, course=course, created_by=teacher_user)
+        AssignmentFactory(assignment_template=assignment_template2, course=course, created_by=teacher_user)
 
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.get(COURSE_URL.format(course.id), {"category": "math"})
@@ -266,7 +266,7 @@ class TestVizCourseSummary:
         """Invalid query param type returns 400."""
         course, _, _ = _seed_course(teacher_user, admin_user=admin_user)
         api_client.force_authenticate(user=teacher_user)
-        resp = api_client.get(COURSE_URL.format(course.id), {"assessmentId": "not-an-int"})
+        resp = api_client.get(COURSE_URL.format(course.id), {"assignmentTemplateId": "not-an-int"})
         assert resp.status_code == 400
 
 
@@ -308,15 +308,15 @@ class TestVizAssignmentSummary:
     def test_VIZ_UC_03_RESEARCHER_anonymized(
         self, api_client, researcher_user, teacher_user, admin_user
     ):
-        """Anonymized researcher — no assignmentId/assessmentTitle (VIZ-CN-01)."""
+        """Anonymized researcher — no assignmentId/assignmentTemplateTitle (VIZ-CN-01)."""
         _, assignment, _ = _seed_course(teacher_user, admin_user=admin_user)
         api_client.force_authenticate(user=researcher_user)
         resp = api_client.get(ASSIGNMENT_URL.format(assignment.id))
         assert resp.status_code == 200
         data = resp.json()
         assert "assignmentId" not in data
-        assert "assessmentTitle" not in data
-        assert "assessmentCategory" in data
+        assert "assignmentTemplateTitle" not in data
+        assert "assignmentTemplateCategory" in data
         assert "distribution" in data
 
     def test_VIZ_UC_03_TEACHER_filter_by_date_range(self, api_client, teacher_user, admin_user):
@@ -372,8 +372,8 @@ class TestVizAssignmentSummary:
     def test_VIZ_CN_02_distribution_bins(self, api_client, teacher_user, admin_user):
         """Distribution bins are correct per VIZ-CN-02."""
         course = CourseFactory(teacher_profile=teacher_user.teacher_profile)
-        assessment = AssessmentFactory(created_by_admin=admin_user)
-        assignment = AssignmentFactory(assessment=assessment, course=course, created_by=teacher_user)
+        assignment_template = AssignmentTemplateFactory(created_by_admin=admin_user)
+        assignment = AssignmentFactory(assignment_template=assignment_template, course=course, created_by=teacher_user)
         sp = StudentProfileFactory(created_by=admin_user)
         EnrollmentFactory(course=course, student_profile=sp)
 
@@ -401,8 +401,8 @@ class TestVizAssignmentSummary:
     def test_VIZ_CN_02_null_scores(self, api_client, teacher_user, admin_user):
         """Null stats with zero graded submissions (VIZ-CN-05)."""
         course = CourseFactory(teacher_profile=teacher_user.teacher_profile)
-        assessment = AssessmentFactory(created_by_admin=admin_user)
-        assignment = AssignmentFactory(assessment=assessment, course=course, created_by=teacher_user)
+        assignment_template = AssignmentTemplateFactory(created_by_admin=admin_user)
+        assignment = AssignmentFactory(assignment_template=assignment_template, course=course, created_by=teacher_user)
         sp = StudentProfileFactory(created_by=admin_user)
         EnrollmentFactory(course=course, student_profile=sp)
 
@@ -418,8 +418,8 @@ class TestVizAssignmentSummary:
     def test_VIZ_CN_02_boundary_scores(self, api_client, teacher_user, admin_user):
         """Scores at boundaries and outside 0-100 range (VIZ-CN-02)."""
         course = CourseFactory(teacher_profile=teacher_user.teacher_profile)
-        assessment = AssessmentFactory(created_by_admin=admin_user)
-        assignment = AssignmentFactory(assessment=assessment, course=course, created_by=teacher_user)
+        assignment_template = AssignmentTemplateFactory(created_by_admin=admin_user)
+        assignment = AssignmentFactory(assignment_template=assignment_template, course=course, created_by=teacher_user)
 
         # 59.5 rounds to 60 → 60-69 bin; 105 → 90-100; -5 → 0-59
         for s in [59.5, 105, -5]:
@@ -451,12 +451,12 @@ class TestVizMoodMeter:
     def test_VIZ_UC_04_ADMIN(self, api_client, admin_user, teacher_user):
         """Admin can view mood meter summary."""
         course = CourseFactory(teacher_profile=teacher_user.teacher_profile)
-        assessment = AssessmentFactory(
+        assignment_template = AssignmentTemplateFactory(
             grading_mode=GradingMode.MOOD_METER,
             created_by_admin=admin_user,
         )
         assignment = AssignmentFactory(
-            assessment=assessment, course=course, created_by=teacher_user
+            assignment_template=assignment_template, course=course, created_by=teacher_user
         )
         api_client.force_authenticate(user=admin_user)
         resp = api_client.get(MOOD_URL.format(assignment.id))
@@ -469,12 +469,12 @@ class TestVizMoodMeter:
     def test_VIZ_UC_04_TEACHER(self, api_client, teacher_user, admin_user):
         """Teacher can view mood meter for own course."""
         course = CourseFactory(teacher_profile=teacher_user.teacher_profile)
-        assessment = AssessmentFactory(
+        assignment_template = AssignmentTemplateFactory(
             grading_mode=GradingMode.MOOD_METER,
             created_by_admin=admin_user,
         )
         assignment = AssignmentFactory(
-            assessment=assessment, course=course, created_by=teacher_user
+            assignment_template=assignment_template, course=course, created_by=teacher_user
         )
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.get(MOOD_URL.format(assignment.id))
@@ -483,12 +483,12 @@ class TestVizMoodMeter:
     def test_VIZ_UC_04_RESEARCHER(self, api_client, researcher_user, teacher_user, admin_user):
         """Researcher can view mood meter."""
         course = CourseFactory(teacher_profile=teacher_user.teacher_profile)
-        assessment = AssessmentFactory(
+        assignment_template = AssignmentTemplateFactory(
             grading_mode=GradingMode.MOOD_METER,
             created_by_admin=admin_user,
         )
         assignment = AssignmentFactory(
-            assessment=assessment, course=course, created_by=teacher_user
+            assignment_template=assignment_template, course=course, created_by=teacher_user
         )
         api_client.force_authenticate(user=researcher_user)
         resp = api_client.get(MOOD_URL.format(assignment.id))
@@ -505,17 +505,17 @@ class TestVizMoodMeter:
     def test_VIZ_UC_04_E2_non_mood_meter_409(self, api_client, teacher_user, admin_user):
         """409 for non-mood-meter assignment (VIZ-CN-04)."""
         course = CourseFactory(teacher_profile=teacher_user.teacher_profile)
-        assessment = AssessmentFactory(
+        assignment_template = AssignmentTemplateFactory(
             grading_mode=GradingMode.AUTO,
             created_by_admin=admin_user,
         )
         assignment = AssignmentFactory(
-            assessment=assessment, course=course, created_by=teacher_user
+            assignment_template=assignment_template, course=course, created_by=teacher_user
         )
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.get(MOOD_URL.format(assignment.id))
         assert resp.status_code == 409
-        assert resp.json()["detail"] == "Incompatible assessment type."
+        assert resp.json()["detail"] == "Incompatible assignment template type."
 
     def test_VIZ_UC_04_E3_teacher_not_owner(self, api_client, teacher_user, admin_user):
         """403 for teacher accessing other teacher's mood meter (VIZ-CN-03)."""
@@ -526,12 +526,12 @@ class TestVizMoodMeter:
         UserRole.objects.create(user=other, role=Role.TEACHER)
         TeacherProfile.objects.create(user=other)
         course = CourseFactory(teacher_profile=other.teacher_profile)
-        assessment = AssessmentFactory(
+        assignment_template = AssignmentTemplateFactory(
             grading_mode=GradingMode.MOOD_METER,
             created_by_admin=admin_user,
         )
         assignment = AssignmentFactory(
-            assessment=assessment, course=course, created_by=other
+            assignment_template=assignment_template, course=course, created_by=other
         )
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.get(MOOD_URL.format(assignment.id))
@@ -540,12 +540,12 @@ class TestVizMoodMeter:
     def test_VIZ_UC_04_E4_student_forbidden(self, api_client, student_user, teacher_user, admin_user):
         """Student gets 403."""
         course = CourseFactory(teacher_profile=teacher_user.teacher_profile)
-        assessment = AssessmentFactory(
+        assignment_template = AssignmentTemplateFactory(
             grading_mode=GradingMode.MOOD_METER,
             created_by_admin=admin_user,
         )
         assignment = AssignmentFactory(
-            assessment=assessment, course=course, created_by=teacher_user
+            assignment_template=assignment_template, course=course, created_by=teacher_user
         )
         api_client.force_authenticate(user=student_user)
         resp = api_client.get(MOOD_URL.format(assignment.id))
@@ -554,38 +554,38 @@ class TestVizMoodMeter:
     def test_VIZ_UC_04_E5_unauthenticated(self, api_client, teacher_user, admin_user):
         """Unauthenticated gets 401."""
         course = CourseFactory(teacher_profile=teacher_user.teacher_profile)
-        assessment = AssessmentFactory(
+        assignment_template = AssignmentTemplateFactory(
             grading_mode=GradingMode.MOOD_METER,
             created_by_admin=admin_user,
         )
         assignment = AssignmentFactory(
-            assessment=assessment, course=course, created_by=teacher_user
+            assignment_template=assignment_template, course=course, created_by=teacher_user
         )
         resp = api_client.get(MOOD_URL.format(assignment.id))
         assert resp.status_code == 401
 
     def test_VIZ_UC_04_quadrant_aggregation(self, api_client, teacher_user, admin_user):
         """Mood meter quadrants are derived from DB-backed row/col values."""
-        from assessments.models import NumberScaleQuestion, QuestionKind
+        from assignment_templates.models import NumberScaleQuestion, QuestionKind
 
         course = CourseFactory(teacher_profile=teacher_user.teacher_profile)
-        assessment = AssessmentFactory(
+        assignment_template = AssignmentTemplateFactory(
             grading_mode=GradingMode.MOOD_METER,
             created_by_admin=admin_user,
         )
         assignment = AssignmentFactory(
-            assessment=assessment,
+            assignment_template=assignment_template,
             course=course,
             created_by=teacher_user,
         )
 
         row_q = QuestionFactory(
-            assessment=assessment,
+            assignment_template=assignment_template,
             question_type=QuestionKind.NUMBER_SCALE,
             kind=QuestionKind.NUMBER_SCALE,
         )
         col_q = QuestionFactory(
-            assessment=assessment,
+            assignment_template=assignment_template,
             question_type=QuestionKind.NUMBER_SCALE,
             kind=QuestionKind.NUMBER_SCALE,
         )
@@ -684,10 +684,10 @@ class TestVizAnonymization:
         assert "courseName" not in data
         a = data["assignments"][0]
         assert "assignmentId" not in a
-        assert "assessmentTitle" not in a
+        assert "assignmentTemplateTitle" not in a
 
         # Assignment summary
         resp = api_client.get(ASSIGNMENT_URL.format(assignment.id))
         data = resp.json()
         assert "assignmentId" not in data
-        assert "assessmentTitle" not in data
+        assert "assignmentTemplateTitle" not in data

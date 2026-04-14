@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockListCourses = vi.fn();
-const mockListAssessments = vi.fn();
+const mockListAssignmentTemplates = vi.fn();
 const mockListRubrics = vi.fn();
 const mockOnAddItem = vi.fn();
 const mockToastError = vi.fn();
@@ -20,8 +20,8 @@ function setupModuleMocks() {
   vi.doMock("@/lib/course-api", () => ({
     listCourses: mockListCourses,
   }));
-  vi.doMock("@/lib/assessment-api", () => ({
-    listAssessments: mockListAssessments,
+  vi.doMock("@/lib/assignment-template-api", () => ({
+    listAssignmentTemplates: mockListAssignmentTemplates,
   }));
   vi.doMock("@/lib/rubric-api", () => ({
     listRubrics: mockListRubrics,
@@ -64,7 +64,7 @@ const mockCourses = [
   },
 ];
 
-const mockAssessments = [
+const mockAssignmentTemplates = [
   {
     id: 1,
     title: "Midterm Exam",
@@ -74,7 +74,7 @@ const mockAssessments = [
     questions: [],
     questionGroups: [],
     rubricId: null,
-    rubricAssessmentIds: [],
+    rubricAssignmentTemplateIds: [],
     status: "ACTIVE",
   },
 ];
@@ -99,7 +99,7 @@ describe("DataCatalog", () => {
 
   it("renders loading state initially", async () => {
     mockListCourses.mockReturnValue(new Promise(() => {}));
-    mockListAssessments.mockReturnValue(new Promise(() => {}));
+    mockListAssignmentTemplates.mockReturnValue(new Promise(() => {}));
     mockListRubrics.mockReturnValue(new Promise(() => {}));
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);
@@ -108,20 +108,20 @@ describe("DataCatalog", () => {
 
   it("renders catalog sections after loading", async () => {
     mockListCourses.mockResolvedValueOnce(mockCourses);
-    mockListAssessments.mockResolvedValueOnce(mockAssessments);
+    mockListAssignmentTemplates.mockResolvedValueOnce(mockAssignmentTemplates);
     mockListRubrics.mockResolvedValueOnce(mockRubricsList);
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);
     await waitFor(() => {
       expect(screen.getByText("Courses")).toBeInTheDocument();
-      expect(screen.getByText("Assessments")).toBeInTheDocument();
+      expect(screen.getByText("Assignment Templates")).toBeInTheDocument();
       expect(screen.getByText("Rubrics")).toBeInTheDocument();
     });
   });
 
   it("shows course count in section header", async () => {
     mockListCourses.mockResolvedValueOnce(mockCourses);
-    mockListAssessments.mockResolvedValueOnce(mockAssessments);
+    mockListAssignmentTemplates.mockResolvedValueOnce(mockAssignmentTemplates);
     mockListRubrics.mockResolvedValueOnce(mockRubricsList);
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);
@@ -132,7 +132,7 @@ describe("DataCatalog", () => {
 
   it("shows course names in the list", async () => {
     mockListCourses.mockResolvedValueOnce(mockCourses);
-    mockListAssessments.mockResolvedValueOnce(mockAssessments);
+    mockListAssignmentTemplates.mockResolvedValueOnce(mockAssignmentTemplates);
     mockListRubrics.mockResolvedValueOnce(mockRubricsList);
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);
@@ -142,9 +142,9 @@ describe("DataCatalog", () => {
     });
   });
 
-  it("shows assessment titles", async () => {
+  it("shows assignment template titles", async () => {
     mockListCourses.mockResolvedValueOnce(mockCourses);
-    mockListAssessments.mockResolvedValueOnce(mockAssessments);
+    mockListAssignmentTemplates.mockResolvedValueOnce(mockAssignmentTemplates);
     mockListRubrics.mockResolvedValueOnce(mockRubricsList);
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);
@@ -155,7 +155,7 @@ describe("DataCatalog", () => {
 
   it("shows rubric titles", async () => {
     mockListCourses.mockResolvedValueOnce(mockCourses);
-    mockListAssessments.mockResolvedValueOnce(mockAssessments);
+    mockListAssignmentTemplates.mockResolvedValueOnce(mockAssignmentTemplates);
     mockListRubrics.mockResolvedValueOnce(mockRubricsList);
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);
@@ -164,9 +164,9 @@ describe("DataCatalog", () => {
     });
   });
 
-  it("shows 'Template export coming soon' for assessments", async () => {
+  it("shows 'Template export coming soon' for assignment templates", async () => {
     mockListCourses.mockResolvedValueOnce(mockCourses);
-    mockListAssessments.mockResolvedValueOnce(mockAssessments);
+    mockListAssignmentTemplates.mockResolvedValueOnce(mockAssignmentTemplates);
     mockListRubrics.mockResolvedValueOnce(mockRubricsList);
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);
@@ -178,7 +178,7 @@ describe("DataCatalog", () => {
 
   it("filters courses by name", async () => {
     mockListCourses.mockResolvedValueOnce(mockCourses);
-    mockListAssessments.mockResolvedValueOnce(mockAssessments);
+    mockListAssignmentTemplates.mockResolvedValueOnce(mockAssignmentTemplates);
     mockListRubrics.mockResolvedValueOnce(mockRubricsList);
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);
@@ -194,7 +194,7 @@ describe("DataCatalog", () => {
 
   it("shows 'No courses found.' when filter matches nothing", async () => {
     mockListCourses.mockResolvedValueOnce(mockCourses);
-    mockListAssessments.mockResolvedValueOnce([]);
+    mockListAssignmentTemplates.mockResolvedValueOnce([]);
     mockListRubrics.mockResolvedValueOnce([]);
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);
@@ -211,7 +211,7 @@ describe("DataCatalog", () => {
 
   it("shows error toast on loading failure", async () => {
     mockListCourses.mockRejectedValueOnce(new Error("Failed"));
-    mockListAssessments.mockResolvedValueOnce([]);
+    mockListAssignmentTemplates.mockResolvedValueOnce([]);
     mockListRubrics.mockResolvedValueOnce([]);
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);
@@ -222,7 +222,7 @@ describe("DataCatalog", () => {
 
   it("expands course to show Roster and Submissions sub-items", async () => {
     mockListCourses.mockResolvedValueOnce(mockCourses);
-    mockListAssessments.mockResolvedValueOnce([]);
+    mockListAssignmentTemplates.mockResolvedValueOnce([]);
     mockListRubrics.mockResolvedValueOnce([]);
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);
@@ -237,7 +237,7 @@ describe("DataCatalog", () => {
 
   it("calls onAddItem with roster binding when Add Roster clicked", async () => {
     mockListCourses.mockResolvedValueOnce(mockCourses);
-    mockListAssessments.mockResolvedValueOnce([]);
+    mockListAssignmentTemplates.mockResolvedValueOnce([]);
     mockListRubrics.mockResolvedValueOnce([]);
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);
@@ -257,7 +257,7 @@ describe("DataCatalog", () => {
 
   it("calls onAddItem with submissions binding when Add Submissions clicked", async () => {
     mockListCourses.mockResolvedValueOnce(mockCourses);
-    mockListAssessments.mockResolvedValueOnce([]);
+    mockListAssignmentTemplates.mockResolvedValueOnce([]);
     mockListRubrics.mockResolvedValueOnce([]);
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);
@@ -277,7 +277,7 @@ describe("DataCatalog", () => {
 
   it("shows descriptive text about data sources", async () => {
     mockListCourses.mockResolvedValueOnce([]);
-    mockListAssessments.mockResolvedValueOnce([]);
+    mockListAssignmentTemplates.mockResolvedValueOnce([]);
     mockListRubrics.mockResolvedValueOnce([]);
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);
@@ -290,7 +290,7 @@ describe("DataCatalog", () => {
 
   it("shows 'Snapshot taken on build' for active courses", async () => {
     mockListCourses.mockResolvedValueOnce(mockCourses);
-    mockListAssessments.mockResolvedValueOnce([]);
+    mockListAssignmentTemplates.mockResolvedValueOnce([]);
     mockListRubrics.mockResolvedValueOnce([]);
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);
@@ -301,7 +301,7 @@ describe("DataCatalog", () => {
 
   it("shows 'Static — export ready' for archived courses", async () => {
     mockListCourses.mockResolvedValueOnce(mockCourses);
-    mockListAssessments.mockResolvedValueOnce([]);
+    mockListAssignmentTemplates.mockResolvedValueOnce([]);
     mockListRubrics.mockResolvedValueOnce([]);
     const DataCatalog = await loadComponent();
     render(<DataCatalog onAddItem={mockOnAddItem} />);

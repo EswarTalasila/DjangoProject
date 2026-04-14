@@ -22,16 +22,20 @@ app/
 ├── (dashboard)/             <-- Private Pages (Has Header)
 │   ├── layout.tsx
 │   ├── page.tsx
-│   ├── courses/
-│   │   ├── page.tsx         <-- List of courses
-│   │   └── [courseId]/      <-- Dynamic Route (e.g., /courses/12)
-│   │       └── page.tsx     <-- Course Detail / Student Roster
-│   ├── assessments/
-│   │   ├── page.tsx         <-- List of assessments
-│   │   └── builder/
-│   │       └── page.tsx
-│   └── profile/
-│       └── page.tsx
+│   ├── dashboard/
+│   │   ├── assignment-templates/
+│   │   │   ├── page.tsx     <-- List of assignment templates
+│   │   │   ├── new/
+│   │   │   │   └── page.tsx
+│   │   │   └── [id]/
+│   │   │       ├── page.tsx
+│   │   │       └── edit/
+│   │   │           └── page.tsx
+│   │   ├── assignments/
+│   │   ├── courses/
+│   │   ├── rubrics/
+│   │   ├── submissions/
+│   │   └── visualizations/
 │
 ├── api/                     <-- Next.js API
 ├── favicon.ico

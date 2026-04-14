@@ -16,7 +16,7 @@
 ### In Scope
 - Virtual filesystem-style package builder for export artifacts.
 - Saved package workspaces with folder/file tree editing.
-- Node-to-dataset bindings (roster/submissions/gradebook/assessment/assignment datasets).
+- Node-to-dataset bindings (roster/submissions/gradebook/assignment template/assignment datasets).
 - Build-time validation (permissions, row caps, size estimates, filter validity).
 - Build jobs that materialize a downloadable archive (`.zip`) with user-defined tree layout.
 - Build pinning to archival snapshots (`snapshotId`) or explicit live-data mode.

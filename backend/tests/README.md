@@ -38,7 +38,7 @@ pytest -m security -v
 ### Integration
 
 - `integration/test_accounts_routes.py`
-- `integration/test_assessments_routes.py`
+- `integration/test_assignment_templates_routes.py`
 - `integration/test_assignments_errors.py`
 - `integration/test_assignments_routes.py`
 - `integration/test_auth_errors.py`

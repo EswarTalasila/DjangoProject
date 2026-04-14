@@ -61,29 +61,29 @@ class TestCourseSummaryParamsSerializer:
         s = CourseSummaryParamsSerializer(data={"category": None})
         assert s.is_valid()
 
-    def test_assessment_id_filter(self):
-        """assessmentId is accepted as an integer."""
+    def test_assignment_template_id_filter(self):
+        """assignmentTemplateId is accepted as an integer."""
         from visualizations.serializers import CourseSummaryParamsSerializer
 
-        s = CourseSummaryParamsSerializer(data={"assessmentId": 15})
+        s = CourseSummaryParamsSerializer(data={"assignmentTemplateId": 15})
         assert s.is_valid()
-        assert s.validated_data["assessmentId"] == 15
+        assert s.validated_data["assignmentTemplateId"] == 15
 
     def test_multiple_filters_combined(self):
         """Multiple filters can be combined in a single request."""
         from visualizations.serializers import CourseSummaryParamsSerializer
 
-        data = {"startDate": "2026-01-01", "endDate": "2026-12-31", "category": "SEL", "assessmentId": 3}
+        data = {"startDate": "2026-01-01", "endDate": "2026-12-31", "category": "SEL", "assignmentTemplateId": 3}
         s = CourseSummaryParamsSerializer(data=data)
         assert s.is_valid()
         assert s.validated_data["category"] == "SEL"
-        assert s.validated_data["assessmentId"] == 3
+        assert s.validated_data["assignmentTemplateId"] == 3
 
     def test_null_date_fields(self):
         """Null values are accepted for optional date fields."""
         from visualizations.serializers import CourseSummaryParamsSerializer
 
-        data = {"startDate": None, "endDate": None, "assessmentId": None}
+        data = {"startDate": None, "endDate": None, "assignmentTemplateId": None}
         s = CourseSummaryParamsSerializer(data=data)
         assert s.is_valid()
 
@@ -91,9 +91,9 @@ class TestCourseSummaryParamsSerializer:
         """Non-numeric string is rejected for integer fields."""
         from visualizations.serializers import CourseSummaryParamsSerializer
 
-        s = CourseSummaryParamsSerializer(data={"assessmentId": "not-a-number"})
+        s = CourseSummaryParamsSerializer(data={"assignmentTemplateId": "not-a-number"})
         assert not s.is_valid()
-        assert "assessmentId" in s.errors
+        assert "assignmentTemplateId" in s.errors
 
     def test_invalid_date_format_rejected(self):
         """Invalid date format is rejected."""

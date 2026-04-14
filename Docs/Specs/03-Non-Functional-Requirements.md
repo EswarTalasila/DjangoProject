@@ -35,10 +35,8 @@
 - Backup and restore procedures documented (daily DB dumps).
 
 ## Documentation and diagrams
-- Class diagrams must include methods and fields (where determinable) for backend and frontend.
-- ER diagrams must be generated directly from Django models.
-- Runtime sequences must be generated from OTel traces for core workflows.
-- Diagram generation must be automated and version-controlled under `docs/diagrams/plantuml`.
+- Diagram automation is deferred until the architecture/documentation workflow is revisited.
+- Existing diagrams may be retained as historical references, but regeneration is not part of the active delivery contract.
 
 ## Proxy agnosticism
 - Backend must accept standard reverse proxy headers.

@@ -13,7 +13,7 @@ import pytest
 from django.conf import settings
 from django.utils import timezone
 
-from assessments.models import Assessment, GradingMode, Question, QuestionKind, ScoringPolicy
+from assignment_templates.models import AssignmentTemplate, GradingMode, Question, QuestionKind, ScoringPolicy
 from assignments.models import Assignment, AssignmentStatus
 from core.models import AuditAction, AuditLog
 from courses.models import Course, Enrollment, EnrollmentStatus
@@ -26,15 +26,15 @@ from submissions.models import ImageStatus, Submission, SubmissionImage, Submiss
 
 
 def _setup_course_assignment(teacher_user, student_user, admin_user):
-    """Create a minimal course → assessment → assignment → enrollment → submission graph."""
-    assessment = Assessment.objects.create(
-        title="IMG Test Assessment",
+    """Create a minimal course → assignment_template → assignment → enrollment → submission graph."""
+    assignment_template = AssignmentTemplate.objects.create(
+        title="IMG Test AssignmentTemplate",
         grading_mode=GradingMode.MANUAL,
         scoring_policy=ScoringPolicy.STANDARD,
         created_by_admin=admin_user,
     )
     Question.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         question_type=QuestionKind.SHORT_ANSWER,
         kind=QuestionKind.SHORT_ANSWER,
         prompt="Q1",
@@ -52,7 +52,7 @@ def _setup_course_assignment(teacher_user, student_user, admin_user):
         status=EnrollmentStatus.ACTIVE,
     )
     assignment = Assignment.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         audience_type="COURSE",
         course=course,
         created_by=teacher_user,

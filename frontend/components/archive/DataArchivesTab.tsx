@@ -22,15 +22,18 @@ import {
 } from '@/components/ui/alert-dialog';
 
 import { listCourses, type CourseSummary } from '@/lib/course-api';
-import { listAssessments, type Assessment } from '@/lib/assessment-api';
+import {
+  listAssignmentTemplates,
+  type AssignmentTemplate,
+} from '@/lib/assignment-template-api';
 import { listAssignmentsByCourse, type Assignment } from '@/lib/assignment-api';
 import {
   archiveCourse,
   restoreCourse,
   purgeCourse,
-  archiveAssessment,
-  restoreAssessment,
-  purgeAssessment,
+  archiveAssignmentTemplate,
+  restoreAssignmentTemplate,
+  purgeAssignmentTemplate,
   archiveAssignment,
   restoreAssignment,
   purgeAssignment,
@@ -102,11 +105,11 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
   const [showArchivedCourses, setShowArchivedCourses] = useState(false);
   const [busyCourseId, setBusyCourseId] = useState<number | null>(null);
 
-  // -- Assessments state --
-  const [assessments, setAssessments] = useState<Assessment[]>([]);
-  const [loadingAssessments, setLoadingAssessments] = useState(true);
-  const [showArchivedAssessments, setShowArchivedAssessments] = useState(false);
-  const [busyAssessmentId, setBusyAssessmentId] = useState<number | null>(null);
+  // -- Assignment templates state --
+  const [assignmentTemplates, setAssignmentTemplates] = useState<AssignmentTemplate[]>([]);
+  const [loadingAssignmentTemplates, setLoadingAssignmentTemplates] = useState(true);
+  const [showArchivedAssignmentTemplates, setShowArchivedAssignmentTemplates] = useState(false);
+  const [busyAssignmentTemplateId, setBusyAssignmentTemplateId] = useState<number | null>(null);
 
   // -- Assignments state --
   const [assignments, setAssignments] = useState<(Assignment & { courseName?: string })[]>([]);
@@ -118,8 +121,8 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
   const [courseSortField, setCourseSortField] = useState('name');
   const [courseSortDir, setCourseSortDir] = useState<SortDirection>('asc');
 
-  const [assessmentSortField, setAssessmentSortField] = useState('title');
-  const [assessmentSortDir, setAssessmentSortDir] = useState<SortDirection>('asc');
+  const [assignmentTemplateSortField, setAssignmentTemplateSortField] = useState('title');
+  const [assignmentTemplateSortDir, setAssignmentTemplateSortDir] = useState<SortDirection>('asc');
 
   const [assignmentSortField, setAssignmentSortField] = useState('title');
   const [assignmentSortDir, setAssignmentSortDir] = useState<SortDirection>('asc');
@@ -140,15 +143,15 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     }
   }, []);
 
-  const loadAssessments = useCallback(async () => {
-    setLoadingAssessments(true);
+  const loadAssignmentTemplates = useCallback(async () => {
+    setLoadingAssignmentTemplates(true);
     try {
-      const data = await listAssessments();
-      setAssessments(data);
+      const data = await listAssignmentTemplates();
+      setAssignmentTemplates(data);
     } catch {
-      toast.error('Failed to load assessments.');
+      toast.error('Failed to load assignment templates.');
     } finally {
-      setLoadingAssessments(false);
+      setLoadingAssignmentTemplates(false);
     }
   }, []);
 
@@ -176,10 +179,10 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     }
   }, []);
 
-  // Load assessments on mount
+  // Load assignment templates on mount
   useEffect(() => {
-    void loadAssessments();
-  }, [loadAssessments]);
+    void loadAssignmentTemplates();
+  }, [loadAssignmentTemplates]);
 
   // Load courses on mount and re-fetch when toggle changes
   useEffect(() => {
@@ -205,9 +208,9 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
 
   const displayedCourses = courses;
 
-  const displayedAssessments = showArchivedAssessments
-    ? assessments
-    : assessments.filter((a) => (a.status ?? 'ACTIVE') === 'ACTIVE');
+  const displayedAssignmentTemplates = showArchivedAssignmentTemplates
+    ? assignmentTemplates
+    : assignmentTemplates.filter((template) => (template.status ?? 'ACTIVE') === 'ACTIVE');
 
   const displayedAssignments = showArchivedAssignments
     ? assignments
@@ -236,21 +239,21 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     });
   }
 
-  function sortedAssessments() {
-    return [...displayedAssessments].sort((a, b) => {
+  function sortedAssignmentTemplates() {
+    return [...displayedAssignmentTemplates].sort((a, b) => {
       const valA =
-        assessmentSortField === 'title'
+        assignmentTemplateSortField === 'title'
           ? a.title
-          : assessmentSortField === 'category'
+          : assignmentTemplateSortField === 'category'
             ? (a.category ?? '')
             : (a.status ?? 'ACTIVE');
       const valB =
-        assessmentSortField === 'title'
+        assignmentTemplateSortField === 'title'
           ? b.title
-          : assessmentSortField === 'category'
+          : assignmentTemplateSortField === 'category'
             ? (b.category ?? '')
             : (b.status ?? 'ACTIVE');
-      return compare(valA, valB, assessmentSortDir);
+      return compare(valA, valB, assignmentTemplateSortDir);
     });
   }
 
@@ -287,12 +290,12 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     }
   }
 
-  function handleAssessmentSort(field: string) {
-    if (assessmentSortField === field) {
-      setAssessmentSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+  function handleAssignmentTemplateSort(field: string) {
+    if (assignmentTemplateSortField === field) {
+      setAssignmentTemplateSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
-      setAssessmentSortField(field);
-      setAssessmentSortDir('asc');
+      setAssignmentTemplateSortField(field);
+      setAssignmentTemplateSortDir('asc');
     }
   }
 
@@ -349,44 +352,44 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     }
   }
 
-  // ── Assessment actions ──
+  // ── Assignment template actions ──
 
-  async function handleArchiveAssessment(assessment: Assessment) {
-    setBusyAssessmentId(assessment.id);
+  async function handleArchiveAssignmentTemplate(template: AssignmentTemplate) {
+    setBusyAssignmentTemplateId(template.id);
     try {
-      await archiveAssessment(assessment.id);
-      toast.success('Assessment archived.');
-      await loadAssessments();
+      await archiveAssignmentTemplate(template.id);
+      toast.success('Assignment template archived.');
+      await loadAssignmentTemplates();
     } catch (error) {
       toast.error(toErrorMessage(error));
     } finally {
-      setBusyAssessmentId(null);
+      setBusyAssignmentTemplateId(null);
     }
   }
 
-  async function handleRestoreAssessment(assessment: Assessment) {
-    setBusyAssessmentId(assessment.id);
+  async function handleRestoreAssignmentTemplate(template: AssignmentTemplate) {
+    setBusyAssignmentTemplateId(template.id);
     try {
-      await restoreAssessment(assessment.id);
-      toast.success('Assessment restored.');
-      await loadAssessments();
+      await restoreAssignmentTemplate(template.id);
+      toast.success('Assignment template restored.');
+      await loadAssignmentTemplates();
     } catch (error) {
       toast.error(toErrorMessage(error));
     } finally {
-      setBusyAssessmentId(null);
+      setBusyAssignmentTemplateId(null);
     }
   }
 
-  async function handleDeleteAssessment(assessment: Assessment) {
-    setBusyAssessmentId(assessment.id);
+  async function handleDeleteAssignmentTemplate(template: AssignmentTemplate) {
+    setBusyAssignmentTemplateId(template.id);
     try {
-      await purgeAssessment(assessment.id);
-      toast.success('Assessment deleted.');
-      await loadAssessments();
+      await purgeAssignmentTemplate(template.id);
+      toast.success('Assignment template deleted.');
+      await loadAssignmentTemplates();
     } catch (error) {
       toast.error(toErrorMessage(error));
     } finally {
-      setBusyAssessmentId(null);
+      setBusyAssignmentTemplateId(null);
     }
   }
 
@@ -453,7 +456,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
       <Tabs defaultValue="courses">
         <TabsList>
           <TabsTrigger value="courses">Courses</TabsTrigger>
-          <TabsTrigger value="assessments">Assessments</TabsTrigger>
+          <TabsTrigger value="assignment-templates">Assignment Templates</TabsTrigger>
           <TabsTrigger value="assignments">Assignments</TabsTrigger>
         </TabsList>
 
@@ -612,25 +615,25 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
           )}
         </TabsContent>
 
-        {/* ── Assessments tab ── */}
-        <TabsContent value="assessments" className="space-y-4 pt-4">
+        {/* ── Assignment templates tab ── */}
+        <TabsContent value="assignment-templates" className="space-y-4 pt-4">
           <div className="flex items-center justify-end">
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <Checkbox
-                checked={showArchivedAssessments}
-                onCheckedChange={(checked) => setShowArchivedAssessments(checked === true)}
+                checked={showArchivedAssignmentTemplates}
+                onCheckedChange={(checked) => setShowArchivedAssignmentTemplates(checked === true)}
               />
               Show archived
               <HelpTip text="Toggle to show or hide archived items in the table." />
             </label>
           </div>
 
-          {loadingAssessments ? (
-            <p className="text-sm text-muted-foreground">Loading assessments...</p>
-          ) : displayedAssessments.length === 0 ? (
+          {loadingAssignmentTemplates ? (
+            <p className="text-sm text-muted-foreground">Loading assignment templates...</p>
+          ) : displayedAssignmentTemplates.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No archived assessments. Active assessments can be archived from their detail pages or
-              using the table actions.
+              No archived assignment templates. Active assignment templates can be archived from
+              their detail pages or using the table actions.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -641,44 +644,44 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                       <SortableHeader
                         label="Title"
                         field="title"
-                        currentSort={assessmentSortField}
-                        currentDirection={assessmentSortDir}
-                        onSort={handleAssessmentSort}
+                        currentSort={assignmentTemplateSortField}
+                        currentDirection={assignmentTemplateSortDir}
+                        onSort={handleAssignmentTemplateSort}
                       />
                     </th>
                     <th className="pb-2 pr-4">
                       <SortableHeader
                         label="Category"
                         field="category"
-                        currentSort={assessmentSortField}
-                        currentDirection={assessmentSortDir}
-                        onSort={handleAssessmentSort}
+                        currentSort={assignmentTemplateSortField}
+                        currentDirection={assignmentTemplateSortDir}
+                        onSort={handleAssignmentTemplateSort}
                       />
                     </th>
                     <th className="pb-2 pr-4">
                       <SortableHeader
                         label="Status"
                         field="status"
-                        currentSort={assessmentSortField}
-                        currentDirection={assessmentSortDir}
-                        onSort={handleAssessmentSort}
+                        currentSort={assignmentTemplateSortField}
+                        currentDirection={assignmentTemplateSortDir}
+                        onSort={handleAssignmentTemplateSort}
                       />
                     </th>
                     <th className="pb-2 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sortedAssessments().map((assessment) => {
-                    const status = assessment.status ?? 'ACTIVE';
+                  {sortedAssignmentTemplates().map((template) => {
+                    const status = template.status ?? 'ACTIVE';
                     const isArchived = status === 'ARCHIVED';
-                    const isBusy = busyAssessmentId === assessment.id;
+                    const isBusy = busyAssignmentTemplateId === template.id;
                     return (
                       <tr
-                        key={assessment.id}
+                        key={template.id}
                         className="border-b border-border hover:bg-accent/30 transition-colors"
                       >
-                        <td className="py-2 pr-4">{assessment.title}</td>
-                        <td className="py-2 pr-4">{assessment.category ?? '-'}</td>
+                        <td className="py-2 pr-4">{template.title}</td>
+                        <td className="py-2 pr-4">{template.category ?? '-'}</td>
                         <td className="py-2 pr-4">
                           <StatusBadge status={isArchived ? 'ARCHIVED' : 'ACTIVE'} />
                         </td>
@@ -690,7 +693,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                                   variant="outline"
                                   size="xs"
                                   disabled={isBusy}
-                                  onClick={() => void handleRestoreAssessment(assessment)}
+                                  onClick={() => void handleRestoreAssignmentTemplate(template)}
                                 >
                                   {isBusy ? 'Restoring...' : 'Restore'}
                                 </Button>
@@ -702,9 +705,9 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                                   </AlertDialogTrigger>
                                   <AlertDialogContent>
                                     <AlertDialogHeader>
-                                      <AlertDialogTitle>Delete assessment</AlertDialogTitle>
+                                      <AlertDialogTitle>Delete assignment template</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        Permanently delete {assessment.title}? This cannot be
+                                        Permanently delete {template.title}? This cannot be
                                         undone.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
@@ -712,7 +715,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                                       <AlertDialogAction
                                         variant="destructive"
-                                        onClick={() => void handleDeleteAssessment(assessment)}
+                                        onClick={() => void handleDeleteAssignmentTemplate(template)}
                                       >
                                         Delete
                                       </AlertDialogAction>
@@ -729,16 +732,18 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
                                   <AlertDialogHeader>
-                                    <AlertDialogTitle>Archive assessment</AlertDialogTitle>
+                                    <AlertDialogTitle>
+                                      Archive assignment template
+                                    </AlertDialogTitle>
                                     <AlertDialogDescription>
-                                      Archive {assessment.title}? It will no longer appear in active
+                                      Archive {template.title}? It will no longer appear in active
                                       views.
                                     </AlertDialogDescription>
                                   </AlertDialogHeader>
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                                     <AlertDialogAction
-                                      onClick={() => void handleArchiveAssessment(assessment)}
+                                      onClick={() => void handleArchiveAssignmentTemplate(template)}
                                     >
                                       Archive
                                     </AlertDialogAction>

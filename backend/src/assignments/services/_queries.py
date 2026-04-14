@@ -17,9 +17,9 @@ def assignment_to_dto(assignment: Assignment) -> AssignmentDTO:
     """Convert an Assignment to a DTO for API responses."""
     return AssignmentDTO(
         id=assignment.id,
-        title=(assignment.title or assignment.assessment.title),
-        assessmentId=assignment.assessment_id,
-        assessmentTitle=assignment.assessment.title,
+        title=(assignment.title or assignment.assignment_template.title),
+        assignmentTemplateId=assignment.assignment_template_id,
+        assignmentTemplateTitle=assignment.assignment_template.title,
         audienceType=assignment.audience_type,
         courseId=assignment.course_id,
         targetTeacherId=assignment.teacher_id,
@@ -30,13 +30,13 @@ def assignment_to_dto(assignment: Assignment) -> AssignmentDTO:
 
 
 def get_assignment(assignment_id: int) -> Assignment | None:
-    """Retrieve an assignment by ID with assessment eagerly loaded, or None if not found."""
-    return Assignment.objects.select_related("assessment").filter(id=assignment_id).first()
+    """Retrieve an assignment by ID with its template eagerly loaded."""
+    return Assignment.objects.select_related("assignment_template").filter(id=assignment_id).first()
 
 
 def list_by_course(course_id: int, include_archived: bool = False) -> list[Assignment]:
     """List assignments for a course. ARCH-CN-06: default ACTIVE-only."""
-    qs = Assignment.objects.select_related("assessment").filter(course_id=course_id)
+    qs = Assignment.objects.select_related("assignment_template").filter(course_id=course_id)
     if not include_archived:
         qs = qs.filter(status=AssignmentStatus.ACTIVE)
     return list(qs)
@@ -58,7 +58,7 @@ def list_for_user(user: User) -> list[Assignment]:
             ).values_list("course_id", flat=True)
         )
         return list(
-            Assignment.objects.select_related("assessment")
+            Assignment.objects.select_related("assignment_template")
             .filter(
                 course_id__in=course_ids,
                 open_at__lte=now,
@@ -69,7 +69,7 @@ def list_for_user(user: User) -> list[Assignment]:
         )
     if role == Role.TEACHER:
         return list(
-            Assignment.objects.select_related("assessment")
+            Assignment.objects.select_related("assignment_template")
             .filter(created_by=user)
             .order_by("open_at")
         )

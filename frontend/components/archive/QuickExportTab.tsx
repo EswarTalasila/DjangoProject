@@ -364,9 +364,9 @@ export default function QuickExportTab({ role, canExportIdentifiable }: QuickExp
       {/* ── Placeholder Cards (future export types) ── */}
       <ExportCard
         icon={<ClipboardList className="size-5" />}
-        title="Assessment Templates"
-        description="Export assessment definitions and question banks."
-        helpText="Download assessment templates as structured data for backup or transfer."
+        title="Assignment Templates"
+        description="Export assignment template definitions and question banks."
+        helpText="Download assignment templates as structured data for backup or transfer."
       >
         <p className="text-sm text-muted-foreground">
           Coming soon. This export type requires a backend endpoint that has not yet been implemented.

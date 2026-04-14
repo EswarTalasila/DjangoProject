@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from django.utils import timezone
 
-from assessments.models import GradingMode
+from assignment_templates.models import GradingMode
 from submissions.models import AnswerType, SubmissionStatus
 
 pytestmark = pytest.mark.unit
@@ -38,7 +38,7 @@ def _mock_submission(
     *,
     id=1,
     assignment_id=10,
-    assessment_id=20,
+    assignment_template_id=20,
     student_id=100,
     teacher_id=None,
     submitted_at=None,
@@ -50,13 +50,14 @@ def _mock_submission(
     sub = MagicMock()
     sub.id = id
     sub.assignment_id = assignment_id
-    sub.assignment.assessment_id = assessment_id
+    sub.assignment.assignment_template_id = assignment_template_id
     sub.student_id = student_id
     sub.student = SimpleNamespace(name="Test Student", username="test-student") if student_id else None
     sub.teacher_id = teacher_id
     sub.teacher = None
     sub.assignment.title = "Mock Assignment"
     sub.assignment.course = SimpleNamespace(name="Mock Course")
+    sub.assignment.assignment_template_id = assignment_template_id
     sub.submitted_at = submitted_at
     sub.score = score
     sub.status = status
@@ -86,29 +87,29 @@ def _mock_answer(*, answer_type, question_id=1, score=None, max_points=100.0):
     return answer
 
 
-def _mock_assignment(*, id=10, assessment_id=20):
+def _mock_assignment(*, id=10, assignment_template_id=20):
     """Build a lightweight mock Assignment."""
     a = MagicMock()
     a.id = id
-    a.assessment_id = assessment_id
+    a.assignment_template_id = assignment_template_id
     return a
 
 
 def _mock_assessment(*, id=20, grading_mode=GradingMode.AUTO):
-    """Build a lightweight mock Assessment."""
+    """Build a lightweight mock AssignmentTemplate."""
     a = MagicMock()
     a.id = id
     a.grading_mode = grading_mode
     return a
 
 
-def _mock_question(*, id=1, auto_gradable=True, max_points=5.0, assessment_id=20, question_type="SHORT_ANSWER"):
+def _mock_question(*, id=1, auto_gradable=True, max_points=5.0, assignment_template_id=20, question_type="SHORT_ANSWER"):
     """Build a lightweight mock Question."""
     q = MagicMock()
     q.id = id
     q.auto_gradable = auto_gradable
     q.max_points = max_points
-    q.assessment_id = assessment_id
+    q.assignment_template_id = assignment_template_id
     q.question_type = question_type
     return q
 
@@ -277,7 +278,7 @@ class TestCreateSubmission:
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
     @patch("submissions.services.Submission")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services.Assignment")
     def test_raises_when_assignment_not_found(
         self, mock_assign_model, mock_assess_model, mock_sub, _replace, _auto
@@ -293,39 +294,39 @@ class TestCreateSubmission:
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
     @patch("submissions.services.Submission")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services.Assignment")
     def test_raises_when_assessment_not_found(
         self, mock_assign_model, mock_assess_model, mock_sub, _replace, _auto
     ):
-        """ValueError raised when linked assessment does not exist."""
+        """ValueError raised when linked assignment_template does not exist."""
         from submissions.services import create_submission
 
         assignment = _mock_assignment()
         mock_assign_model.objects.filter.return_value.first.return_value = assignment
         mock_assess_model.objects.filter.return_value.first.return_value = None
 
-        with pytest.raises(ValueError, match="Assessment not found"):
+        with pytest.raises(ValueError, match="AssignmentTemplate not found"):
             create_submission(10, {"studentId": 1}, SubmissionStatus.SUBMITTED)
 
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
     @patch("submissions.services.Submission")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services.Assignment")
     @patch("submissions.services._find_existing_submission")
     def test_updates_existing_for_non_mood_meter(
         self, mock_find, mock_assign, mock_assess, mock_sub, _replace, _auto
     ):
-        """Non-MOOD_METER assessment redirects to edit_submission if submission exists."""
+        """Non-MOOD_METER assignment_template redirects to edit_submission if submission exists."""
         from submissions.services import create_submission
 
         assignment = _mock_assignment()
-        assessment = _mock_assessment(grading_mode=GradingMode.AUTO)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.AUTO)
         existing_sub = _mock_submission()
 
         mock_assign.objects.filter.return_value.first.return_value = assignment
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        mock_assess.objects.filter.return_value.first.return_value = assignment_template
         mock_find.return_value = existing_sub
 
         with patch("submissions.services.edit_submission") as mock_edit:
@@ -338,7 +339,7 @@ class TestCreateSubmission:
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
     @patch("submissions.services.Submission")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services.Assignment")
     @patch("submissions.services._find_existing_submission")
     def test_auto_score_called_for_auto_mode(
@@ -348,22 +349,22 @@ class TestCreateSubmission:
         from submissions.services import create_submission
 
         assignment = _mock_assignment()
-        assessment = _mock_assessment(grading_mode=GradingMode.AUTO)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.AUTO)
         new_sub = _mock_submission()
 
         mock_assign.objects.filter.return_value.first.return_value = assignment
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        mock_assess.objects.filter.return_value.first.return_value = assignment_template
         mock_find.return_value = None
         mock_sub.objects.create.return_value = new_sub
 
         create_submission(10, {"studentId": 1}, SubmissionStatus.SUBMITTED)
 
-        mock_auto.assert_called_once_with(new_sub, assessment)
+        mock_auto.assert_called_once_with(new_sub, assignment_template)
 
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
     @patch("submissions.services.Submission")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services.Assignment")
     @patch("submissions.services._find_existing_submission")
     def test_no_auto_score_for_in_progress(
@@ -373,11 +374,11 @@ class TestCreateSubmission:
         from submissions.services import create_submission
 
         assignment = _mock_assignment()
-        assessment = _mock_assessment(grading_mode=GradingMode.AUTO)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.AUTO)
         new_sub = _mock_submission()
 
         mock_assign.objects.filter.return_value.first.return_value = assignment
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        mock_assess.objects.filter.return_value.first.return_value = assignment_template
         mock_find.return_value = None
         mock_sub.objects.create.return_value = new_sub
 
@@ -388,7 +389,7 @@ class TestCreateSubmission:
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
     @patch("submissions.services.Submission")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services.Assignment")
     @patch("submissions.services._find_existing_submission")
     def test_no_auto_score_for_manual_mode(
@@ -398,11 +399,11 @@ class TestCreateSubmission:
         from submissions.services import create_submission
 
         assignment = _mock_assignment()
-        assessment = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.MANUAL)
         new_sub = _mock_submission()
 
         mock_assign.objects.filter.return_value.first.return_value = assignment
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        mock_assess.objects.filter.return_value.first.return_value = assignment_template
         mock_find.return_value = None
         mock_sub.objects.create.return_value = new_sub
 
@@ -413,7 +414,7 @@ class TestCreateSubmission:
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
     @patch("submissions.services.Submission")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services.Assignment")
     @patch("submissions.services._find_existing_submission")
     @patch("submissions.services.timezone")
@@ -427,11 +428,11 @@ class TestCreateSubmission:
         mock_tz.now.return_value = fake_now
 
         assignment = _mock_assignment()
-        assessment = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.MANUAL)
         new_sub = _mock_submission()
 
         mock_assign.objects.filter.return_value.first.return_value = assignment
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        mock_assess.objects.filter.return_value.first.return_value = assignment_template
         mock_find.return_value = None
         mock_sub.objects.create.return_value = new_sub
 
@@ -619,18 +620,18 @@ class TestEditSubmission:
 
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services._find_existing_submission")
     def test_updates_fields_and_saves(self, mock_find, mock_assess, mock_replace, mock_auto):
         """Edit updates submitted_at, score, status and replaces answers."""
         from submissions.services import edit_submission
 
         sub = _mock_submission(status=SubmissionStatus.IN_PROGRESS)
-        sub.assignment = _mock_assignment(assessment_id=20)
+        sub.assignment = _mock_assignment(assignment_template_id=20)
         mock_find.return_value = sub
 
-        assessment = _mock_assessment(grading_mode=GradingMode.AUTO)
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        assignment_template = _mock_assessment(grading_mode=GradingMode.AUTO)
+        mock_assess.objects.filter.return_value.first.return_value = assignment_template
 
         edit_submission({
             "assignmentId": 10,
@@ -640,23 +641,23 @@ class TestEditSubmission:
         })
 
         mock_replace.assert_called_once()
-        mock_auto.assert_called_once_with(sub, assessment)
+        mock_auto.assert_called_once_with(sub, assignment_template)
         sub.save.assert_called_once()
 
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services._find_existing_submission")
     def test_no_auto_score_for_manual(self, mock_find, mock_assess, _replace, mock_auto):
         """Edit does not auto-score when grading mode is MANUAL."""
         from submissions.services import edit_submission
 
         sub = _mock_submission(status=SubmissionStatus.IN_PROGRESS)
-        sub.assignment = _mock_assignment(assessment_id=20)
+        sub.assignment = _mock_assignment(assignment_template_id=20)
         mock_find.return_value = sub
 
-        assessment = _mock_assessment(grading_mode=GradingMode.MANUAL)
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        assignment_template = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        mock_assess.objects.filter.return_value.first.return_value = assignment_template
 
         edit_submission({
             "assignmentId": 10,
@@ -699,15 +700,15 @@ class TestOverrideScore:
     @patch("submissions.services.Answer")
     @patch("submissions.services.Submission")
     def test_raises_when_assessment_not_found(self, mock_sub_model, _answer):
-        """ValueError raised when linked assessment does not exist."""
+        """ValueError raised when linked assignment_template does not exist."""
         from submissions.services import override_score
 
         sub = _mock_submission()
-        sub.assignment = _mock_assignment(assessment_id=20)
-        sub.assignment.assessment = None
+        sub.assignment = _mock_assignment(assignment_template_id=20)
+        sub.assignment.assignment_template = None
         mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
 
-        with pytest.raises(ValueError, match="Assessment not found"):
+        with pytest.raises(ValueError, match="AssignmentTemplate not found"):
             override_score(1, [10])
 
     @patch("submissions.services.Question")
@@ -721,10 +722,10 @@ class TestOverrideScore:
         a2 = _mock_answer(answer_type=AnswerType.SHORT_ANSWER, question_id=2, score=None)
 
         sub = _mock_submission(answers=[a1, a2])
-        sub.assignment = _mock_assignment(assessment_id=20)
-        assessment = _mock_assessment(grading_mode=GradingMode.MANUAL)
-        assessment.scoring_policy = "STANDARD"
-        sub.assignment.assessment = assessment
+        sub.assignment = _mock_assignment(assignment_template_id=20)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        assignment_template.scoring_policy = "STANDARD"
+        sub.assignment.assignment_template = assignment_template
         mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
 
         # Mock Question max_points lookup — no cap (values_list returns empty)
@@ -747,10 +748,10 @@ class TestOverrideScore:
         a1 = _mock_answer(answer_type=AnswerType.SHORT_ANSWER, question_id=1, score=None)
 
         sub = _mock_submission(answers=[a1])
-        sub.assignment = _mock_assignment(assessment_id=20)
-        assessment = _mock_assessment(grading_mode=GradingMode.MANUAL)
-        assessment.scoring_policy = "STANDARD"
-        sub.assignment.assessment = assessment
+        sub.assignment = _mock_assignment(assignment_template_id=20)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        assignment_template.scoring_policy = "STANDARD"
+        sub.assignment.assignment_template = assignment_template
         mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
 
         mock_question.objects.filter.return_value.values_list.return_value = [(1, 100.0)]
@@ -772,10 +773,10 @@ class TestOverrideScore:
         a_sa = _mock_answer(answer_type=AnswerType.SHORT_ANSWER, question_id=2, score=None)
 
         sub = _mock_submission(answers=[a_mcq, a_sa])
-        sub.assignment = _mock_assignment(assessment_id=20)
-        assessment = _mock_assessment(grading_mode=GradingMode.HYBRID)
-        assessment.scoring_policy = "STANDARD"
-        sub.assignment.assessment = assessment
+        sub.assignment = _mock_assignment(assignment_template_id=20)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.HYBRID)
+        assignment_template.scoring_policy = "STANDARD"
+        sub.assignment.assignment_template = assignment_template
         mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
 
         mock_question.objects.filter.return_value.values_list.return_value = [(1, 100.0), (2, 100.0)]
@@ -796,10 +797,10 @@ class TestOverrideScore:
         a_sa = _mock_answer(answer_type=AnswerType.SHORT_ANSWER, question_id=1, score=None)
 
         sub = _mock_submission(answers=[a_sa])
-        sub.assignment = _mock_assignment(assessment_id=20)
-        assessment = _mock_assessment(grading_mode=GradingMode.HYBRID)
-        assessment.scoring_policy = "STANDARD"
-        sub.assignment.assessment = assessment
+        sub.assignment = _mock_assignment(assignment_template_id=20)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.HYBRID)
+        assignment_template.scoring_policy = "STANDARD"
+        sub.assignment.assignment_template = assignment_template
         mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
 
         mock_question.objects.filter.return_value.values_list.return_value = [(1, 100.0)]
@@ -843,10 +844,10 @@ class TestOverrideScore:
         )
 
         sub = _mock_submission(answers=[a_scale, a_mcq, a_select_all])
-        sub.assignment = _mock_assignment(assessment_id=20)
-        assessment = _mock_assessment(grading_mode=GradingMode.MANUAL)
-        assessment.scoring_policy = "STANDARD"
-        sub.assignment.assessment = assessment
+        sub.assignment = _mock_assignment(assignment_template_id=20)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        assignment_template.scoring_policy = "STANDARD"
+        sub.assignment.assignment_template = assignment_template
         mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
 
         mock_question.objects.filter.return_value.values_list.return_value = [
@@ -876,10 +877,10 @@ class TestOverrideScore:
         answer.question.prompt = "Which classroom supports helped most?"
 
         sub = _mock_submission(answers=[answer])
-        sub.assignment = _mock_assignment(assessment_id=20)
-        assessment = _mock_assessment(grading_mode=GradingMode.MANUAL)
-        assessment.scoring_policy = "STANDARD"
-        sub.assignment.assessment = assessment
+        sub.assignment = _mock_assignment(assignment_template_id=20)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        assignment_template.scoring_policy = "STANDARD"
+        sub.assignment.assignment_template = assignment_template
         mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
 
         with pytest.raises(ValueError, match=r"Question 1"):
@@ -1059,9 +1060,9 @@ class TestAutoScoreSubmission:
         a.question = q
 
         sub = _mock_submission(answers=[a])
-        assessment = _mock_assessment(grading_mode=GradingMode.AUTO)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.AUTO)
 
-        _auto_score_submission(sub, assessment)
+        _auto_score_submission(sub, assignment_template)
 
         assert sub.score == 0.0
 
@@ -1070,9 +1071,9 @@ class TestAutoScoreSubmission:
         from submissions.services import _auto_score_submission
 
         sub = _mock_submission(answers=[], submitted_at=None)
-        assessment = _mock_assessment(grading_mode=GradingMode.AUTO)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.AUTO)
 
-        _auto_score_submission(sub, assessment)
+        _auto_score_submission(sub, assignment_template)
 
         assert sub.status == SubmissionStatus.GRADED
         assert sub.submitted_at is not None
@@ -1082,9 +1083,9 @@ class TestAutoScoreSubmission:
         from submissions.services import _auto_score_submission
 
         sub = _mock_submission(answers=[], status=SubmissionStatus.SUBMITTED)
-        assessment = _mock_assessment(grading_mode=GradingMode.HYBRID)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.HYBRID)
 
-        _auto_score_submission(sub, assessment)
+        _auto_score_submission(sub, assignment_template)
 
         assert sub.status == SubmissionStatus.SUBMITTED
 

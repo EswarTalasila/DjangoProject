@@ -16,7 +16,7 @@ Django REST Framework API backend for the EE Lab Data Dashboard.
 backend/
 ├── src/
 │   ├── accounts/          # User models, auth views, profile services
-│   ├── assessments/       # Assessment templates, questions, grading modes
+│   ├── assignment_templates/ # Assignment templates, questions, grading modes
 │   ├── assignments/       # Assignment creation and distribution
 │   ├── courses/           # Course CRUD, enrollment, student management
 │   ├── submissions/       # Submission lifecycle, grading, score override

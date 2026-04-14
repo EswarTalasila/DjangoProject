@@ -671,12 +671,12 @@ class TestCreateSubmissionsForStudent:
     """Tests for _create_submissions_for_student internal helper."""
 
     @patch("courses.services._mutations.Assignment")
-    @patch("courses.services._mutations.Assessment")
+    @patch("courses.services._mutations.AssignmentTemplate")
     def test_skips_when_assessment_not_found(self, mock_assessment_model, mock_assignment_model):
-        """Skips when assessment does not exist."""
+        """Skips when assignment_template does not exist."""
         from courses.services._mutations import _create_submissions_for_student
 
-        fake_assignment = SimpleNamespace(id=1, assessment_id=99)
+        fake_assignment = SimpleNamespace(id=1, assignment_template_id=99)
         mock_assignment_model.objects.filter.return_value = [fake_assignment]
         mock_assessment_model.objects.filter.return_value.first.return_value = None
 
@@ -687,28 +687,30 @@ class TestCreateSubmissionsForStudent:
     @patch("courses.services._mutations.MultipleChoiceAnswer")
     @patch("courses.services._mutations.Answer")
     @patch("courses.services._mutations.Submission")
-    @patch("courses.services._mutations.Assessment")
+    @patch("courses.services._mutations.AssignmentTemplate")
     @patch("courses.services._mutations.Assignment")
     @patch("courses.services._mutations.answer_type_from_question")
     def test_creates_submissions_with_answers(
-        self, mock_answer_type, mock_assignment_model, mock_assessment_model,
+        self, mock_answer_type, mock_assignment_model, mock_assignment_template_model,
         mock_submission_model, mock_answer_model, mock_mca, mock_saa, mock_nsa,
     ):
         """Creates submission with correct answer types for each question kind."""
-        from assessments.models import QuestionKind
+        from assignment_templates.models import QuestionKind
         from courses.services._mutations import _create_submissions_for_student
 
-        fake_assignment = SimpleNamespace(id=1, assessment_id=10)
+        fake_assignment = SimpleNamespace(id=1, assignment_template_id=10)
         mock_assignment_model.objects.filter.return_value = [fake_assignment]
 
         mc_q = SimpleNamespace(kind=QuestionKind.MULTIPLE_CHOICE)
         sa_q = SimpleNamespace(kind=QuestionKind.SHORT_ANSWER)
         ns_q = SimpleNamespace(kind=QuestionKind.NUMBER_SCALE)
 
-        fake_assessment = MagicMock()
-        fake_assessment.id = 10
-        fake_assessment.questions.all.return_value = [mc_q, sa_q, ns_q]
-        mock_assessment_model.objects.filter.return_value.first.return_value = fake_assessment
+        fake_assignment_template = MagicMock()
+        fake_assignment_template.id = 10
+        fake_assignment_template.questions.all.return_value = [mc_q, sa_q, ns_q]
+        mock_assignment_template_model.objects.filter.return_value.first.return_value = (
+            fake_assignment_template
+        )
         mock_submission_model.objects.filter.return_value.exists.return_value = False
         mock_submission_model.objects.create.return_value = SimpleNamespace(id=100)
         mock_answer_type.return_value = "MC"

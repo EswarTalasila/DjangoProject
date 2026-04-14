@@ -4,8 +4,8 @@
 Define exact endpoint paths, methods, request bodies, and response shapes for parity with the current Angular frontend. This is the authoritative contract for the rewrite.
 
 ## Scope
-- All endpoints under `/api/*` used by the current Angular services.
-- Versioned aliases under `/api/v1/*` must produce identical payloads.
+- Current runtime endpoints under `/api/v1/*`.
+- The assignment template section below reflects the active backend/frontend contract after the hard cutover.
 
 ## Sources of truth
 - Controller UML: `2025Fall-Team22-EE-Lab-Personal/Migration Notes/diagrams-wsd/uml/uml-backend-controllers.wsd`
@@ -45,15 +45,19 @@ Define exact endpoint paths, methods, request bodies, and response shapes for pa
 | POST | /api/students/bulk | [StudentDto] | {created, errors} | Teacher | Bulk add |
 | GET | /api/students/{id}/submissions | {} | [SubmissionDto] | Teacher | Scope by course |
 
-## Assessments
+## AssignmentTemplates
 | Method | Path | Request | Response | Auth | Notes |
 |---|---|---|---|---|---|
-| POST | /api/assessments | AssessmentDto | AssessmentDto | Admin | Create |
-| GET | /api/assessments | {} | [AssessmentDto] | Admin/Teacher | Scope by role |
-| GET | /api/assessments/{id} | {} | AssessmentDto | Admin/Teacher | |
-| PUT | /api/assessments/{id} | AssessmentDto | AssessmentDto | Admin | Version or lock |
-| DELETE | /api/assessments/{id} | {} | {status} | Admin | Archive vs delete |
-| POST | /api/assessments/{id}/teacher-self-assess | [AnswerDto] | {status} | Teacher | Reflection flow |
+| POST | /api/v1/assignment-templates | AssignmentTemplateDto | AssignmentTemplateDto | Researcher/Admin | Create |
+| GET | /api/v1/assignment-templates | {} | [AssignmentTemplateDto] | Teacher+ | List available templates |
+| GET | /api/v1/assignment-templates/{id} | {} | AssignmentTemplateDto | Teacher+ | Detail |
+| PATCH | /api/v1/assignment-templates/{id} | AssignmentTemplateDto | AssignmentTemplateDto | Researcher/Admin | Update when unreferenced |
+| DELETE | /api/v1/assignment-templates/{id} | {} | 204 No Content | Researcher/Admin | Hard delete when unreferenced |
+| POST | /api/v1/assignment-templates/{id}/archive | {} | AssignmentTemplateDto | Researcher/Admin | Archive |
+| POST | /api/v1/assignment-templates/{id}/restore | {} | AssignmentTemplateDto | Researcher/Admin | Restore archived template |
+| POST | /api/v1/assignment-templates/{id}/publish | {} | AssignmentTemplateDto | Researcher/Admin | Publish draft template |
+| POST | /api/v1/assignment-templates/{id}/questions/{questionId}/image | multipart/form-data | QuestionImageDto | Researcher/Admin | Upload question image |
+| DELETE | /api/v1/assignment-templates/{id}/questions/{questionId}/image | {} | 204 No Content | Researcher/Admin | Remove question image |
 
 ## Assignments
 | Method | Path | Request | Response | Auth | Notes |

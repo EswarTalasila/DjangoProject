@@ -59,7 +59,7 @@ class TestCreateView:
         fake_assignment = SimpleNamespace(id=1)
         mock_create.return_value = fake_assignment
         dto = AssignmentDTO(
-            id=1, title="Test Assignment", assessmentId=10,
+            id=1, title="Test Assignment", assignmentTemplateId=10,
             audienceType=AudienceType.COURSE,
             courseId=20, targetTeacherId=None, openAt=now, dueAt=None,
             status="ACTIVE",
@@ -71,7 +71,7 @@ class TestCreateView:
             "post",
             "/api/v1/assignments",
             data={
-                "assessmentId": 10,
+                "assignmentTemplateId": 10,
                 "audienceType": "COURSE",
                 "courseId": 20,
                 "openAt": "2025-06-01T00:00:00Z",
@@ -82,7 +82,7 @@ class TestCreateView:
         response = create(request)
 
         assert response.status_code == status.HTTP_201_CREATED
-        assert response.data["assessmentId"] == 10
+        assert response.data["assignmentTemplateId"] == 10
 
     @patch(
         "assignments.views.create_assignment",
@@ -98,7 +98,7 @@ class TestCreateView:
             "post",
             "/api/v1/assignments",
             data={
-                "assessmentId": 10,
+                "assignmentTemplateId": 10,
                 "audienceType": "COURSE",
                 "openAt": "2025-06-01T00:00:00Z",
             },
@@ -159,13 +159,13 @@ class TestDetailView:
         now = datetime(2025, 6, 1, tzinfo=UTC)
         fake_course = SimpleNamespace(id=20)
         fake_assignment = SimpleNamespace(
-            id=1, assessment_id=10, audience_type="COURSE",
+            id=1, assignment_template_id=10, audience_type="COURSE",
             course_id=20, course=fake_course, teacher_id=None,
             open_at=now, due_at=None,
         )
         mock_get.return_value = fake_assignment
         dto = AssignmentDTO(
-            id=1, title="Test", assessmentId=10, audienceType="COURSE",
+            id=1, title="Test", assignmentTemplateId=10, audienceType="COURSE",
             courseId=20, targetTeacherId=None, openAt=now, dueAt=None,
             status="ACTIVE",
         )

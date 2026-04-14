@@ -30,11 +30,11 @@ class TestSubmissionErrors:
         """Test that get student submission missing returns 404."""
         from django.utils import timezone
 
-        from assessments.models import Assessment, GradingMode
+        from assignment_templates.models import AssignmentTemplate, GradingMode
         from assignments.models import Assignment
         from courses.models import Course, Enrollment, EnrollmentStatus
 
-        assessment = Assessment.objects.create(
+        assignment_template = AssignmentTemplate.objects.create(
             title="Missing Submission",
             grading_mode=GradingMode.AUTO,
             created_by_admin=admin_user,
@@ -48,7 +48,7 @@ class TestSubmissionErrors:
             status=EnrollmentStatus.ACTIVE,
         )
         assignment = Assignment.objects.create(
-            assessment=assessment,
+            assignment_template=assignment_template,
             audience_type="COURSE",
             course=course,
             created_by=teacher_user,

@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Assignment } from '@/lib/assignment-api';
-import type { Assessment } from '@/lib/assessment-api';
+import type { AssignmentTemplate } from '@/lib/assignment-template-api';
 import { formatDate } from '@/lib/utils';
 
 type PreviewMode = 'teacher' | 'student';
@@ -29,7 +29,7 @@ function formatPoints(value: number): string {
 
 export type AssignmentMetadataPanelProps = {
   assignment: Assignment;
-  assessmentTemplate: Assessment | null;
+  assignmentTemplate: AssignmentTemplate | null;
   courseName: string;
   totalPoints: number;
   canMutate: boolean;
@@ -52,7 +52,7 @@ export type AssignmentMetadataPanelProps = {
 
 export default function AssignmentMetadataPanel({
   assignment,
-  assessmentTemplate,
+  assignmentTemplate,
   courseName,
   totalPoints,
   canMutate,
@@ -81,7 +81,7 @@ export default function AssignmentMetadataPanel({
               {assignment.title || 'Untitled Assignment'}
             </h1>
             <p className="text-muted-foreground mt-1">
-              {(assessmentTemplate?.title ?? assignment.assessmentTitle ?? 'Template unavailable')} • {courseName}
+              {(assignmentTemplate?.title ?? assignment.assignmentTemplateTitle ?? 'Template unavailable')} • {courseName}
             </p>
           </div>
           <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded text-xs font-medium shrink-0">
@@ -91,9 +91,9 @@ export default function AssignmentMetadataPanel({
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <div className="space-y-1">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Template</p>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Assignment Template</p>
             <p className="text-sm text-foreground">
-              {assessmentTemplate?.title ?? assignment.assessmentTitle ?? '-'}
+              {assignmentTemplate?.title ?? assignment.assignmentTemplateTitle ?? '-'}
             </p>
           </div>
           <div className="space-y-1">
@@ -102,7 +102,7 @@ export default function AssignmentMetadataPanel({
           </div>
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Questions</p>
-            <p className="text-sm text-foreground">{assessmentTemplate?.questions.length ?? 0}</p>
+            <p className="text-sm text-foreground">{assignmentTemplate?.questions.length ?? 0}</p>
           </div>
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Points</p>

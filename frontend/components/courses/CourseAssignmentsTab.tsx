@@ -135,7 +135,7 @@ export default function CourseAssignmentsTab({
                     {assignment.title}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {assignment.assessmentTitle ?? 'Template unavailable'}
+                    {assignment.assignmentTemplateTitle ?? 'Assignment template unavailable'}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {assignment.status}

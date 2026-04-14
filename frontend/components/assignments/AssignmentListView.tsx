@@ -101,12 +101,12 @@ export default function AssignmentListView({ role, userId, canCreate }: Assignme
     if (!needle) return assignments;
     return assignments.filter((assignment) => {
       const assignmentTitle = assignment.title.toLowerCase();
-      const assessmentTitle = assignment.assessmentTitle?.toLowerCase() ?? '';
+      const assignmentTemplateTitle = assignment.assignmentTemplateTitle?.toLowerCase() ?? '';
       const courseName =
         courses.find((course) => course.id === assignment.courseId)?.name.toLowerCase() ?? '';
       return (
         assignmentTitle.includes(needle) ||
-        assessmentTitle.includes(needle) ||
+        assignmentTemplateTitle.includes(needle) ||
         courseName.includes(needle) ||
         assignment.status.toLowerCase().includes(needle)
       );
@@ -181,7 +181,7 @@ export default function AssignmentListView({ role, userId, canCreate }: Assignme
                   Assignment
                 </TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Template
+                  Assignment Template
                 </TableHead>
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Course
@@ -199,7 +199,8 @@ export default function AssignmentListView({ role, userId, canCreate }: Assignme
             </TableHeader>
             <TableBody>
               {filtered.map((assignment) => {
-                const assessmentTitle = assignment.assessmentTitle ?? 'Template unavailable';
+                const assignmentTemplateTitle =
+                  assignment.assignmentTemplateTitle ?? 'Template unavailable';
                 const courseName =
                   courses.find((course) => course.id === assignment.courseId)?.name ?? '-';
 
@@ -212,7 +213,7 @@ export default function AssignmentListView({ role, userId, canCreate }: Assignme
                     <TableCell className="font-medium text-sm text-foreground">
                       {assignment.title}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{assessmentTitle}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{assignmentTemplateTitle}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{courseName}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{assignment.status}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{formatDate(assignment.openAt)}</TableCell>

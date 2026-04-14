@@ -14,8 +14,8 @@ async function loadAssignmentApi() {
 const sampleAssignment = {
   id: 1,
   title: "HW 1",
-  assessmentId: 10,
-  assessmentTitle: "Math Quiz",
+  assignmentTemplateId: 10,
+  assignmentTemplateTitle: "Math Quiz",
   audienceType: "COURSE",
   courseId: 5,
   targetTeacherId: null,
@@ -29,9 +29,9 @@ describe("assignment api", () => {
     it("creates and returns a new assignment", async () => {
       server.use(
         http.post(`${API_BASE}/assignments/`, async ({ request }) => {
-          const body = (await request.json()) as { assessmentId?: number };
+          const body = (await request.json()) as { assignmentTemplateId?: number };
           return HttpResponse.json(
-            { ...sampleAssignment, assessmentId: body.assessmentId },
+            { ...sampleAssignment, assignmentTemplateId: body.assignmentTemplateId },
             { status: 201 },
           );
         }),
@@ -39,14 +39,14 @@ describe("assignment api", () => {
 
       const { createAssignment } = await loadAssignmentApi();
       const result = await createAssignment({
-        assessmentId: 10,
+        assignmentTemplateId: 10,
         audienceType: "COURSE",
         courseId: 5,
         openAt: "2026-01-01T00:00:00Z",
       });
 
       expect(result.id).toBe(1);
-      expect(result.assessmentId).toBe(10);
+      expect(result.assignmentTemplateId).toBe(10);
     });
   });
 
@@ -74,34 +74,6 @@ describe("assignment api", () => {
 
       const { getAssignment } = await loadAssignmentApi();
       await expect(getAssignment(999)).rejects.toThrow();
-    });
-  });
-
-  describe("getAssignmentTemplate", () => {
-    it("fetches the assessment template for an assignment", async () => {
-      const template = {
-        id: 10,
-        title: "Math Quiz",
-        category: null,
-        gradingMode: "AUTO",
-        scoringPolicy: "STANDARD",
-        questions: [],
-        questionGroups: [],
-        rubricId: null,
-        rubricAssessmentIds: [],
-      };
-
-      server.use(
-        http.get(`${API_BASE}/assignments/1/template`, () =>
-          HttpResponse.json(template),
-        ),
-      );
-
-      const { getAssignmentTemplate } = await loadAssignmentApi();
-      const result = await getAssignmentTemplate(1);
-
-      expect(result.id).toBe(10);
-      expect(result.title).toBe("Math Quiz");
     });
   });
 

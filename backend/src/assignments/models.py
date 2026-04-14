@@ -1,14 +1,14 @@
 """
-Assignment models for distributing assessments to students.
+Assignment models for distributing assignment templates to students.
 
-This module defines the Assignment model which connects assessments (templates)
-to courses (classes). When a teacher assigns an assessment to a course, empty
-submissions are automatically created for all enrolled students.
+This module defines the Assignment model which connects assignment templates to
+courses. When a teacher assigns a template to a course, empty submissions are
+automatically created for all enrolled students.
 
 Assignment Workflow:
-    1. Admin creates an Assessment (template with questions)
-    2. Teacher creates an Assignment linking assessment to their course
-    3. Empty Submissions are auto-created for each enrolled student
+    1. Admin creates an AssignmentTemplate
+    2. Teacher creates an Assignment linking the template to their course
+    3. Empty submissions are auto-created for each enrolled student
     4. Students complete their submissions before the due date
     5. Teacher reviews and grades submissions
 
@@ -17,18 +17,18 @@ Audience Types:
     TEACHER: Self-assessment for the teacher (no student recipients)
 
 Database Tables:
-    assignments - Links assessments to courses with scheduling info
+    assignments - Links assignment templates to courses with scheduling info
 
 Note:
-    The open_at and due_at fields control when students can access and
-    must complete the assignment. Submissions created before open_at
-    cannot be started until that timestamp.
+    The open_at and due_at fields control when students can access and must
+    complete the assignment. Submissions created before open_at cannot be
+    started until that timestamp.
 """
 
 from django.db import models
 
 from accounts.models import User
-from assessments.models import Assessment
+from assignment_templates.models import AssignmentTemplate
 from courses.models import Course
 
 
@@ -54,18 +54,19 @@ class AssignmentStatus(models.TextChoices):
 
 class Assignment(models.Model):
     """
-    Links an assessment template to a course for distribution.
+    Links an assignment template to a course for distribution.
 
-    Assignments schedule when students can access and complete an assessment.
+    Assignments schedule when students can access and complete a template-driven
+    activity.
     Creating an assignment automatically generates empty Submission records
     for all enrolled students (for COURSE type) or the teacher (for TEACHER type).
 
     Attributes:
-        assessment: The assessment template being assigned
+        assignment_template: The assignment template being assigned
         audience_type: Who receives the assignment (COURSE or TEACHER)
         course: Target course (required for COURSE type, null for TEACHER)
         created_by: User who created the assignment (PROTECT on delete)
-        open_at: When students can begin the assessment
+        open_at: When students can begin the assignment
         due_at: Optional deadline for submission (null = no deadline)
         teacher: For TEACHER type, the teacher taking the self-assessment
 
@@ -73,18 +74,21 @@ class Assignment(models.Model):
         submissions: Submission instances for this assignment
 
     Delete Behavior:
-        - Deleting assessment: Cascades to delete assignments
+        - Deleting assignment template: Cascades to delete assignments
         - Deleting course: Sets course to NULL (keeps assignment)
         - Deleting created_by user: PROTECT prevents deletion
         - Deleting teacher: Sets teacher to NULL
     """
 
-    # The assessment template being distributed
-    assessment = models.ForeignKey(
-        Assessment, on_delete=models.CASCADE, db_column="assessment_id", related_name="assignments"
+    # The assignment template being distributed
+    assignment_template = models.ForeignKey(
+        AssignmentTemplate,
+        on_delete=models.CASCADE,
+        db_column="assignment_template_id",
+        related_name="assignments",
     )
 
-    # Editable assignment title shown to end users; defaults to assessment title at creation.
+    # Editable assignment title shown to end users; defaults to the template title at creation.
     title = models.CharField(max_length=255, null=True, blank=True)
 
     # Who the assignment is for (COURSE = students, TEACHER = self-assessment)
@@ -103,7 +107,7 @@ class Assignment(models.Model):
     # Teacher who created this assignment (cannot be deleted while assignment exists)
     created_by = models.ForeignKey(User, on_delete=models.PROTECT, db_column="created_by_user_id")
 
-    # When the assessment becomes available to students
+    # When the assignment becomes available to students
     open_at = models.DateTimeField()
 
     # Optional deadline (null means no deadline)

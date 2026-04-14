@@ -43,11 +43,11 @@ ROSTER_COLS_ANONYMIZED = ["consent", "enrollmentStatus", "enrolledAt"]
 
 COURSE_SUB_COLS_IDENTIFIABLE = [
     "studentId", "studentName", "studentUsername", "consent",
-    "assignmentId", "assessmentTitle", "assessmentCategory",
+    "assignmentId", "assignmentTemplateTitle", "assignmentTemplateCategory",
     "gradingMode", "status", "score", "submittedAt",
 ]
 COURSE_SUB_COLS_ANONYMIZED = [
-    "consent", "assessmentCategory", "gradingMode", "status",
+    "consent", "assignmentTemplateCategory", "gradingMode", "status",
     "score", "submittedAt",
 ]
 
@@ -223,7 +223,7 @@ def export_course_submissions(
     start_date=None,
     end_date=None,
     category=None,
-    assessment_id=None,
+    assignment_template_id=None,
     assignment_id=None,
     status_filter=None,
     include_answers=False,
@@ -237,7 +237,7 @@ def export_course_submissions(
     qs = Submission.objects.filter(
         assignment__course=course,
     ).select_related(
-        "assignment__assessment", "assignment__course",
+        "assignment__assignment_template", "assignment__course",
         "student__student_profile",
     )
 
@@ -246,9 +246,9 @@ def export_course_submissions(
     if end_date:
         qs = qs.filter(submitted_at__lte=end_date)
     if category:
-        qs = qs.filter(assignment__assessment__category=category)
-    if assessment_id:
-        qs = qs.filter(assignment__assessment_id=assessment_id)
+        qs = qs.filter(assignment__assignment_template__category=category)
+    if assignment_template_id:
+        qs = qs.filter(assignment__assignment_template_id=assignment_template_id)
     if assignment_id:
         qs = qs.filter(assignment_id=assignment_id)
     if status_filter:
@@ -276,7 +276,7 @@ def export_course_submissions(
             "startDate": str(start_date) if start_date else None,
             "endDate": str(end_date) if end_date else None,
             "category": category,
-            "assessmentId": assessment_id,
+            "assignmentTemplateId": assignment_template_id,
             "assignmentId": assignment_id,
             "status": status_filter,
             "includeAnswers": include_answers,
@@ -294,7 +294,7 @@ def export_course_submissions(
         rows = qs.iterator(chunk_size=2000)
         for sub in rows:
             student = sub.student
-            assessment = sub.assignment.assessment
+            assignment_template = sub.assignment.assignment_template
             # Resolve student profile for consent
             consent = ""
             if student:
@@ -308,9 +308,11 @@ def export_course_submissions(
                 "studentUsername": student.username if student else "",
                 "consent": consent,
                 "assignmentId": sub.assignment_id,
-                "assessmentTitle": assessment.title if assessment else "",
-                "assessmentCategory": assessment.category if assessment else "",
-                "gradingMode": assessment.grading_mode if assessment else "",
+                "assignmentTemplateTitle": assignment_template.title if assignment_template else "",
+                "assignmentTemplateCategory": (
+                    assignment_template.category if assignment_template else ""
+                ),
+                "gradingMode": assignment_template.grading_mode if assignment_template else "",
                 "status": sub.status,
                 "score": sub.score,
                 "submittedAt": sub.submitted_at.isoformat() if sub.submitted_at else "",

@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from accounts.models import Role, StudentProfile, User
 from accounts.services import create_user_from_payload, generate_managed_username
-from assessments.models import Assessment, QuestionKind
+from assignment_templates.models import AssignmentTemplate, QuestionKind
 from assignments.models import Assignment, AssignmentStatus
 from core.helpers import answer_type_from_question
 from core.lifecycle import ConflictError
@@ -155,8 +155,10 @@ def _create_submissions_for_student(student_user: User, course: Course) -> None:
     """
     assignments = Assignment.objects.filter(course=course, status=AssignmentStatus.ACTIVE)
     for assignment in assignments:
-        assessment = Assessment.objects.filter(id=assignment.assessment_id).first()
-        if not assessment:
+        assignment_template = AssignmentTemplate.objects.filter(
+            id=assignment.assignment_template_id
+        ).first()
+        if not assignment_template:
             continue
         if Submission.objects.filter(student=student_user, assignment=assignment).exists():
             continue
@@ -169,7 +171,7 @@ def _create_submissions_for_student(student_user: User, course: Course) -> None:
             status=SubmissionStatus.NOT_STARTED,
         )
 
-        for question in assessment.questions.all():
+        for question in assignment_template.questions.all():
             answer = Answer.objects.create(
                 submission=submission,
                 question=question,

@@ -43,7 +43,7 @@ INSTALLED_APPS = [
     "core",
     "accounts",
     "courses",
-    "assessments",
+    "assignment_templates",
     "rubrics",
     "assignments",
     "submissions",
@@ -272,7 +272,7 @@ REST_FRAMEWORK = {
 #   - /api/schema/ (Raw OpenAPI YAML)
 SPECTACULAR_SETTINGS = {
     "TITLE": "EE Lab Data Dashboard API",
-    "DESCRIPTION": "API for managing educational assessments, submissions, and visualization.",
+    "DESCRIPTION": "API for managing assignment templates, assignments, submissions, and visualization.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,  # Don't include schema endpoint in schema itself
     "SWAGGER_UI_SETTINGS": {

@@ -22,8 +22,8 @@ export type DashboardDTO = {
 
 export type CourseSummaryAssignment = {
   assignmentId?: number;
-  assessmentTitle?: string;
-  assessmentCategory: string | null;
+  assignmentTemplateTitle?: string;
+  assignmentTemplateCategory: string | null;
   submittedCount: number;
   totalStudents: number;
   completionPct: number | null;
@@ -38,7 +38,7 @@ export type CourseSummaryDTO = {
     startDate: string | null;
     endDate: string | null;
     category: string | null;
-    assessmentId: number | null;
+    assignmentTemplateId: number | null;
   };
   courseId?: number;
   courseName?: string;
@@ -55,8 +55,8 @@ export type AssignmentSummaryDTO = {
   generatedAt: string;
   filters: { startDate: string | null; endDate: string | null };
   assignmentId?: number;
-  assessmentTitle?: string;
-  assessmentCategory: string | null;
+  assignmentTemplateTitle?: string;
+  assignmentTemplateCategory: string | null;
   totalStudents: number;
   submittedCount: number;
   gradedCount: number;
@@ -81,7 +81,12 @@ export async function fetchDashboard(): Promise<DashboardDTO> {
 /** GET /visualizations/courses/:id/summary — Fetch per-assignment completion and score stats for a course. */
 export async function fetchCourseSummary(
   courseId: number,
-  params?: { startDate?: string; endDate?: string; category?: string; assessmentId?: number },
+  params?: {
+    startDate?: string;
+    endDate?: string;
+    category?: string;
+    assignmentTemplateId?: number;
+  },
 ): Promise<CourseSummaryDTO> {
   const { data } = await api.get(`/visualizations/courses/${courseId}/summary`, { params });
   return data;
@@ -97,4 +102,3 @@ export async function fetchAssignmentSummary(
   });
   return data;
 }
-

@@ -10,8 +10,8 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from assessments.models import (
-    Assessment,
+from assignment_templates.models import (
+    AssignmentTemplate,
     GradingMode,
     McqChoice,
     MultipleChoiceQuestion,
@@ -52,15 +52,15 @@ def _make_course_assignment(
     open_at=None,
     due_at=None,
 ):
-    """Create a minimal course → assessment → assignment → enrollment graph."""
-    assessment = Assessment.objects.create(
-        title="Assessment",
+    """Create a minimal course → assignment_template → assignment → enrollment graph."""
+    assignment_template = AssignmentTemplate.objects.create(
+        title="AssignmentTemplate",
         grading_mode=grading_mode,
         scoring_policy=scoring_policy,
         created_by_admin=admin_user,
     )
     question = Question.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         question_type=question_kind,
         kind=question_kind,
         prompt="Q1",
@@ -78,7 +78,7 @@ def _make_course_assignment(
         status=EnrollmentStatus.ACTIVE,
     )
     assignment = Assignment.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         audience_type="COURSE",
         course=course,
         created_by=teacher_user,
@@ -91,14 +91,14 @@ def _make_course_assignment(
 
 def _make_mcq_assignment(teacher_user, student_user, admin_user, *, grading_mode=GradingMode.AUTO):
     """Create assignment with an MCQ question (auto-gradable)."""
-    assessment = Assessment.objects.create(
-        title="MCQ Assessment",
+    assignment_template = AssignmentTemplate.objects.create(
+        title="MCQ AssignmentTemplate",
         grading_mode=grading_mode,
         scoring_policy=ScoringPolicy.STANDARD,
         created_by_admin=admin_user,
     )
     question = Question.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         question_type=QuestionKind.MULTIPLE_CHOICE,
         kind=QuestionKind.MULTIPLE_CHOICE,
         prompt="Pick one",
@@ -119,7 +119,7 @@ def _make_mcq_assignment(teacher_user, student_user, admin_user, *, grading_mode
         status=EnrollmentStatus.ACTIVE,
     )
     assignment = Assignment.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         audience_type="COURSE",
         course=course,
         created_by=teacher_user,
@@ -131,7 +131,7 @@ def _make_mcq_assignment(teacher_user, student_user, admin_user, *, grading_mode
 
 def _short_answer_payload(question, student_user, text="answer"):
     return {
-        "assignmentId": question.assessment_id,
+        "assignmentId": question.assignment_template_id,
         "studentId": student_user.id,
         "status": "SUBMITTED",
         "answers": [
@@ -524,7 +524,7 @@ class TestGradeSubmission:
         )
         # Add second question
         q2 = Question.objects.create(
-            assessment=assignment.assessment,
+            assignment_template=assignment.assignment_template,
             question_type=QuestionKind.SHORT_ANSWER,
             kind=QuestionKind.SHORT_ANSWER,
             prompt="Q2",
@@ -989,7 +989,7 @@ class TestAutoGrading:
         )
         # Add a short-answer question needing manual grading
         Question.objects.create(
-            assessment=assignment.assessment,
+            assignment_template=assignment.assignment_template,
             question_type=QuestionKind.SHORT_ANSWER,
             kind=QuestionKind.SHORT_ANSWER,
             prompt="Explain",
@@ -999,7 +999,7 @@ class TestAutoGrading:
         )
         api_client.force_authenticate(user=student_user)
         sa_q = Question.objects.filter(
-            assessment=assignment.assessment, kind=QuestionKind.SHORT_ANSWER
+            assignment_template=assignment.assignment_template, kind=QuestionKind.SHORT_ANSWER
         ).first()
         payload = {
             "assignmentId": assignment.id,
@@ -1064,7 +1064,7 @@ class TestHybridScoring:
             teacher_user, student_user, admin_user, grading_mode=GradingMode.HYBRID
         )
         sa_q = Question.objects.create(
-            assessment=assignment.assessment,
+            assignment_template=assignment.assignment_template,
             question_type=QuestionKind.SHORT_ANSWER,
             kind=QuestionKind.SHORT_ANSWER,
             prompt="Explain",

@@ -197,7 +197,7 @@ class TestDetail:
     @patch("rubrics.views.RubricSerializer")
     @patch("rubrics.views.Rubric")
     def test_patch_returns_409_on_referenced_error(self, mock_rubric_model, mock_serializer_cls, mock_update):
-        """Returns 409 when updating a rubric that is referenced by an assessment."""
+        """Returns 409 when updating a rubric that is referenced by an assignment_template."""
         from rubrics.views import detail
         from rubrics.services import RubricReferencedError
 
@@ -265,7 +265,7 @@ class TestDetail:
     @patch("rubrics.views.delete_rubric")
     @patch("rubrics.views.Rubric")
     def test_delete_returns_409_on_referenced_error(self, mock_rubric_model, mock_delete):
-        """Returns 409 when deleting a rubric that is referenced by an assessment."""
+        """Returns 409 when deleting a rubric that is referenced by an assignment_template."""
         from rubrics.views import detail
         from rubrics.services import RubricReferencedError
 

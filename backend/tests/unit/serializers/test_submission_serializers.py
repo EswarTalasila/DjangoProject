@@ -213,7 +213,7 @@ class TestSubmissionSerializer:
         assert s.is_valid(), s.errors
 
     def test_valid_teacher_submission(self):
-        """Valid teacher self-assessment payload passes validation."""
+        """Valid teacher self-assignment_template payload passes validation."""
         from submissions.serializers import SubmissionSerializer
 
         data = {

@@ -89,7 +89,7 @@ export default function ImagePicker({
       return;
     }
     if (!onUpload) {
-      toast.error('Save the assessment first to enable image uploads.');
+      toast.error('Save the assignment template first to enable image uploads.');
       return;
     }
 

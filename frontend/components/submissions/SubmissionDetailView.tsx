@@ -17,13 +17,18 @@ import {
   type SubmissionImageDTO,
 } from '@/lib/submission-api';
 import { getAssignment, getAssignmentTemplate, type Assignment } from '@/lib/assignment-api';
-import type { Assessment, GradingMode, Question, QuestionGroup } from '@/lib/assessment-api';
+import type {
+  AssignmentTemplate,
+  GradingMode,
+  Question,
+  QuestionGroup,
+} from '@/lib/assignment-template-api';
 import { listRubrics, type Rubric } from '@/lib/rubric-api';
 import RubricGridPreview from '@/components/rubrics/RubricGridPreview';
 import { toErrorMessage, formatDate, formatScore, cn } from '@/lib/utils';
 
 type Role = 'ADMIN' | 'TEACHER' | 'RESEARCHER' | 'STUDENT';
-type RubricSource = 'Question' | 'Group' | 'Assessment' | 'N/A';
+type RubricSource = 'Question' | 'Group' | 'AssignmentTemplate' | 'N/A';
 
 type SubmissionDetailViewProps = {
   submissionId: number;
@@ -86,7 +91,7 @@ function isManualQuestion(question: Question | undefined, gradingMode: GradingMo
 function getEffectiveRubricMeta(
   question: Question | undefined,
   questionGroups: QuestionGroup[],
-  assessmentRubricId: number | null,
+  assignmentTemplateRubricId: number | null,
   rubricById: Map<number, Rubric>,
 ): { rubricId: number | null; rubric: Rubric | null; source: RubricSource } {
   if (!question) return { rubricId: null, rubric: null, source: 'N/A' };
@@ -112,11 +117,11 @@ function getEffectiveRubricMeta(
     };
   }
 
-  if (assessmentRubricId != null) {
+  if (assignmentTemplateRubricId != null) {
     return {
-      rubricId: assessmentRubricId,
-      rubric: rubricById.get(assessmentRubricId) ?? null,
-      source: 'Assessment',
+      rubricId: assignmentTemplateRubricId,
+      rubric: rubricById.get(assignmentTemplateRubricId) ?? null,
+      source: 'AssignmentTemplate',
     };
   }
 
@@ -140,7 +145,7 @@ function getSubmissionStatusLabel(status: SubmissionDTO['status']): string {
 export default function SubmissionDetailView({ submissionId, viewerRole }: SubmissionDetailViewProps) {
   const [submission, setSubmission] = useState<SubmissionDTO | null>(null);
   const [assignment, setAssignment] = useState<Assignment | null>(null);
-  const [assessmentTemplate, setAssessmentTemplate] = useState<Assessment | null>(null);
+  const [assignmentTemplate, setAssignmentTemplate] = useState<AssignmentTemplate | null>(null);
   const [rubricById, setRubricById] = useState<Map<number, Rubric>>(new Map());
   const [expandedRubricQuestionIds, setExpandedRubricQuestionIds] = useState<Set<number>>(new Set());
   const [scoreInputs, setScoreInputs] = useState<Record<number, string>>({});
@@ -162,7 +167,7 @@ export default function SubmissionDetailView({ submissionId, viewerRole }: Submi
       ]);
       setSubmission(currentSubmission);
       setAssignment(assignmentRecord);
-      setAssessmentTemplate(template);
+      setAssignmentTemplate(template);
       setRubricById(new Map(rubrics.map((rubric) => [rubric.id, rubric])));
 
       // Load uploaded images for this submission
@@ -192,28 +197,28 @@ export default function SubmissionDetailView({ submissionId, viewerRole }: Submi
 
   const questionsById = useMemo(() => {
     const map = new Map<number, Question>();
-    for (const question of assessmentTemplate?.questions ?? []) {
+    for (const question of assignmentTemplate?.questions ?? []) {
       map.set(question.questionId, question);
     }
     return map;
-  }, [assessmentTemplate]);
+  }, [assignmentTemplate]);
 
   const totalPoints = useMemo(() => {
-    return (assessmentTemplate?.questions ?? []).reduce((sum, question) => sum + question.maxPoints, 0);
-  }, [assessmentTemplate]);
+    return (assignmentTemplate?.questions ?? []).reduce((sum, question) => sum + question.maxPoints, 0);
+  }, [assignmentTemplate]);
 
-  const gradingMode = assessmentTemplate?.gradingMode ?? 'AUTO';
+  const gradingMode = assignmentTemplate?.gradingMode ?? 'AUTO';
 
   const answerRows = useMemo(() => {
-    if (!submission || !assessmentTemplate) return [];
+    if (!submission || !assignmentTemplate) return [];
 
     return submission.answers.map((answer, index) => {
       const question = questionsById.get(answer.questionId);
       const manualReview = isManualQuestion(question, gradingMode);
       const rubricMeta = getEffectiveRubricMeta(
         question,
-        assessmentTemplate.questionGroups,
-        assessmentTemplate.rubricId,
+        assignmentTemplate.questionGroups,
+        assignmentTemplate.rubricId,
         rubricById,
       );
       const canEdit =
@@ -244,7 +249,7 @@ export default function SubmissionDetailView({ submissionId, viewerRole }: Submi
         gradingLabel,
       };
     });
-  }, [submission, assessmentTemplate, questionsById, gradingMode, rubricById, canOverride]);
+  }, [submission, assignmentTemplate, questionsById, gradingMode, rubricById, canOverride]);
 
   const manualReviewCount = answerRows.filter((row) => row.manualReview).length;
   const pendingManualCount = answerRows.filter(

@@ -119,8 +119,8 @@ describe("SubmissionsHubView", () => {
       });
 
       expect(screen.getByText("Science Lab")).toBeInTheDocument();
-      expect(screen.getByText("GRADED")).toBeInTheDocument();
-      expect(screen.getByText("IN_PROGRESS")).toBeInTheDocument();
+      expect(screen.getByText("Graded")).toBeInTheDocument();
+      expect(screen.getByText("Not Submitted")).toBeInTheDocument();
       expect(screen.getByText("85")).toBeInTheDocument();
     });
 
@@ -158,7 +158,7 @@ describe("SubmissionsHubView", () => {
       render(<Component role="STUDENT" userId={1} />);
 
       await waitFor(() => {
-        expect(screen.getByText("SUBMITTED")).toBeInTheDocument();
+        expect(screen.getAllByText("Submitted").length).toBeGreaterThanOrEqual(1);
       });
     });
 
@@ -357,24 +357,24 @@ describe("SubmissionsHubView", () => {
         {
           id: 100,
           assignmentId: 1,
+          assignmentTitle: "HW1",
+          courseName: "Bio 101",
+          studentName: "Student 42",
           submittedAt: "2026-01-10T00:00:00Z",
           score: 75,
           status: "SUBMITTED",
         },
       ]);
-      mockGetSubmission.mockResolvedValueOnce({
-        id: 100,
-        studentId: 42,
-      });
       const Component = await loadComponent();
       render(<Component role="TEACHER" userId={2} />);
 
       await waitFor(() => {
-        expect(screen.getByText("#100")).toBeInTheDocument();
+        expect(screen.getByText("Student 42")).toBeInTheDocument();
       });
-      expect(screen.getByText("#42")).toBeInTheDocument();
-      expect(screen.getByText("SUBMITTED")).toBeInTheDocument();
-      expect(screen.getByText("75")).toBeInTheDocument();
+      expect(screen.getByText("Bio 101")).toBeInTheDocument();
+      expect(screen.getAllByText("HW1").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("Submitted").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(1);
     });
 
     it("shows 'No submissions found' when assignment has none", async () => {
@@ -419,7 +419,7 @@ describe("SubmissionsHubView", () => {
       expect(screen.queryByText("Select course")).not.toBeInTheDocument();
     });
 
-    it("renders Open button for teacher submission rows", async () => {
+    it("renders View button for teacher draft submission rows", async () => {
       mockListAssignmentsForUser.mockResolvedValueOnce([
         { id: 1, title: "HW1" },
       ]);
@@ -441,7 +441,7 @@ describe("SubmissionsHubView", () => {
 
       await waitFor(() => {
         expect(
-          screen.getByRole("button", { name: "Open" })
+          screen.getByRole("button", { name: "View" })
         ).toBeInTheDocument();
       });
     });
@@ -518,22 +518,23 @@ describe("SubmissionsHubView", () => {
         {
           id: 200,
           assignmentId: 10,
+          assignmentTitle: "Lab Report",
+          courseName: "Bio 101",
+          studentName: "Student 55",
           submittedAt: "2026-03-01T08:00:00Z",
           score: 95,
           status: "GRADED",
         },
       ]);
-      mockGetSubmission.mockResolvedValueOnce({
-        id: 200,
-        studentId: 55,
-      });
       const Component = await loadComponent();
       render(<Component role="RESEARCHER" userId={3} />);
 
       await waitFor(() => {
-        expect(screen.getByText("#200")).toBeInTheDocument();
+        expect(screen.getByText("Student 55")).toBeInTheDocument();
       });
-      expect(screen.getByText("#55")).toBeInTheDocument();
+      expect(screen.getAllByText("Bio 101").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText("Lab Report").length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText("Graded")).toBeInTheDocument();
       expect(screen.getByText("95")).toBeInTheDocument();
     });
   });
@@ -560,26 +561,25 @@ describe("SubmissionsHubView", () => {
         {
           id: 300,
           assignmentId: 1,
+          assignmentTitle: "HW1",
+          courseName: "Bio 101",
+          studentName: "Student 77",
           submittedAt: "2026-02-15T12:00:00Z",
           score: 88,
           status: "GRADED",
         },
       ]);
-      mockGetSubmission.mockResolvedValueOnce({
-        id: 300,
-        studentId: 77,
-      });
 
       await userEvent.click(
         screen.getByRole("button", { name: "Refresh" })
       );
 
       await waitFor(() => {
-        expect(screen.getByText("#300")).toBeInTheDocument();
+        expect(screen.getByText("Student 77")).toBeInTheDocument();
       });
     });
 
-    it("navigates when Open button is clicked on teacher submission row", async () => {
+    it("navigates when Grade button is clicked on teacher submitted row", async () => {
       mockListAssignmentsForUser.mockResolvedValueOnce([
         { id: 1, title: "HW1" },
       ]);
@@ -587,26 +587,25 @@ describe("SubmissionsHubView", () => {
         {
           id: 150,
           assignmentId: 1,
+          assignmentTitle: "HW1",
+          courseName: "Bio 101",
+          studentName: "Student 33",
           submittedAt: "2026-01-20T09:00:00Z",
           score: 70,
           status: "SUBMITTED",
         },
       ]);
-      mockGetSubmission.mockResolvedValueOnce({
-        id: 150,
-        studentId: 33,
-      });
       const Component = await loadComponent();
       render(<Component role="TEACHER" userId={2} />);
 
       await waitFor(() => {
         expect(
-          screen.getByRole("button", { name: "Open" })
+          screen.getByRole("button", { name: "Grade" })
         ).toBeInTheDocument();
       });
 
       await userEvent.click(
-        screen.getByRole("button", { name: "Open" })
+        screen.getByRole("button", { name: "Grade" })
       );
       expect(mockPush).toHaveBeenCalledWith("/dashboard/submissions/150");
     });

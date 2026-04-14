@@ -103,7 +103,7 @@ ignore = [
 "src/**/models.py" = ["RUF012"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["config", "core", "accounts", "courses", "assessments", "assignments", "submissions", "visualizations", "exports"]
+known-first-party = ["config", "core", "accounts", "courses", "assignment_templates", "assignments", "submissions", "visualizations", "exports"]
 
 [tool.black]
 target-version = ["py312"]

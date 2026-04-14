@@ -51,8 +51,8 @@ Acceptance criteria:
 - Role changes are restricted to admin-only.
 - Deleting staff accounts does not delete historical data.
 
-### US-07 Create/edit/delete assessments
-As an admin, I can create and manage assessments with multiple question types and grading modes.
+### US-07 Create/edit/delete assignment templates
+As an admin, I can create and manage assignment templates with multiple question types and grading modes.
 
 Acceptance criteria:
 - Supports grading modes: auto, manual, hybrid, rubric, reflection, mood meter.
@@ -63,7 +63,7 @@ Acceptance criteria:
 As an admin, I can view aggregate statistics and export as CSV.
 
 Acceptance criteria:
-- Filters for course, teacher, assessment category, and assessment.
+- Filters for course, teacher, assignment template category, and assignment template.
 - CSV export is consistent with on-screen data.
 - Export jobs are bounded and paginated for large datasets.
 
@@ -84,11 +84,11 @@ Acceptance criteria:
 - Teachers can reset student passwords.
 - Teachers cannot edit students outside their courses.
 
-### US-11 Assign assessments to courses
-As a teacher, I can assign assessments to a course with open/close dates.
+### US-11 Assign assignment templates to courses
+As a teacher, I can assign assignment templates to a course with open/close dates.
 
 Acceptance criteria:
-- Teachers can select assessment(s), course(s), and date ranges.
+- Teachers can select assignment template(s), course(s), and date ranges.
 - Assignments are visible to students during active windows.
 
 ### US-12 View submissions and grade
@@ -103,7 +103,7 @@ Acceptance criteria:
 As a teacher, I can view aggregate trends and export PDF reports.
 
 Acceptance criteria:
-- Filters: mood meter, course, student, assessment, category.
+- Filters: mood meter, course, student, assignment template, category.
 - PDF export completes for typical data sets and includes charts.
 
 ## Student

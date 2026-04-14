@@ -38,7 +38,7 @@ FR_SPECS: tuple[FrSpec, ...] = (
     FrSpec("FR-03", "SUDO", "Docs/Wiki/requirements/FR-03-Sudo.md"),
     FrSpec("FR-04", "USER", "Docs/Wiki/requirements/FR-04-User.md"),
     FrSpec("FR-05", "CRS", "Docs/Wiki/requirements/FR-05-Courses.md"),
-    FrSpec("FR-06", "ASMT", "Docs/Wiki/requirements/FR-06-Assessments.md"),
+    FrSpec("FR-06", "ATMPL", "Docs/Wiki/requirements/FR-06-Assignment-Templates.md"),
     FrSpec("FR-07", "ASGN", "Docs/Wiki/requirements/FR-07-Assignments.md"),
     FrSpec("FR-08", "SUB", "Docs/Wiki/requirements/FR-08-Submissions.md"),
     FrSpec("FR-09", "VIZ", "Docs/Wiki/requirements/FR-09-Visualization.md"),
@@ -51,7 +51,7 @@ FR_SPECS: tuple[FrSpec, ...] = (
 MODULE_DESCRIPTIONS: dict[str, str] = {
     "accounts": "Auth/registration domain logic and APIs",
     "courses": "Course and enrollment domain logic",
-    "assessments": "Assessment domain",
+    "assignment_templates": "AssignmentTemplate domain",
     "assignments": "Assignment domain",
     "submissions": "Submission domain",
     "visualizations": "Visualization domain",

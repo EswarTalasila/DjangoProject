@@ -11,7 +11,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from accounts.models import Role
-from assessments.models import GradingMode
+from assignment_templates.models import GradingMode
 from assignments.models import Assignment
 from core.permissions import IsTeacherOrAbove, has_role, teacher_owns_course
 from courses.models import Course
@@ -72,7 +72,7 @@ def viz_course_summary(request, course_id):
         start_date=params.get("startDate"),
         end_date=params.get("endDate"),
         category=params.get("category"),
-        assessment_id=params.get("assessmentId"),
+        assignment_template_id=params.get("assignmentTemplateId"),
     )
     return Response(data, status=status.HTTP_200_OK)
 
@@ -87,7 +87,10 @@ def viz_course_summary(request, course_id):
 def viz_assignment_summary(request, assignment_id):
     """GET /api/v1/visualizations/assignments/{assignmentId}/summary"""
     try:
-        assignment = Assignment.objects.select_related("course__teacher_profile", "assessment").get(
+        assignment = Assignment.objects.select_related(
+            "course__teacher_profile",
+            "assignment_template",
+        ).get(
             pk=assignment_id
         )
     except Assignment.DoesNotExist:
@@ -121,16 +124,19 @@ def viz_assignment_summary(request, assignment_id):
 def viz_mood_meter(request, assignment_id):
     """GET /api/v1/visualizations/assignments/{assignmentId}/mood-meter"""
     try:
-        assignment = Assignment.objects.select_related("course__teacher_profile", "assessment").get(
+        assignment = Assignment.objects.select_related(
+            "course__teacher_profile",
+            "assignment_template",
+        ).get(
             pk=assignment_id
         )
     except Assignment.DoesNotExist:
         return Response({"detail": "Assignment not found."}, status=status.HTTP_404_NOT_FOUND)
 
     # VIZ-CN-04: mood meter type gate
-    if assignment.assessment.grading_mode != GradingMode.MOOD_METER:
+    if assignment.assignment_template.grading_mode != GradingMode.MOOD_METER:
         return Response(
-            {"detail": "Incompatible assessment type."},
+            {"detail": "Incompatible assignment template type."},
             status=status.HTTP_409_CONFLICT,
         )
 

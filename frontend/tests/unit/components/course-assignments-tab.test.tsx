@@ -31,8 +31,8 @@ const mockAssignments = [
   {
     id: 1,
     title: "Homework 1",
-    assessmentId: 10,
-    assessmentTitle: "SEL Check-in",
+    assignmentTemplateId: 10,
+    assignmentTemplateTitle: "SEL Check-in",
     audienceType: "COURSE" as const,
     courseId: 1,
     targetTeacherId: null,
@@ -43,8 +43,8 @@ const mockAssignments = [
   {
     id: 2,
     title: "Homework 2",
-    assessmentId: 11,
-    assessmentTitle: null,
+    assignmentTemplateId: 11,
+    assignmentTemplateTitle: null,
     audienceType: "COURSE" as const,
     courseId: 1,
     targetTeacherId: null,
@@ -75,7 +75,7 @@ describe("CourseAssignmentsTab", () => {
     });
     expect(screen.getByText("Homework 2")).toBeInTheDocument();
     expect(screen.getByText("SEL Check-in")).toBeInTheDocument();
-    expect(screen.getByText("Template unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Assignment template unavailable")).toBeInTheDocument();
   });
 
   it("shows Create Assignment button for TEACHER", async () => {
@@ -170,8 +170,8 @@ describe("CourseAssignmentsTab", () => {
       {
         id: 3,
         title: "Other course HW",
-        assessmentId: 12,
-        assessmentTitle: "Other",
+        assignmentTemplateId: 12,
+        assignmentTemplateTitle: "Other",
         audienceType: "COURSE" as const,
         courseId: 99,
         targetTeacherId: null,

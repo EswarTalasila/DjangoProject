@@ -24,8 +24,8 @@ from accounts.models import (
     User,
     UserRole,
 )
-from assessments.models import (
-    Assessment,
+from assignment_templates.models import (
+    AssignmentTemplate,
     GradingMode,
     McqChoice,
     MultipleChoiceQuestion,
@@ -80,11 +80,11 @@ class StudentProfileFactory(factory.django.DjangoModelFactory):
     consent = False
 
 
-class AssessmentFactory(factory.django.DjangoModelFactory):
+class AssignmentTemplateFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = Assessment
+        model = AssignmentTemplate
 
-    title = factory.Sequence(lambda n: f"Assessment {n}")
+    title = factory.Sequence(lambda n: f"AssignmentTemplate {n}")
     grading_mode = GradingMode.AUTO
     scoring_policy = ScoringPolicy.STANDARD
     created_by_admin = factory.SubFactory(UserFactory)
@@ -112,7 +112,7 @@ class AssignmentFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Assignment
 
-    assessment = factory.SubFactory(AssessmentFactory)
+    assignment_template = factory.SubFactory(AssignmentTemplateFactory)
     audience_type = AudienceType.COURSE
     course = factory.SubFactory(CourseFactory)
     created_by = factory.SubFactory(UserFactory)
@@ -125,7 +125,7 @@ class QuestionFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Question
 
-    assessment = factory.SubFactory(AssessmentFactory)
+    assignment_template = factory.SubFactory(AssignmentTemplateFactory)
     question_type = QuestionKind.MULTIPLE_CHOICE
     kind = QuestionKind.MULTIPLE_CHOICE
     prompt = factory.Sequence(lambda n: f"Question {n}")

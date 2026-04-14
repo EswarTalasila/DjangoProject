@@ -151,7 +151,7 @@ All NFR entries specify one of these five verification methods. Each method defi
 
 **Definition:** Verified by code review, configuration audit, or manual testing that requires human judgment.
 
-**When to use:** NFRs with subjective criteria (error message quality, naming conventions, security posture assessment) or infrequent manual verification needs.
+**When to use:** NFRs with subjective criteria (error message quality, naming conventions, security posture assignment template) or infrequent manual verification needs.
 
 **Examples:**
 - **NFR-SEC-03 (Enumeration Prevention):** Security audit verifies error messages do not reveal whether user accounts exist (identical messages for invalid username vs wrong password).
@@ -171,7 +171,7 @@ All NFR entries specify one of these five verification methods. Each method defi
 
 ### Audit
 
-**Definition:** Verified by periodic compliance review -- regulatory audit, security assessment, or data governance check performed on a scheduled basis (quarterly, annually).
+**Definition:** Verified by periodic compliance review -- regulatory audit, security assignment template, or data governance check performed on a scheduled basis (quarterly, annually).
 
 **When to use:** NFRs with compliance requirements (FERPA audit trails, PII protection verification, access control reviews).
 

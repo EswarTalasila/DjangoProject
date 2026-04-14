@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockPush = vi.fn();
 const mockCreateAssignment = vi.fn();
-const mockListAssessments = vi.fn();
+const mockListAssignmentTemplates = vi.fn();
 const mockListCourses = vi.fn();
 const mockToast = { success: vi.fn(), error: vi.fn() };
 let mockSearchParams = new URLSearchParams();
@@ -19,8 +19,8 @@ function setupModuleMocks() {
   vi.doMock("@/lib/assignment-api", () => ({
     createAssignment: mockCreateAssignment,
   }));
-  vi.doMock("@/lib/assessment-api", () => ({
-    listAssessments: mockListAssessments,
+  vi.doMock("@/lib/assignment-template-api", () => ({
+    listAssignmentTemplates: mockListAssignmentTemplates,
   }));
   vi.doMock("@/lib/course-api", () => ({
     listCourses: mockListCourses,
@@ -49,17 +49,17 @@ async function loadComponent() {
   return imported.default;
 }
 
-const mockAssessments = [
+const mockAssignmentTemplates = [
   {
     id: 10,
-    title: "Self Assessment",
+    title: "Self AssignmentTemplate",
     category: null,
     gradingMode: "AUTO" as const,
     scoringPolicy: "STANDARD" as const,
     questions: [],
     questionGroups: [],
     rubricId: null,
-    rubricAssessmentIds: [],
+    rubricAssignmentTemplateIds: [],
   },
 ];
 
@@ -77,7 +77,7 @@ const mockCourses = [
 ];
 
 function mockSuccessfulLoad() {
-  mockListAssessments.mockResolvedValue(mockAssessments);
+  mockListAssignmentTemplates.mockResolvedValue(mockAssignmentTemplates);
   mockListCourses.mockResolvedValue(mockCourses);
 }
 
@@ -88,7 +88,7 @@ describe("AssignmentCreateView", () => {
   });
 
   it("shows loading spinner initially", async () => {
-    mockListAssessments.mockReturnValue(new Promise(() => {}));
+    mockListAssignmentTemplates.mockReturnValue(new Promise(() => {}));
     mockListCourses.mockReturnValue(new Promise(() => {}));
     const AssignmentCreateView = await loadComponent();
     const { container } = render(<AssignmentCreateView />);
@@ -108,7 +108,7 @@ describe("AssignmentCreateView", () => {
     });
     expect(
       screen.getByText(
-        "Link an assessment template to one of your courses."
+        "Link an assignment template to one of your courses."
       )
     ).toBeInTheDocument();
   });
@@ -120,14 +120,14 @@ describe("AssignmentCreateView", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Assignment Title")).toBeInTheDocument();
-      expect(screen.getByText("Assessment")).toBeInTheDocument();
+      expect(screen.getByText("Assignment Template")).toBeInTheDocument();
       expect(screen.getByText("Course")).toBeInTheDocument();
       expect(screen.getByText("Open At")).toBeInTheDocument();
       expect(screen.getByText("Due At")).toBeInTheDocument();
     });
   });
 
-  it("pre-fills title from first assessment", async () => {
+  it("pre-fills title from first assignment_template", async () => {
     mockSuccessfulLoad();
     const AssignmentCreateView = await loadComponent();
     render(<AssignmentCreateView />);
@@ -136,7 +136,7 @@ describe("AssignmentCreateView", () => {
       const titleInput = screen.getByLabelText(
         "Assignment Title"
       ) as HTMLInputElement;
-      expect(titleInput.value).toBe("Self Assessment");
+      expect(titleInput.value).toBe("Self AssignmentTemplate");
     });
   });
 
@@ -163,7 +163,7 @@ describe("AssignmentCreateView", () => {
   });
 
   it("shows load error when API calls fail", async () => {
-    mockListAssessments.mockRejectedValue(new Error("Network error"));
+    mockListAssignmentTemplates.mockRejectedValue(new Error("Network error"));
     mockListCourses.mockRejectedValue(new Error("Network error"));
     const AssignmentCreateView = await loadComponent();
     render(<AssignmentCreateView />);
@@ -209,8 +209,8 @@ describe("AssignmentCreateView", () => {
     await waitFor(() => {
       expect(mockCreateAssignment).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: "Self Assessment",
-          assessmentId: 10,
+          title: "Self AssignmentTemplate",
+          assignmentTemplateId: 10,
           audienceType: "COURSE",
           courseId: 1,
         })
@@ -270,7 +270,7 @@ describe("AssignmentCreateView", () => {
     });
   });
 
-  it("shows 409 error toast for archived assessment", async () => {
+  it("shows 409 error toast for archived assignment_template", async () => {
     mockSuccessfulLoad();
     mockCreateAssignment.mockRejectedValue({
       response: { status: 409, data: { detail: "Archived" } },
@@ -290,7 +290,7 @@ describe("AssignmentCreateView", () => {
 
     await waitFor(() => {
       expect(mockToast.error).toHaveBeenCalledWith(
-        "Cannot create assignment from archived assessment."
+        "Cannot create assignment from archived assignment template."
       );
     });
   });
@@ -332,18 +332,18 @@ describe("AssignmentCreateView", () => {
     expect(mockListCourses).toHaveBeenCalled();
   });
 
-  it("updates title when assessment selection changes", async () => {
-    const multiAssessments = [
+  it("updates title when assignment_template selection changes", async () => {
+    const multiAssignmentTemplates = [
       {
         id: 10,
-        title: "Self Assessment",
+        title: "Self AssignmentTemplate",
         category: null,
         gradingMode: "AUTO" as const,
         scoringPolicy: "STANDARD" as const,
         questions: [],
         questionGroups: [],
         rubricId: null,
-        rubricAssessmentIds: [],
+        rubricAssignmentTemplateIds: [],
       },
       {
         id: 20,
@@ -354,10 +354,10 @@ describe("AssignmentCreateView", () => {
         questions: [],
         questionGroups: [],
         rubricId: null,
-        rubricAssessmentIds: [],
+        rubricAssignmentTemplateIds: [],
       },
     ];
-    mockListAssessments.mockResolvedValue(multiAssessments);
+    mockListAssignmentTemplates.mockResolvedValue(multiAssignmentTemplates);
     mockListCourses.mockResolvedValue(mockCourses);
     const AssignmentCreateView = await loadComponent();
     render(<AssignmentCreateView />);
@@ -366,14 +366,14 @@ describe("AssignmentCreateView", () => {
       expect(screen.getByLabelText("Assignment Title")).toBeInTheDocument();
     });
 
-    // The capturedSelectProps should have the assessment select's onValueChange
-    // The assessment select has value="10" (the first assessment id)
-    const onAssessmentChange = capturedSelectProps["10"] as (v: string) => void;
-    expect(onAssessmentChange).toBeDefined();
+    // The capturedSelectProps should have the assignment_template select's onValueChange
+    // The assignment_template select has value="10" (the first assignment_template id)
+    const onAssignmentTemplateChange = capturedSelectProps["10"] as (v: string) => void;
+    expect(onAssignmentTemplateChange).toBeDefined();
 
-    // Simulate changing the assessment to the second one
+    // Simulate changing the assignment_template to the second one
     act(() => {
-      onAssessmentChange("20");
+      onAssignmentTemplateChange("20");
     });
 
     await waitFor(() => {
@@ -395,8 +395,8 @@ describe("AssignmentCreateView", () => {
     expect(mockListCourses).toHaveBeenCalled();
   });
 
-  it("handles empty assessment and course lists", async () => {
-    mockListAssessments.mockResolvedValue([]);
+  it("handles empty assignment_template and course lists", async () => {
+    mockListAssignmentTemplates.mockResolvedValue([]);
     mockListCourses.mockResolvedValue([]);
     const AssignmentCreateView = await loadComponent();
     render(<AssignmentCreateView />);

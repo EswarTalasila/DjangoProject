@@ -87,7 +87,7 @@ describe("QuickExportTab", () => {
       <QuickExportTab role="RESEARCHER" canExportIdentifiable={true} />
     );
     await waitFor(() => {
-      expect(screen.getByText("Assessment Templates")).toBeInTheDocument();
+      expect(screen.getByText("Assignment Templates")).toBeInTheDocument();
       expect(
         screen.getByText("Assignment Configurations")
       ).toBeInTheDocument();
@@ -104,7 +104,7 @@ describe("QuickExportTab", () => {
     );
     await waitFor(() => {
       expect(
-        screen.getByText("Export assessment definitions and question banks.")
+        screen.getByText("Export assignment template definitions and question banks.")
       ).toBeInTheDocument();
       expect(
         screen.getByText("Export assignment settings, schedules, and scoring rules.")

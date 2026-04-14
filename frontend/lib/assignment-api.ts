@@ -1,5 +1,4 @@
 import api from '@/lib/api';
-import type { Assessment } from '@/lib/assessment-api';
 
 export type AudienceType = 'COURSE' | 'TEACHER';
 export type AssignmentStatus = 'ACTIVE' | 'ARCHIVED';
@@ -7,8 +6,8 @@ export type AssignmentStatus = 'ACTIVE' | 'ARCHIVED';
 export type Assignment = {
   id: number;
   title: string;
-  assessmentId: number;
-  assessmentTitle: string | null;
+  assignmentTemplateId: number;
+  assignmentTemplateTitle: string | null;
   audienceType: AudienceType;
   courseId: number | null;
   targetTeacherId: number | null;
@@ -19,7 +18,7 @@ export type Assignment = {
 
 export type AssignmentCreateInput = {
   title?: string;
-  assessmentId: number;
+  assignmentTemplateId: number;
   audienceType: 'COURSE';
   courseId: number;
   openAt: string;
@@ -39,7 +38,7 @@ type Paginated<T> = {
   results: T[];
 };
 
-/** POST /assignments/ — Create a new assignment linking an assessment to a course. */
+/** POST /assignments/ — Create a new assignment linking an assignment template to a course. */
 export async function createAssignment(payload: AssignmentCreateInput): Promise<Assignment> {
   const response = await api.post<Assignment>('/assignments/', payload);
   return response.data;
@@ -48,12 +47,6 @@ export async function createAssignment(payload: AssignmentCreateInput): Promise<
 /** GET /assignments/:id — Fetch a single assignment by ID. */
 export async function getAssignment(assignmentId: number): Promise<Assignment> {
   const response = await api.get<Assignment>(`/assignments/${assignmentId}`);
-  return response.data;
-}
-
-/** GET /assignments/:id/template — Fetch the assessment template (questions) for an assignment. */
-export async function getAssignmentTemplate(assignmentId: number): Promise<Assessment> {
-  const response = await api.get<Assessment>(`/assignments/${assignmentId}/template`);
   return response.data;
 }
 

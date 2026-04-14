@@ -6,7 +6,7 @@ and ValueError→400 regression.
 
 import pytest
 
-from assessments.models import Assessment, GradingMode
+from assignment_templates.models import AssignmentTemplate, GradingMode
 from rubrics.models import Rubric, RubricCriterion, RubricLevel, RubricStatus
 
 
@@ -17,9 +17,9 @@ def _make_rubric(user, **overrides):
 
 
 def _make_assessment(user, **overrides):
-    defaults = dict(title="Test Assessment", grading_mode=GradingMode.AUTO, created_by_admin=user)
+    defaults = dict(title="Test AssignmentTemplate", grading_mode=GradingMode.AUTO, created_by_admin=user)
     defaults.update(overrides)
-    return Assessment.objects.create(**defaults)
+    return AssignmentTemplate.objects.create(**defaults)
 
 
 # ===========================================================================
@@ -30,11 +30,11 @@ class TestLegacyFieldRejection:
     """Current and legacy rubric payload behavior."""
 
     def test_create_with_assessment_rubric_succeeds(self, api_client, admin_user):
-        """Top-level rubricId now binds a default rubric to the assessment."""
+        """Top-level rubricId now binds a default rubric to the assignment_template."""
         r = _make_rubric(admin_user)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
-            "/api/v1/assessments/",
+            "/api/v1/assignment-templates/",
             {
                 "title": "Test",
                 "gradingMode": "MANUAL",
@@ -53,16 +53,16 @@ class TestLegacyFieldRejection:
         assert resp.status_code == 201
         assert resp.json()["rubricId"] == r.id
 
-    def test_create_with_rubricAssessmentIds_returns_400(self, api_client, admin_user):
-        """Sending legacy rubricAssessmentIds on create returns 400."""
+    def test_create_with_rubricAssignmentTemplateIds_returns_400(self, api_client, admin_user):
+        """Sending legacy rubricAssignmentTemplateIds on create returns 400."""
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
-            "/api/v1/assessments/",
+            "/api/v1/assignment-templates/",
             {
                 "title": "Test",
                 "gradingMode": "AUTO",
                 "questions": [],
-                "rubricAssessmentIds": [1, 2],
+                "rubricAssignmentTemplateIds": [1, 2],
             },
             format="json",
         )
@@ -80,7 +80,7 @@ class TestInvalidGradingMode:
         """Creating with gradingMode=RUBRIC is rejected."""
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
-            "/api/v1/assessments/",
+            "/api/v1/assignment-templates/",
             {
                 "title": "Rubric Test",
                 "gradingMode": "RUBRIC",
@@ -110,7 +110,7 @@ class TestArchivedRubricAttachment:
         r = _make_rubric(admin_user, status=RubricStatus.ARCHIVED)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
-            "/api/v1/assessments/",
+            "/api/v1/assignment-templates/",
             {
                 "title": "Test",
                 "gradingMode": "MANUAL",
@@ -135,7 +135,7 @@ class TestArchivedRubricAttachment:
         r = _make_rubric(admin_user, status=RubricStatus.ARCHIVED)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
-            "/api/v1/assessments/",
+            "/api/v1/assignment-templates/",
             {
                 "title": "Test",
                 "gradingMode": "MANUAL",
@@ -159,11 +159,11 @@ class TestArchivedRubricAttachment:
         assert "archived" in resp.json()["detail"].lower()
 
     def test_archived_rubric_on_assessment_returns_400(self, api_client, admin_user):
-        """Attaching archived rubric to the assessment returns 400."""
+        """Attaching archived rubric to the assignment_template returns 400."""
         r = _make_rubric(admin_user, status=RubricStatus.ARCHIVED)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
-            "/api/v1/assessments/",
+            "/api/v1/assignment-templates/",
             {
                 "title": "Test",
                 "gradingMode": "MANUAL",
@@ -192,12 +192,12 @@ class TestRubricImmutability:
 
     def test_update_referenced_rubric_returns_409(self, api_client, admin_user):
         """PATCH on referenced rubric returns 409."""
-        from assessments.models import Question, QuestionKind
+        from assignment_templates.models import Question, QuestionKind
 
         r = _make_rubric(admin_user)
         a = _make_assessment(admin_user, grading_mode=GradingMode.MANUAL)
         Question.objects.create(
-            assessment=a,
+            assignment_template=a,
             question_type=QuestionKind.SHORT_ANSWER,
             kind=QuestionKind.SHORT_ANSWER,
             prompt="Q",
@@ -212,12 +212,12 @@ class TestRubricImmutability:
 
     def test_delete_referenced_rubric_returns_409(self, api_client, admin_user):
         """DELETE on referenced rubric returns 409."""
-        from assessments.models import Question, QuestionKind
+        from assignment_templates.models import Question, QuestionKind
 
         r = _make_rubric(admin_user)
         a = _make_assessment(admin_user, grading_mode=GradingMode.MANUAL)
         Question.objects.create(
-            assessment=a,
+            assignment_template=a,
             question_type=QuestionKind.SHORT_ANSWER,
             kind=QuestionKind.SHORT_ANSWER,
             prompt="Q",
@@ -241,7 +241,7 @@ class TestValueErrorRegression:
         a = _make_assessment(admin_user)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.patch(
-            f"/api/v1/assessments/{a.id}",
+            f"/api/v1/assignment-templates/{a.id}",
             {
                 "title": "Updated",
                 "gradingMode": "AUTO",
@@ -270,7 +270,7 @@ class TestHybridValidation:
         """HYBRID with MANUAL question but no rubric returns 400."""
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
-            "/api/v1/assessments/",
+            "/api/v1/assignment-templates/",
             {
                 "title": "Hybrid Test",
                 "gradingMode": "HYBRID",
@@ -294,7 +294,7 @@ class TestHybridValidation:
         r = _make_rubric(admin_user)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
-            "/api/v1/assessments/",
+            "/api/v1/assignment-templates/",
             {
                 "title": "Hybrid Test",
                 "gradingMode": "HYBRID",
@@ -322,7 +322,7 @@ class TestHybridValidation:
         r = _make_rubric(admin_user)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
-            "/api/v1/assessments/",
+            "/api/v1/assignment-templates/",
             {
                 "title": "Hybrid Test",
                 "gradingMode": "HYBRID",
@@ -364,13 +364,13 @@ class TestQuestionGroups:
     """Question groups with rubric assignment."""
 
     def test_create_with_question_groups(self, api_client, admin_user):
-        """Assessment can be created with question groups."""
+        """AssignmentTemplate can be created with question groups."""
         r = _make_rubric(admin_user)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
-            "/api/v1/assessments/",
+            "/api/v1/assignment-templates/",
             {
-                "title": "Grouped Assessment",
+                "title": "Grouped AssignmentTemplate",
                 "gradingMode": "HYBRID",
                 "questionGroups": [
                     {"clientKey": "g1", "name": "Writing", "rubricId": r.id},
@@ -409,13 +409,13 @@ class TestQuestionGroups:
         assert data["questions"][1]["groupId"] is None
 
     def test_manual_with_assessment_rubric_succeeds(self, api_client, admin_user):
-        """Assessment-level rubric satisfies MANUAL rubric requirements."""
+        """AssignmentTemplate-level rubric satisfies MANUAL rubric requirements."""
         r = _make_rubric(admin_user)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
-            "/api/v1/assessments/",
+            "/api/v1/assignment-templates/",
             {
-                "title": "Manual Assessment Rubric",
+                "title": "Manual AssignmentTemplate Rubric",
                 "gradingMode": "MANUAL",
                 "rubricId": r.id,
                 "questions": [
@@ -437,13 +437,13 @@ class TestQuestionGroups:
     def test_hybrid_manual_question_inherits_assessment_rubric(
         self, api_client, admin_user
     ):
-        """HYBRID MANUAL questions can inherit the assessment-level rubric."""
+        """HYBRID MANUAL questions can inherit the assignment_template-level rubric."""
         r = _make_rubric(admin_user)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
-            "/api/v1/assessments/",
+            "/api/v1/assignment-templates/",
             {
-                "title": "Hybrid Assessment Rubric",
+                "title": "Hybrid AssignmentTemplate Rubric",
                 "gradingMode": "HYBRID",
                 "rubricId": r.id,
                 "questions": [
@@ -474,7 +474,7 @@ class TestAutoModeRubricRejection:
         r = _make_rubric(admin_user)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
-            "/api/v1/assessments/",
+            "/api/v1/assignment-templates/",
             {
                 "title": "Test",
                 "gradingMode": "AUTO",
@@ -497,13 +497,13 @@ class TestAutoModeRubricRejection:
         assert "auto" in resp.json()["detail"].lower()
 
     def test_auto_with_assessment_rubric_returns_400(self, api_client, admin_user):
-        """AUTO mode with an assessment-level rubric returns 400."""
+        """AUTO mode with an assignment_template-level rubric returns 400."""
         r = _make_rubric(admin_user)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.post(
-            "/api/v1/assessments/",
+            "/api/v1/assignment-templates/",
             {
-                "title": "Assessment Rubric in Auto",
+                "title": "AssignmentTemplate Rubric in Auto",
                 "gradingMode": "AUTO",
                 "rubricId": r.id,
                 "questions": [

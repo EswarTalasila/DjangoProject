@@ -6,7 +6,7 @@ Each DTO corresponds to a service function's return type and ensures
 type safety, IDE autocomplete, and runtime validation.
 
 Usage:
-    from core.dtos import CourseDTO, AssessmentDTO
+    from core.dtos import CourseDTO, AssignmentTemplateDTO
 
     def course_to_dto(course: Course) -> CourseDTO:
         return CourseDTO(id=course.id, name=course.name, ...)
@@ -52,7 +52,7 @@ class CourseDTO(BaseModel):
 
 
 # =============================================================================
-# Assessment DTOs
+# AssignmentTemplate DTOs
 # =============================================================================
 
 
@@ -105,7 +105,7 @@ class QuestionGroupDTO(BaseModel):
     orderIndex: int = 0
 
 
-class AssessmentDTO(BaseModel):
+class AssignmentTemplateDTO(BaseModel):
     """Full assessment with all questions."""
 
     model_config = ConfigDict(from_attributes=True)
@@ -167,14 +167,14 @@ class RubricDTO(BaseModel):
 
 
 class AssignmentDTO(BaseModel):
-    """Assignment linking assessment to audience."""
+    """Assignment linking an assignment template to an audience."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     title: str
-    assessmentId: int
-    assessmentTitle: str | None = None
+    assignmentTemplateId: int
+    assignmentTemplateTitle: str | None = None
     audienceType: str
     courseId: int | None
     targetTeacherId: int | None
@@ -241,5 +241,4 @@ class SubmissionImageDTO(BaseModel):
     uploadedByUserId: int | None
     status: str
     createdAt: datetime
-
 

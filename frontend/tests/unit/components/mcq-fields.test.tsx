@@ -5,13 +5,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockOnChange = vi.fn();
 
 function setupModuleMocks() {
-  vi.doMock("@/lib/assessment-api", () => ({}));
+  vi.doMock("@/lib/assignment-template-api", () => ({}));
 }
 
 async function loadComponent() {
   vi.resetModules();
   setupModuleMocks();
-  const imported = await import("@/components/assessments/McqFields");
+  const imported = await import("@/components/assignment-templates/McqFields");
   return imported.default;
 }
 
@@ -268,7 +268,7 @@ describe("McqFields", () => {
     );
 
     expect(screen.getByText("Choice Text")).toBeInTheDocument();
-    expect(screen.getByText("Points")).toBeInTheDocument();
+    expect(screen.getByText("Value")).toBeInTheDocument();
   });
 
   it("handles undefined choices gracefully", async () => {
@@ -432,7 +432,7 @@ describe("McqFields", () => {
     expect(screen.getByText("3.")).toBeInTheDocument();
   });
 
-  it("shows pts label on score inputs", async () => {
+  it("shows val label on score inputs", async () => {
     const McqFields = await loadComponent();
     render(
       <McqFields
@@ -444,7 +444,7 @@ describe("McqFields", () => {
       />
     );
 
-    expect(screen.getByText("pts")).toBeInTheDocument();
+    expect(screen.getByText("val")).toBeInTheDocument();
   });
 
   it("re-shows choices when toggle button is clicked again after hiding", async () => {

@@ -11,11 +11,11 @@ const mockOnMoveDown = vi.fn();
 let capturedSelectProps: Record<string, { onValueChange?: (v: string) => void; value?: string }> = {};
 
 function setupModuleMocks() {
-  vi.doMock("@/lib/assessment-api", () => ({}));
+  vi.doMock("@/lib/assignment-template-api", () => ({}));
 }
 
 function setupModuleMocksWithSelectCapture() {
-  vi.doMock("@/lib/assessment-api", () => ({}));
+  vi.doMock("@/lib/assignment-template-api", () => ({}));
   vi.doMock("@/components/ui/select", () => ({
     Select: ({ children, onValueChange, value }: { children: React.ReactNode; onValueChange?: (v: string) => void; value?: string }) => {
       capturedSelectProps[value || ""] = { onValueChange, value };
@@ -33,7 +33,7 @@ function setupModuleMocksWithSelectCapture() {
 async function loadComponent() {
   vi.resetModules();
   setupModuleMocks();
-  const imported = await import("@/components/assessments/QuestionBlock");
+  const imported = await import("@/components/assignment-templates/QuestionBlock");
   return imported.default;
 }
 
@@ -41,7 +41,7 @@ async function loadComponentWithSelectCapture() {
   vi.resetModules();
   capturedSelectProps = {};
   setupModuleMocksWithSelectCapture();
-  const imported = await import("@/components/assessments/QuestionBlock");
+  const imported = await import("@/components/assignment-templates/QuestionBlock");
   return imported.default;
 }
 

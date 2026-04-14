@@ -13,7 +13,7 @@ from django.db.models.functions import Coalesce, Round
 from django.utils import timezone
 
 from accounts.models import Role, SudoPermission
-from assessments.models import QuestionKind
+from assignment_templates.models import QuestionKind
 from assignments.models import Assignment
 from core.permissions import has_role, has_sudo_permission
 from courses.models import Course, Enrollment, EnrollmentStatus
@@ -160,7 +160,7 @@ def course_summary(
     start_date: date | None = None,
     end_date: date | None = None,
     category: str | None = None,
-    assessment_id: int | None = None,
+    assignment_template_id: int | None = None,
 ) -> dict:
     """Per-assignment completion and grade stats for a course."""
     anonymize = _is_researcher_without_viz(user)
@@ -169,7 +169,7 @@ def course_summary(
         status=EnrollmentStatus.ACTIVE,
     ).count()
 
-    assignments = course.assignments.select_related("assessment")
+    assignments = course.assignments.select_related("assignment_template")
 
     if start_date or end_date:
         start_dt, end_dt = _date_to_datetime_range(start_date, end_date)
@@ -179,9 +179,9 @@ def course_summary(
             assignments = assignments.filter(open_at__lte=end_dt)
 
     if category:
-        assignments = assignments.filter(assessment__category=category)
-    if assessment_id is not None:
-        assignments = assignments.filter(assessment_id=assessment_id)
+        assignments = assignments.filter(assignment_template__category=category)
+    if assignment_template_id is not None:
+        assignments = assignments.filter(assignment_template_id=assignment_template_id)
 
     submitted_count_sq = (
         Submission.objects.filter(
@@ -237,7 +237,7 @@ def course_summary(
         pending = assignment.pending_count
 
         entry = {
-            "assessmentCategory": assignment.assessment.category,
+            "assignmentTemplateCategory": assignment.assignment_template.category,
             "submittedCount": submitted_count,
             "totalStudents": enrolled_count,
             "completionPct": completion_pct,
@@ -247,7 +247,7 @@ def course_summary(
         }
         if not anonymize:
             entry["assignmentId"] = assignment.id
-            entry["assessmentTitle"] = assignment.assessment.title
+            entry["assignmentTemplateTitle"] = assignment.assignment_template.title
 
         items.append(entry)
 
@@ -257,7 +257,7 @@ def course_summary(
             "startDate": start_date.isoformat() if start_date else None,
             "endDate": end_date.isoformat() if end_date else None,
             "category": category,
-            "assessmentId": assessment_id,
+            "assignmentTemplateId": assignment_template_id,
         },
         "enrolledCount": enrolled_count,
         "assignments": items,
@@ -361,7 +361,7 @@ def assignment_grade_summary(
             "startDate": start_date.isoformat() if start_date else None,
             "endDate": end_date.isoformat() if end_date else None,
         },
-        "assessmentCategory": assignment.assessment.category,
+        "assignmentTemplateCategory": assignment.assignment_template.category,
         "totalStudents": total_students,
         "submittedCount": submitted_count,
         "gradedCount": graded_count,
@@ -374,7 +374,7 @@ def assignment_grade_summary(
     }
     if not anonymize:
         result["assignmentId"] = assignment.id
-        result["assessmentTitle"] = assignment.assessment.title
+        result["assignmentTemplateTitle"] = assignment.assignment_template.title
 
     return result
 
@@ -393,7 +393,7 @@ def mood_meter_summary(user, assignment: Assignment) -> dict:
     )
 
     ns_question_cfg = list(
-        assignment.assessment.questions.filter(kind=QuestionKind.NUMBER_SCALE)
+        assignment.assignment_template.questions.filter(kind=QuestionKind.NUMBER_SCALE)
         .select_related("number_scale")
         .order_by("id")[:2]
     )

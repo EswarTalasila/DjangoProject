@@ -8,7 +8,7 @@
 
 ## Service boundaries
 - Frontend: presentation and routing only; no business logic changes.
-- Backend: REST API with service-layer separation for auth, courses, assessments, assignments, submissions, visualization, and exports.
+- Backend: REST API with service-layer separation for auth, courses, assignment templates, assignments, submissions, visualization, and exports.
 - Database: normalized relational schema equivalent to current entities.
 
 ## API structure
@@ -19,7 +19,7 @@
 ## Module layout (Django)
 - `accounts`: auth, user roles, password setup, OAuth validation.
 - `courses`: courses and enrollments.
-- `assessments`: assessments, questions, grading modes, rubrics.
+- `assignment templates`: assignment templates, questions, grading modes, rubrics.
 - `assignments`: assignment scheduling, open/close windows.
 - `submissions`: submission capture, grading, overrides.
 - `visualizations`: aggregate queries and filters.
@@ -31,7 +31,7 @@
   - `backend/src/`: project source root (src-layout).
   - `backend/src/config/`: settings, urls, wsgi/asgi.
   - `backend/src/core/`: shared utilities (auth base, permissions, audit, pagination).
-  - `backend/src/<domain>/`: domain modules (accounts, courses, assessments, assignments, submissions, visualizations, exports, audit).
+  - `backend/src/<domain>/`: domain modules (accounts, courses, assignment templates, assignments, submissions, visualizations, exports, audit).
   - `backend/tests/unit`: unit tests per module.
   - `backend/tests/integration`: API and workflow tests.
   - `backend/tests/security`: auth/authorization and abuse-case tests.
@@ -39,8 +39,8 @@
 - `frontend/`: Angular project (unchanged UI).
   - `frontend/src`: existing UI.
   - `frontend/tests/unit`: Angular unit tests.
-- `docs/`: spec sheets and diagrams (PlantUML).
-  - `docs/diagrams/plantuml`: generated class/ER/sequence diagrams.
+- `docs/`: spec sheets and historical diagrams.
+  - `docs/diagrams/plantuml`: retained reference outputs; regeneration is currently deferred.
 
 ## Backend organization rationale (chosen)
 - Use a src-layout with domain modules and a shared core package.

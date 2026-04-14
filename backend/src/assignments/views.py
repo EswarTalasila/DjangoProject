@@ -2,11 +2,11 @@
 Assignment management API endpoints.
 
 Endpoints:
-    POST   /api/v1/assignments              - Create new assignment
+    POST   /api/v1/assignments               - Create new assignment
     GET    /api/v1/assignments/{id}          - Get assignment detail
     PATCH  /api/v1/assignments/{id}          - Update assignment scheduling
     DELETE /api/v1/assignments/{id}          - Delete assignment
-    GET    /api/v1/assignments/{id}/template - Get assignment assessment template
+    GET    /api/v1/assignments/{id}/template - Get assignment template
     POST   /api/v1/assignments/{id}/archive  - Archive assignment
     GET    /api/v1/assignments/courses/{id}  - List assignments for course
     GET    /api/v1/assignments/users/{id}    - List assignments for user
@@ -18,9 +18,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import Role, User
-from assessments.services import (
-    _assessment_with_related,
-    assessment_to_dto as assessment_template_to_dto,
+from assignment_templates.services import (
+    _assignment_template_with_related,
+    assignment_template_to_dto,
 )
 from core.audit import complete_audit, get_client_ip, log_audit
 from core.errors import error_response
@@ -49,6 +49,7 @@ from .services import (
 
 
 def _can_read_assignment(user: User, assignment) -> bool:
+    """Apply assignment access rules for the current user."""
     role = primary_role(user)
     if role == Role.STUDENT:
         if assignment.course_id is None:
@@ -66,15 +67,7 @@ def _can_read_assignment(user: User, assignment) -> bool:
 @api_view(["POST"])
 @permission_classes([IsTeacher])
 def create(request):
-    """
-    Create a new assignment from an assessment.
-
-    Returns:
-        201: Assignment DTO
-        400: Validation error (invalid payload, scheduling, deprecated audience type)
-        403: Forbidden (not teacher, or does not own course)
-        409: Assessment is archived
-    """
+    """Create a new assignment from an assignment template."""
     serializer = AssignmentSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     try:
@@ -91,13 +84,7 @@ def create(request):
 @api_view(["GET", "PATCH", "DELETE"])
 @permission_classes([IsAuthenticated])
 def detail(request, assignment_id: int):
-    """
-    Get, update, or delete a specific assignment.
-
-    GET: Returns assignment details with role-based access control.
-    PATCH: Updates scheduling fields (creator-only).
-    DELETE: Removes assignment if no submissions progressed (creator-only).
-    """
+    """Get, update, or delete a specific assignment."""
     assignment = get_assignment(assignment_id)
     if not assignment:
         return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -122,7 +109,6 @@ def detail(request, assignment_id: int):
             return error_response(exc)
         return Response(assignment_to_dto(assignment).model_dump(), status=status.HTTP_200_OK)
 
-    # DELETE with ?purge=true — admin-only hard delete of archived assignment
     if request.query_params.get("purge", "").lower() == "true":
         audit_id = log_audit(
             actor=request.user,
@@ -144,7 +130,6 @@ def detail(request, assignment_id: int):
         complete_audit(audit_id, AuditOutcome.SUCCESS)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    # Regular DELETE — creator-only, cascades through submissions
     try:
         delete_assignment(assignment, caller_user=request.user)
     except ForbiddenError as exc:
@@ -155,12 +140,7 @@ def detail(request, assignment_id: int):
 @api_view(["GET"])
 @permission_classes([IsTeacherOrAbove])
 def list_course(request, course_id: int):
-    """
-    List all assignments for a specific course.
-
-    ADMIN/RESEARCHER: can list any course's assignments.
-    TEACHER: must own the course.
-    """
+    """List all assignments for a specific course."""
     role = primary_role(request.user)
     if role == Role.TEACHER:
         from courses.models import Course
@@ -170,23 +150,18 @@ def list_course(request, course_id: int):
             return Response({"detail": "Course not found"}, status=status.HTTP_404_NOT_FOUND)
         if not can_view_course(request.user, course):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
     include_archived, include_archived_error = parse_include_archived(request)
     if include_archived_error is not None:
         return include_archived_error
     assignments = list_by_course(course_id, include_archived=include_archived)
-    return paginate(assignments, request, transform_fn=lambda a: assignment_to_dto(a).model_dump())
+    return paginate(assignments, request, transform_fn=lambda item: assignment_to_dto(item).model_dump())
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def list_user(request, user_id: int):
-    """
-    List all assignments for a specific user.
-
-    For students: Returns ACTIVE assignments from enrolled courses within time window.
-    For teachers: Returns assignments they created.
-    Researchers and admins can view assignments for any user.
-    """
+    """List all assignments for a specific user."""
     if (
         request.user.id != user_id
         and not request.user.is_staff
@@ -197,13 +172,13 @@ def list_user(request, user_id: int):
     if not target:
         return Response({"detail": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     assignments = list_for_user(target)
-    return paginate(assignments, request, transform_fn=lambda a: assignment_to_dto(a).model_dump())
+    return paginate(assignments, request, transform_fn=lambda item: assignment_to_dto(item).model_dump())
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def archive(request, assignment_id: int):
-    """Archive an assignment (ARCH-UC-01). Creator or admin."""
+    """Archive an assignment."""
     assignment = get_assignment(assignment_id)
     if not assignment:
         return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -231,7 +206,7 @@ def archive(request, assignment_id: int):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def restore(request, assignment_id: int):
-    """Restore an archived assignment (ARCH-UC-04). Creator or admin."""
+    """Restore an archived assignment."""
     assignment = get_assignment(assignment_id)
     if not assignment:
         return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -259,17 +234,15 @@ def restore(request, assignment_id: int):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_assignment_template(request, assignment_id: int):
-    """
-    Get the assessment template attached to an assignment using assignment-level access rules.
-    """
+    """Get the template attached to an assignment using assignment access rules."""
     assignment = get_assignment(assignment_id)
     if not assignment:
         return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
     if not _can_read_assignment(request.user, assignment):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
-    # Fetch assessment with prefetches for efficient DTO serialization.
-    assessment = _assessment_with_related(assignment.assessment_id)
+
+    assignment_template = _assignment_template_with_related(assignment.assignment_template_id)
     return Response(
-        assessment_template_to_dto(assessment).model_dump(),
+        assignment_template_to_dto(assignment_template).model_dump(),
         status=status.HTTP_200_OK,
     )

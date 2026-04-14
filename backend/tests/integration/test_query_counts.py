@@ -10,9 +10,9 @@ from django.test.utils import CaptureQueriesContext
 from django.db import connection
 
 from accounts.models import Role, StudentProfile, TeacherProfile, UserRole
-from assessments.models import (
-    Assessment,
-    AssessmentQuestionGroup,
+from assignment_templates.models import (
+    AssignmentTemplate,
+    AssignmentTemplateQuestionGroup,
     GradingMode,
     McqChoice,
     MultipleChoiceQuestion,
@@ -51,10 +51,10 @@ def _create_teacher_and_course():
     return teacher, course
 
 
-def _create_assessment_with_questions(admin, n_mcq=2, n_sa=1, n_ns=1):
-    """Create an assessment with a mix of question types."""
-    assessment = Assessment.objects.create(
-        title="Query Test Assessment",
+def _create_assignment_template_with_questions(admin, n_mcq=2, n_sa=1, n_ns=1):
+    """Create an assignment_template with a mix of question types."""
+    assignment_template = AssignmentTemplate.objects.create(
+        title="Query Test AssignmentTemplate",
         grading_mode=GradingMode.AUTO,
         scoring_policy=ScoringPolicy.STANDARD,
         created_by_admin=admin,
@@ -62,7 +62,7 @@ def _create_assessment_with_questions(admin, n_mcq=2, n_sa=1, n_ns=1):
     questions = []
     for i in range(n_mcq):
         q = Question.objects.create(
-            assessment=assessment,
+            assignment_template=assignment_template,
             question_type=QuestionKind.MULTIPLE_CHOICE,
             kind=QuestionKind.MULTIPLE_CHOICE,
             prompt=f"MCQ {i}",
@@ -76,7 +76,7 @@ def _create_assessment_with_questions(admin, n_mcq=2, n_sa=1, n_ns=1):
         questions.append(q)
     for i in range(n_sa):
         q = Question.objects.create(
-            assessment=assessment,
+            assignment_template=assignment_template,
             question_type=QuestionKind.SHORT_ANSWER,
             kind=QuestionKind.SHORT_ANSWER,
             prompt=f"SA {i}",
@@ -88,7 +88,7 @@ def _create_assessment_with_questions(admin, n_mcq=2, n_sa=1, n_ns=1):
         questions.append(q)
     for i in range(n_ns):
         q = Question.objects.create(
-            assessment=assessment,
+            assignment_template=assignment_template,
             question_type=QuestionKind.NUMBER_SCALE,
             kind=QuestionKind.NUMBER_SCALE,
             prompt=f"NS {i}",
@@ -98,7 +98,7 @@ def _create_assessment_with_questions(admin, n_mcq=2, n_sa=1, n_ns=1):
         )
         NumberScaleQuestion.objects.create(question=q, min=1, max=10, target=5)
         questions.append(q)
-    return assessment, questions
+    return assignment_template, questions
 
 
 def _create_submission_with_answers(assignment, student, questions):
@@ -161,11 +161,11 @@ class TestSubmissionDtoQueryCount:
         from submissions.services import get_submission_for_dto, submission_to_dto
 
         teacher, course = _create_teacher_and_course()
-        assessment, questions = _create_assessment_with_questions(
+        assignment_template, questions = _create_assignment_template_with_questions(
             admin_user, n_mcq=3, n_sa=2, n_ns=2,
         )
         assignment = Assignment.objects.create(
-            assessment=assessment, audience_type=AudienceType.COURSE,
+            assignment_template=assignment_template, audience_type=AudienceType.COURSE,
             course=course, created_by=teacher, open_at="2025-01-01T00:00:00Z",
         )
         student = UserFactory()
@@ -190,37 +190,40 @@ class TestSubmissionDtoQueryCount:
         )
 
 
-# ── Assessment DTO query-count test ──────────────────────────────────────
+# ── AssignmentTemplate DTO query-count test ──────────────────────────────────────
 
 
-class TestAssessmentDtoQueryCount:
-    """Verify assessment DTO generation query count is constant."""
+class TestAssignmentTemplateDtoQueryCount:
+    """Verify assignment_template DTO generation query count is constant."""
 
-    def test_assessment_dto_constant_queries(self, admin_user):
-        """assessment_to_dto query count does not scale with question count."""
-        from assessments.services import _assessment_with_related, assessment_to_dto
+    def test_assignment_template_dto_constant_queries(self, admin_user):
+        """assignment_template_to_dto query count does not scale with question count."""
+        from assignment_templates.services import (
+            _assignment_template_with_related,
+            assignment_template_to_dto,
+        )
 
-        assessment, _ = _create_assessment_with_questions(
+        assignment_template, _ = _create_assignment_template_with_questions(
             admin_user, n_mcq=5, n_sa=3, n_ns=2,
         )
         for i in range(3):
-            AssessmentQuestionGroup.objects.create(
-                assessment=assessment,
+            AssignmentTemplateQuestionGroup.objects.create(
+                assignment_template=assignment_template,
                 name=f"Group {i}",
                 order_index=i,
             )
 
         # Warm up
-        _assessment_with_related(assessment.id)
+        _assignment_template_with_related(assignment_template.id)
 
         with CaptureQueriesContext(connection) as ctx:
-            a = _assessment_with_related(assessment.id)
-            assessment_to_dto(a)
+            a = _assignment_template_with_related(assignment_template.id)
+            assignment_template_to_dto(a)
 
-        # 1 assessment query + 5 prefetch queries (groups, questions,
+        # 1 assignment_template query + 5 prefetch queries (groups, questions,
         # mcq_choices, multiple_choice, short_answer, number_scale).
         assert len(ctx.captured_queries) <= 8, (
-            f"Expected <= 8 queries for assessment DTO, got {len(ctx.captured_queries)}:\n"
+            f"Expected <= 8 queries for assignment_template DTO, got {len(ctx.captured_queries)}:\n"
             + "\n".join(q["sql"][:120] for q in ctx.captured_queries)
         )
 
@@ -330,11 +333,11 @@ class TestExportAnswersQueryCount:
         from exports.services import export_course_submissions
 
         teacher, course = _create_teacher_and_course()
-        assessment, questions = _create_assessment_with_questions(
+        assignment_template, questions = _create_assignment_template_with_questions(
             admin_user, n_mcq=3, n_sa=2, n_ns=2,
         )
         assignment = Assignment.objects.create(
-            assessment=assessment, audience_type=AudienceType.COURSE,
+            assignment_template=assignment_template, audience_type=AudienceType.COURSE,
             course=course, created_by=teacher, open_at="2025-01-01T00:00:00Z",
         )
         # Create multiple students with submissions

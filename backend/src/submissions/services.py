@@ -3,7 +3,7 @@ Submission domain helpers.
 
 This module provides business logic for managing submissions including:
 - Creating and editing submissions
-- Auto-scoring based on assessment grading mode
+- Auto-scoring based on assignment template grading mode
 - Manual score overrides by teachers
 - Converting submissions to DTOs for API responses
 
@@ -18,7 +18,13 @@ from django.db import transaction
 from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 
-from assessments.models import Assessment, GradingMode, McqChoice, Question, ScoringPolicy
+from assignment_templates.models import (
+    AssignmentTemplate,
+    GradingMode,
+    McqChoice,
+    Question,
+    ScoringPolicy,
+)
 from assignments.models import Assignment
 from core.dtos import AnswerDTO, SubmissionCompactDTO, SubmissionDTO
 
@@ -244,9 +250,11 @@ def create_submission(assignment_id: int, payload: dict, target_status: str) -> 
     assignment = Assignment.objects.filter(id=assignment_id).first()
     if not assignment:
         raise ValueError("Assignment not found")
-    assessment = Assessment.objects.filter(id=assignment.assessment_id).first()
-    if not assessment:
-        raise ValueError("Assessment not found")
+    assignment_template = AssignmentTemplate.objects.filter(
+        id=assignment.assignment_template_id
+    ).first()
+    if not assignment_template:
+        raise ValueError("AssignmentTemplate not found")
 
     student_id = payload.get("studentId")
     teacher_id = payload.get("teacherId")
@@ -271,10 +279,10 @@ def create_submission(assignment_id: int, payload: dict, target_status: str) -> 
     )
     _replace_answers(submission, payload.get("answers") or [])
     if target_status != SubmissionStatus.IN_PROGRESS and (
-        assessment.scoring_policy == ScoringPolicy.COMPLETION
-        or assessment.grading_mode != GradingMode.MANUAL
+        assignment_template.scoring_policy == ScoringPolicy.COMPLETION
+        or assignment_template.grading_mode != GradingMode.MANUAL
     ):
-        _auto_score_submission(submission, assessment)
+        _auto_score_submission(submission, assignment_template)
     submission.save()
     return submission
 
@@ -394,16 +402,18 @@ def edit_submission(payload: dict) -> Submission:
 
     _replace_answers(submission, payload.get("answers") or [])
 
-    assessment = Assessment.objects.filter(id=submission.assignment.assessment_id).first()
+    assignment_template = AssignmentTemplate.objects.filter(
+        id=submission.assignment.assignment_template_id
+    ).first()
     if (
-        assessment
+        assignment_template
         and new_status != SubmissionStatus.IN_PROGRESS
         and (
-            assessment.scoring_policy == ScoringPolicy.COMPLETION
-            or assessment.grading_mode != GradingMode.MANUAL
+            assignment_template.scoring_policy == ScoringPolicy.COMPLETION
+            or assignment_template.grading_mode != GradingMode.MANUAL
         )
     ):
-        _auto_score_submission(submission, assessment)
+        _auto_score_submission(submission, assignment_template)
 
     submission.save()
     return submission
@@ -431,10 +441,10 @@ def override_score(submission_id: int, scores: list) -> Submission:
         The updated Submission with new scores and GRADED status
 
     Raises:
-        ValueError: If submission not found, no scores provided, or assessment not found
+        ValueError: If submission not found, no scores provided, or assignment template not found
     """
     submission = (
-        Submission.objects.select_related("assignment__assessment")
+        Submission.objects.select_related("assignment__assignment_template")
         .filter(id=submission_id)
         .first()
     )
@@ -443,12 +453,12 @@ def override_score(submission_id: int, scores: list) -> Submission:
     if not scores:
         raise ValueError("Override score request must include score values")
 
-    assessment = submission.assignment.assessment
-    if not assessment:
-        raise ValueError("Assessment not found")
-    if assessment.scoring_policy == ScoringPolicy.COMPLETION:
+    assignment_template = submission.assignment.assignment_template
+    if not assignment_template:
+        raise ValueError("AssignmentTemplate not found")
+    if assignment_template.scoring_policy == ScoringPolicy.COMPLETION:
         raise ValueError(
-            "Completion-scored assessments always award full credit and cannot be manually overridden"
+            "Completion-scored assignment templates always award full credit and cannot be manually overridden"
         )
 
     answers = sorted(
@@ -498,7 +508,7 @@ def override_score(submission_id: int, scores: list) -> Submission:
             total += scores[-1]
         return total
 
-    if assessment.grading_mode == GradingMode.HYBRID:
+    if assignment_template.grading_mode == GradingMode.HYBRID:
         # HYBRID: only manually score SHORT_ANSWER questions;
         # other types (MCQ, NUMBER_SCALE) keep their auto-calculated scores
         total = _apply_scores(
@@ -560,11 +570,11 @@ def _create_answer(submission: Submission, payload: dict) -> Answer:
     question = Question.objects.filter(id=question_id).first()
     if not question:
         raise ValueError("Question not found")
-    # Bug 2 fix: verify question belongs to the submission's assignment's assessment
-    if question.assessment_id != submission.assignment.assessment_id:
+    # Verify the question belongs to the submission's assignment template.
+    if question.assignment_template_id != submission.assignment.assignment_template_id:
         raise ValueError(
-            f"Question {question_id} does not belong to assessment "
-            f"{submission.assignment.assessment_id}"
+            f"Question {question_id} does not belong to assignment template "
+            f"{submission.assignment.assignment_template_id}"
         )
     answer_type = payload.get("type")
     if not answer_type:
@@ -613,7 +623,10 @@ def _create_answer(submission: Submission, payload: dict) -> Answer:
     return answer
 
 
-def _auto_score_submission(submission: Submission, assessment: Assessment) -> None:
+def _auto_score_submission(
+    submission: Submission,
+    assignment_template: AssignmentTemplate,
+) -> None:
     """
     Calculate auto-scores for all gradable answers in a submission.
 
@@ -623,7 +636,7 @@ def _auto_score_submission(submission: Submission, assessment: Assessment) -> No
 
     For AUTO grading mode, also marks the submission as GRADED.
     """
-    if assessment.scoring_policy == ScoringPolicy.COMPLETION:
+    if assignment_template.scoring_policy == ScoringPolicy.COMPLETION:
         submission.score = 100.0
         submission.status = SubmissionStatus.GRADED
         if submission.submitted_at is None:
@@ -647,7 +660,7 @@ def _auto_score_submission(submission: Submission, assessment: Assessment) -> No
         elif answer.answer_type == AnswerType.NUMBER_SCALE:
             total += _auto_score_number_scale(answer, question)
     submission.score = total
-    if assessment.grading_mode == GradingMode.AUTO:
+    if assignment_template.grading_mode == GradingMode.AUTO:
         submission.status = SubmissionStatus.GRADED
         if submission.submitted_at is None:
             submission.submitted_at = timezone.now()

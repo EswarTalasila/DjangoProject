@@ -5,7 +5,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from assessments.models import Question
+from assignment_templates.models import Question
 
 
 def login(client: APIClient, username: str, password: str) -> dict:
@@ -52,9 +52,9 @@ class TestWorkflows:
         step("Admin login (force_authenticate — admins blocked from API login)")
         admin_authenticate(admin_client, admin)
 
-        step("Admin creates assessment")
-        assessment_payload = {
-            "title": "Workflow Assessment",
+        step("Admin creates assignment_template")
+        assignment_template_payload = {
+            "title": "Workflow AssignmentTemplate",
             "gradingMode": "AUTO",
             "questions": [
                 {
@@ -65,12 +65,12 @@ class TestWorkflows:
                 }
             ],
         }
-        assessment_response = admin_client.post(
-            "/api/v1/assessments/", assessment_payload, format="json"
+        assignment_template_response = admin_client.post(
+            "/api/v1/assignment-templates/", assignment_template_payload, format="json"
         )
-        assert assessment_response.status_code == 201
-        assessment_id = assessment_response.json()["id"]
-        question = Question.objects.filter(assessment_id=assessment_id).first()
+        assert assignment_template_response.status_code == 201
+        assignment_template_id = assignment_template_response.json()["id"]
+        question = Question.objects.filter(assignment_template_id=assignment_template_id).first()
         assert question is not None
 
         step("Admin creates teacher")
@@ -109,7 +109,7 @@ class TestWorkflows:
         student_username = student_response.json()["username"]
 
         assignment_payload = {
-            "assessmentId": assessment_id,
+            "assignmentTemplateId": assignment_template_id,
             "audienceType": "COURSE",
             "courseId": course_id,
             "openAt": timezone.now().isoformat(),

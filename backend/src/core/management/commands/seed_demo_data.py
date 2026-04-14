@@ -9,20 +9,20 @@ from django.utils import timezone
 
 from accounts.management.commands.provision_account import COURSE_NAME, CREDENTIALS
 from accounts.models import StudentProfile, User
-from assessments.models import (
-    Assessment,
-    AssessmentStatus,
+from assignment_templates.models import (
+    AssignmentTemplate,
+    AssignmentTemplateStatus,
     GradingMode,
     GradingStrategy,
     QuestionKind,
     ScoringPolicy,
     SubmissionMode,
 )
-from assessments.services import (
-    archive_assessment,
-    create_assessment,
-    create_draft,
-    update_assessment,
+from assignment_templates.services import (
+    archive_assignment_template,
+    create_assignment_template,
+    create_assignment_template_draft,
+    update_assignment_template,
 )
 from assignments.models import Assignment
 from assignments.services._mutations import create_assignment
@@ -48,7 +48,7 @@ SEED_RUBRIC_TITLES = (
     "Seed Participation Rubric",
 )
 
-SEED_ASSESSMENT_TITLES = (
+SEED_ASSIGNMENT_TEMPLATE_TITLES = (
     "Seed Screening Survey",
     "Seed Writing Reflection",
     "Seed Grouped Behavior Review",
@@ -72,7 +72,7 @@ class Command(BaseCommand):
     """Seed a fuller deterministic demo dataset for local development/testing."""
 
     help = (
-        "Provision deterministic accounts and seed demo rubrics, assessments, "
+        "Provision deterministic accounts and seed demo rubrics, assignment templates, "
         "assignments, courses, and submissions."
     )
 
@@ -103,7 +103,7 @@ class Command(BaseCommand):
             holistic_rubric = self._ensure_rubric(
                 researcher,
                 title="Seed Holistic Reflection Rubric",
-                description="Assessment-wide manual grading rubric for writing-based demos.",
+                description="Assignment-template-wide manual grading rubric for writing-based demos.",
                 criteria=[
                     {
                         "title": "Insight",
@@ -145,7 +145,7 @@ class Command(BaseCommand):
                 ],
             )
 
-            screening_assessment = create_assessment(
+            screening_assignment_template = create_assignment_template(
                 researcher,
                 {
                     "title": "Seed Screening Survey",
@@ -189,7 +189,7 @@ class Command(BaseCommand):
                 },
             )
 
-            writing_assessment = create_assessment(
+            writing_assignment_template = create_assignment_template(
                 researcher,
                 {
                     "title": "Seed Writing Reflection",
@@ -216,7 +216,7 @@ class Command(BaseCommand):
                 },
             )
 
-            grouped_assessment = create_assessment(
+            grouped_assignment_template = create_assignment_template(
                 researcher,
                 {
                     "title": "Seed Grouped Behavior Review",
@@ -250,9 +250,9 @@ class Command(BaseCommand):
                 },
             )
 
-            draft_assessment = create_draft(researcher)
-            update_assessment(
-                draft_assessment,
+            draft_assignment_template = create_assignment_template_draft(researcher)
+            update_assignment_template(
+                draft_assignment_template,
                 {
                     "title": "Seed Intake Packet Draft",
                     "category": "Intake",
@@ -278,7 +278,7 @@ class Command(BaseCommand):
                 },
             )
 
-            archived_assessment = create_assessment(
+            archived_assignment_template = create_assignment_template(
                 researcher,
                 {
                     "title": "Seed Retired Check-In",
@@ -301,13 +301,13 @@ class Command(BaseCommand):
                     ],
                 },
             )
-            archive_assessment(researcher, archived_assessment)
+            archive_assignment_template(researcher, archived_assignment_template)
 
             screening_assignment = create_assignment(
                 teacher,
                 {
                     "title": "Seed Screening Survey - Period 1",
-                    "assessmentId": screening_assessment.id,
+                    "assignmentTemplateId": screening_assignment_template.id,
                     "audienceType": "COURSE",
                     "courseId": primary_course.id,
                     "openAt": timezone.now() - timedelta(days=3),
@@ -318,7 +318,7 @@ class Command(BaseCommand):
                 teacher,
                 {
                     "title": "Seed Writing Reflection - Period 1",
-                    "assessmentId": writing_assessment.id,
+                    "assignmentTemplateId": writing_assignment_template.id,
                     "audienceType": "COURSE",
                     "courseId": primary_course.id,
                     "openAt": timezone.now() - timedelta(days=1),
@@ -329,7 +329,7 @@ class Command(BaseCommand):
                 teacher,
                 {
                     "title": "Seed Grouped Behavior Review - Lab",
-                    "assessmentId": grouped_assessment.id,
+                    "assignmentTemplateId": grouped_assignment_template.id,
                     "audienceType": "COURSE",
                     "courseId": secondary_course.id,
                     "openAt": timezone.now() - timedelta(days=2),
@@ -372,13 +372,16 @@ class Command(BaseCommand):
                     f"  student:    {base_student.username}",
                     f"  courses:    {Course.objects.filter(name__in=[COURSE_NAME, SEED_SECONDARY_COURSE]).count()}",
                     f"  rubrics:    {Rubric.objects.filter(title__in=SEED_RUBRIC_TITLES).count()}",
-                    f"  assessments:{Assessment.objects.filter(title__in=SEED_ASSESSMENT_TITLES).count()}",
+                    (
+                        "  assignment_templates:"
+                        f"{AssignmentTemplate.objects.filter(title__in=SEED_ASSIGNMENT_TEMPLATE_TITLES).count()}"
+                    ),
                     f"  assignments:{Assignment.objects.filter(title__in=SEED_ASSIGNMENT_TITLES).count()}",
                     (
                         "  statuses:   draft="
-                        f"{Assessment.objects.filter(title='Seed Intake Packet Draft', status=AssessmentStatus.DRAFT).count()} "
-                        f"active={Assessment.objects.filter(title__in=SEED_ASSESSMENT_TITLES, status=AssessmentStatus.ACTIVE).count()} "
-                        f"archived={Assessment.objects.filter(title='Seed Retired Check-In', status=AssessmentStatus.ARCHIVED).count()}"
+                        f"{AssignmentTemplate.objects.filter(title='Seed Intake Packet Draft', status=AssignmentTemplateStatus.DRAFT).count()} "
+                        f"active={AssignmentTemplate.objects.filter(title__in=SEED_ASSIGNMENT_TEMPLATE_TITLES, status=AssignmentTemplateStatus.ACTIVE).count()} "
+                        f"archived={AssignmentTemplate.objects.filter(title='Seed Retired Check-In', status=AssignmentTemplateStatus.ARCHIVED).count()}"
                     ),
                 ]
             )
@@ -456,7 +459,7 @@ class Command(BaseCommand):
 
     def _clear_seed_domain_data(self) -> None:
         Assignment.objects.filter(title__in=SEED_ASSIGNMENT_TITLES).delete()
-        Assessment.objects.filter(title__in=SEED_ASSESSMENT_TITLES).delete()
+        AssignmentTemplate.objects.filter(title__in=SEED_ASSIGNMENT_TEMPLATE_TITLES).delete()
         Rubric.objects.filter(title__in=SEED_RUBRIC_TITLES).delete()
         Course.objects.filter(name=SEED_SECONDARY_COURSE).delete()
 
@@ -479,7 +482,7 @@ class Command(BaseCommand):
 
         normalized_status = status
         if (
-            assignment.assessment.grading_mode == GradingMode.AUTO
+            assignment.assignment_template.grading_mode == GradingMode.AUTO
             and status == SubmissionStatus.SUBMITTED
         ):
             normalized_status = SubmissionStatus.GRADED

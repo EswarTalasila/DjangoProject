@@ -7,7 +7,7 @@
 | **Domain** | EXP |
 | **Applies To** | ADMIN (system role), RESEARCHER, TEACHER |
 | **Related Issues** | — |
-| **Dependencies** | FR-03 SUDO (`EXPORT_IDENTIFIABLE` permission), FR-05 CRS (course ownership, enrollment data), FR-06 ASMT (assessment metadata, `GradingMode`), FR-07 ASGN (assignment data), FR-08 SUB (submission data source) |
+| **Dependencies** | FR-03 SUDO (`EXPORT_IDENTIFIABLE` permission), FR-05 CRS (course ownership, enrollment data), FR-06 ATMPL (assignment template metadata, `GradingMode`), FR-07 ASGN (assignment data), FR-08 SUB (submission data source) |
 
 ---
 
@@ -31,7 +31,7 @@
 - Student-facing exports (students cannot access EXP endpoints).
 - Background job / async export processing.
 - File storage or download links.
-- Assessment template export (FR-06 ASMT domain).
+- AssignmentTemplate template export (FR-06 ATMPL domain).
 - Cross-course roster export (roster is always course-scoped).
 - Server-side chart or visualization generation.
 - UI wireframes and future browser smoke flows (tracked separately).
@@ -132,7 +132,7 @@ consent, enrollmentStatus, enrolledAt
 
 **Roles:** ADMIN, RESEARCHER, TEACHER
 **Endpoint:** `GET /api/v1/exports/courses/{courseId}/submissions`
-**Query Params:** `startDate` (ISO date, optional), `endDate` (ISO date, optional), `category` (string, optional), `assessmentId` (int, optional), `assignmentId` (int, optional), `status` (string, optional: `NOT_STARTED`, `IN_PROGRESS`, `SUBMITTED`, `GRADED`), `includeAnswers` (boolean, optional, default `false`), `identifiable` (boolean, optional; researcher-only)
+**Query Params:** `startDate` (ISO date, optional), `endDate` (ISO date, optional), `category` (string, optional), `assignmentTemplateId` (int, optional), `assignmentId` (int, optional), `status` (string, optional: `NOT_STARTED`, `IN_PROGRESS`, `SUBMITTED`, `GRADED`), `includeAnswers` (boolean, optional, default `false`), `identifiable` (boolean, optional; researcher-only)
 
 **Main Flow:**
 1. Caller requests submission export for a course.
@@ -141,11 +141,11 @@ consent, enrollmentStatus, enrolledAt
 4. System validates caller access:
    - TEACHER: must own the course.
    - RESEARCHER / ADMIN: can access any course.
-5. System queries submissions linked to assignments in this course with `select_related('assignment__assessment', 'student')`.
+5. System queries submissions linked to assignments in this course with `select_related('assignment__assignment_template', 'student')`.
 6. Apply optional filters:
    - `startDate` / `endDate`: filter by `submitted_at` within range (inclusive).
-   - `category`: filter by `assignment.assessment.category`.
-   - `assessmentId`: filter by `assignment.assessment.id`.
+   - `category`: filter by `assignment.assignment_template.category`.
+   - `assignmentTemplateId`: filter by `assignment.assignment_template.id`.
    - `assignmentId`: filter by `assignment.id`.
    - `status`: filter by submission status.
 7. System estimates row count. If count exceeds 10,000 (EXP-CN-03), return `422`.
@@ -156,7 +156,7 @@ consent, enrollmentStatus, enrolledAt
 
 **Identifiable CSV Columns:**
 ```
-studentId, studentName, studentUsername, consent, assignmentId, assessmentTitle, assessmentCategory, gradingMode, status, score, submittedAt
+studentId, studentName, studentUsername, consent, assignmentId, assignmentTemplateTitle, assignmentTemplateCategory, gradingMode, status, score, submittedAt
 ```
 
 With `includeAnswers=true`, append column:
@@ -167,14 +167,14 @@ answers
 
 **Anonymized CSV Columns (researcher without EXPORT_IDENTIFIABLE):**
 ```
-consent, assessmentCategory, gradingMode, status, score, submittedAt
+consent, assignmentTemplateCategory, gradingMode, status, score, submittedAt
 ```
 
 With `includeAnswers=true`, append column:
 ```
 answers
 ```
-(JSON string: `questionPrompt` omitted from each answer object to prevent assessment identification)
+(JSON string: `questionPrompt` omitted from each answer object to prevent assignment template identification)
 
 **Errors:**
 - `EXP-UC-02-E1`: Course not found (`404 Not Found`).
@@ -205,15 +205,15 @@ answers
 
 **Roles:** ADMIN, RESEARCHER
 **Endpoint:** `GET /api/v1/exports/submissions`
-**Query Params:** `startDate` (ISO date, **required**), `endDate` (ISO date, **required**), `category` (string, optional), `assessmentId` (int, optional), `status` (string, optional), `includeAnswers` (boolean, optional, default `false`), `identifiable` (boolean, optional, default `false`; requires `EXPORT_IDENTIFIABLE` sudo)
+**Query Params:** `startDate` (ISO date, **required**), `endDate` (ISO date, **required**), `category` (string, optional), `assignmentTemplateId` (int, optional), `status` (string, optional), `includeAnswers` (boolean, optional, default `false`), `identifiable` (boolean, optional, default `false`; requires `EXPORT_IDENTIFIABLE` sudo)
 
 **Main Flow:**
 1. Caller requests cross-course submission export.
 2. System validates caller has RESEARCHER or ADMIN role via `IsResearcherOrAdmin`. Teachers receive `403`.
 3. System validates required filters: `startDate` AND `endDate` must both be present. If either is missing, return `400`.
-4. System queries all submissions with `select_related('assignment__assessment', 'assignment__course', 'student')`.
+4. System queries all submissions with `select_related('assignment__assignment_template', 'assignment__course', 'student')`.
 5. Filter by `submitted_at` within `[startDate, endDate]` range (inclusive).
-6. Apply optional filters: `category`, `assessmentId`, `status`.
+6. Apply optional filters: `category`, `assignmentTemplateId`, `status`.
 7. System estimates row count. If count exceeds 5,000 (EXP-CN-04), return `422`.
 8. If `includeAnswers=true`, prefetch answers.
 9. System determines anonymization mode (EXP-CN-01):
@@ -225,14 +225,14 @@ answers
 
 **Identifiable CSV Columns:**
 ```
-courseId, courseName, studentId, studentName, studentUsername, consent, assignmentId, assessmentTitle, assessmentCategory, gradingMode, status, score, submittedAt
+courseId, courseName, studentId, studentName, studentUsername, consent, assignmentId, assignmentTemplateTitle, assignmentTemplateCategory, gradingMode, status, score, submittedAt
 ```
 
 With `includeAnswers=true`, append `answers` column (same format as EXP-UC-02).
 
 **Anonymized CSV Columns:**
 ```
-consent, assessmentCategory, gradingMode, status, score, submittedAt
+consent, assignmentTemplateCategory, gradingMode, status, score, submittedAt
 ```
 
 With `includeAnswers=true`, append `answers` column (`questionPrompt` omitted).
@@ -255,8 +255,8 @@ With `includeAnswers=true`, append `answers` column (`questionPrompt` omitted).
 
 - Researchers without `EXPORT_IDENTIFIABLE` sudo permission receive anonymized CSV exports where identifiable columns are **omitted from the CSV header and data rows** (not nulled, not replaced with placeholder values).
 - Researchers WITH `EXPORT_IDENTIFIABLE` sudo receive anonymized exports by default and must explicitly opt in via `identifiable=true` query param to receive identifiable data.
-- Identifiable columns subject to omission: `studentId`, `studentName`, `studentUsername`, `courseId`, `courseName`, `assignmentId`, `assessmentTitle`, `questionPrompt` (in answers JSON).
-- Non-identifiable columns always retained: `consent`, `assessmentCategory`, `gradingMode`, `status`, `score`, `submittedAt`, `enrollmentStatus`, `enrolledAt`.
+- Identifiable columns subject to omission: `studentId`, `studentName`, `studentUsername`, `courseId`, `courseName`, `assignmentId`, `assignmentTemplateTitle`, `questionPrompt` (in answers JSON).
+- Non-identifiable columns always retained: `consent`, `assignmentTemplateCategory`, `gradingMode`, `status`, `score`, `submittedAt`, `enrollmentStatus`, `enrolledAt`.
 - Anonymized answers JSON (when `includeAnswers=true`): omits `questionPrompt` from each answer object. Retains `answerType`, `value`, `score`, `skipped`.
 - Authorization check: `has_sudo_permission(user, SudoPermission.EXPORT_IDENTIFIABLE)` from FR-03.
 - Requesting `identifiable=true` without `EXPORT_IDENTIFIABLE` sudo returns `403 Forbidden` (not a silent fallback to anonymized).
@@ -288,7 +288,7 @@ With `includeAnswers=true`, append `answers` column (`questionPrompt` omitted).
 - Cross-course export (EXP-UC-03) has a maximum row limit of 5,000 records.
 - `startDate` AND `endDate` query params are **required**. Missing either returns `400 Bad Request` with `{"detail": "Cross-course export requires startDate and endDate filters"}`.
 - System performs a `COUNT(*)` query before streaming. If count exceeds 5,000, return `422 Unprocessable Entity` with `{"detail": "Export too large. Narrow date range or apply additional filters."}`.
-- Additional optional filters (`category`, `assessmentId`, `status`) further narrow the result set.
+- Additional optional filters (`category`, `assignmentTemplateId`, `status`) further narrow the result set.
 - Applies to: EXP-UC-03.
 
 ### EXP-CN-05 — Streaming CSV Delivery
@@ -340,7 +340,7 @@ With `includeAnswers=true`, append `answers` column (`questionPrompt` omitted).
 
 - Export queries must use `select_related()` to prefetch related models and avoid N+1 patterns:
   - Roster: `select_related('student_profile__user')`.
-  - Submissions: `select_related('assignment__assessment', 'assignment__course', 'student')`.
+  - Submissions: `select_related('assignment__assignment_template', 'assignment__course', 'student')`.
   - Answers (when `includeAnswers=true`): `prefetch_related('answers')` with type-specific extensions.
 - Count queries must use the same filter conditions as the data query to ensure consistency between cap check and actual export.
 - `QuerySet.iterator(chunk_size=2000)` is required for streaming to limit memory usage.
@@ -368,8 +368,8 @@ With `includeAnswers=true`, append `answers` column (`questionPrompt` omitted).
 | `status` | string | EXP-UC-01 | No | Filter enrollments: `ACTIVE`, `DROPPED`. Default: all. |
 | `startDate` | ISO date | EXP-UC-02, EXP-UC-03 | UC-03: Yes | Filter start (inclusive). Filters by `submitted_at`. |
 | `endDate` | ISO date | EXP-UC-02, EXP-UC-03 | UC-03: Yes | Filter end (inclusive). Filters by `submitted_at`. |
-| `category` | string | EXP-UC-02, EXP-UC-03 | No | Filter by assessment category. |
-| `assessmentId` | int | EXP-UC-02, EXP-UC-03 | No | Filter by assessment ID. |
+| `category` | string | EXP-UC-02, EXP-UC-03 | No | Filter by assignment template category. |
+| `assignmentTemplateId` | int | EXP-UC-02, EXP-UC-03 | No | Filter by assignment template ID. |
 | `assignmentId` | int | EXP-UC-02 | No | Filter by assignment ID. |
 | `status` | string | EXP-UC-02, EXP-UC-03 | No | Filter by submission status: `NOT_STARTED`, `IN_PROGRESS`, `SUBMITTED`, `GRADED`. |
 | `includeAnswers` | boolean | EXP-UC-02, EXP-UC-03 | No | Include serialized answer data as JSON column. Default: `false`. |
@@ -407,7 +407,7 @@ Expected statuses by UC:
 - Cross-course required filter: 400 when `startDate`/`endDate` missing.
 - Consent column: present for all students regardless of consent value.
 - Null safety: null scores and null `submitted_at` represented as empty strings.
-- Filter application: date range, category, assessmentId, assignmentId, status filters.
+- Filter application: date range, category, assignmentTemplateId, assignmentId, status filters.
 - `identifiable=true` without sudo: 403 returned.
 
 ### Backend Integration
@@ -458,7 +458,7 @@ Expected statuses by UC:
 - **NFR-Privacy**
   - Researcher anonymization aligns with data minimization: identifiable columns omitted entirely when not authorized.
   - Consent column included for all students, enabling downstream FERPA/IRB compliance decisions by the exporter.
-  - Anonymized answers strip `questionPrompt` to prevent indirect assessment identification.
+  - Anonymized answers strip `questionPrompt` to prevent indirect assignment template identification.
   - `EXPORT_IDENTIFIABLE` is separate from `VIEW_IDENTIFIABLE_VIZ` — viewing PII in dashboards and exporting PII are different risk levels with independent authorization.
 - **NFR-Performance**
   - Streaming CSV via `StreamingHttpResponse` with `iterator(chunk_size=2000)` prevents memory exhaustion.
@@ -482,7 +482,7 @@ Expected statuses by UC:
 |----|-----------|-------|
 | FR-03 SUDO | `EXPORT_IDENTIFIABLE` added to `SudoPermission` enum | New enum value; checked via `has_sudo_permission(user, SudoPermission.EXPORT_IDENTIFIABLE)`. Separate from `VIEW_IDENTIFIABLE_VIZ` — independent authorization for export PII vs. dashboard PII. |
 | FR-05 CRS | Course ownership (`CRS-CN-01`), enrollment data | Teacher ownership gate uses `course.teacher_profile` to restrict EXP access. `Enrollment` model and `EnrollmentStatus` enum are the data source for roster export. |
-| FR-06 ASMT | Assessment metadata (`title`, `category`, `GradingMode`) | Assessment fields used in submission CSV columns. `GradingMode` column enables export recipients to identify mood meter vs. graded submissions. |
+| FR-06 ATMPL | AssignmentTemplate metadata (`title`, `category`, `GradingMode`) | AssignmentTemplate fields used in submission CSV columns. `GradingMode` column enables export recipients to identify mood meter vs. graded submissions. |
 | FR-07 ASGN | Assignment data | `Assignment.id`, assignment → course → teacher relationship used for submission queries and ownership gate derivation. |
 | FR-08 SUB | Submission data source | All submission export data comes from `Submission` records. `SubmissionStatus` enum values drive status column and filter. Answer data serialized via `answer_to_dto` pattern from submissions services. |
 | FR-09 VIZ | Visualization aggregates | FR-09 provides dashboard aggregates; FR-10 provides raw data export. No overlap — FR-10 exports row-level data, FR-09 returns computed summaries. Mood meter submissions included in FR-10 as regular rows (no dedicated trend export). |

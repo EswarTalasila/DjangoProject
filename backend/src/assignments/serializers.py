@@ -12,7 +12,7 @@ class AssignmentSerializer(serializers.Serializer):
 
     id = serializers.IntegerField(required=False)
     title = serializers.CharField(required=False, allow_blank=False, max_length=255)
-    assessmentId = serializers.IntegerField()
+    assignmentTemplateId = serializers.IntegerField()
     audienceType = serializers.ChoiceField(choices=["COURSE", "TEACHER"])
     courseId = serializers.IntegerField(required=False, allow_null=True)
     targetTeacherId = serializers.IntegerField(required=False, allow_null=True)

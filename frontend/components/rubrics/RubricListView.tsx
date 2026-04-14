@@ -86,7 +86,7 @@ export default function RubricListView({ canManage }: RubricListViewProps) {
         axErr.response?.data?.detail?.toLowerCase().includes('referenced') ||
         axErr.response?.status === 409
       ) {
-        toast.error('Cannot delete — rubric is referenced by assessments.');
+        toast.error('Cannot delete — rubric is referenced by assignment templates.');
       } else {
         toast.error(toErrorMessage(error, 'Failed to delete rubric.'));
       }

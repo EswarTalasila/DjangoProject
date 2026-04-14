@@ -1,7 +1,7 @@
 """
 Submission and answer models for student work.
 
-This module defines the models that store student responses to assessments.
+This module defines the models that store student responses to assignment templates.
 When an assignment is created, empty submissions are generated for each
 enrolled student. Students then fill in answers and submit their work.
 
@@ -32,7 +32,7 @@ import uuid
 from django.db import models
 
 from accounts.models import User
-from assessments.models import Question
+from assignment_templates.models import Question
 from assignments.models import Assignment
 
 
@@ -40,7 +40,7 @@ class SubmissionStatus(models.TextChoices):
     """
     Enumeration of submission lifecycle states.
 
-    Tracks the progress of a student's work through the assessment process.
+    Tracks the progress of a student's work through the assignment process.
 
     Values:
         NOT_STARTED: Submission created but student hasn't begun
@@ -59,7 +59,7 @@ class Submission(models.Model):
     """
     A student's work for a specific assignment.
 
-    Submissions are pre-created when a teacher assigns an assessment to a course.
+    Submissions are pre-created when a teacher assigns an assignment template to a course.
     Each enrolled student gets one submission per assignment. Students update
     their submission by adding answers and eventually submitting for grading.
 
@@ -157,7 +157,7 @@ class Answer(models.Model):
     """
     Base answer model for student responses to questions.
 
-    Each answer corresponds to one question in the assessment. The answer_type
+    Each answer corresponds to one question in the assignment template. The answer_type
     determines which extension model contains the actual response data.
 
     Attributes:

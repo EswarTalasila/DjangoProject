@@ -43,8 +43,8 @@ const summaryData = {
   generatedAt: "2026-03-01T10:00:00Z",
   filters: { startDate: null, endDate: null },
   assignmentId: 10,
-  assessmentTitle: "Midterm Exam",
-  assessmentCategory: "EXAM",
+  assignmentTemplateTitle: "Midterm Exam",
+  assignmentTemplateCategory: "EXAM",
   totalStudents: 30,
   submittedCount: 25,
   gradedCount: 20,
@@ -67,7 +67,7 @@ describe("VizAssignmentSummaryView (assignment-summary-view)", () => {
     vi.clearAllMocks();
   });
 
-  it("renders assessment title as heading", async () => {
+  it("renders assignment_template title as heading", async () => {
     mockFetchAssignmentSummary.mockResolvedValueOnce(summaryData);
     const Component = await loadComponent();
     render(<Component assignmentId={10} role="TEACHER" />);
@@ -109,10 +109,10 @@ describe("VizAssignmentSummaryView (assignment-summary-view)", () => {
     });
   });
 
-  it("shows fallback heading when assessmentTitle is missing", async () => {
+  it("shows fallback heading when assignmentTemplateTitle is missing", async () => {
     mockFetchAssignmentSummary.mockResolvedValueOnce({
       ...summaryData,
-      assessmentTitle: undefined,
+      assignmentTemplateTitle: undefined,
     });
     const Component = await loadComponent();
     render(<Component assignmentId={10} role="TEACHER" />);

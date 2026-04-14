@@ -35,19 +35,19 @@ describe("ResearcherView", () => {
 
     expect(
       screen.getByText(
-        "Build assessment templates, manage teacher-facing setup, and review anonymized analytics."
+        "Build assignment templates, manage teacher-facing setup, and review anonymized analytics."
       )
     ).toBeInTheDocument();
   });
 
-  it("renders Assessments & Rubrics section", async () => {
+  it("renders Assignment Templates & Rubrics section", async () => {
     const ResearcherView = await loadComponent();
     render(<ResearcherView />);
 
     expect(
-      screen.getByText("Assessments & Rubrics")
+      screen.getByText("Assignment Templates & Rubrics")
     ).toBeInTheDocument();
-    expect(screen.getByText("Open Assessments")).toBeInTheDocument();
+    expect(screen.getByText("Open Assignment Templates")).toBeInTheDocument();
     expect(screen.getByText("Open Rubrics")).toBeInTheDocument();
   });
 
@@ -75,8 +75,13 @@ describe("ResearcherView", () => {
     const ResearcherView = await loadComponent();
     render(<ResearcherView />);
 
-    const assessmentsLink = screen.getByText("Open Assessments").closest("a");
-    expect(assessmentsLink).toHaveAttribute("href", "/dashboard/assessments");
+    const assignmentTemplatesLink = screen
+      .getByText("Open Assignment Templates")
+      .closest("a");
+    expect(assignmentTemplatesLink).toHaveAttribute(
+      "href",
+      "/dashboard/assignment-templates"
+    );
 
     const rubricsLink = screen.getByText("Open Rubrics").closest("a");
     expect(rubricsLink).toHaveAttribute("href", "/dashboard/rubrics");

@@ -82,7 +82,7 @@ export default function RubricDetailView({
           .includes('referenced') ||
         axErr.response?.status === 409
       ) {
-        toast.error('Cannot delete — rubric is referenced by assessments.');
+        toast.error('Cannot delete — rubric is referenced by assignment templates.');
       } else {
         toast.error(toErrorMessage(error, 'Failed to delete rubric.'));
       }

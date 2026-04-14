@@ -12,7 +12,7 @@ export type CourseSubmissionsExportParams = BaseExportParams & {
   startDate?: string;
   endDate?: string;
   category?: string;
-  assessmentId?: number;
+  assignmentTemplateId?: number;
   assignmentId?: number;
   status?: string;
   includeAnswers?: boolean;

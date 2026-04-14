@@ -6,12 +6,12 @@ import pytest
 from django.utils import timezone
 
 from accounts.models import Role, SudoGrant, SudoPermission, UserRole
-from assessments.models import GradingMode, ScoringPolicy
+from assignment_templates.models import GradingMode, ScoringPolicy
 from core.models import AuditAction, AuditLog, AuditOutcome
 from submissions.models import AnswerType, SubmissionStatus
 from tests.factories import (
     AnswerFactory,
-    AssessmentFactory,
+    AssignmentTemplateFactory,
     AssignmentFactory,
     CourseFactory,
     EnrollmentFactory,
@@ -39,20 +39,20 @@ def _setup_teacher_with_submission(teacher_user, admin_user):
     course = CourseFactory(teacher_profile=teacher_user.teacher_profile)
     sp = StudentProfileFactory(created_by=admin_user)
     EnrollmentFactory(course=course, student_profile=sp)
-    assessment = AssessmentFactory(
+    assignment_template = AssignmentTemplateFactory(
         grading_mode=GradingMode.MANUAL,
         scoring_policy=ScoringPolicy.STANDARD,
         created_by_admin=admin_user,
     )
     question = QuestionFactory(
-        assessment=assessment,
+        assignment_template=assignment_template,
         kind="SHORT_ANSWER",
         question_type="SHORT_ANSWER",
         prompt="Question?",
         max_points=10.0,
     )
     assignment = AssignmentFactory(
-        assessment=assessment,
+        assignment_template=assignment_template,
         course=course,
         created_by=teacher_user,
     )

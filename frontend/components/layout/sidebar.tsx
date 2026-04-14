@@ -22,7 +22,7 @@ import type { Role, NavGroup } from "@/components/layout/sidebarWrapper";
 const GROUP_ICONS: Record<string, LucideIcon> = {
   Overview: LayoutDashboard,
   Courses: BookOpen,
-  Assessments: FileText,
+  "Assignment Templates": FileText,
   "Assignments & Grading": CheckSquare,
   Registration: KeyRound,
   Analytics: TrendingUp,

@@ -2,7 +2,7 @@
 Submission serializers.
 
 This module provides DRF serializers for student submission management.
-Submissions contain answers to questions from the assigned assessment.
+Submissions contain answers to questions from the assigned assignment template.
 
 Serializer Hierarchy:
     SubmissionSerializer
@@ -38,7 +38,7 @@ class AnswerSerializer(serializers.Serializer):
 
     The 'data' field contains the actual response, with format depending
     on the answer type. The service layer validates type matching against
-    the assessment question, but this serializer enforces structural
+    the assignment template question, but this serializer enforces structural
     requirements (e.g. MULTIPLE_CHOICE data must contain 'selected').
 
     Fields:

@@ -2,7 +2,7 @@
 
 Tests cover:
   Bug 1 – Enrollment status leakage (dropped students bypass access control)
-  Bug 2 – Submission answer ownership (question from wrong assessment accepted)
+  Bug 2 – Submission answer ownership (question from wrong assignment_template accepted)
   Bug 3 – Answer type mismatch (answer type doesn't match question kind)
   Bug 4 – Placeholder submissions for inactive/archived entities
 """
@@ -108,12 +108,12 @@ class TestEnrollmentStatusGating:
 
 
 # ---------------------------------------------------------------------------
-# Bug 2: Submission answer ownership (cross-assessment question)
+# Bug 2: Submission answer ownership (cross-assignment_template question)
 # ---------------------------------------------------------------------------
 
 
 class TestAnswerOwnership:
-    """_create_answer must reject questions from a different assessment."""
+    """_create_answer must reject questions from a different assignment_template."""
 
     @patch("submissions.services.NumberScaleAnswer")
     @patch("submissions.services.ShortAnswerAnswer")
@@ -123,18 +123,18 @@ class TestAnswerOwnership:
     def test_rejects_question_from_different_assessment(
         self, mock_question_model, mock_answer, mock_mca, mock_saa, mock_nsa
     ):
-        """_create_answer raises ValueError when question belongs to a different assessment."""
+        """_create_answer raises ValueError when question belongs to a different assignment_template."""
         from submissions.services import _create_answer
 
-        # Question belongs to assessment 99, but submission's assignment points to assessment 20
+        # Question belongs to assignment_template 99, but submission's assignment points to assignment_template 20
         fake_question = MagicMock()
         fake_question.id = 1
-        fake_question.assessment_id = 99
+        fake_question.assignment_template_id = 99
         fake_question.question_type = "SHORT_ANSWER"
         mock_question_model.objects.filter.return_value.first.return_value = fake_question
 
         submission = MagicMock()
-        submission.assignment.assessment_id = 20
+        submission.assignment.assignment_template_id = 20
 
         payload = {"questionId": 1, "type": "SHORT_ANSWER", "data": {"text": "hello"}}
 
@@ -149,17 +149,17 @@ class TestAnswerOwnership:
     def test_accepts_question_from_same_assessment(
         self, mock_question_model, mock_answer, mock_mca, mock_saa, mock_nsa
     ):
-        """_create_answer succeeds when question belongs to the correct assessment."""
+        """_create_answer succeeds when question belongs to the correct assignment_template."""
         from submissions.services import _create_answer
 
         fake_question = MagicMock()
         fake_question.id = 1
-        fake_question.assessment_id = 20
+        fake_question.assignment_template_id = 20
         fake_question.question_type = "SHORT_ANSWER"
         mock_question_model.objects.filter.return_value.first.return_value = fake_question
 
         submission = MagicMock()
-        submission.assignment.assessment_id = 20
+        submission.assignment.assignment_template_id = 20
 
         fake_answer = MagicMock()
         mock_answer.objects.create.return_value = fake_answer
@@ -191,12 +191,12 @@ class TestAnswerTypeMismatch:
 
         fake_question = MagicMock()
         fake_question.id = 1
-        fake_question.assessment_id = 20
+        fake_question.assignment_template_id = 20
         fake_question.question_type = "MULTIPLE_CHOICE"
         mock_question_model.objects.filter.return_value.first.return_value = fake_question
 
         submission = MagicMock()
-        submission.assignment.assessment_id = 20
+        submission.assignment.assignment_template_id = 20
 
         # Payload says SHORT_ANSWER but question is MULTIPLE_CHOICE
         payload = {"questionId": 1, "type": "SHORT_ANSWER", "data": {"text": "hello"}}
@@ -217,12 +217,12 @@ class TestAnswerTypeMismatch:
 
         fake_question = MagicMock()
         fake_question.id = 1
-        fake_question.assessment_id = 20
+        fake_question.assignment_template_id = 20
         fake_question.question_type = "SHORT_ANSWER"
         mock_question_model.objects.filter.return_value.first.return_value = fake_question
 
         submission = MagicMock()
-        submission.assignment.assessment_id = 20
+        submission.assignment.assignment_template_id = 20
 
         fake_answer = MagicMock()
         mock_answer.objects.create.return_value = fake_answer
@@ -247,12 +247,12 @@ class TestPlaceholderSubmissionFiltering:
     @patch("assignments.services._mutations.Answer")
     @patch("assignments.services._mutations.Submission")
     @patch("assignments.services._mutations.Enrollment")
-    @patch("assignments.services._mutations.Assessment")
+    @patch("assignments.services._mutations.AssignmentTemplate")
     @patch("assignments.services._mutations.answer_type_from_question")
     def test_create_submissions_for_course_only_active_enrollments(
         self,
         mock_answer_type,
-        mock_assessment,
+        mock_assignment_template,
         mock_enrollment,
         mock_submission,
         mock_answer,
@@ -263,13 +263,15 @@ class TestPlaceholderSubmissionFiltering:
         """_create_submissions_for_course filters enrollments by ACTIVE status."""
         from assignments.services._mutations import _create_submissions_for_course
 
-        fake_assessment = MagicMock()
-        fake_assessment.questions.all.return_value = []
-        mock_assessment.objects.filter.return_value.first.return_value = fake_assessment
+        fake_assignment_template = MagicMock()
+        fake_assignment_template.questions.all.return_value = []
+        mock_assignment_template.objects.filter.return_value.first.return_value = (
+            fake_assignment_template
+        )
 
         mock_enrollment.objects.filter.return_value.values_list.return_value = []
 
-        assignment = SimpleNamespace(id=1, assessment_id=5, course_id=10)
+        assignment = SimpleNamespace(id=1, assignment_template_id=5, course_id=10)
 
         _create_submissions_for_course(assignment)
 
@@ -284,12 +286,12 @@ class TestPlaceholderSubmissionFiltering:
     @patch("courses.services._mutations.MultipleChoiceAnswer")
     @patch("courses.services._mutations.Answer")
     @patch("courses.services._mutations.Submission")
-    @patch("courses.services._mutations.Assessment")
+    @patch("courses.services._mutations.AssignmentTemplate")
     @patch("courses.services._mutations.Assignment")
     def test_create_submissions_for_student_skips_archived_assignments(
         self,
         mock_assignment,
-        mock_assessment,
+        mock_assignment_template,
         mock_submission,
         mock_answer,
         mock_mca,
@@ -302,13 +304,15 @@ class TestPlaceholderSubmissionFiltering:
 
         # Return an archived assignment
         archived = MagicMock()
-        archived.assessment_id = 1
+        archived.assignment_template_id = 1
         archived.status = "ARCHIVED"
         mock_assignment.objects.filter.return_value = [archived]
 
-        fake_assessment = MagicMock()
-        fake_assessment.questions.all.return_value = []
-        mock_assessment.objects.filter.return_value.first.return_value = fake_assessment
+        fake_assignment_template = MagicMock()
+        fake_assignment_template.questions.all.return_value = []
+        mock_assignment_template.objects.filter.return_value.first.return_value = (
+            fake_assignment_template
+        )
 
         student = MagicMock()
         student.id = 100
@@ -340,17 +344,17 @@ class TestRegressionValidPayloads:
     def test_valid_short_answer_still_works(
         self, mock_question_model, mock_answer, mock_nsa, mock_mca, mock_saa
     ):
-        """A valid SHORT_ANSWER payload for the correct assessment succeeds."""
+        """A valid SHORT_ANSWER payload for the correct assignment_template succeeds."""
         from submissions.services import _create_answer
 
         fake_question = MagicMock()
         fake_question.id = 1
-        fake_question.assessment_id = 20
+        fake_question.assignment_template_id = 20
         fake_question.question_type = "SHORT_ANSWER"
         mock_question_model.objects.filter.return_value.first.return_value = fake_question
 
         submission = MagicMock()
-        submission.assignment.assessment_id = 20
+        submission.assignment.assignment_template_id = 20
 
         fake_answer = MagicMock()
         mock_answer.objects.create.return_value = fake_answer
@@ -370,17 +374,17 @@ class TestRegressionValidPayloads:
     def test_valid_multiple_choice_still_works(
         self, mock_question_model, mock_answer, mock_nsa, mock_saa, mock_mca, mock_mcs
     ):
-        """A valid MULTIPLE_CHOICE payload for the correct assessment succeeds."""
+        """A valid MULTIPLE_CHOICE payload for the correct assignment_template succeeds."""
         from submissions.services import _create_answer
 
         fake_question = MagicMock()
         fake_question.id = 2
-        fake_question.assessment_id = 20
+        fake_question.assignment_template_id = 20
         fake_question.question_type = "MULTIPLE_CHOICE"
         mock_question_model.objects.filter.return_value.first.return_value = fake_question
 
         submission = MagicMock()
-        submission.assignment.assessment_id = 20
+        submission.assignment.assignment_template_id = 20
 
         fake_answer = MagicMock()
         mock_answer.objects.create.return_value = fake_answer
@@ -399,17 +403,17 @@ class TestRegressionValidPayloads:
     def test_valid_number_scale_still_works(
         self, mock_question_model, mock_answer, mock_mca, mock_saa, mock_nsa
     ):
-        """A valid NUMBER_SCALE payload for the correct assessment succeeds."""
+        """A valid NUMBER_SCALE payload for the correct assignment_template succeeds."""
         from submissions.services import _create_answer
 
         fake_question = MagicMock()
         fake_question.id = 3
-        fake_question.assessment_id = 20
+        fake_question.assignment_template_id = 20
         fake_question.question_type = "NUMBER_SCALE"
         mock_question_model.objects.filter.return_value.first.return_value = fake_question
 
         submission = MagicMock()
-        submission.assignment.assessment_id = 20
+        submission.assignment.assignment_template_id = 20
 
         fake_answer = MagicMock()
         mock_answer.objects.create.return_value = fake_answer

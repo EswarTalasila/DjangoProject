@@ -29,7 +29,7 @@
 
 ### Out of Scope
 - Profile avatar uploads.
-- Assessment/assignment media attachments (question illustrations, diagrams).
+- AssignmentTemplate/assignment media attachments (question illustrations, diagrams).
 - Thumbnail generation or image resizing.
 - CDN edge caching (infrastructure upgrade, not API contract change).
 - Video or non-image file uploads.
@@ -48,7 +48,7 @@
 | Role | Type | IMG domain permissions |
 |------|------|----------------------|
 | ADMIN | System role (`is_staff=True`) | Read any image via SUB visibility rules; no direct upload role (inherits via override if needed) |
-| RESEARCHER | User role | Read images on submissions visible per SUB/ASMT read gates; no upload or delete rights |
+| RESEARCHER | User role | Read images on submissions visible per SUB/ATMPL read gates; no upload or delete rights |
 | TEACHER | User role | Proxy upload to submissions in teacher-owned courses/assignments; delete own-course images before submit; read images per SUB visibility |
 | STUDENT | User role | Upload to own submission; delete own images before submit; read own submission images |
 

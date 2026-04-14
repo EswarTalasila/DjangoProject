@@ -12,7 +12,7 @@
 - API compatibility tests to ensure `/api/*` and `/api/v1/*` return identical payload shapes.
 
 ## TODO / open testing gaps
-- TODO: Add full workflow integration tests that go from account creation -> login -> course -> assessment -> assignment -> submission -> grading for teacher and student roles.
+- TODO: Add full workflow integration tests that go from account creation -> login -> course -> assignment template -> assignment -> submission -> grading for teacher and student roles.
 - TODO: Add spec-first tests for known audit items (first-login tokenization, check-email privacy, stricter access pre-checks) before changing behavior.
 - TODO: Reintroduce browser-driven end-to-end coverage only after a dedicated testing harness is rebuilt intentionally.
 

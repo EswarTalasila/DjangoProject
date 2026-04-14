@@ -21,7 +21,10 @@ import {
 } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { listAssessments, type Assessment } from '@/lib/assessment-api';
+import {
+  listAssignmentTemplates,
+  type AssignmentTemplate,
+} from '@/lib/assignment-template-api';
 import { listCourses, type CourseSummary } from '@/lib/course-api';
 import {
   type DatasetBinding,
@@ -39,14 +42,14 @@ type DataCatalogProps = {
 
 export default function DataCatalog({ onAddItem }: DataCatalogProps) {
   const [courses, setCourses] = useState<CourseSummary[]>([]);
-  const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [assignmentTemplates, setAssignmentTemplates] = useState<AssignmentTemplate[]>([]);
   const [rubrics, setRubrics] = useState<Rubric[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterText, setFilterText] = useState('');
 
   /* Collapsible section state */
   const [coursesOpen, setCoursesOpen] = useState(true);
-  const [assessmentsOpen, setAssessmentsOpen] = useState(true);
+  const [assignmentTemplatesOpen, setAssignmentTemplatesOpen] = useState(true);
   const [rubricsOpen, setRubricsOpen] = useState(true);
   /* Per-course expansion within the courses section */
   const [expandedCourses, setExpandedCourses] = useState<Set<number>>(
@@ -60,13 +63,13 @@ export default function DataCatalog({ onAddItem }: DataCatalogProps) {
   async function loadCatalog() {
     setIsLoading(true);
     try {
-      const [courseList, assessmentList, rubricList] = await Promise.all([
+      const [courseList, assignmentTemplateList, rubricList] = await Promise.all([
         listCourses({ includeArchived: true }),
-        listAssessments(),
+        listAssignmentTemplates(),
         listRubrics(),
       ]);
       setCourses(courseList);
-      setAssessments(assessmentList);
+      setAssignmentTemplates(assignmentTemplateList);
       setRubrics(rubricList);
     } catch (error) {
       toast.error(toErrorMessage(error));
@@ -85,12 +88,12 @@ export default function DataCatalog({ onAddItem }: DataCatalogProps) {
     [courses, lowerFilter],
   );
 
-  const filteredAssessments = useMemo(
+  const filteredAssignmentTemplates = useMemo(
     () =>
-      assessments.filter((assessment) =>
-        assessment.title.toLowerCase().includes(lowerFilter),
+      assignmentTemplates.filter((assignmentTemplate) =>
+        assignmentTemplate.title.toLowerCase().includes(lowerFilter),
       ),
-    [assessments, lowerFilter],
+    [assignmentTemplates, lowerFilter],
   );
 
   const filteredRubrics = useMemo(
@@ -242,41 +245,44 @@ export default function DataCatalog({ onAddItem }: DataCatalogProps) {
         </CollapsibleContent>
       </Collapsible>
 
-      {/* Assessments section */}
-      <Collapsible open={assessmentsOpen} onOpenChange={setAssessmentsOpen}>
+      {/* Assignment templates section */}
+      <Collapsible
+        open={assignmentTemplatesOpen}
+        onOpenChange={setAssignmentTemplatesOpen}
+      >
         <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm font-semibold text-foreground hover:bg-accent/30">
-          {assessmentsOpen ? (
+          {assignmentTemplatesOpen ? (
             <ChevronDown className="size-4" />
           ) : (
             <ChevronRight className="size-4" />
           )}
           <Layers className="size-4" />
-          Assessments
+          Assignment Templates
           <span className="ml-auto text-xs text-muted-foreground">
-            {filteredAssessments.length}
+            {filteredAssignmentTemplates.length}
           </span>
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-0.5 pl-2">
-          {filteredAssessments.length === 0 ? (
+          {filteredAssignmentTemplates.length === 0 ? (
             <p className="px-2 py-1 text-xs text-muted-foreground">
-              No assessments found.
+              No assignment templates found.
             </p>
           ) : (
-            filteredAssessments.map((assessment) => (
-              <div key={assessment.id} className="rounded-md px-2 py-1.5">
+            filteredAssignmentTemplates.map((assignmentTemplate) => (
+              <div key={assignmentTemplate.id} className="rounded-md px-2 py-1.5">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Layers className="size-3.5 shrink-0" />
                   <span className="truncate font-medium text-foreground">
-                    {assessment.title}
+                    {assignmentTemplate.title}
                   </span>
-                  {assessment.status && (
+                  {assignmentTemplate.status && (
                     <StatusBadge
-                      status={assessment.status}
+                      status={assignmentTemplate.status}
                       className="shrink-0"
                     />
                   )}
                   <span className="ml-auto text-xs text-muted-foreground italic whitespace-nowrap">
-                    Template export coming soon
+                    Assignment template export coming soon
                   </span>
                 </div>
               </div>

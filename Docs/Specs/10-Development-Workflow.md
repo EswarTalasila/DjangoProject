@@ -81,8 +81,8 @@ task test:frontend
 ```
 
 ## Diagram generation (PlantUML-first)
-- Regenerate diagrams from code and traces using the planned scripts under `backend/tools/diagrams`.
-- Output should be placed under `docs/diagrams/plantuml`.
+- Diagram generation is currently deferred and not part of the active workflow.
+- Historical outputs under `docs/diagrams/plantuml` may remain as references.
 
 ## Notes
 - Keep `/api/v1/*` paths compatible with frontend services and route them through the proxy.

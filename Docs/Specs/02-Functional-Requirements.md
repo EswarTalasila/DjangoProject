@@ -21,14 +21,14 @@
 - Teachers can enroll students individually or in bulk.
 - Enrollment actions must be scoped to the teacher’s courses.
 
-## FR-04 Assessments
-- Admin can create assessments with grading modes:
+## FR-04 AssignmentTemplates
+- Admin can create assignment templates with grading modes:
   - AUTO, MANUAL, HYBRID, RUBRIC, REFLECTION, MOOD_METER.
-- Admin can edit assessments prior to submissions; after submissions, assessment is versioned or locked.
-- Admin can archive assessments without deleting historical data.
+- Admin can edit assignment templates prior to submissions; after submissions, assignment template is versioned or locked.
+- Admin can archive assignment templates without deleting historical data.
 
 ## FR-05 Assignments
-- Teachers can assign assessments to courses with open/close dates.
+- Teachers can assign assignment templates to courses with open/close dates.
 - Assignment creation does not pre-create all submissions unless required for legacy compatibility.
 - Students can view assignments within open/close windows.
 
@@ -39,7 +39,7 @@
 
 ## FR-07 Visualization and reporting
 - Admin and teacher dashboards provide aggregate views (charts + tables).
-- Filtering by course, teacher, student, assessment, category.
+- Filtering by course, teacher, student, assignment template, category.
 - Teacher self-reflection trends should be available in visualization.
 
 ## FR-08 Export
@@ -48,7 +48,7 @@
 - Export must be bounded/paginated for large data sets.
 
 ## FR-09 Image upload (future gap closure)
-- If assessment images are supported in UI, backend must support upload and retrieval.
+- If assignment template images are supported in UI, backend must support upload and retrieval.
 - Storage may be Postgres (bytea) or filesystem; avoid cloud storage dependency.
 
 ## FR-10 Archival and lifecycle

@@ -26,8 +26,8 @@ function makeAssignment(overrides: Record<string, unknown> = {}) {
   return {
     id: 1,
     title: "Unit Test Assignment",
-    assessmentId: 10,
-    assessmentTitle: "Assessment Alpha",
+    assignmentTemplateId: 10,
+    assignmentTemplateTitle: "AssignmentTemplate Alpha",
     audienceType: "COURSE",
     courseId: 100,
     targetTeacherId: null,
@@ -41,12 +41,12 @@ function makeAssignment(overrides: Record<string, unknown> = {}) {
 function makeTemplate(overrides: Record<string, unknown> = {}) {
   return {
     id: 10,
-    title: "Assessment Alpha",
+    title: "AssignmentTemplate Alpha",
     category: null,
     gradingMode: "AUTO",
     scoringPolicy: "STANDARD",
     rubricId: null,
-    rubricAssessmentIds: [],
+    rubricAssignmentTemplateIds: [],
     questionGroups: [{ id: 1, name: "Group A", rubricId: null, orderIndex: 0 }],
     questions: [
       {
@@ -151,13 +151,14 @@ function setupModuleMocks() {
 
   vi.doMock("@/lib/assignment-api", () => ({
     getAssignment: mockGetAssignment,
-    getAssignmentTemplate: mockGetAssignmentTemplate,
     updateAssignment: mockUpdateAssignment,
     archiveAssignment: mockArchiveAssignment,
     deleteAssignment: mockDeleteAssignment,
   }));
 
-  vi.doMock("@/lib/assessment-api", () => ({}));
+  vi.doMock("@/lib/assignment-template-api", () => ({
+    getAssignmentTemplate: mockGetAssignmentTemplate,
+  }));
 
   vi.doMock("@/lib/course-api", () => ({
     listCourses: mockListCourses,
@@ -259,7 +260,7 @@ describe("AssignmentDetailView", () => {
         <Component assignmentId={1} canMutate={true} viewerRole="TEACHER" viewerId={5} />
       );
       expect(await screen.findByText("Unit Test Assignment")).toBeInTheDocument();
-      expect(screen.getAllByText(/Assessment Alpha/).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/AssignmentTemplate Alpha/).length).toBeGreaterThan(0);
       expect(screen.getByText("Science 101")).toBeInTheDocument();
     });
 
@@ -614,7 +615,7 @@ describe("AssignmentDetailView", () => {
       );
       await screen.findByText("Unit Test Assignment");
       // First question is MC — the first choice should be checked
-      const radio = screen.getByRole("radio", { name: "Option A" }) as HTMLInputElement;
+      const radio = screen.getAllByRole("radio")[0] as HTMLInputElement;
       expect(radio.checked).toBe(true);
     });
   });
@@ -693,7 +694,7 @@ describe("AssignmentDetailView", () => {
         <Component assignmentId={1} canMutate={false} viewerRole="STUDENT" viewerId={42} />
       );
       await screen.findByText("Question 1 of 3");
-      const optionB = screen.getByRole("radio", { name: "Option B" });
+      const optionB = screen.getAllByRole("radio")[1];
       await user.click(optionB);
       expect((optionB as HTMLInputElement).checked).toBe(true);
     });
@@ -907,7 +908,7 @@ describe("AssignmentDetailView", () => {
       await screen.findByText("Question 1 of 3");
 
       // Click a radio to trigger a change
-      await user.click(screen.getByRole("radio", { name: "Option A" }));
+      await user.click(screen.getAllByRole("radio")[0]);
 
       // Wait for debounced save (1s + buffer)
       await waitFor(
@@ -976,7 +977,7 @@ describe("AssignmentDetailView", () => {
     it("shows 'No questions' message when template has no questions", async () => {
       mockGetAssignment.mockResolvedValue(makeAssignment());
       mockGetAssignmentTemplate.mockResolvedValue(
-        makeTemplate({ questions: [], questionGroups: [] })
+        makeTemplate({ questions: [], questionGroups: [], submissionMode: "DIGITAL" })
       );
       mockListCourses.mockResolvedValue(makeCourses());
       const Component = await loadComponent();

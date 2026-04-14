@@ -27,12 +27,12 @@ def _make_course(*, id=1, name="Test Course", teacher_profile=None):
     return course
 
 
-def _make_assignment(*, id=10, course=None, assessment=None):
+def _make_assignment(*, id=10, course=None, assignment_template=None):
     """Build a lightweight mock Assignment."""
     asgn = MagicMock()
     asgn.id = id
     asgn.course = course or _make_course()
-    asgn.assessment = assessment or MagicMock(title="Test Assessment", category="General")
+    asgn.assignment_template = assignment_template or MagicMock(title="Test AssignmentTemplate", category="General")
     return asgn
 
 
@@ -151,12 +151,12 @@ class TestCourseSummary:
 
         course_summary(user, course, category="Math")
 
-        qs.filter.assert_any_call(assessment__category="Math")
+        qs.filter.assert_any_call(assignment_template__category="Math")
 
     @patch("visualizations.services.Submission")
     @patch("visualizations.services.Enrollment")
-    def test_filters_by_assessment_id(self, mock_enrollment, mock_submission):
-        """assessmentId filter is applied to assignments queryset."""
+    def test_filters_by_assignment_template_id(self, mock_enrollment, mock_submission):
+        """assignmentTemplateId filter is applied to assignments queryset."""
         from visualizations.services import course_summary
 
         user = MagicMock()
@@ -172,9 +172,9 @@ class TestCourseSummary:
         qs.filter.return_value = qs
         qs.annotate.return_value = []
 
-        course_summary(user, course, assessment_id=42)
+        course_summary(user, course, assignment_template_id=42)
 
-        qs.filter.assert_any_call(assessment_id=42)
+        qs.filter.assert_any_call(assignment_template_id=42)
 
 
 # ============================================================================
@@ -200,8 +200,8 @@ class TestAssignmentGradeSummary:
         assignment = MagicMock()
         assignment.id = 5
         assignment.course = course
-        assignment.assessment.title = "Quiz 1"
-        assignment.assessment.category = "Math"
+        assignment.assignment_template.title = "Quiz 1"
+        assignment.assignment_template.category = "Math"
 
         qs = MagicMock()
         mock_submission.objects.filter.return_value = qs
@@ -224,8 +224,8 @@ class TestAssignmentGradeSummary:
         assert "totalStudents" in result
         assert result["totalStudents"] == 10
         assert result["assignmentId"] == 5
-        assert result["assessmentTitle"] == "Quiz 1"
-        assert result["assessmentCategory"] == "Math"
+        assert result["assignmentTemplateTitle"] == "Quiz 1"
+        assert result["assignmentTemplateCategory"] == "Math"
 
     @patch("visualizations.services._distribution_from_graded_queryset")
     @patch("visualizations.services.Submission")
@@ -242,8 +242,8 @@ class TestAssignmentGradeSummary:
         assignment = MagicMock()
         assignment.id = 1
         assignment.course = course
-        assignment.assessment.title = "Quiz"
-        assignment.assessment.category = None
+        assignment.assignment_template.title = "Quiz"
+        assignment.assignment_template.category = None
 
         qs = MagicMock()
         mock_submission.objects.filter.return_value = qs
@@ -281,7 +281,7 @@ class TestMoodMeterSummary:
 
         assignment = MagicMock()
         assignment.id = 10
-        assignment.assessment.questions.filter.return_value.select_related.return_value.order_by.return_value.__getitem__ = MagicMock(return_value=[])
+        assignment.assignment_template.questions.filter.return_value.select_related.return_value.order_by.return_value.__getitem__ = MagicMock(return_value=[])
 
         qs = MagicMock()
         mock_submission.objects.filter.return_value = qs
@@ -520,7 +520,7 @@ class TestCourseSummaryExtended:
     @patch("visualizations.services.Submission")
     @patch("visualizations.services.Enrollment")
     def test_anonymized_excludes_ids(self, mock_enrollment, mock_submission, mock_anon):
-        """Anonymized output excludes courseId, courseName, assignmentId, assessmentTitle."""
+        """Anonymized output excludes courseId, courseName, assignmentId, assignmentTemplateTitle."""
         from visualizations.services import course_summary
 
         user = MagicMock()
@@ -534,8 +534,8 @@ class TestCourseSummaryExtended:
         asgn.graded_count = 2
         asgn.pending_count = 1
         asgn.avg_score = 80.0
-        asgn.assessment.category = "Math"
-        asgn.assessment.title = "Quiz 1"
+        asgn.assignment_template.category = "Math"
+        asgn.assignment_template.title = "Quiz 1"
 
         course = MagicMock()
         course.id = 1
@@ -572,8 +572,8 @@ class TestAssignmentGradeSummaryExtended:
         assignment = MagicMock()
         assignment.id = 5
         assignment.course = course
-        assignment.assessment.title = "Quiz"
-        assignment.assessment.category = "Math"
+        assignment.assignment_template.title = "Quiz"
+        assignment.assignment_template.category = "Math"
 
         qs = MagicMock()
         mock_submission.objects.filter.return_value = qs
@@ -605,8 +605,8 @@ class TestAssignmentGradeSummaryExtended:
         assignment = MagicMock()
         assignment.id = 5
         assignment.course = None
-        assignment.assessment.title = "Quiz"
-        assignment.assessment.category = "Math"
+        assignment.assignment_template.title = "Quiz"
+        assignment.assignment_template.category = "Math"
 
         qs = MagicMock()
         mock_submission.objects.filter.return_value = qs
@@ -648,7 +648,7 @@ class TestMoodMeterSummaryExtended:
 
         assignment = MagicMock()
         assignment.id = 10
-        qs_chain = assignment.assessment.questions.filter.return_value.select_related.return_value.order_by.return_value
+        qs_chain = assignment.assignment_template.questions.filter.return_value.select_related.return_value.order_by.return_value
         qs_chain.__getitem__ = MagicMock(return_value=[q1, q2])
 
         sub_qs = MagicMock()

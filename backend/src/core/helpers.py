@@ -1,6 +1,6 @@
 """Shared helpers used across multiple domain modules."""
 
-from assessments.models import QuestionKind
+from assignment_templates.models import QuestionKind
 from submissions.models import AnswerType
 
 

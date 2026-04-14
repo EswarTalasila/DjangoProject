@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import MoodMeterInput from '@/components/questions/MoodMeterInput';
-import type { Question, SubmissionMode } from '@/lib/assessment-api';
+import type { Question, SubmissionMode } from '@/lib/assignment-template-api';
 import type {
   SubmissionStatus,
   SubmissionDTO,

@@ -55,7 +55,7 @@ export default function RubricBuilderForm({
   const returnTo = useMemo(() => {
     const raw = searchParams.get('returnTo');
     if (!raw) return null;
-    if (!raw.startsWith('/dashboard/assessments')) return null;
+    if (!raw.startsWith('/dashboard/assignment-templates')) return null;
     return raw;
   }, [searchParams]);
 
@@ -226,7 +226,7 @@ export default function RubricBuilderForm({
     } catch (err: unknown) {
       if (mode === 'edit' && getStatusCode(err) === 409) {
         toast.error(
-          'This rubric is referenced by assessments and cannot be modified',
+          'This rubric is referenced by assignment templates and cannot be modified',
         );
       } else {
         toast.error(toErrorMessage(err, 'Failed to save rubric'));

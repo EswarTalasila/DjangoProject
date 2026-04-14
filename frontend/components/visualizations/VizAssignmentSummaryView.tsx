@@ -76,10 +76,10 @@ export default function VizAssignmentSummaryView({
         </Link>
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            {data?.assessmentTitle ?? `Assignment ${assignmentId}`}
+            {data?.assignmentTemplateTitle ?? `Assignment ${assignmentId}`}
           </h1>
           <p className="text-muted-foreground mt-1">
-            {data?.assessmentCategory ?? 'Loading...'}
+            {data?.assignmentTemplateCategory ?? 'Loading...'}
           </p>
         </div>
       </div>

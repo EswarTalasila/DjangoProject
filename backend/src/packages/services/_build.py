@@ -250,7 +250,7 @@ def _materialize_node(node, user) -> bytes:
             start_date=filters.get("startDate"),
             end_date=filters.get("endDate"),
             category=filters.get("category"),
-            assessment_id=filters.get("assessmentId"),
+            assignment_template_id=filters.get("assignmentTemplateId"),
             assignment_id=filters.get("assignmentId"),
             status_filter=filters.get("status"),
             include_answers=node.include_answers,

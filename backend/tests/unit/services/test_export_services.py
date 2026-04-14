@@ -73,10 +73,10 @@ def _submission(student_id=10, student_name="Alice", student_username="alice",
 
     sub.assignment_id = assignment_id
     sub.assignment = MagicMock()
-    sub.assignment.assessment = MagicMock()
-    sub.assignment.assessment.title = assessment_title
-    sub.assignment.assessment.category = assessment_category
-    sub.assignment.assessment.grading_mode = grading_mode
+    sub.assignment.assignment_template = MagicMock()
+    sub.assignment.assignment_template.title = assessment_title
+    sub.assignment.assignment_template.category = assessment_category
+    sub.assignment.assignment_template.grading_mode = grading_mode
     sub.status = status
     sub.score = score
     sub.submitted_at = submitted_at
@@ -489,7 +489,7 @@ class TestExportCourseSubmissions:
             start_date="2025-01-01",
             end_date="2025-12-31",
             category="FORMATIVE",
-            assessment_id=5,
+            assignment_template_id=5,
             assignment_id=10,
             status_filter="SUBMITTED",
             identifiable=True,

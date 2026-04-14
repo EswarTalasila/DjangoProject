@@ -43,7 +43,7 @@ async function loadComponent() {
   vi.resetModules();
   setupModuleMocks();
   const imported = await import(
-    "@/components/assessments/RubricQuickBuilderDrawer"
+    "@/components/assignment-templates/RubricQuickBuilderDrawer"
   );
   return imported.default;
 }

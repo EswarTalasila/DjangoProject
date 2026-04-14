@@ -43,8 +43,8 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "link", label: "Dashboard", href: "/dashboard" },
 
     { type: "divider" },
-    { type: "header", label: "Assessments" },
-    { type: "link", label: "Assessments", href: "/dashboard/assessments" },
+    { type: "header", label: "Assignment Templates" },
+    { type: "link", label: "Assignment Templates", href: "/dashboard/assignment-templates" },
     { type: "link", label: "Assignments", href: "/dashboard/assignments" },
     { type: "link", label: "Submissions", href: "/dashboard/submissions" },
     { type: "link", label: "Rubrics", href: "/dashboard/rubrics" },
@@ -80,8 +80,8 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "link", label: "Registration Codes", href: "/dashboard/codes" },
 
     { type: "divider" },
-    { type: "header", label: "Assessments" },
-    { type: "link", label: "Assessments", href: "/dashboard/assessments" },
+    { type: "header", label: "Assignment Templates" },
+    { type: "link", label: "Assignment Templates", href: "/dashboard/assignment-templates" },
     { type: "link", label: "Rubrics", href: "/dashboard/rubrics" },
 
     { type: "divider" },
@@ -104,8 +104,8 @@ const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { type: "link", label: "Dashboard", href: "/dashboard" },
 
     { type: "divider" },
-    { type: "header", label: "Assessments" },
-    { type: "link", label: "Assessments", href: "/dashboard/assessments" },
+    { type: "header", label: "Assignment Templates" },
+    { type: "link", label: "Assignment Templates", href: "/dashboard/assignment-templates" },
     { type: "link", label: "Submissions", href: "/dashboard/submissions" },
     { type: "link", label: "Rubrics", href: "/dashboard/rubrics" },
 

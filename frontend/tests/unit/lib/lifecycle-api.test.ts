@@ -36,19 +36,19 @@ describe("lifecycle-api", () => {
     expect(typeof lifecycle.purgeCourse).toBe("function");
   });
 
-  it("re-exports archiveAssessment from assessment-api", async () => {
+  it("re-exports archiveAssignmentTemplate from assignment-template-api", async () => {
     const lifecycle = await loadModule();
-    expect(typeof lifecycle.archiveAssessment).toBe("function");
+    expect(typeof lifecycle.archiveAssignmentTemplate).toBe("function");
   });
 
-  it("re-exports restoreAssessment from assessment-api", async () => {
+  it("re-exports restoreAssignmentTemplate from assignment-template-api", async () => {
     const lifecycle = await loadModule();
-    expect(typeof lifecycle.restoreAssessment).toBe("function");
+    expect(typeof lifecycle.restoreAssignmentTemplate).toBe("function");
   });
 
-  it("re-exports purgeAssessment (deleteAssessment) from assessment-api", async () => {
+  it("re-exports purgeAssignmentTemplate (deleteAssignmentTemplate) from assignment-template-api", async () => {
     const lifecycle = await loadModule();
-    expect(typeof lifecycle.purgeAssessment).toBe("function");
+    expect(typeof lifecycle.purgeAssignmentTemplate).toBe("function");
   });
 
   it("re-exports archiveAssignment from assignment-api", async () => {
@@ -95,32 +95,32 @@ describe("lifecycle-api", () => {
     });
   });
 
-  describe("archiveAssessment delegates to assessment-api", () => {
-    it("calls api.post with /assessments/:id/archive", async () => {
+  describe("archiveAssignmentTemplate delegates to assignment-template-api", () => {
+    it("calls api.post with /assignment-templates/:id/archive", async () => {
       mockPost.mockResolvedValueOnce({ data: { id: 2, status: "ARCHIVED" } });
-      const { archiveAssessment } = await loadModule();
-      const result = await archiveAssessment(2);
-      expect(mockPost).toHaveBeenCalledWith("/assessments/2/archive", {});
+      const { archiveAssignmentTemplate } = await loadModule();
+      const result = await archiveAssignmentTemplate(2);
+      expect(mockPost).toHaveBeenCalledWith("/assignment-templates/2/archive", {});
       expect(result.status).toBe("ARCHIVED");
     });
   });
 
-  describe("restoreAssessment delegates to assessment-api", () => {
-    it("calls api.post with /assessments/:id/restore", async () => {
+  describe("restoreAssignmentTemplate delegates to assignment-template-api", () => {
+    it("calls api.post with /assignment-templates/:id/restore", async () => {
       mockPost.mockResolvedValueOnce({ data: { id: 2, status: "ACTIVE" } });
-      const { restoreAssessment } = await loadModule();
-      const result = await restoreAssessment(2);
-      expect(mockPost).toHaveBeenCalledWith("/assessments/2/restore", {});
+      const { restoreAssignmentTemplate } = await loadModule();
+      const result = await restoreAssignmentTemplate(2);
+      expect(mockPost).toHaveBeenCalledWith("/assignment-templates/2/restore", {});
       expect(result.status).toBe("ACTIVE");
     });
   });
 
-  describe("purgeAssessment delegates to assessment-api deleteAssessment", () => {
-    it("calls api.delete with /assessments/:id", async () => {
+  describe("purgeAssignmentTemplate delegates to assignment-template-api deleteAssignmentTemplate", () => {
+    it("calls api.delete with /assignment-templates/:id", async () => {
       mockDelete.mockResolvedValueOnce({});
-      const { purgeAssessment } = await loadModule();
-      await purgeAssessment(2);
-      expect(mockDelete).toHaveBeenCalledWith("/assessments/2");
+      const { purgeAssignmentTemplate } = await loadModule();
+      await purgeAssignmentTemplate(2);
+      expect(mockDelete).toHaveBeenCalledWith("/assignment-templates/2");
     });
   });
 

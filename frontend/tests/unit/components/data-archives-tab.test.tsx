@@ -3,14 +3,14 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockListCourses = vi.fn();
-const mockListAssessments = vi.fn();
+const mockListAssignmentTemplates = vi.fn();
 const mockListAssignmentsByCourse = vi.fn();
 const mockArchiveCourse = vi.fn();
 const mockRestoreCourse = vi.fn();
 const mockPurgeCourse = vi.fn();
-const mockArchiveAssessment = vi.fn();
-const mockRestoreAssessment = vi.fn();
-const mockPurgeAssessment = vi.fn();
+const mockArchiveAssignmentTemplate = vi.fn();
+const mockRestoreAssignmentTemplate = vi.fn();
+const mockPurgeAssignmentTemplate = vi.fn();
 const mockArchiveAssignment = vi.fn();
 const mockRestoreAssignment = vi.fn();
 const mockPurgeAssignment = vi.fn();
@@ -29,8 +29,8 @@ function setupModuleMocks() {
   vi.doMock("@/lib/course-api", () => ({
     listCourses: mockListCourses,
   }));
-  vi.doMock("@/lib/assessment-api", () => ({
-    listAssessments: mockListAssessments,
+  vi.doMock("@/lib/assignment-template-api", () => ({
+    listAssignmentTemplates: mockListAssignmentTemplates,
   }));
   vi.doMock("@/lib/assignment-api", () => ({
     listAssignmentsByCourse: mockListAssignmentsByCourse,
@@ -39,9 +39,9 @@ function setupModuleMocks() {
     archiveCourse: mockArchiveCourse,
     restoreCourse: mockRestoreCourse,
     purgeCourse: mockPurgeCourse,
-    archiveAssessment: mockArchiveAssessment,
-    restoreAssessment: mockRestoreAssessment,
-    purgeAssessment: mockPurgeAssessment,
+    archiveAssignmentTemplate: mockArchiveAssignmentTemplate,
+    restoreAssignmentTemplate: mockRestoreAssignmentTemplate,
+    purgeAssignmentTemplate: mockPurgeAssignmentTemplate,
     archiveAssignment: mockArchiveAssignment,
     restoreAssignment: mockRestoreAssignment,
     purgeAssignment: mockPurgeAssignment,
@@ -93,7 +93,7 @@ const mockCourses = [
   },
 ];
 
-const mockAssessmentsList = [
+const mockAssignmentTemplatesList = [
   {
     id: 1,
     title: "Midterm Exam",
@@ -103,7 +103,7 @@ const mockAssessmentsList = [
     questions: [],
     questionGroups: [],
     rubricId: null,
-    rubricAssessmentIds: [],
+    rubricAssignmentTemplateIds: [],
     status: "ACTIVE",
   },
   {
@@ -115,7 +115,7 @@ const mockAssessmentsList = [
     questions: [],
     questionGroups: [],
     rubricId: null,
-    rubricAssessmentIds: [],
+    rubricAssignmentTemplateIds: [],
     status: "ARCHIVED",
   },
 ];
@@ -124,8 +124,8 @@ const mockAssignments = [
   {
     id: 1,
     title: "HW 1",
-    assessmentId: 1,
-    assessmentTitle: "Midterm Exam",
+    assignmentTemplateId: 1,
+    assignmentTemplateTitle: "Midterm Exam",
     audienceType: "COURSE",
     courseId: 1,
     targetTeacherId: null,
@@ -140,7 +140,7 @@ describe("DataArchivesTab", () => {
     vi.clearAllMocks();
     // Default: courses load returns mockCourses, assignments returns mockAssignments
     mockListCourses.mockResolvedValue(mockCourses);
-    mockListAssessments.mockResolvedValue(mockAssessmentsList);
+    mockListAssignmentTemplates.mockResolvedValue(mockAssignmentTemplatesList);
     mockListAssignmentsByCourse.mockResolvedValue(mockAssignments);
   });
 
@@ -149,16 +149,16 @@ describe("DataArchivesTab", () => {
     expect(screen.getByText("Data Archives")).toBeInTheDocument();
   });
 
-  it("renders Courses, Assessments, and Assignments tab triggers", async () => {
+  it("renders Courses, Assignment Templates, and Assignments tab triggers", async () => {
     await renderDataArchivesAndWait();
     expect(screen.getByText("Courses")).toBeInTheDocument();
-    expect(screen.getByText("Assessments")).toBeInTheDocument();
+    expect(screen.getByText("Assignment Templates")).toBeInTheDocument();
     expect(screen.getByText("Assignments")).toBeInTheDocument();
   });
 
   it("shows loading state for courses initially", async () => {
     mockListCourses.mockReturnValue(new Promise(() => {}));
-    mockListAssessments.mockReturnValue(new Promise(() => {}));
+    mockListAssignmentTemplates.mockReturnValue(new Promise(() => {}));
     mockListAssignmentsByCourse.mockReturnValue(new Promise(() => {}));
     const DataArchivesTab = await loadComponent();
     const { unmount } = render(<DataArchivesTab role="ADMIN" />);
@@ -250,28 +250,28 @@ describe("DataArchivesTab", () => {
     });
   });
 
-  it("shows assessments tab content when clicked", async () => {
+  it("shows assignment templates tab content when clicked", async () => {
     const DataArchivesTab = await loadComponent();
     render(<DataArchivesTab role="ADMIN" />);
     const user = userEvent.setup();
     await waitFor(() => {
       expect(screen.getByText("Courses")).toBeInTheDocument();
     });
-    await user.click(screen.getByText("Assessments"));
+    await user.click(screen.getByText("Assignment Templates"));
     await waitFor(() => {
       // When showing only active, "Final Exam" (ARCHIVED) should not appear
       expect(screen.getByText("Midterm Exam")).toBeInTheDocument();
     });
   });
 
-  it("shows assessments table headers", async () => {
+  it("shows assignment templates table headers", async () => {
     const DataArchivesTab = await loadComponent();
     render(<DataArchivesTab role="ADMIN" />);
     const user = userEvent.setup();
     await waitFor(() => {
-      expect(screen.getByText("Assessments")).toBeInTheDocument();
+      expect(screen.getByText("Assignment Templates")).toBeInTheDocument();
     });
-    await user.click(screen.getByText("Assessments"));
+    await user.click(screen.getByText("Assignment Templates"));
     await waitFor(() => {
       expect(screen.getByText("Title")).toBeInTheDocument();
       expect(screen.getByText("Category")).toBeInTheDocument();
@@ -309,13 +309,13 @@ describe("DataArchivesTab", () => {
     });
   });
 
-  it("shows error toast when assessments fail to load", async () => {
-    mockListAssessments.mockRejectedValueOnce(new Error("Network error"));
+  it("shows error toast when assignment templates fail to load", async () => {
+    mockListAssignmentTemplates.mockRejectedValueOnce(new Error("Network error"));
     const DataArchivesTab = await loadComponent();
     render(<DataArchivesTab role="ADMIN" />);
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith(
-        "Failed to load assessments."
+        "Failed to load assignment templates."
       );
     });
   });

@@ -37,13 +37,18 @@ Document exactly which Angular services call which API endpoints for parity veri
 - bulkCreateStudents() -> POST /api/students/bulk
 - listStudentSubmissions() -> GET /api/students/{id}/submissions
 
-### AssessmentService
-- createAssessment() -> POST /api/assessments
-- listAssessments() -> GET /api/assessments
-- getAssessment() -> GET /api/assessments/{id}
-- updateAssessment() -> PUT /api/assessments/{id}
-- deleteAssessment() -> DELETE /api/assessments/{id}
-- teacherSelfAssess() -> POST /api/assessments/{id}/teacher-self-assess
+### AssignmentTemplateService
+- listAssignmentTemplates() -> GET /api/v1/assignment-templates
+- getAssignmentTemplate() -> GET /api/v1/assignment-templates/{id}
+- createAssignmentTemplate() -> POST /api/v1/assignment-templates
+- updateAssignmentTemplate() -> PATCH /api/v1/assignment-templates/{id}
+- deleteAssignmentTemplate() -> DELETE /api/v1/assignment-templates/{id}
+- archiveAssignmentTemplate() -> POST /api/v1/assignment-templates/{id}/archive
+- restoreAssignmentTemplate() -> POST /api/v1/assignment-templates/{id}/restore
+- createDraftAssignmentTemplate() -> POST /api/v1/assignment-templates?draft=true
+- publishAssignmentTemplate() -> POST /api/v1/assignment-templates/{id}/publish
+- uploadQuestionImage() -> POST /api/v1/assignment-templates/{assignmentTemplateId}/questions/{questionId}/image
+- deleteQuestionImage() -> DELETE /api/v1/assignment-templates/{assignmentTemplateId}/questions/{questionId}/image
 
 ### AssignmentService
 - createAssignment() -> POST /api/assignments
