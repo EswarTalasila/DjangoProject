@@ -11,7 +11,7 @@ const mockGetAssignment = vi.fn();
 const mockGetAssignmentTemplate = vi.fn();
 const mockUpdateAssignment = vi.fn();
 const mockArchiveAssignment = vi.fn();
-const mockDeleteAssignment = vi.fn();
+const mockRestoreAssignment = vi.fn();
 const mockListCourses = vi.fn();
 const mockGetStudentSubmission = vi.fn();
 const mockSaveDraft = vi.fn();
@@ -153,7 +153,7 @@ function setupModuleMocks() {
     getAssignment: mockGetAssignment,
     updateAssignment: mockUpdateAssignment,
     archiveAssignment: mockArchiveAssignment,
-    deleteAssignment: mockDeleteAssignment,
+    restoreAssignment: mockRestoreAssignment,
   }));
 
   vi.doMock("@/lib/assignment-template-api", () => ({
@@ -396,7 +396,7 @@ describe("AssignmentDetailView", () => {
       expect(screen.getByText("Manage Assignment")).toBeInTheDocument();
       expect(screen.getByText("Save Changes")).toBeInTheDocument();
       expect(screen.getByText("Archive")).toBeInTheDocument();
-      expect(screen.getByText("Delete")).toBeInTheDocument();
+      expect(screen.queryByText("Delete")).not.toBeInTheDocument();
     });
 
     it("does NOT render manage panel when canMutate=false", async () => {
@@ -490,7 +490,7 @@ describe("AssignmentDetailView", () => {
 
   /* ---- Teacher: archive ---- */
   describe("teacher — archive", () => {
-    it("archive button is disabled when already archived", async () => {
+    it("shows restore action when assignment is already archived", async () => {
       mockGetAssignment.mockResolvedValue(makeAssignment({ status: "ARCHIVED" }));
       mockGetAssignmentTemplate.mockResolvedValue(makeTemplate());
       mockListCourses.mockResolvedValue(makeCourses());
@@ -499,17 +499,19 @@ describe("AssignmentDetailView", () => {
         <Component assignmentId={1} canMutate={true} viewerRole="TEACHER" viewerId={5} />
       );
       await screen.findByText("Unit Test Assignment");
-      const archiveBtn = screen.getByRole("button", { name: "Archive" });
-      expect(archiveBtn).toBeDisabled();
+      const restoreBtn = screen.getByRole("button", { name: "Restore" });
+      expect(restoreBtn).toBeEnabled();
     });
   });
 
-  /* ---- Teacher: delete ---- */
-  describe("teacher — delete", () => {
-    it("calls deleteAssignment and navigates on success", async () => {
+  /* ---- Teacher: restore ---- */
+  describe("teacher — restore", () => {
+    it("calls restoreAssignment on success", async () => {
       vi.useRealTimers();
-      setupTeacherDefaults();
-      mockDeleteAssignment.mockResolvedValue(undefined);
+      mockGetAssignment.mockResolvedValue(makeAssignment({ status: "ARCHIVED" }));
+      mockGetAssignmentTemplate.mockResolvedValue(makeTemplate());
+      mockListCourses.mockResolvedValue(makeCourses());
+      mockRestoreAssignment.mockResolvedValue(makeAssignment());
       const Component = await loadComponent();
       const user = userEvent.setup();
       render(
@@ -517,20 +519,17 @@ describe("AssignmentDetailView", () => {
       );
       await screen.findByText("Unit Test Assignment");
 
-      // Click the Delete button to open the dialog
-      await user.click(screen.getByRole("button", { name: "Delete" }));
-      // Click the confirm button in dialog
-      const confirmBtn = await screen.findByRole("button", { name: "Confirm Delete" });
+      await user.click(screen.getByRole("button", { name: "Restore" }));
+      const confirmBtn = await screen.findByRole("button", {
+        name: "Confirm Restore",
+      });
       await user.click(confirmBtn);
 
       await waitFor(() => {
-        expect(mockDeleteAssignment).toHaveBeenCalledWith(1);
+        expect(mockRestoreAssignment).toHaveBeenCalledWith(1);
       });
       await waitFor(() => {
-        expect(mockToast.success).toHaveBeenCalledWith("Assignment deleted.");
-      });
-      await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith("/dashboard/assignments");
+        expect(mockToast.success).toHaveBeenCalledWith("Assignment restored.");
       });
     });
   });

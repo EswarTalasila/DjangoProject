@@ -144,9 +144,9 @@ describe("DataArchivesTab", () => {
     mockListAssignmentsByCourse.mockResolvedValue(mockAssignments);
   });
 
-  it("renders Data Archives heading", async () => {
+  it("renders Archive Records heading", async () => {
     await renderDataArchivesAndWait();
-    expect(screen.getByText("Data Archives")).toBeInTheDocument();
+    expect(screen.getByText("Archive Records")).toBeInTheDocument();
   });
 
   it("renders Courses, Assignment Templates, and Assignments tab triggers", async () => {
@@ -209,13 +209,12 @@ describe("DataArchivesTab", () => {
     });
   });
 
-  it("shows Delete button for archived courses", async () => {
+  it("shows Purge button for archived courses", async () => {
     const DataArchivesTab = await loadComponent();
     render(<DataArchivesTab role="ADMIN" />);
     await waitFor(() => {
-      // Delete appears for archived courses
-      const deleteButtons = screen.getAllByText("Delete");
-      expect(deleteButtons.length).toBeGreaterThan(0);
+      const purgeButtons = screen.getAllByText("Purge");
+      expect(purgeButtons.length).toBeGreaterThan(0);
     });
   });
 
@@ -244,9 +243,7 @@ describe("DataArchivesTab", () => {
     const DataArchivesTab = await loadComponent();
     render(<DataArchivesTab role="ADMIN" />);
     await waitFor(() => {
-      expect(
-        screen.getByText(/No archived courses/)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/No archived courses/)).toBeInTheDocument();
     });
   });
 
@@ -356,6 +353,29 @@ describe("DataArchivesTab", () => {
     });
   });
 
+  it("calls purgeCourse when Purge course action confirmed", async () => {
+    mockPurgeCourse.mockResolvedValueOnce({});
+    const DataArchivesTab = await loadComponent();
+    render(<DataArchivesTab role="ADMIN" />);
+    const user = userEvent.setup();
+    await waitFor(() => {
+      expect(screen.getByText("Purge")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Purge"));
+    await waitFor(() => {
+      expect(screen.getByText("Purge course")).toBeInTheDocument();
+    });
+
+    const confirmButtons = screen.getAllByText("Purge");
+    const confirmBtn = confirmButtons[confirmButtons.length - 1];
+    await user.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(mockPurgeCourse).toHaveBeenCalledWith(2);
+    });
+  });
+
   it("sorts courses by name when clicking Name header", async () => {
     const DataArchivesTab = await loadComponent();
     render(<DataArchivesTab role="ADMIN" />);
@@ -368,5 +388,38 @@ describe("DataArchivesTab", () => {
     // Names should still be in DOM
     expect(screen.getByText("Intro to CS")).toBeInTheDocument();
     expect(screen.getByText("Data Science")).toBeInTheDocument();
+  });
+
+  it("loads assignment rows with includeArchived=true so restored courses can surface archived assignments", async () => {
+    await renderDataArchivesAndWait();
+    await waitFor(() => {
+      expect(mockListAssignmentsByCourse).toHaveBeenCalledWith(1, {
+        includeArchived: true,
+      });
+    });
+  });
+
+  it("shows teacher only course and assignment tabs", async () => {
+    const DataArchivesTab = await loadComponent();
+    render(<DataArchivesTab role="TEACHER" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Courses")).toBeInTheDocument();
+      expect(screen.getByText("Assignments")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("Assignment Templates")).toBeNull();
+  });
+
+  it("shows researcher only assignment template tab", async () => {
+    const DataArchivesTab = await loadComponent();
+    render(<DataArchivesTab role="RESEARCHER" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Assignment Templates")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("Courses")).toBeNull();
+    expect(screen.queryByText("Assignments")).toBeNull();
   });
 });

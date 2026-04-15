@@ -94,11 +94,12 @@ describe("assignment api", () => {
   });
 
   describe("deleteAssignment", () => {
-    it("deletes an assignment without error", async () => {
+    it("purges an archived assignment without error", async () => {
       server.use(
-        http.delete(`${API_BASE}/assignments/1`, () =>
-          new HttpResponse(null, { status: 204 }),
-        ),
+        http.delete(`${API_BASE}/assignments/1`, ({ request }) => {
+          expect(new URL(request.url).searchParams.get("purge")).toBe("true");
+          return new HttpResponse(null, { status: 204 });
+        }),
       );
 
       const { deleteAssignment } = await loadAssignmentApi();
@@ -165,6 +166,25 @@ describe("assignment api", () => {
 
       const { listAssignmentsByCourse } = await loadAssignmentApi();
       const result = await listAssignmentsByCourse(5);
+
+      expect(result).toHaveLength(1);
+    });
+
+    it("passes includeArchived=true when requested", async () => {
+      server.use(
+        http.get(`${API_BASE}/assignments/courses/5`, ({ request }) => {
+          expect(new URL(request.url).searchParams.get("includeArchived")).toBe("true");
+          return HttpResponse.json({
+            count: 1,
+            next: null,
+            previous: null,
+            results: [sampleAssignment],
+          });
+        }),
+      );
+
+      const { listAssignmentsByCourse } = await loadAssignmentApi();
+      const result = await listAssignmentsByCourse(5, { includeArchived: true });
 
       expect(result).toHaveLength(1);
     });

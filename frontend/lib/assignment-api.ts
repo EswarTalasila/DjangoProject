@@ -59,9 +59,9 @@ export async function updateAssignment(
   return response.data;
 }
 
-/** DELETE /assignments/:id — Permanently delete an assignment. */
+/** DELETE /assignments/:id?purge=true — Permanently delete an archived assignment. */
 export async function deleteAssignment(assignmentId: number): Promise<void> {
-  await api.delete(`/assignments/${assignmentId}`);
+  await api.delete(`/assignments/${assignmentId}?purge=true`);
 }
 
 /** POST /assignments/:id/archive — Soft-archive an assignment. */
@@ -76,9 +76,16 @@ export async function restoreAssignment(assignmentId: number): Promise<Assignmen
   return response.data;
 }
 
-/** GET /assignments/courses/:id — List all assignments for a given course. */
-export async function listAssignmentsByCourse(courseId: number): Promise<Assignment[]> {
-  const response = await api.get<Paginated<Assignment> | Assignment[]>(`/assignments/courses/${courseId}`);
+/** GET /assignments/courses/:id — List assignments for a given course. */
+export async function listAssignmentsByCourse(
+  courseId: number,
+  options?: { includeArchived?: boolean },
+): Promise<Assignment[]> {
+  const params = options?.includeArchived ? { includeArchived: true } : undefined;
+  const response = await api.get<Paginated<Assignment> | Assignment[]>(
+    `/assignments/courses/${courseId}`,
+    { params },
+  );
   const data = response.data;
   return Array.isArray(data) ? data : data.results;
 }

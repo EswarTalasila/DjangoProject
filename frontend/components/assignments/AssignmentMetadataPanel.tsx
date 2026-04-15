@@ -44,10 +44,10 @@ export type AssignmentMetadataPanelProps = {
   onPreviewModeChange: (mode: PreviewMode) => void;
   isUpdating: boolean;
   isArchiving: boolean;
-  isDeleting: boolean;
+  isRestoring: boolean;
   onUpdate: () => void;
   onArchive: () => void;
-  onDelete: () => void;
+  onRestore: () => void;
 };
 
 export default function AssignmentMetadataPanel({
@@ -67,11 +67,13 @@ export default function AssignmentMetadataPanel({
   onPreviewModeChange,
   isUpdating,
   isArchiving,
-  isDeleting,
+  isRestoring,
   onUpdate,
   onArchive,
-  onDelete,
+  onRestore,
 }: AssignmentMetadataPanelProps) {
+  const isArchived = assignment.status === 'ARCHIVED';
+
   return (
     <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
       <div className="rounded-sm border border-border bg-card p-6 space-y-5">
@@ -186,58 +188,43 @@ export default function AssignmentMetadataPanel({
 
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="outline" disabled={assignment.status === 'ARCHIVED' || isArchiving}>
-                  {isArchiving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Archive
+                <Button
+                  variant={isArchived ? 'outline' : 'secondary'}
+                  disabled={isArchived ? isRestoring : isArchiving}
+                >
+                  {(isArchived ? isRestoring : isArchiving) && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {isArchived ? 'Restore' : 'Archive'}
                 </Button>
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Archive Assignment</AlertDialogTitle>
+                  <AlertDialogTitle>
+                    {isArchived ? 'Restore Assignment' : 'Archive Assignment'}
+                  </AlertDialogTitle>
                   <AlertDialogDescription>
-                    Archiving hides this assignment from student active lists. This can't be undone yet.
+                    {isArchived
+                      ? 'Restore this assignment to make it active in its course again.'
+                      : 'Archive this assignment to remove it from active teaching workflows while preserving its records and submissions.'}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isArchiving}>Cancel</AlertDialogCancel>
+                  <AlertDialogCancel disabled={isArchived ? isRestoring : isArchiving}>
+                    Cancel
+                  </AlertDialogCancel>
                   <AlertDialogAction
                     onClick={(event) => {
                       event.preventDefault();
-                      onArchive();
+                      if (isArchived) {
+                        onRestore();
+                      } else {
+                        onArchive();
+                      }
                     }}
-                    disabled={isArchiving}
+                    disabled={isArchived ? isRestoring : isArchiving}
                   >
-                    Confirm Archive
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive" disabled={isDeleting}>
-                  {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Delete
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete Assignment</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Delete is blocked if submissions progressed beyond NOT_STARTED.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    variant="destructive"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      onDelete();
-                    }}
-                    disabled={isDeleting}
-                  >
-                    Confirm Delete
+                    {isArchived ? 'Confirm Restore' : 'Confirm Archive'}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

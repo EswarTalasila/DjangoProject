@@ -34,29 +34,31 @@ describe("ArchiveManagerHub", () => {
     expect(screen.getByText("Archive Manager")).toBeInTheDocument();
   });
 
-  it("renders Quick Export and Package Builder tabs", async () => {
+  it("renders Quick Export, Archive Records, and Advanced Packaging for admin", async () => {
     const ArchiveManagerHub = await loadComponent();
     render(<ArchiveManagerHub role="ADMIN" canExportIdentifiable={true} />);
     expect(screen.getByText("Quick Export")).toBeInTheDocument();
-    expect(screen.getByText("Package Builder")).toBeInTheDocument();
+    expect(screen.getByText("Archive Records")).toBeInTheDocument();
+    expect(screen.getByText("Advanced Packaging")).toBeInTheDocument();
   });
 
-  it("renders Data Archives tab for ADMIN role", async () => {
+  it("renders Archive Records tab for ADMIN role", async () => {
     const ArchiveManagerHub = await loadComponent();
     render(<ArchiveManagerHub role="ADMIN" canExportIdentifiable={true} />);
-    expect(screen.getByText("Data Archives")).toBeInTheDocument();
+    expect(screen.getByText("Archive Records")).toBeInTheDocument();
   });
 
-  it("renders Data Archives tab for RESEARCHER role", async () => {
+  it("renders Archive Records tab for RESEARCHER role", async () => {
     const ArchiveManagerHub = await loadComponent();
     render(<ArchiveManagerHub role="RESEARCHER" canExportIdentifiable={false} />);
-    expect(screen.getByText("Data Archives")).toBeInTheDocument();
+    expect(screen.getByText("Archive Records")).toBeInTheDocument();
   });
 
-  it("does NOT render Data Archives tab for TEACHER role", async () => {
+  it("renders Archive Records tab but hides Advanced Packaging for TEACHER role", async () => {
     const ArchiveManagerHub = await loadComponent();
     render(<ArchiveManagerHub role="TEACHER" canExportIdentifiable={false} />);
-    expect(screen.queryByText("Data Archives")).not.toBeInTheDocument();
+    expect(screen.getByText("Archive Records")).toBeInTheDocument();
+    expect(screen.queryByText("Advanced Packaging")).not.toBeInTheDocument();
   });
 
   it("renders QuickExportTab content by default", async () => {

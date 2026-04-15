@@ -54,7 +54,7 @@ export default function ResearcherView() {
         <div className="rounded-sm border border-border bg-card p-6 md:col-span-2">
           <h2 className="text-lg font-semibold text-foreground">Analytics & Archive</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            View anonymized visualizations, download exports, and build archive package layouts.
+            Review visualizations, export live datasets, and manage template/archive records without treating packaging as the primary workflow.
           </p>
           <div className="mt-4 flex gap-2 flex-wrap">
             <Button asChild variant="outline">

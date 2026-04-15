@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
   archiveAssignment,
-  deleteAssignment,
   getAssignment,
+  restoreAssignment,
   updateAssignment,
   type Assignment,
   type AssignmentUpdateInput,
@@ -231,8 +230,6 @@ export default function AssignmentDetailView({
   viewerRole,
   viewerId,
 }: AssignmentDetailViewProps) {
-  const router = useRouter();
-
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [assignmentTemplate, setAssignmentTemplate] = useState<AssignmentTemplate | null>(null);
   const [courseName, setCourseName] = useState<string>('');
@@ -257,7 +254,7 @@ export default function AssignmentDetailView({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -555,18 +552,18 @@ export default function AssignmentDetailView({
     }
   }
 
-  async function handleDelete() {
+  async function handleRestore() {
     if (!assignment) return;
 
-    setIsDeleting(true);
+    setIsRestoring(true);
     try {
-      await deleteAssignment(assignment.id);
-      toast.success('Assignment deleted.');
-      router.push('/dashboard/assignments');
+      const restored = await restoreAssignment(assignment.id);
+      setAssignment(restored);
+      toast.success('Assignment restored.');
     } catch (error: unknown) {
-      toast.error(toErrorMessage(error, 'Failed to delete assignment.'));
+      toast.error(toErrorMessage(error, 'Failed to restore assignment.'));
     } finally {
-      setIsDeleting(false);
+      setIsRestoring(false);
     }
   }
 
@@ -620,10 +617,10 @@ export default function AssignmentDetailView({
         onPreviewModeChange={setPreviewMode}
         isUpdating={isUpdating}
         isArchiving={isArchiving}
-        isDeleting={isDeleting}
+        isRestoring={isRestoring}
         onUpdate={() => void handleUpdateAssignment()}
         onArchive={() => void handleArchive()}
-        onDelete={() => void handleDelete()}
+        onRestore={() => void handleRestore()}
       />
 
       <div className="rounded-sm border border-border bg-card p-6 space-y-4 min-h-[760px]">

@@ -43,7 +43,7 @@ import { toErrorMessage } from '@/lib/utils';
 // ── Props ──
 
 type DataArchivesTabProps = {
-  role: 'RESEARCHER' | 'ADMIN';
+  role: 'TEACHER' | 'RESEARCHER' | 'ADMIN';
 };
 
 // ── Sort helpers ──
@@ -97,8 +97,16 @@ function compare(a: unknown, b: unknown, direction: SortDirection): number {
 
 // ── Component ──
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- reserved for admin-only purge gating
 export default function DataArchivesTab({ role }: DataArchivesTabProps) {
+  const canManageCourses = role === 'TEACHER' || role === 'ADMIN';
+  const canManageAssignmentTemplates = role === 'RESEARCHER' || role === 'ADMIN';
+  const canManageAssignments = role === 'TEACHER' || role === 'ADMIN';
+  const defaultTab = canManageCourses
+    ? 'courses'
+    : canManageAssignmentTemplates
+      ? 'assignment-templates'
+      : 'assignments';
+
   // -- Courses state --
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [loadingCourses, setLoadingCourses] = useState(true);
@@ -161,10 +169,12 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     setLoadingAssignments(true);
     try {
       const allAssignments: (Assignment & { courseName?: string })[] = [];
-      // Fetch assignments from all courses (including archived ones to get archived assignments)
+      // Fetch assignments from all visible courses, explicitly including archived rows.
       const results = await Promise.allSettled(
         courseList.map(async (course) => {
-          const courseAssignments = await listAssignmentsByCourse(course.id);
+          const courseAssignments = await listAssignmentsByCourse(course.id, {
+            includeArchived: true,
+          });
           return courseAssignments.map((a) => ({ ...a, courseName: course.name }));
         }),
       );
@@ -191,8 +201,8 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     void loadCourses(showArchivedCourses);
   }, [showArchivedCourses, loadCourses]);
 
-  // Load assignments once courses are available
-  // We always fetch with includeArchived for assignment aggregation
+  // Load assignments once courses are available, always including archived rows so
+  // restored courses can still surface archived assignments for review/restore.
   useEffect(() => {
     async function fetchCoursesForAssignments() {
       try {
@@ -340,11 +350,11 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     }
   }
 
-  async function handleDeleteCourse(course: CourseSummary) {
+  async function handlePurgeCourse(course: CourseSummary) {
     setBusyCourseId(course.id);
     try {
       await purgeCourse(course.id);
-      toast.success('Course deleted.');
+      toast.success('Course purged.');
       await loadCourses(showArchivedCourses);
       await refreshAssignments();
     } catch (error) {
@@ -382,11 +392,11 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     }
   }
 
-  async function handleDeleteAssignmentTemplate(template: AssignmentTemplate) {
+  async function handlePurgeAssignmentTemplate(template: AssignmentTemplate) {
     setBusyAssignmentTemplateId(template.id);
     try {
       await purgeAssignmentTemplate(template.id);
-      toast.success('Assignment template deleted.');
+      toast.success('Assignment template purged.');
       await loadAssignmentTemplates(showArchivedAssignmentTemplates);
     } catch (error) {
       toast.error(toErrorMessage(error));
@@ -432,11 +442,11 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     }
   }
 
-  async function handleDeleteAssignment(assignment: Assignment) {
+  async function handlePurgeAssignment(assignment: Assignment) {
     setBusyAssignmentId(assignment.id);
     try {
       await purgeAssignment(assignment.id);
-      toast.success('Assignment deleted.');
+      toast.success('Assignment purged.');
       await refreshAssignments();
     } catch (error) {
       toast.error(toErrorMessage(error));
@@ -451,19 +461,21 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     <div className="space-y-4">
       {/* Title area with HelpTip */}
       <div className="flex items-center gap-2">
-        <h2 className="text-lg font-semibold text-foreground">Data Archives</h2>
-        <HelpTip text="Archiving hides items from active views but preserves all data. Items can be restored later. Deleting permanently removes an item and all associated data." />
+        <h2 className="text-lg font-semibold text-foreground">Archive Records</h2>
+        <HelpTip text="Archive keeps records available for later restore or controlled cleanup. Purge permanently removes archived records only when the lifecycle rules allow it." />
       </div>
 
-      <Tabs defaultValue="courses">
+      <Tabs defaultValue={defaultTab}>
         <TabsList>
-          <TabsTrigger value="courses">Courses</TabsTrigger>
-          <TabsTrigger value="assignment-templates">Assignment Templates</TabsTrigger>
-          <TabsTrigger value="assignments">Assignments</TabsTrigger>
+          {canManageCourses && <TabsTrigger value="courses">Courses</TabsTrigger>}
+          {canManageAssignmentTemplates && (
+            <TabsTrigger value="assignment-templates">Assignment Templates</TabsTrigger>
+          )}
+          {canManageAssignments && <TabsTrigger value="assignments">Assignments</TabsTrigger>}
         </TabsList>
 
         {/* ── Courses tab ── */}
-        <TabsContent value="courses" className="space-y-4 pt-4">
+        {canManageCourses && <TabsContent value="courses" className="space-y-4 pt-4">
           <div className="flex items-center justify-end">
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <Checkbox
@@ -479,8 +491,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
             <p className="text-sm text-muted-foreground">Loading courses...</p>
           ) : displayedCourses.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No archived courses. Active courses can be archived from their detail pages or using
-              the table actions.
+              No archived courses yet. Restoring a course does not restore its assignments, so use the course detail view or assignment archive tools to bring back archived work deliberately.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -556,24 +567,24 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
                                     <Button variant="destructive" size="xs" disabled={isBusy}>
-                                      Delete
+                                      Purge
                                     </Button>
                                   </AlertDialogTrigger>
                                   <AlertDialogContent>
                                     <AlertDialogHeader>
-                                      <AlertDialogTitle>Delete course</AlertDialogTitle>
+                                      <AlertDialogTitle>Purge course</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        Permanently delete {course.name}? This cannot be undone. All
-                                        associated data will be removed.
+                                        Permanently purge {course.name}? This cannot be undone. All
+                                        archived course data will be removed.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                                       <AlertDialogAction
                                         variant="destructive"
-                                        onClick={() => void handleDeleteCourse(course)}
+                                        onClick={() => void handlePurgeCourse(course)}
                                       >
-                                        Delete
+                                        Purge
                                       </AlertDialogAction>
                                     </AlertDialogFooter>
                                   </AlertDialogContent>
@@ -615,10 +626,10 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
               </table>
             </div>
           )}
-        </TabsContent>
+        </TabsContent>}
 
         {/* ── Assignment templates tab ── */}
-        <TabsContent value="assignment-templates" className="space-y-4 pt-4">
+        {canManageAssignmentTemplates && <TabsContent value="assignment-templates" className="space-y-4 pt-4">
           <div className="flex items-center justify-end">
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <Checkbox
@@ -634,8 +645,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
             <p className="text-sm text-muted-foreground">Loading assignment templates...</p>
           ) : displayedAssignmentTemplates.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No archived assignment templates. Active assignment templates can be archived from
-              their detail pages or using the table actions.
+              No archived assignment templates yet. Used templates should be archived instead of edited or deleted in place.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -703,14 +713,14 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
                                     <Button variant="destructive" size="xs" disabled={isBusy}>
-                                      Delete
+                                      Purge
                                     </Button>
                                   </AlertDialogTrigger>
                                   <AlertDialogContent>
                                     <AlertDialogHeader>
-                                      <AlertDialogTitle>Delete assignment template</AlertDialogTitle>
+                                      <AlertDialogTitle>Purge assignment template</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        Permanently delete {template.title}? This cannot be
+                                        Permanently purge {template.title}? This cannot be
                                         undone.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
@@ -718,9 +728,9 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                                       <AlertDialogAction
                                         variant="destructive"
-                                        onClick={() => void handleDeleteAssignmentTemplate(template)}
+                                        onClick={() => void handlePurgeAssignmentTemplate(template)}
                                       >
-                                        Delete
+                                        Purge
                                       </AlertDialogAction>
                                     </AlertDialogFooter>
                                   </AlertDialogContent>
@@ -745,7 +755,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                                     <AlertDialogCancel>Cancel</AlertDialogCancel>
                                     <AlertDialogAction
                                       variant="destructive"
-                                      onClick={() => void handleDeleteAssignmentTemplate(template)}
+                                      onClick={() => void handlePurgeAssignmentTemplate(template)}
                                     >
                                       Delete Draft
                                     </AlertDialogAction>
@@ -789,10 +799,10 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
               </table>
             </div>
           )}
-        </TabsContent>
+        </TabsContent>}
 
         {/* ── Assignments tab ── */}
-        <TabsContent value="assignments" className="space-y-4 pt-4">
+        {canManageAssignments && <TabsContent value="assignments" className="space-y-4 pt-4">
           <div className="flex items-center justify-end">
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
               <Checkbox
@@ -808,8 +818,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
             <p className="text-sm text-muted-foreground">Loading assignments...</p>
           ) : displayedAssignments.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No archived assignments. Active assignments can be archived from their detail pages or
-              using the table actions.
+              No archived assignments yet. Archived assignments linked to restored courses will appear here and can be restored individually.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -889,14 +898,14 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
                                     <Button variant="destructive" size="xs" disabled={isBusy}>
-                                      Delete
+                                      Purge
                                     </Button>
                                   </AlertDialogTrigger>
                                   <AlertDialogContent>
                                     <AlertDialogHeader>
-                                      <AlertDialogTitle>Delete assignment</AlertDialogTitle>
+                                      <AlertDialogTitle>Purge assignment</AlertDialogTitle>
                                       <AlertDialogDescription>
-                                        Permanently delete {assignment.title}? This cannot be
+                                        Permanently purge {assignment.title}? This cannot be
                                         undone.
                                       </AlertDialogDescription>
                                     </AlertDialogHeader>
@@ -904,9 +913,9 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                                       <AlertDialogAction
                                         variant="destructive"
-                                        onClick={() => void handleDeleteAssignment(assignment)}
+                                        onClick={() => void handlePurgeAssignment(assignment)}
                                       >
-                                        Delete
+                                        Purge
                                       </AlertDialogAction>
                                     </AlertDialogFooter>
                                   </AlertDialogContent>
@@ -947,7 +956,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
               </table>
             </div>
           )}
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
     </div>
   );

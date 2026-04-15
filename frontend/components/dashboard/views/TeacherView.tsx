@@ -61,7 +61,7 @@ export default function TeacherView() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-sm border border-border bg-card p-5">
           <h3 className="text-sm font-semibold text-foreground">Assignments</h3>
           <p className="text-sm text-muted-foreground mt-1">
@@ -94,6 +94,18 @@ export default function TeacherView() {
           <div className="mt-4">
             <Button asChild size="sm" variant="outline">
               <Link href="/dashboard/visualizations">Open Analytics</Link>
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-sm border border-border bg-card p-5">
+          <h3 className="text-sm font-semibold text-foreground">Archive & Exports</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Archive courses and assignments intentionally, then export live records when you need a snapshot of current work.
+          </p>
+          <div className="mt-4">
+            <Button asChild size="sm" variant="outline">
+              <Link href="/dashboard/archive-manager">Open Archive Manager</Link>
             </Button>
           </div>
         </div>

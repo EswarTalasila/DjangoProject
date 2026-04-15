@@ -16,34 +16,34 @@ export default function ArchiveManagerHub({
   role,
   canExportIdentifiable,
 }: ArchiveManagerHubProps) {
+  const showAdvancedPackaging = role !== 'TEACHER';
+
   return (
     <div className="space-y-6 p-6">
-      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
           Archive Manager
         </h1>
         <p className="text-muted-foreground mt-1">
-          Export data, build organized packages, and manage archived records.
-          <HelpTip text="Use Quick Export for one-off downloads, Package Builder to organize multi-file exports, and Data Archives to manage the lifecycle of courses, assignment templates, and assignments." />
+          Export live data, manage archive records, and use advanced packaging only when you need a structured handoff.
+          <HelpTip text="Quick Export is for current live data. Archive Records is where courses, assignment templates, and assignments move through archive and restore flows. Advanced Packaging remains available for structured legacy packaging workflows." />
         </p>
       </div>
 
-      {/* Tabs */}
       <Tabs defaultValue="quick-export">
         <TabsList>
           <TabsTrigger value="quick-export" className="gap-2">
             <Upload className="size-4" />
             Quick Export
           </TabsTrigger>
-          <TabsTrigger value="package-builder" className="gap-2">
-            <Package className="size-4" />
-            Package Builder
+          <TabsTrigger value="archive-records" className="gap-2">
+            <Archive className="size-4" />
+            Archive Records
           </TabsTrigger>
-          {role !== 'TEACHER' && (
-            <TabsTrigger value="data-archives" className="gap-2">
-              <Archive className="size-4" />
-              Data Archives
+          {showAdvancedPackaging && (
+            <TabsTrigger value="advanced-packaging" className="gap-2">
+              <Package className="size-4" />
+              Advanced Packaging
             </TabsTrigger>
           )}
         </TabsList>
@@ -53,15 +53,15 @@ export default function ArchiveManagerHub({
             canExportIdentifiable={canExportIdentifiable}
           />
         </TabsContent>
-        <TabsContent value="package-builder">
-          <PackageBuilderTab
-            role={role}
-            canExportIdentifiable={canExportIdentifiable}
-          />
+        <TabsContent value="archive-records">
+          <DataArchivesTab role={role} />
         </TabsContent>
-        {role !== 'TEACHER' && (
-          <TabsContent value="data-archives">
-            <DataArchivesTab role={role as 'RESEARCHER' | 'ADMIN'} />
+        {showAdvancedPackaging && (
+          <TabsContent value="advanced-packaging">
+            <PackageBuilderTab
+              role={role}
+              canExportIdentifiable={canExportIdentifiable}
+            />
           </TabsContent>
         )}
       </Tabs>

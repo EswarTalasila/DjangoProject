@@ -145,11 +145,11 @@ describe("lifecycle-api", () => {
   });
 
   describe("purgeAssignment delegates to assignment-api deleteAssignment", () => {
-    it("calls api.delete with /assignments/:id", async () => {
+    it("calls api.delete with /assignments/:id?purge=true", async () => {
       mockDelete.mockResolvedValueOnce({});
       const { purgeAssignment } = await loadModule();
       await purgeAssignment(3);
-      expect(mockDelete).toHaveBeenCalledWith("/assignments/3");
+      expect(mockDelete).toHaveBeenCalledWith("/assignments/3?purge=true");
     });
   });
 });
