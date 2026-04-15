@@ -394,7 +394,7 @@ class TestARCH_UC_06:
         assert resp.status_code == status.HTTP_204_NO_CONTENT
 
     def test_ARCH_UC_06_admin_purge_assignment_template(self, admin_client, assignment_template):
-        """Admin can purge an archived assignment_template with no assignments."""
+        """Admin can purge an archived assignment_template when lifecycle eligibility checks pass."""
         assignment_template.status = AssignmentTemplateStatus.ARCHIVED
         assignment_template.save()
         resp = admin_client.delete(f"/api/v1/assignment-templates/{assignment_template.id}?purge=true")

@@ -52,7 +52,7 @@ def _make_assignment_template(admin_user, **overrides):
 
 
 def _reference_assignment_template(assignment_template, teacher_user):
-    """Create an assignment that references the assignment_template, blocking mutation."""
+    """Create an assignment that marks the assignment_template as used for lifecycle tests."""
     course = Course.objects.create(name="Ref Course", teacher_profile=teacher_user.teacher_profile)
     return Assignment.objects.create(
         assignment_template=assignment_template,
@@ -237,7 +237,7 @@ class TestATMPL_UC_04:
     """Update assignment_template (PATCH /api/v1/assignment-templates/{id})."""
 
     def test_ATMPL_UC_04_ADMIN(self, api_client, admin_user):
-        """Admin can update an unreferenced assignment_template."""
+        """Admin can update a never-used assignment_template."""
         a = _make_assignment_template(admin_user)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.patch(
@@ -248,7 +248,7 @@ class TestATMPL_UC_04:
         assert a.title == "SA AssignmentTemplate"
 
     def test_ATMPL_UC_04_RESEARCHER(self, api_client, admin_user, researcher_user):
-        """Researcher can update an unreferenced assignment_template."""
+        """Researcher can update a never-used assignment_template."""
         a = _make_assignment_template(admin_user)
         api_client.force_authenticate(user=researcher_user)
         resp = api_client.patch(
@@ -265,8 +265,8 @@ class TestATMPL_UC_04:
         )
         assert resp.status_code == 403
 
-    def test_ATMPL_UC_04_E3_referenced(self, api_client, admin_user, teacher_user):
-        """Update blocked when assignments reference assignment_template (409 — ATMPL-CN-06)."""
+    def test_ATMPL_UC_04_E3_used(self, api_client, admin_user, teacher_user):
+        """Update blocked once assignment_template usage has begun (409 — ATMPL-CN-06)."""
         a = _make_assignment_template(admin_user)
         _reference_assignment_template(a, teacher_user)
         api_client.force_authenticate(user=admin_user)

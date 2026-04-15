@@ -7,7 +7,7 @@
 | **Domain** | ATMPL |
 | **Applies To** | ADMIN (system role), RESEARCHER, TEACHER |
 | **Related Issues** | TBD |
-| **Dependencies** | FR-07 ASGN (assignment references), FR-08 SUB (submission data), FR-14 ARCH (archive lifecycle) |
+| **Dependencies** | FR-07 ASGN (assignment usage), FR-08 SUB (submission data), FR-14 ARCH (archive lifecycle) |
 
 ---
 
@@ -18,8 +18,8 @@
   - create assignment template with questions
   - list available assignment templates
   - read assignment template detail
-  - update assignment template (when unreferenced by assignments)
-  - delete assignment template (when unreferenced by assignments)
+  - update assignment template (only before it has ever been used)
+  - delete assignment template (for drafts or active templates that have never been used)
 - 4 question types (current backend): `MULTIPLE_CHOICE`, `SHORT_ANSWER`, `NUMBER_SCALE`, `MOOD_METER`.
 - Grading modes in active backend contract: `AUTO`, `MANUAL`, `HYBRID`, `MOOD_METER`, with `RUBRIC` accepted as an input compatibility alias that persists as `MANUAL`.
 - Rubric linkage/lifecycle within assignment template domain (assignment template-linked `rubric` FK + `rubric_assignment_template_ids`).
@@ -47,7 +47,7 @@
 
 ### Core Intent
 - Provide researcher-authored assignment templates with multi-type question support and grading mode configuration.
-- Enforce two-tier mutation policy: unreferenced assignment templates allow full CRUD; referenced assignment templates are protected from destructive changes.
+- Enforce a usage-aware mutation policy: never-used templates allow normal mutation; historically used templates are protected by archive-first lifecycle rules.
 - Support assignment template archive lifecycle to retire templates without breaking existing assignments.
 
 ---
@@ -72,10 +72,10 @@
 |----|-------|-------|
 | ATMPL-US-01 | RESEARCHER, ADMIN | As a researcher or admin I can create an assignment template with questions so that teachers can assign it to their courses. |
 | ATMPL-US-02 | ADMIN, RESEARCHER, TEACHER | As an admin, researcher, or teacher I can view available assignment templates so that I can review content or select templates for assignment. |
-| ATMPL-US-03 | RESEARCHER, ADMIN | As a researcher or admin I can update an assignment template that has no assignments so that I can correct or improve questions before distribution. |
+| ATMPL-US-03 | RESEARCHER, ADMIN | As a researcher or admin I can update an assignment template before it has been used so that I can correct or improve questions before distribution. |
 | ATMPL-US-04 | RESEARCHER, ADMIN | As a researcher or admin I can delete an unused assignment template so that the template library stays clean without preserving unused drafts or active templates. |
 | ATMPL-US-05 | RESEARCHER, ADMIN | As a researcher or admin I can link a rubric to an assignment template so that grading criteria are attached to the template. |
-| ATMPL-US-06 | RESEARCHER, ADMIN | As a researcher or admin I can archive a referenced assignment template so that no new assignments are created from it while existing assignments remain valid. |
+| ATMPL-US-06 | RESEARCHER, ADMIN | As a researcher or admin I can archive a historically used assignment template so that no new assignments are created from it while existing assignments remain valid. |
 
 ---
 
@@ -281,7 +281,7 @@
 ### ATMPL-CN-08 — Question Replacement Semantics
 - AssignmentTemplate updates replace all questions (full replacement, not merge).
 - Old questions are deleted; new questions are created with new IDs.
-- This is why ATMPL-CN-06 blocks updates when assignments reference the assignment template.
+- This is why ATMPL-CN-06 blocks updates once the assignment template has been used.
 - Applies to: ATMPL-UC-04.
 
 ### ATMPL-CN-09 — Mood Meter Auto-Configuration
@@ -344,7 +344,7 @@ Expected statuses by UC:
 - `400`: invalid payload/question type/grading mode
 - `403`: forbidden by role
 - `404`: assignment template not found
-- `409`: mutation blocked by assignment references (`ATMPL-UC-04-E3`, `ATMPL-UC-05-E3`) or already archived (`ATMPL-UC-06-E3`)
+- `409`: mutation blocked by lifecycle usage rules (`ATMPL-UC-04-E3`, `ATMPL-UC-05-E3`) or already archived (`ATMPL-UC-06-E3`)
 - `201`: create success
 - `200`: read/update success
 - `204`: delete success
@@ -372,8 +372,8 @@ Expected statuses by UC:
 - `ST-ATMPL-UC-01` through `ST-ATMPL-UC-06`
 - Required constraint checks:
   - `ST-ATMPL-CN-02` (no student assignment template access)
-  - `ST-ATMPL-CN-05` (delete blocked when referenced)
-  - `ST-ATMPL-CN-06` (update blocked when referenced)
+  - `ST-ATMPL-CN-05` (delete blocked once used)
+  - `ST-ATMPL-CN-06` (update blocked once used)
   - `ST-ATMPL-CN-10` (atomic question provisioning)
   - `ST-ATMPL-CN-13` (archived assignment template blocks new assignments)
 
@@ -404,7 +404,7 @@ Expected statuses by UC:
 |--------|-----------------|------------------|
 | FR-05 CRS | Course context for assignment creation | AssignmentTemplates are global templates; course scoping happens at assignment level (FR-07) |
 | FR-07 ASGN | Assignment usage establishes lifecycle history | ASGN-CN-04 enforces archived assignment template check; ATMPL-CN-05/06 block delete/update once a template has been used |
-| FR-08 SUB | Submission answers tied to question structure | Question replacement (ATMPL-CN-08) is blocked when submissions exist via assignment reference check |
+| FR-08 SUB | Submission answers tied to question structure | Question replacement (ATMPL-CN-08) is blocked once assignment-template usage has begun, preserving downstream submission context |
 | FR-14 ARCH | AssignmentTemplate archive lifecycle | ARCH-UC-01 archives assignment templates; blocks new assignment creation from archived templates |
 
 ---
