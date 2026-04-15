@@ -20,8 +20,6 @@ class AuditAction(models.TextChoices):
     IMAGE_UPLOAD = "IMAGE_UPLOAD"
     IMAGE_PROXY_UPLOAD = "IMAGE_PROXY_UPLOAD"
     IMAGE_DELETE = "IMAGE_DELETE"
-    PKG_BUILD = "PKG_BUILD"
-    PKG_DOWNLOAD = "PKG_DOWNLOAD"
 
 
 class AuditOutcome(models.TextChoices):

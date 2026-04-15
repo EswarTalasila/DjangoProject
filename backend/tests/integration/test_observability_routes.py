@@ -323,8 +323,6 @@ class TestAuditCoverage:
             "IMAGE_UPLOAD",
             "IMAGE_PROXY_UPLOAD",
             "IMAGE_DELETE",
-            "PKG_BUILD",
-            "PKG_DOWNLOAD",
         }
         actual = {choice[0] for choice in AuditAction.choices}
         assert required == actual

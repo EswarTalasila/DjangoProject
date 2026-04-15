@@ -49,7 +49,6 @@ INSTALLED_APPS = [
     "submissions",
     "visualizations",
     "exports",
-    "packages",
 ]
 
 # Development-only apps (not loaded in production)
@@ -158,16 +157,11 @@ IMAGE_ROOT = MEDIA_ROOT / "images"
 QUESTION_IMAGE_DIR = IMAGE_ROOT / "questions"
 SUBMISSION_IMAGE_DIR = IMAGE_ROOT / "submissions"
 ARTIFACT_ROOT = MEDIA_ROOT / "artifacts"
-PACKAGE_ARTIFACT_DIR = ARTIFACT_ROOT / "packages"
-PACKAGE_SNAPSHOT_DIR = ARTIFACT_ROOT / "snapshots"
-
 for directory in (
     IMAGE_ROOT,
     QUESTION_IMAGE_DIR,
     SUBMISSION_IMAGE_DIR,
     ARTIFACT_ROOT,
-    PACKAGE_ARTIFACT_DIR,
-    PACKAGE_SNAPSHOT_DIR,
 ):
     try:
         directory.mkdir(parents=True, exist_ok=True)

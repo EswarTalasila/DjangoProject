@@ -2,7 +2,8 @@ openapi: 3.0.3
 info:
   title: EE Lab Data Dashboard API
   version: 1.0.0
-  description: API for managing assignment templates, assignments, submissions, and visualization.
+  description: API for managing assignment templates, assignments, submissions, and
+    visualization.
 paths:
   /api/v1/assignment-templates/:
     get:
@@ -219,6 +220,50 @@ paths:
     post:
       operationId: v1_assignments_archive_create
       description: Archive an assignment.
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignments/{assignment_id}/archive-bundle:
+    get:
+      operationId: v1_assignments_archive_bundle_retrieve
+      description: Get or generate assignment archive bundle metadata.
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_assignments_archive_bundle_create
+      description: Get or generate assignment archive bundle metadata.
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignments/{assignment_id}/archive-bundle/download:
+    get:
+      operationId: v1_assignments_archive_bundle_download_retrieve
+      description: Download an existing assignment archive bundle.
       parameters:
       - in: path
         name: assignment_id
@@ -785,224 +830,6 @@ paths:
       parameters:
       - in: path
         name: course_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - v1
-      responses:
-        '200':
-          description: No response body
-  /api/v1/packages/artifacts/{artifact_id}/download:
-    get:
-      operationId: v1_packages_artifacts_download_retrieve
-      description: GET /api/v1/packages/artifacts/{artifactId}/download
-      parameters:
-      - in: path
-        name: artifact_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - v1
-      responses:
-        '200':
-          description: No response body
-  /api/v1/packages/jobs/{job_id}:
-    get:
-      operationId: v1_packages_jobs_retrieve
-      description: GET /api/v1/packages/jobs/{jobId}
-      parameters:
-      - in: path
-        name: job_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - v1
-      responses:
-        '200':
-          description: No response body
-  /api/v1/packages/workspaces:
-    get:
-      operationId: v1_packages_workspaces_retrieve
-      description: GET/POST /api/v1/packages/workspaces
-      tags:
-      - v1
-      responses:
-        '200':
-          description: No response body
-    post:
-      operationId: v1_packages_workspaces_create
-      description: GET/POST /api/v1/packages/workspaces
-      tags:
-      - v1
-      responses:
-        '200':
-          description: No response body
-  /api/v1/packages/workspaces/{workspace_id}:
-    get:
-      operationId: v1_packages_workspaces_retrieve_2
-      description: GET/PATCH/DELETE /api/v1/packages/workspaces/{workspaceId}
-      parameters:
-      - in: path
-        name: workspace_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - v1
-      responses:
-        '200':
-          description: No response body
-    patch:
-      operationId: v1_packages_workspaces_partial_update
-      description: GET/PATCH/DELETE /api/v1/packages/workspaces/{workspaceId}
-      parameters:
-      - in: path
-        name: workspace_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - v1
-      responses:
-        '200':
-          description: No response body
-    delete:
-      operationId: v1_packages_workspaces_destroy
-      description: GET/PATCH/DELETE /api/v1/packages/workspaces/{workspaceId}
-      parameters:
-      - in: path
-        name: workspace_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - v1
-      responses:
-        '204':
-          description: No response body
-  /api/v1/packages/workspaces/{workspace_id}/build:
-    post:
-      operationId: v1_packages_workspaces_build_create
-      description: POST /api/v1/packages/workspaces/{workspaceId}/build
-      parameters:
-      - in: path
-        name: workspace_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - v1
-      responses:
-        '200':
-          description: No response body
-  /api/v1/packages/workspaces/{workspace_id}/nodes:
-    post:
-      operationId: v1_packages_workspaces_nodes_create
-      description: POST /api/v1/packages/workspaces/{workspaceId}/nodes
-      parameters:
-      - in: path
-        name: workspace_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - v1
-      responses:
-        '200':
-          description: No response body
-  /api/v1/packages/workspaces/{workspace_id}/nodes/{node_id}:
-    patch:
-      operationId: v1_packages_workspaces_nodes_partial_update
-      description: PATCH/DELETE /api/v1/packages/workspaces/{workspaceId}/nodes/{nodeId}
-      parameters:
-      - in: path
-        name: node_id
-        schema:
-          type: integer
-        required: true
-      - in: path
-        name: workspace_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - v1
-      responses:
-        '200':
-          description: No response body
-    delete:
-      operationId: v1_packages_workspaces_nodes_destroy
-      description: PATCH/DELETE /api/v1/packages/workspaces/{workspaceId}/nodes/{nodeId}
-      parameters:
-      - in: path
-        name: node_id
-        schema:
-          type: integer
-        required: true
-      - in: path
-        name: workspace_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - v1
-      responses:
-        '204':
-          description: No response body
-  /api/v1/packages/workspaces/{workspace_id}/nodes/reorder:
-    post:
-      operationId: v1_packages_workspaces_nodes_reorder_create
-      description: POST /api/v1/packages/workspaces/{workspaceId}/nodes/reorder
-      parameters:
-      - in: path
-        name: workspace_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - v1
-      responses:
-        '200':
-          description: No response body
-  /api/v1/packages/workspaces/{workspace_id}/snapshots:
-    get:
-      operationId: v1_packages_workspaces_snapshots_retrieve
-      description: GET/POST /api/v1/packages/workspaces/{workspaceId}/snapshots
-      parameters:
-      - in: path
-        name: workspace_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - v1
-      responses:
-        '200':
-          description: No response body
-    post:
-      operationId: v1_packages_workspaces_snapshots_create
-      description: GET/POST /api/v1/packages/workspaces/{workspaceId}/snapshots
-      parameters:
-      - in: path
-        name: workspace_id
-        schema:
-          type: integer
-        required: true
-      tags:
-      - v1
-      responses:
-        '200':
-          description: No response body
-  /api/v1/packages/workspaces/{workspace_id}/validate:
-    post:
-      operationId: v1_packages_workspaces_validate_create
-      description: POST /api/v1/packages/workspaces/{workspaceId}/validate
-      parameters:
-      - in: path
-        name: workspace_id
         schema:
           type: integer
         required: true

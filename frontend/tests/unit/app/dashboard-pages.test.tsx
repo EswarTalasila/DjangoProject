@@ -273,21 +273,6 @@ describe("exports/page.tsx", () => {
 });
 
 /* ------------------------------------------------------------------ */
-/*  Packages page — redirect to archive-manager                        */
-/* ------------------------------------------------------------------ */
-describe("packages/page.tsx", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("redirects to /dashboard/archive-manager", async () => {
-    vi.resetModules();
-    vi.doMock("next/navigation", () => ({ redirect: mockRedirect }));
-    const mod = await import("@/app/(dashboard)/dashboard/packages/page");
-    mod.default();
-    expect(mockRedirect).toHaveBeenCalledWith("/dashboard/archive-manager");
-  });
-});
-
-/* ------------------------------------------------------------------ */
 /*  Codes page                                                         */
 /* ------------------------------------------------------------------ */
 describe("codes/page.tsx", () => {
