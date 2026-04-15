@@ -258,6 +258,29 @@ describe("archive-manager/page.tsx", () => {
 });
 
 /* ------------------------------------------------------------------ */
+/*  Legacy redirect pages                                              */
+/* ------------------------------------------------------------------ */
+describe("legacy archive redirects", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("redirects /dashboard/exports to /dashboard/archive-manager", async () => {
+    vi.resetModules();
+    vi.doMock("next/navigation", () => ({ redirect: mockRedirect }));
+    const mod = await import("@/app/(dashboard)/dashboard/exports/page");
+    mod.default();
+    expect(mockRedirect).toHaveBeenCalledWith("/dashboard/archive-manager");
+  });
+
+  it("redirects /dashboard/packages to /dashboard/archive-manager", async () => {
+    vi.resetModules();
+    vi.doMock("next/navigation", () => ({ redirect: mockRedirect }));
+    const mod = await import("@/app/(dashboard)/dashboard/packages/page");
+    mod.default();
+    expect(mockRedirect).toHaveBeenCalledWith("/dashboard/archive-manager");
+  });
+});
+
+/* ------------------------------------------------------------------ */
 /*  Exports page — redirect to archive-manager                         */
 /* ------------------------------------------------------------------ */
 describe("exports/page.tsx", () => {
