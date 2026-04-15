@@ -33,6 +33,13 @@ class AssignmentTemplateReferencedError(Exception):
     """Raised when assignments already reference an assignment template."""
 
 
+def _assignment_template_has_usage(assignment_template: AssignmentTemplate) -> bool:
+    """Return True when a template has ever been used by an assignment."""
+    return bool(assignment_template.used_at) or Assignment.objects.filter(
+        assignment_template=assignment_template
+    ).exists()
+
+
 def _assignment_template_with_related(assignment_template_id: int) -> AssignmentTemplate | None:
     """Fetch an assignment template with related questions prefetched."""
     return (
@@ -197,10 +204,12 @@ def update_assignment_template(
     assignment_template: AssignmentTemplate,
     payload: dict,
 ) -> AssignmentTemplate:
-    """Update an assignment template when it is not already assigned."""
-    if Assignment.objects.filter(assignment_template=assignment_template).exists():
+    """Update an assignment template only while it remains unused and active."""
+    if assignment_template.status == AssignmentTemplateStatus.ARCHIVED:
+        raise ConflictError("Cannot update an archived assignment template.")
+    if _assignment_template_has_usage(assignment_template):
         raise AssignmentTemplateReferencedError(
-            "Cannot update assignment template referenced by assignments"
+            "Assignment template has been used by assignments and cannot be modified."
         )
 
     grading_mode = payload.get("gradingMode", assignment_template.grading_mode)
@@ -277,10 +286,10 @@ def delete_assignment_template_draft(assignment_template: AssignmentTemplate) ->
 
 @transaction.atomic
 def delete_assignment_template(assignment_template: AssignmentTemplate) -> None:
-    """Delete an assignment template that is not referenced by assignments."""
-    if Assignment.objects.filter(assignment_template=assignment_template).exists():
+    """Delete an assignment template only when it has never been used."""
+    if _assignment_template_has_usage(assignment_template):
         raise AssignmentTemplateReferencedError(
-            "Cannot delete assignment template referenced by assignments"
+            "Assignment template has been used by assignments and must be archived instead."
         )
     assignment_template.delete()
 
@@ -324,6 +333,8 @@ def archive_assignment_template(
     """Archive an assignment template."""
     if assignment_template.status == AssignmentTemplateStatus.ARCHIVED:
         raise ConflictError("Assignment template is already archived.")
+    if assignment_template.status == AssignmentTemplateStatus.DRAFT:
+        raise ConflictError("Draft assignment templates cannot be archived.")
     assignment_template.status = AssignmentTemplateStatus.ARCHIVED
     assignment_template.archived_at = timezone.now()
     assignment_template.archived_by = request_user

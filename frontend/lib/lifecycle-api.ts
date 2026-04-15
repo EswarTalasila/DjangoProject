@@ -15,7 +15,7 @@ export { archiveCourse, restoreCourse, deleteCourse as purgeCourse } from '@/lib
 export {
   archiveAssignmentTemplate,
   restoreAssignmentTemplate,
-  deleteAssignmentTemplate as purgeAssignmentTemplate,
+  purgeAssignmentTemplate,
 } from '@/lib/assignment-template-api';
 
 // -- Assignment lifecycle --

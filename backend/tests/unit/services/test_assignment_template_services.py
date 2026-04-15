@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from assignment_templates.models import GradingMode, QuestionKind
+from core.lifecycle import ConflictError
 
 pytestmark = pytest.mark.unit
 
@@ -292,6 +293,16 @@ class TestCreateAssignmentTemplate(_NoopAtomicMixin):
 class TestUpdateAssignmentTemplate(_NoopAtomicMixin):
     """Tests for update_assignment_template service."""
 
+    def test_raises_when_assignment_template_is_archived(self):
+        """Archived assignment templates cannot be updated through the normal edit path."""
+        from assignment_templates.services import update_assignment_template
+
+        assignment_template = MagicMock()
+        assignment_template.status = "ARCHIVED"
+
+        with pytest.raises(ConflictError, match="archived"):
+            update_assignment_template(assignment_template, {"title": "Nope"})
+
     @patch("assignment_templates.services._validate_rubric_rules")
     @patch("assignment_templates.services._replace_questions")
     @patch("assignment_templates.services._create_question_groups")
@@ -312,6 +323,7 @@ class TestUpdateAssignmentTemplate(_NoopAtomicMixin):
         assignment_template.grading_mode = GradingMode.AUTO
         assignment_template.scoring_policy = "STANDARD"
         assignment_template.rubric_id = None
+        assignment_template.used_at = None
 
         payload = {
             "title": "New Title",
@@ -332,6 +344,23 @@ class TestUpdateAssignmentTemplate(_NoopAtomicMixin):
         mock_replace.assert_called_once()
         mock_validate.assert_called_once()
 
+    @patch("assignment_templates.services.Assignment")
+    def test_raises_when_assignment_template_was_previously_used(self, mock_assignment):
+        """Historically used templates stay read-only even after live assignments are gone."""
+        from assignment_templates.services import (
+            AssignmentTemplateReferencedError,
+            update_assignment_template,
+        )
+
+        mock_assignment.objects.filter.return_value.exists.return_value = False
+
+        assignment_template = MagicMock()
+        assignment_template.status = "ACTIVE"
+        assignment_template.used_at = "2026-04-15T00:00:00Z"
+
+        with pytest.raises(AssignmentTemplateReferencedError, match="used"):
+            update_assignment_template(assignment_template, {"title": "Nope"})
+
     @patch("assignment_templates.services._validate_rubric_rules")
     @patch("assignment_templates.services._replace_questions")
     @patch("assignment_templates.services._create_question_groups")
@@ -351,6 +380,7 @@ class TestUpdateAssignmentTemplate(_NoopAtomicMixin):
         assignment_template.grading_mode = GradingMode.AUTO
         assignment_template.scoring_policy = "STANDARD"
         assignment_template.rubric_id = None
+        assignment_template.used_at = None
 
         payload = {"category": "New"}
 
@@ -371,11 +401,12 @@ class TestDeleteAssignmentTemplate(_NoopAtomicMixin):
     def test_deletes_assignment_template_when_no_assignments(
         self, mock_assignment_model
     ):
-        """Deletes assignment_template when no assignments reference it."""
+        """Deletes an unused assignment_template when no assignments reference it."""
         from assignment_templates.services import delete_assignment_template
 
         mock_assignment_model.objects.filter.return_value.exists.return_value = False
         assignment_template = MagicMock()
+        assignment_template.used_at = None
 
         delete_assignment_template(assignment_template)
 
@@ -395,6 +426,20 @@ class TestDeleteAssignmentTemplate(_NoopAtomicMixin):
         assignment_template = MagicMock()
 
         with pytest.raises(AssignmentTemplateReferencedError):
+            delete_assignment_template(assignment_template)
+
+    @patch("assignment_templates.services.Assignment")
+    def test_raises_when_assignment_template_was_previously_used(
+        self, mock_assignment_model
+    ):
+        """Previously used assignment_templates stay archive-first even after assignments are gone."""
+        from assignment_templates.services import AssignmentTemplateReferencedError, delete_assignment_template
+
+        mock_assignment_model.objects.filter.return_value.exists.return_value = False
+        assignment_template = MagicMock()
+        assignment_template.used_at = "2026-04-15T00:00:00Z"
+
+        with pytest.raises(AssignmentTemplateReferencedError, match="used"):
             delete_assignment_template(assignment_template)
 
 
@@ -759,6 +804,18 @@ class TestArchiveAssignmentTemplate(_NoopAtomicMixin):
         assignment_template.status = AssignmentTemplateStatus.ARCHIVED
 
         with pytest.raises(ConflictError, match="already archived"):
+            archive_assignment_template(SimpleNamespace(id=1), assignment_template)
+
+    def test_raises_when_assignment_template_is_draft(self):
+        """Draft assignment templates cannot move straight to archived state."""
+        from assignment_templates.services import archive_assignment_template
+        from assignment_templates.models import AssignmentTemplateStatus
+        from core.lifecycle import ConflictError
+
+        assignment_template = MagicMock()
+        assignment_template.status = AssignmentTemplateStatus.DRAFT
+
+        with pytest.raises(ConflictError, match="Draft"):
             archive_assignment_template(SimpleNamespace(id=1), assignment_template)
 
 

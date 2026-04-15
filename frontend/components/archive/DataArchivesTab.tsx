@@ -143,10 +143,12 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     }
   }, []);
 
-  const loadAssignmentTemplates = useCallback(async () => {
+  const loadAssignmentTemplates = useCallback(async (includeArchived: boolean) => {
     setLoadingAssignmentTemplates(true);
     try {
-      const data = await listAssignmentTemplates();
+      const data = await listAssignmentTemplates(
+        includeArchived ? { includeArchived: true } : undefined,
+      );
       setAssignmentTemplates(data);
     } catch {
       toast.error('Failed to load assignment templates.');
@@ -181,8 +183,8 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
 
   // Load assignment templates on mount
   useEffect(() => {
-    void loadAssignmentTemplates();
-  }, [loadAssignmentTemplates]);
+    void loadAssignmentTemplates(showArchivedAssignmentTemplates);
+  }, [loadAssignmentTemplates, showArchivedAssignmentTemplates]);
 
   // Load courses on mount and re-fetch when toggle changes
   useEffect(() => {
@@ -359,7 +361,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     try {
       await archiveAssignmentTemplate(template.id);
       toast.success('Assignment template archived.');
-      await loadAssignmentTemplates();
+      await loadAssignmentTemplates(showArchivedAssignmentTemplates);
     } catch (error) {
       toast.error(toErrorMessage(error));
     } finally {
@@ -372,7 +374,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     try {
       await restoreAssignmentTemplate(template.id);
       toast.success('Assignment template restored.');
-      await loadAssignmentTemplates();
+      await loadAssignmentTemplates(showArchivedAssignmentTemplates);
     } catch (error) {
       toast.error(toErrorMessage(error));
     } finally {
@@ -385,7 +387,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     try {
       await purgeAssignmentTemplate(template.id);
       toast.success('Assignment template deleted.');
-      await loadAssignmentTemplates();
+      await loadAssignmentTemplates(showArchivedAssignmentTemplates);
     } catch (error) {
       toast.error(toErrorMessage(error));
     } finally {
@@ -674,6 +676,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                   {sortedAssignmentTemplates().map((template) => {
                     const status = template.status ?? 'ACTIVE';
                     const isArchived = status === 'ARCHIVED';
+                    const isDraft = status === 'DRAFT';
                     const isBusy = busyAssignmentTemplateId === template.id;
                     return (
                       <tr
@@ -683,7 +686,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                         <td className="py-2 pr-4">{template.title}</td>
                         <td className="py-2 pr-4">{template.category ?? '-'}</td>
                         <td className="py-2 pr-4">
-                          <StatusBadge status={isArchived ? 'ARCHIVED' : 'ACTIVE'} />
+                          <StatusBadge status={status} />
                         </td>
                         <td className="py-2">
                           <div className="flex items-center gap-2">
@@ -723,6 +726,32 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                                   </AlertDialogContent>
                                 </AlertDialog>
                               </>
+                            ) : isDraft ? (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="destructive" size="xs" disabled={isBusy}>
+                                    Delete Draft
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete draft template</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Permanently delete the draft {template.title}? This cannot be
+                                      undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      variant="destructive"
+                                      onClick={() => void handleDeleteAssignmentTemplate(template)}
+                                    >
+                                      Delete Draft
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             ) : (
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>

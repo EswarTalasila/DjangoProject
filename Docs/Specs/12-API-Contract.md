@@ -50,12 +50,13 @@ Define exact endpoint paths, methods, request bodies, and response shapes for pa
 |---|---|---|---|---|---|
 | POST | /api/v1/assignment-templates | AssignmentTemplateDto | AssignmentTemplateDto | Researcher/Admin | Create |
 | GET | /api/v1/assignment-templates | {} | [AssignmentTemplateDto] | Teacher+ | List available templates |
-| GET | /api/v1/assignment-templates/{id} | {} | AssignmentTemplateDto | Teacher+ | Detail |
-| PATCH | /api/v1/assignment-templates/{id} | AssignmentTemplateDto | AssignmentTemplateDto | Researcher/Admin | Update when unreferenced |
-| DELETE | /api/v1/assignment-templates/{id} | {} | 204 No Content | Researcher/Admin | Hard delete when unreferenced |
+| GET | /api/v1/assignment-templates/{id} | {} | AssignmentTemplateDto | Teacher+ | Detail; teachers only for ACTIVE templates |
+| PATCH | /api/v1/assignment-templates/{id} | AssignmentTemplateDto | AssignmentTemplateDto | Researcher/Admin | Update only while never used and not archived |
+| DELETE | /api/v1/assignment-templates/{id} | {} | 204 No Content / 409 | Researcher/Admin | Delete draft or never-used active template; used templates must archive first |
 | POST | /api/v1/assignment-templates/{id}/archive | {} | AssignmentTemplateDto | Researcher/Admin | Archive |
 | POST | /api/v1/assignment-templates/{id}/restore | {} | AssignmentTemplateDto | Researcher/Admin | Restore archived template |
 | POST | /api/v1/assignment-templates/{id}/publish | {} | AssignmentTemplateDto | Researcher/Admin | Publish draft template |
+| DELETE | /api/v1/assignment-templates/{id}?purge=true | {} | 204 No Content | Admin | Hard delete archived template |
 | POST | /api/v1/assignment-templates/{id}/questions/{questionId}/image | multipart/form-data | QuestionImageDto | Researcher/Admin | Upload question image |
 | DELETE | /api/v1/assignment-templates/{id}/questions/{questionId}/image | {} | 204 No Content | Researcher/Admin | Remove question image |
 

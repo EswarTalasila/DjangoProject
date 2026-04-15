@@ -204,6 +204,17 @@ class TestATMPL_UC_03:
         resp = api_client.get(f"/api/v1/assignment-templates/{a.id}")
         assert resp.status_code == 200
 
+    def test_ATMPL_CN_02_teacher_cannot_view_draft_detail(self, api_client, admin_user, teacher_user):
+        """Teacher cannot fetch draft assignment_template detail by direct ID."""
+        a = _make_assignment_template(
+            admin_user,
+            status="DRAFT",
+            title="Draft Only",
+        )
+        api_client.force_authenticate(user=teacher_user)
+        resp = api_client.get(f"/api/v1/assignment-templates/{a.id}")
+        assert resp.status_code == 404
+
     def test_ATMPL_CN_02_student_cannot_view(self, api_client, admin_user, student_user):
         """Student cannot view assignment_template detail (403 — ATMPL-CN-02)."""
         a = _make_assignment_template(admin_user)
@@ -263,7 +274,26 @@ class TestATMPL_UC_04:
             f"/api/v1/assignment-templates/{a.id}", VALID_SHORT_ANSWER_PAYLOAD, format="json"
         )
         assert resp.status_code == 409
-        assert "referenced" in resp.json()["detail"].lower()
+        assert "used" in resp.json()["detail"].lower()
+
+    def test_ATMPL_CN_06_previously_used_template_cannot_be_updated(
+        self, api_client, admin_user, teacher_user
+    ):
+        """Previously used assignment templates stay immutable after downstream assignments are removed."""
+        assignment_template = _make_assignment_template(admin_user, title="Historical")
+        assignment_template.used_at = timezone.now()
+        assignment_template.save(update_fields=["used_at"])
+        _reference_assignment_template(assignment_template, teacher_user).delete()
+
+        api_client.force_authenticate(user=admin_user)
+        resp = api_client.patch(
+            f"/api/v1/assignment-templates/{assignment_template.id}",
+            VALID_SHORT_ANSWER_PAYLOAD,
+            format="json",
+        )
+
+        assert resp.status_code == 409
+        assert "used" in resp.json()["detail"].lower()
 
 
 # ===========================================================================
@@ -274,20 +304,20 @@ class TestATMPL_UC_05:
     """Delete assignment_template (DELETE /api/v1/assignment-templates/{id})."""
 
     def test_ATMPL_UC_05_ADMIN(self, api_client, admin_user):
-        """Plain DELETE is blocked; caller must archive/purge."""
+        """Admin can plain-delete an unused assignment_template."""
         a = _make_assignment_template(admin_user)
         api_client.force_authenticate(user=admin_user)
         resp = api_client.delete(f"/api/v1/assignment-templates/{a.id}")
-        assert resp.status_code == 409
-        assert "archive" in resp.json()["detail"].lower()
-        assert AssignmentTemplate.objects.filter(id=a.id).exists()
+        assert resp.status_code == 204
+        assert not AssignmentTemplate.objects.filter(id=a.id).exists()
 
     def test_ATMPL_UC_05_RESEARCHER(self, api_client, admin_user, researcher_user):
-        """Researcher plain DELETE is also blocked by lifecycle policy."""
+        """Researcher can plain-delete an unused assignment_template."""
         a = _make_assignment_template(admin_user)
         api_client.force_authenticate(user=researcher_user)
         resp = api_client.delete(f"/api/v1/assignment-templates/{a.id}")
-        assert resp.status_code == 409
+        assert resp.status_code == 204
+        assert not AssignmentTemplate.objects.filter(id=a.id).exists()
 
     def test_ATMPL_UC_05_E2_TEACHER(self, api_client, admin_user, teacher_user):
         """Teacher cannot delete assignment_template (403)."""
@@ -297,7 +327,7 @@ class TestATMPL_UC_05:
         assert resp.status_code == 403
 
     def test_ATMPL_UC_05_E3_referenced(self, api_client, admin_user, teacher_user):
-        """Referenced assignment_template still returns conflict on plain DELETE."""
+        """Used assignment_template still returns conflict on plain DELETE."""
         a = _make_assignment_template(admin_user)
         _reference_assignment_template(a, teacher_user)
         api_client.force_authenticate(user=admin_user)
@@ -305,13 +335,15 @@ class TestATMPL_UC_05:
         assert resp.status_code == 409
         assert AssignmentTemplate.objects.filter(id=a.id).exists()
 
-    def test_ATMPL_CN_05_unreferenced_delete_requires_archive(self, api_client, admin_user, teacher_user):
-        """Unreferenced assignment_template requires archive/purge (no plain hard delete)."""
+    def test_ATMPL_CN_05_used_delete_requires_archive(self, api_client, admin_user, teacher_user):
+        """Previously used assignment_template requires archive/purge instead of plain delete."""
         a_referenced = _make_assignment_template(admin_user, title="Referenced")
+        a_referenced.used_at = timezone.now()
+        a_referenced.save(update_fields=["used_at"])
+        _reference_assignment_template(a_referenced, teacher_user).delete()
         a_free = _make_assignment_template(admin_user, title="Free")
-        _reference_assignment_template(a_referenced, teacher_user)
         api_client.force_authenticate(user=admin_user)
-        resp = api_client.delete(f"/api/v1/assignment-templates/{a_free.id}")
+        resp = api_client.delete(f"/api/v1/assignment-templates/{a_referenced.id}")
         assert resp.status_code == 409
         assert AssignmentTemplate.objects.filter(id=a_referenced.id).exists()
         assert AssignmentTemplate.objects.filter(id=a_free.id).exists()

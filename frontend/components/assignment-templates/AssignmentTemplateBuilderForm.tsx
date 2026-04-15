@@ -760,7 +760,7 @@ export default function AssignmentTemplateBuilderForm({
     } catch (err: unknown) {
       if (mode === 'edit' && getStatusCode(err) === 409) {
         toast.error(
-          'This assignment template is referenced by assignments and cannot be modified',
+          'This assignment template is archived or has already been used and cannot be modified',
         );
       } else {
         toast.error(toErrorMessage(err, 'Failed to save assignment template'));

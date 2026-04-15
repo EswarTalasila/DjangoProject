@@ -25,10 +25,11 @@
 - Rubric linkage/lifecycle within assignment template domain (assignment template-linked `rubric` FK + `rubric_assignment_template_ids`).
 - Authorization matrix:
   - RESEARCHER/ADMIN: full CRUD
-  - TEACHER: read-only visibility
+  - TEACHER: read-only visibility for ACTIVE published templates
   - STUDENT: no ATMPL domain access
-- Two-tier mutation policy: unreferenced assignment templates allow update/delete; referenced assignment templates return `409 Conflict`.
-- AssignmentTemplate archive lifecycle: referenced assignment templates can be archived to prevent new assignment creation while preserving existing assignments.
+- Usage-aware mutation policy: never-used ACTIVE templates allow update/delete; historically used templates are archive-first and return `409 Conflict` for update/delete.
+- Draft lifecycle: drafts can be published or deleted, but not archived.
+- AssignmentTemplate archive lifecycle: historically used templates can be archived to prevent new assignment creation while preserving existing assignments.
 - Auto-grading detection per question type.
 - Atomic question provisioning within assignment template create/update.
 
@@ -72,7 +73,7 @@
 | ATMPL-US-01 | RESEARCHER, ADMIN | As a researcher or admin I can create an assignment template with questions so that teachers can assign it to their courses. |
 | ATMPL-US-02 | ADMIN, RESEARCHER, TEACHER | As an admin, researcher, or teacher I can view available assignment templates so that I can review content or select templates for assignment. |
 | ATMPL-US-03 | RESEARCHER, ADMIN | As a researcher or admin I can update an assignment template that has no assignments so that I can correct or improve questions before distribution. |
-| ATMPL-US-04 | RESEARCHER, ADMIN | As a researcher or admin I can delete an unused assignment template so that the template library stays clean. |
+| ATMPL-US-04 | RESEARCHER, ADMIN | As a researcher or admin I can delete an unused assignment template so that the template library stays clean without preserving unused drafts or active templates. |
 | ATMPL-US-05 | RESEARCHER, ADMIN | As a researcher or admin I can link a rubric to an assignment template so that grading criteria are attached to the template. |
 | ATMPL-US-06 | RESEARCHER, ADMIN | As a researcher or admin I can archive a referenced assignment template so that no new assignments are created from it while existing assignments remain valid. |
 
@@ -142,11 +143,12 @@
 **Main Flow:**
 1. System resolves assignment template by ID.
 2. System validates caller has TEACHER or above role.
-3. Returns assignment template DTO with all questions and rubric linkage.
+3. Teachers can read only `ACTIVE` published templates; draft and archived templates remain researcher/admin-only detail views.
+4. Returns assignment template DTO with all questions and rubric linkage.
 
 **Errors:**
 - `ATMPL-UC-03-E1`: AssignmentTemplate not found.
-- `ATMPL-UC-03-E2`: Unauthorized role (below TEACHER).
+- `ATMPL-UC-03-E2`: Unauthorized role (below TEACHER) or teacher tries to access non-active template detail.
 
 **Tests (representative):**
 - `test_ATMPL_UC_03_ADMIN`
@@ -164,8 +166,8 @@
 **Main Flow:**
 1. System resolves assignment template by ID.
 2. System validates caller has RESEARCHER or ADMIN role.
-3. System checks whether any assignments reference this assignment template.
-4. If assignments reference this assignment template, request is rejected with `409 Conflict`.
+3. System checks whether the assignment template has ever been used by an assignment.
+4. If the template has ever been used, request is rejected with `409 Conflict`.
 5. System validates patch payload (`title`, `category`, `gradingMode`, `questions`).
 6. System replaces all questions (full replacement, not merge; question IDs are regenerated).
 7. If rubric linkage fields are updated, system applies rubric linkage.
@@ -175,7 +177,7 @@
 **Errors:**
 - `ATMPL-UC-04-E1`: AssignmentTemplate not found.
 - `ATMPL-UC-04-E2`: Caller is not RESEARCHER or ADMIN.
-- `ATMPL-UC-04-E3`: Update blocked because assignments reference this assignment template.
+- `ATMPL-UC-04-E3`: Update blocked because the assignment template has already been used by assignments.
 - `ATMPL-UC-04-E4`: Invalid payload.
 
 **Tests (representative):**
@@ -192,20 +194,21 @@
 **Main Flow:**
 1. System resolves assignment template by ID.
 2. System validates caller has RESEARCHER or ADMIN role.
-3. System checks whether any assignments reference this assignment template.
-4. If assignments reference this assignment template, request is rejected with `409 Conflict`.
-5. System hard-deletes assignment template and all associated questions.
-6. Returns `204 No Content`.
+3. If the assignment template is a draft, system hard-deletes it directly.
+4. If the assignment template is ACTIVE and has never been used, system hard-deletes it and all associated questions.
+5. If the assignment template has ever been used, request is rejected with `409 Conflict` and caller must archive it instead.
+6. If the assignment template is ARCHIVED, plain delete is rejected with `409 Conflict` and caller must use `?purge=true`.
+7. Returns `204 No Content` on successful draft or unused-template delete.
 
 **Errors:**
 - `ATMPL-UC-05-E1`: AssignmentTemplate not found.
 - `ATMPL-UC-05-E2`: Caller is not RESEARCHER or ADMIN.
-- `ATMPL-UC-05-E3`: Deletion blocked because assignments reference this assignment template.
+- `ATMPL-UC-05-E3`: Deletion blocked because the assignment template has already been used by assignments.
 
 **Tests (representative):**
 - `test_ATMPL_UC_05_RESEARCHER`
 - `test_ATMPL_UC_05_E2_TEACHER`
-- `test_ATMPL_CN_05_unreferenced_delete_succeeds`
+- `test_ATMPL_CN_05_used_delete_requires_archive`
 
 ---
 

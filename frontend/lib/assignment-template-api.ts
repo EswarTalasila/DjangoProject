@@ -109,11 +109,22 @@ type Paginated<T> = {
   results: T[];
 };
 
+type ListAssignmentTemplatesOptions = {
+  includeArchived?: boolean;
+};
+
 // -- API Functions --
 
 /** GET /assignment-templates/ — Fetch all assignment templates (paginated). */
-export async function listAssignmentTemplates(): Promise<AssignmentTemplate[]> {
-  const response = await api.get<Paginated<AssignmentTemplate>>('/assignment-templates/');
+export async function listAssignmentTemplates(
+  options?: ListAssignmentTemplatesOptions,
+): Promise<AssignmentTemplate[]> {
+  const params = new URLSearchParams();
+  if (options?.includeArchived) {
+    params.set('includeArchived', 'true');
+  }
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  const response = await api.get<Paginated<AssignmentTemplate>>(`/assignment-templates/${suffix}`);
   return response.data.results;
 }
 
@@ -142,6 +153,11 @@ export async function updateAssignmentTemplate(
 /** DELETE /assignment-templates/:id — Permanently delete an assignment template. */
 export async function deleteAssignmentTemplate(id: number): Promise<void> {
   await api.delete(`/assignment-templates/${id}`);
+}
+
+/** DELETE /assignment-templates/:id?purge=true — Permanently delete an archived assignment template. */
+export async function purgeAssignmentTemplate(id: number): Promise<void> {
+  await api.delete(`/assignment-templates/${id}?purge=true`);
 }
 
 /** POST /assignment-templates/:id/archive — Soft-archive an assignment template. */

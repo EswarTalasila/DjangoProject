@@ -46,7 +46,7 @@ describe("lifecycle-api", () => {
     expect(typeof lifecycle.restoreAssignmentTemplate).toBe("function");
   });
 
-  it("re-exports purgeAssignmentTemplate (deleteAssignmentTemplate) from assignment-template-api", async () => {
+  it("re-exports purgeAssignmentTemplate from assignment-template-api", async () => {
     const lifecycle = await loadModule();
     expect(typeof lifecycle.purgeAssignmentTemplate).toBe("function");
   });
@@ -115,12 +115,12 @@ describe("lifecycle-api", () => {
     });
   });
 
-  describe("purgeAssignmentTemplate delegates to assignment-template-api deleteAssignmentTemplate", () => {
-    it("calls api.delete with /assignment-templates/:id", async () => {
+  describe("purgeAssignmentTemplate delegates to assignment-template-api", () => {
+    it("calls api.delete with /assignment-templates/:id?purge=true", async () => {
       mockDelete.mockResolvedValueOnce({});
       const { purgeAssignmentTemplate } = await loadModule();
       await purgeAssignmentTemplate(2);
-      expect(mockDelete).toHaveBeenCalledWith("/assignment-templates/2");
+      expect(mockDelete).toHaveBeenCalledWith("/assignment-templates/2?purge=true");
     });
   });
 

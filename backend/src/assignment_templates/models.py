@@ -93,11 +93,17 @@ class AssignmentTemplate(models.Model):
         blank=True,
         related_name="restored_assignment_templates",
     )
+    used_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="First time an assignment was created from this template.",
+    )
 
     class Meta:
         db_table = "assignment_templates"
         indexes = [
             models.Index(fields=["status"], name="idx_assignment_template_status"),
+            models.Index(fields=["used_at"], name="idx_assignment_template_used_at"),
         ]
 
     def __str__(self):

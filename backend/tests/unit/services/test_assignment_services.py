@@ -231,7 +231,7 @@ class TestListForUser:
 # ---------------------------------------------------------------------------
 
 
-class TestCreateAssignment:
+class TestCreateAssignment(_NoopAtomicMixin):
     """Tests for create_assignment mutation."""
 
     def test_raises_when_no_assignment_template_id(self):
@@ -305,9 +305,11 @@ class TestCreateAssignment:
         from assignments.services._mutations import create_assignment
         from assignment_templates.models import AssignmentTemplateStatus
 
-        fake_assignment_template = SimpleNamespace(
-            id=5, title="Test", status=AssignmentTemplateStatus.ACTIVE,
-        )
+        fake_assignment_template = MagicMock()
+        fake_assignment_template.id = 5
+        fake_assignment_template.title = "Test"
+        fake_assignment_template.status = AssignmentTemplateStatus.ACTIVE
+        fake_assignment_template.used_at = None
         mock_assignment_template_model.objects.filter.return_value.first.return_value = (
             fake_assignment_template
         )
@@ -330,6 +332,99 @@ class TestCreateAssignment:
 
         assert result is fake_assignment
         mock_create_subs.assert_called_once_with(fake_assignment)
+
+    @patch("assignments.services._mutations.timezone")
+    @patch("assignments.services._mutations._create_submissions_for_course")
+    @patch("assignments.services._mutations.Assignment")
+    @patch("assignments.services._mutations.can_manage_course", return_value=True)
+    @patch("assignments.services._mutations.Course")
+    @patch("assignments.services._mutations.AssignmentTemplate")
+    def test_marks_assignment_template_as_used_on_first_assignment(
+        self,
+        mock_assignment_template_model,
+        mock_course_model,
+        mock_can_manage,
+        mock_assignment_model,
+        mock_create_subs,
+        mock_tz,
+    ):
+        """Creating the first assignment stamps the template with a durable used_at marker."""
+        from assignments.services._mutations import create_assignment
+        from assignment_templates.models import AssignmentTemplateStatus
+
+        now = datetime(2026, 4, 15, 12, 0, tzinfo=UTC)
+        mock_tz.now.return_value = now
+
+        fake_assignment_template = MagicMock()
+        fake_assignment_template.id = 5
+        fake_assignment_template.title = "Test"
+        fake_assignment_template.status = AssignmentTemplateStatus.ACTIVE
+        fake_assignment_template.used_at = None
+        mock_assignment_template_model.objects.filter.return_value.first.return_value = (
+            fake_assignment_template
+        )
+        fake_course = SimpleNamespace(id=10, status="ACTIVE")
+        mock_course_model.objects.filter.return_value.first.return_value = fake_course
+
+        fake_assignment = SimpleNamespace(id=1, course_id=10)
+        mock_assignment_model.objects.create.return_value = fake_assignment
+
+        user = SimpleNamespace(id=1)
+        payload = {
+            "assignmentTemplateId": 5,
+            "audienceType": AudienceType.COURSE,
+            "courseId": 10,
+            "openAt": datetime(2026, 4, 16, 12, 0, tzinfo=UTC),
+            "dueAt": None,
+        }
+
+        create_assignment(user, payload)
+
+        assert fake_assignment_template.used_at == now
+        fake_assignment_template.save.assert_called_once_with(update_fields=["used_at"])
+
+    @patch("assignments.services._mutations._create_submissions_for_course")
+    @patch("assignments.services._mutations.Assignment")
+    @patch("assignments.services._mutations.can_manage_course", return_value=True)
+    @patch("assignments.services._mutations.Course")
+    @patch("assignments.services._mutations.AssignmentTemplate")
+    def test_does_not_mark_assignment_template_used_when_assignment_create_fails(
+        self,
+        mock_assignment_template_model,
+        mock_course_model,
+        mock_can_manage,
+        mock_assignment_model,
+        mock_create_subs,
+    ):
+        """A failed assignment create must not stamp the template as historically used."""
+        from assignments.services._mutations import create_assignment
+        from assignment_templates.models import AssignmentTemplateStatus
+
+        fake_assignment_template = MagicMock()
+        fake_assignment_template.id = 5
+        fake_assignment_template.title = "Test"
+        fake_assignment_template.status = AssignmentTemplateStatus.ACTIVE
+        fake_assignment_template.used_at = None
+        mock_assignment_template_model.objects.filter.return_value.first.return_value = (
+            fake_assignment_template
+        )
+        fake_course = SimpleNamespace(id=10, status="ACTIVE")
+        mock_course_model.objects.filter.return_value.first.return_value = fake_course
+        mock_assignment_model.objects.create.side_effect = RuntimeError("boom")
+
+        user = SimpleNamespace(id=1)
+        payload = {
+            "assignmentTemplateId": 5,
+            "audienceType": AudienceType.COURSE,
+            "courseId": 10,
+            "openAt": "2025-01-01",
+            "dueAt": None,
+        }
+
+        with pytest.raises(RuntimeError, match="boom"):
+            create_assignment(user, payload)
+
+        fake_assignment_template.save.assert_not_called()
 
     def test_raises_when_open_at_after_due_at(self):
         """Raises ValueError when openAt >= dueAt."""

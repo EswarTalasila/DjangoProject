@@ -1002,10 +1002,10 @@ export default function AssignmentTemplateStudioShell({
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } }).response?.status;
       if (status === 409) {
-        // Assignment template is referenced by assignments — mark read-only
+        // Used or archived templates become read-only in the studio.
         setIsReadOnly(true);
         setSaveState('idle');
-        toast.error('This assignment template is linked to assignments and cannot be modified.');
+        toast.error('This assignment template is archived or has already been used and cannot be modified.');
       } else {
         setSaveState('error');
       }

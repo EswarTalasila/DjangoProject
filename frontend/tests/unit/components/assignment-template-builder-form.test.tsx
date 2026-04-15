@@ -448,7 +448,7 @@ describe("AssignmentTemplateBuilderForm", () => {
 
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith(
-        "This assignment template is referenced by assignments and cannot be modified"
+        "This assignment template is archived or has already been used and cannot be modified"
       );
     });
   });

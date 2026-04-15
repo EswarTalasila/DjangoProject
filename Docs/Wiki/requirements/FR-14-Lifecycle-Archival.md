@@ -501,4 +501,4 @@ ARCH errors are lifecycle and permission conflicts, not infrastructure failures.
 9. **Audit integration complete.** All archive/restore/purge view handlers emit two-phase audit logs via `log_audit`/`complete_audit` with `AuditAction.ARCHIVE/RESTORE/PURGE`.
 10. **41 FR-traceable integration tests pass.** `tests/integration/test_lifecycle_archival.py` covers ARCH-UC-01 through UC-07, ARCH-CN-03/05/07/13/14.
 11. **ARCH-CN-04 verification is covered.** Submission save/submit endpoints reject archived assignments (`409`) and are covered in FR-08 submission integration tests (`SUB-UC-01-E5`, `SUB-UC-02-E4`).
-12. **Plain DELETE lifecycle policy is consistent.** Regular `DELETE` for courses, assignment templates, and assignments now returns `409` directing callers to archive first (or purge with `?purge=true` for admin).
+12. **Plain DELETE lifecycle policy is usage-aware.** Regular `DELETE` for courses and assignments remains archive-first. Assignment templates are draft-delete / never-used-delete / used-archive-first / archived-purge-aware, with `?purge=true` reserved for admin hard-delete of archived rows.

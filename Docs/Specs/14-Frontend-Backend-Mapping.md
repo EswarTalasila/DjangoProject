@@ -38,11 +38,12 @@ Document exactly which Angular services call which API endpoints for parity veri
 - listStudentSubmissions() -> GET /api/students/{id}/submissions
 
 ### AssignmentTemplateService
-- listAssignmentTemplates() -> GET /api/v1/assignment-templates
+- listAssignmentTemplates({ includeArchived? }) -> GET /api/v1/assignment-templates[?includeArchived=true]
 - getAssignmentTemplate() -> GET /api/v1/assignment-templates/{id}
 - createAssignmentTemplate() -> POST /api/v1/assignment-templates
 - updateAssignmentTemplate() -> PATCH /api/v1/assignment-templates/{id}
 - deleteAssignmentTemplate() -> DELETE /api/v1/assignment-templates/{id}
+- purgeAssignmentTemplate() -> DELETE /api/v1/assignment-templates/{id}?purge=true
 - archiveAssignmentTemplate() -> POST /api/v1/assignment-templates/{id}/archive
 - restoreAssignmentTemplate() -> POST /api/v1/assignment-templates/{id}/restore
 - createDraftAssignmentTemplate() -> POST /api/v1/assignment-templates?draft=true

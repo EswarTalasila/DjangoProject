@@ -166,15 +166,17 @@ class TestDetailView:
 
     @patch("assignment_templates.views.assignment_template_to_dto")
     @patch("assignment_templates.views._assignment_template_with_related")
+    @patch("assignment_templates.views.IsResearcherOrAdmin")
     @patch("assignment_templates.views.AssignmentTemplate")
     @patch("assignment_templates.views.IsTeacherOrAbove.has_permission", return_value=True)
     def test_get_returns_dto(
-        self, mock_perm, mock_assignment_template_model, mock_with_related, mock_dto
+        self, mock_perm, mock_assignment_template_model, mock_is_ra, mock_with_related, mock_dto
     ):
         """GET returns assignment_template DTO."""
         from assignment_templates.views import detail
 
-        fake_assignment_template = SimpleNamespace(id=1)
+        mock_is_ra.return_value.has_permission.return_value = True
+        fake_assignment_template = SimpleNamespace(id=1, status="ACTIVE")
         mock_assignment_template_model.objects.filter.return_value.first.return_value = (
             fake_assignment_template
         )
@@ -188,6 +190,27 @@ class TestDetailView:
 
         assert response.status_code == status.HTTP_200_OK
         assert response.data["id"] == 1
+
+    @patch("assignment_templates.views.IsResearcherOrAdmin")
+    @patch("assignment_templates.views.AssignmentTemplate")
+    @patch("assignment_templates.views.IsTeacherOrAbove.has_permission", return_value=True)
+    def test_get_teacher_cannot_view_draft_assignment_template(
+        self, mock_perm, mock_assignment_template_model, mock_is_ra
+    ):
+        """Teacher detail access hides draft assignment templates."""
+        from assignment_templates.views import detail
+
+        mock_is_ra.return_value.has_permission.return_value = False
+        mock_assignment_template_model.objects.filter.return_value.first.return_value = (
+            SimpleNamespace(id=1, status="DRAFT")
+        )
+
+        user = MagicMock(is_authenticated=True, is_staff=False)
+        request = _authed_request("get", "/api/v1/assignment-templates/1", user=user)
+
+        response = detail(request, assignment_template_id=1)
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
 
     @patch("assignment_templates.views.assignment_template_to_dto")
     @patch("assignment_templates.views._assignment_template_with_related")
@@ -248,17 +271,18 @@ class TestDetailView:
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
+    @patch("assignment_templates.views.delete_assignment_template")
     @patch("assignment_templates.views.IsResearcherOrAdmin")
     @patch("assignment_templates.views.AssignmentTemplate")
     @patch("assignment_templates.views.IsTeacherOrAbove.has_permission", return_value=True)
-    def test_delete_without_purge_returns_409(
-        self, mock_perm, mock_assignment_template_model, mock_is_ra
+    def test_delete_without_purge_deletes_unused_assignment_template(
+        self, mock_perm, mock_assignment_template_model, mock_is_ra, mock_delete
     ):
-        """DELETE without ?purge=true returns 409 with guidance."""
+        """DELETE without ?purge=true hard-deletes an unused active assignment template."""
         from assignment_templates.views import detail
 
         mock_is_ra.return_value.has_permission.return_value = True
-        fake_assignment_template = SimpleNamespace(id=1, status="ACTIVE")
+        fake_assignment_template = SimpleNamespace(id=1, status="ACTIVE", used_at=None)
         mock_assignment_template_model.objects.filter.return_value.first.return_value = (
             fake_assignment_template
         )
@@ -268,7 +292,35 @@ class TestDetailView:
 
         response = detail(request, assignment_template_id=1)
 
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        mock_delete.assert_called_once_with(fake_assignment_template)
+
+    @patch("assignment_templates.views.delete_assignment_template")
+    @patch("assignment_templates.views.IsResearcherOrAdmin")
+    @patch("assignment_templates.views.AssignmentTemplate")
+    @patch("assignment_templates.views.IsTeacherOrAbove.has_permission", return_value=True)
+    def test_delete_without_purge_returns_409_for_used_assignment_template(
+        self, mock_perm, mock_assignment_template_model, mock_is_ra, mock_delete
+    ):
+        """DELETE without ?purge=true returns 409 with guidance for used templates."""
+        from assignment_templates.views import AssignmentTemplateReferencedError, detail
+
+        mock_is_ra.return_value.has_permission.return_value = True
+        fake_assignment_template = SimpleNamespace(id=1, status="ACTIVE", used_at="2026-04-15")
+        mock_assignment_template_model.objects.filter.return_value.first.return_value = (
+            fake_assignment_template
+        )
+        mock_delete.side_effect = AssignmentTemplateReferencedError(
+            "Assignment template has been used by assignments and must be archived instead."
+        )
+
+        user = MagicMock(is_authenticated=True)
+        request = _authed_request("delete", "/api/v1/assignment-templates/1", user=user)
+
+        response = detail(request, assignment_template_id=1)
+
         assert response.status_code == status.HTTP_409_CONFLICT
+        mock_delete.assert_called_once_with(fake_assignment_template)
 
     @patch("assignment_templates.views.IsResearcherOrAdmin")
     @patch("assignment_templates.views.AssignmentTemplate")
@@ -281,7 +333,7 @@ class TestDetailView:
 
         mock_is_ra.return_value.has_permission.return_value = False
         mock_assignment_template_model.objects.filter.return_value.first.return_value = (
-            SimpleNamespace(id=1)
+            SimpleNamespace(id=1, status="ACTIVE")
         )
 
         user = MagicMock(is_authenticated=True)

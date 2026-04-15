@@ -62,6 +62,26 @@ describe("assignment_template api", () => {
 
       expect(result).toEqual([]);
     });
+
+    it("passes includeArchived=true when requested", async () => {
+      let requestUrl = "";
+      server.use(
+        http.get(`${API_BASE}/assignment-templates/`, ({ request }) => {
+          requestUrl = request.url;
+          return HttpResponse.json({
+            count: 0,
+            next: null,
+            previous: null,
+            results: [],
+          });
+        }),
+      );
+
+      const { listAssignmentTemplates } = await loadAssignmentTemplateApi();
+      await listAssignmentTemplates({ includeArchived: true });
+
+      expect(new URL(requestUrl).searchParams.get("includeArchived")).toBe("true");
+    });
   });
 
   describe("getAssignmentTemplate", () => {
@@ -156,6 +176,23 @@ describe("assignment_template api", () => {
 
       const { deleteAssignmentTemplate } = await loadAssignmentTemplateApi();
       await expect(deleteAssignmentTemplate(1)).rejects.toThrow();
+    });
+  });
+
+  describe("purgeAssignmentTemplate", () => {
+    it("deletes an archived assignment_template using purge semantics", async () => {
+      let requestUrl = "";
+      server.use(
+        http.delete(`${API_BASE}/assignment-templates/1`, ({ request }) => {
+          requestUrl = request.url;
+          return new HttpResponse(null, { status: 204 });
+        }),
+      );
+
+      const { purgeAssignmentTemplate } = await loadAssignmentTemplateApi();
+      await expect(purgeAssignmentTemplate(1)).resolves.toBeUndefined();
+
+      expect(new URL(requestUrl).searchParams.get("purge")).toBe("true");
     });
   });
 

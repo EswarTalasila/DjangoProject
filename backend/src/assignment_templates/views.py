@@ -28,6 +28,7 @@ from .services import (
     assignment_template_to_dto,
     create_assignment_template,
     create_assignment_template_draft,
+    delete_assignment_template,
     delete_assignment_template_draft,
     list_assignment_templates,
     publish_assignment_template,
@@ -97,6 +98,16 @@ def detail(request, assignment_template_id: int):
         )
 
     if request.method == "GET":
+        # Teachers can browse only active published templates. Draft and archived
+        # templates stay visible to researcher/admin workflows only.
+        if (
+            assignment_template.status != AssignmentTemplateStatus.ACTIVE
+            and not IsResearcherOrAdmin().has_permission(request, None)
+        ):
+            return Response(
+                {"detail": "AssignmentTemplate not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
         assignment_template = _assignment_template_with_related(assignment_template_id)
         return Response(
             assignment_template_to_dto(assignment_template).model_dump(),
@@ -154,10 +165,17 @@ def detail(request, assignment_template_id: int):
         complete_audit(audit_id, AuditOutcome.SUCCESS)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    return Response(
-        {"detail": "Use POST /archive to archive, or DELETE ?purge=true to hard-delete."},
-        status=status.HTTP_409_CONFLICT,
-    )
+    if assignment_template.status == AssignmentTemplateStatus.ARCHIVED:
+        return Response(
+            {"detail": "Use DELETE ?purge=true to hard-delete an archived assignment template."},
+            status=status.HTTP_409_CONFLICT,
+        )
+
+    try:
+        delete_assignment_template(assignment_template)
+    except AssignmentTemplateReferencedError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(["POST"])

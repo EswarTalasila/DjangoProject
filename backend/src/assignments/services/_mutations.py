@@ -31,6 +31,7 @@ class ForbiddenError(Exception):
     """Raised when the caller lacks permission for the mutation."""
 
 
+@transaction.atomic
 def create_assignment(creator_user, payload: dict) -> Assignment:
     """Create an assignment from an assignment template."""
     assignment_template_id = payload.get("assignmentTemplateId")
@@ -86,6 +87,10 @@ def create_assignment(creator_user, payload: dict) -> Assignment:
         due_at=due_at,
         status=AssignmentStatus.ACTIVE,
     )
+
+    if assignment_template.used_at is None:
+        assignment_template.used_at = timezone.now()
+        assignment_template.save(update_fields=["used_at"])
 
     if assignment.course_id:
         _create_submissions_for_course(assignment)

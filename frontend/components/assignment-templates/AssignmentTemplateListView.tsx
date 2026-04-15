@@ -86,7 +86,7 @@ export default function AssignmentTemplateListView({ canManage }: AssignmentTemp
         axErr.response?.data?.detail?.toLowerCase().includes('referenced') ||
         axErr.response?.status === 409
       ) {
-        toast.error('Cannot delete — assignment template is referenced by assignments.');
+        toast.error(describeDeleteConflict(axErr.response?.data?.detail));
       } else {
         toast.error(toErrorMessage(error, 'Failed to delete assignment template.'));
       }
@@ -285,4 +285,14 @@ export default function AssignmentTemplateListView({ canManage }: AssignmentTemp
       )}
     </div>
   );
+}
+function describeDeleteConflict(detail?: string): string {
+  const text = detail?.toLowerCase() ?? '';
+  if (text.includes('must be archived')) {
+    return 'Cannot delete — this assignment template has already been used. Archive it instead.';
+  }
+  if (text.includes('archived assignment template')) {
+    return 'Cannot delete — archived templates must be purged from the archive manager.';
+  }
+  return 'Cannot delete — assignment template is referenced by assignments.';
 }
