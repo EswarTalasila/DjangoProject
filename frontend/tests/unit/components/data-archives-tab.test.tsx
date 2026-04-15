@@ -433,4 +433,14 @@ describe("DataArchivesTab", () => {
 
     expect(screen.queryByText("Purge")).toBeNull();
   });
+
+  it("hides purge actions from researchers", async () => {
+    await renderDataArchivesAndWait("RESEARCHER");
+
+    await waitFor(() => {
+      expect(screen.getByText("Assignment Templates")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("Purge")).toBeNull();
+  });
 });

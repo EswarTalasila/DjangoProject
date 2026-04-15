@@ -121,6 +121,20 @@ describe("CourseAssignmentsTab", () => {
     });
   });
 
+  it("shows archived restore guidance for teachers while archived rows are hidden", async () => {
+    mockListByCourse.mockResolvedValue([mockAssignments[0]]);
+    const Component = await loadComponent();
+    render(<Component courseId={1} userRole="TEACHER" userId={1} />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Restored courses keep previously archived assignments archived. Turn on Show archived to review and restore those assignments when needed.",
+        ),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("shows error state when API fails", async () => {
     mockListByCourse.mockRejectedValue(new Error("Network error"));
     const Component = await loadComponent();

@@ -142,6 +142,13 @@ export default function CourseAssignmentsTab({
         </div>
       </div>
 
+      {canManageLifecycle && !showArchived && (
+        <p className="text-sm text-muted-foreground">
+          Restored courses keep previously archived assignments archived. Turn on Show archived to
+          review and restore those assignments when needed.
+        </p>
+      )}
+
       {loadError && <p className="text-sm text-destructive">{loadError}</p>}
 
       {isLoading && (
