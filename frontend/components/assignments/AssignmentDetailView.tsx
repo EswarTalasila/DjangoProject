@@ -6,18 +6,16 @@ import { ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import {
+  getAssignmentContent,
   archiveAssignment,
+  type AssignmentContent,
   getAssignment,
   restoreAssignment,
   updateAssignment,
   type Assignment,
+  type AssignmentQuestion as Question,
   type AssignmentUpdateInput,
 } from '@/lib/assignment-api';
-import {
-  getAssignmentTemplate,
-  type AssignmentTemplate,
-  type Question,
-} from '@/lib/assignment-template-api';
 import { listCourses } from '@/lib/course-api';
 import {
   getStudentSubmission,
@@ -28,6 +26,7 @@ import {
   type SubmissionStatus,
 } from '@/lib/submission-api';
 import { toErrorMessage } from '@/lib/utils';
+import AssignmentComposerPanel from './AssignmentComposerPanel';
 import AssignmentMetadataPanel from './AssignmentMetadataPanel';
 import StudentSubmissionForm from './StudentSubmissionForm';
 
@@ -69,24 +68,6 @@ function toIsoOrNull(value: string): string | null {
   return date.toISOString();
 }
 
-function formatQuestionKind(kind: Question['type']): string {
-  switch (kind) {
-    case 'MULTIPLE_CHOICE':
-      return 'Multiple Choice';
-    case 'SHORT_ANSWER':
-      return 'Short Answer';
-    case 'NUMBER_SCALE':
-      return 'Number Scale';
-    default:
-      return kind;
-  }
-}
-
-function formatPoints(value: number): string {
-  if (Number.isInteger(value)) return String(value);
-  return value.toFixed(2).replace(/\.?0+$/, '');
-}
-
 function defaultStudentAnswer(question: Question): StudentAttemptAnswer {
   return {
     selectedChoiceIndexes: [],
@@ -122,49 +103,6 @@ function estimateAutoPoints(question: Question, answer: StudentAttemptAnswer): n
     if (target == null || answer.numericResponse == null) return null;
     return answer.numericResponse === target ? question.maxPoints : 0;
   }
-  return null;
-}
-
-function TeacherQuestionDetails({ question }: { question: Question }) {
-  const data = question.data;
-
-  if (question.type === 'MULTIPLE_CHOICE' && data?.choices?.length) {
-    return (
-      <div className="space-y-1">
-        <p className="text-xs text-muted-foreground">
-          {data.selectAll ? 'Select all that apply' : 'Single correct option'}
-        </p>
-        <ol className="list-decimal list-inside space-y-1">
-          {data.choices.map((choice, idx) => (
-            <li key={`${choice.prompt}-${idx}`} className="text-sm text-foreground">
-              {choice.prompt || '(empty choice)'}{' '}
-              <span className="text-muted-foreground">• {formatPoints(choice.score)} pts</span>
-            </li>
-          ))}
-        </ol>
-      </div>
-    );
-  }
-
-  if (question.type === 'SHORT_ANSWER') {
-    return (
-      <div className="text-xs text-muted-foreground space-y-1">
-        <p>Trim whitespace: {data?.trim === false ? 'Off' : 'On'}</p>
-        <p>Case sensitive: {data?.caseSensitive ? 'On' : 'Off'}</p>
-      </div>
-    );
-  }
-
-  if (question.type === 'NUMBER_SCALE') {
-    const min = data?.min ?? question.min;
-    const max = data?.max ?? question.max;
-    return (
-      <p className="text-xs text-muted-foreground">
-        Range: {min ?? '?'} to {max ?? '?'}
-      </p>
-    );
-  }
-
   return null;
 }
 
@@ -231,7 +169,7 @@ export default function AssignmentDetailView({
   viewerId,
 }: AssignmentDetailViewProps) {
   const [assignment, setAssignment] = useState<Assignment | null>(null);
-  const [assignmentTemplate, setAssignmentTemplate] = useState<AssignmentTemplate | null>(null);
+  const [assignmentContent, setAssignmentContent] = useState<AssignmentContent | null>(null);
   const [courseName, setCourseName] = useState<string>('');
   const [titleInput, setTitleInput] = useState('');
   const [openAtInput, setOpenAtInput] = useState('');
@@ -260,25 +198,25 @@ export default function AssignmentDetailView({
     setLoadError(null);
     try {
       const item = await getAssignment(assignmentId);
-      const [template, courses] = await Promise.all([
-        getAssignmentTemplate(item.id),
+      const [content, courses] = await Promise.all([
+        getAssignmentContent(item.id),
         listCourses().catch(() => []),
       ]);
 
       setAssignment(item);
-      setAssignmentTemplate(template);
-      setTitleInput(item.title || template?.title || 'Untitled Assignment');
+      setAssignmentContent(content);
+      setTitleInput(item.title || content?.assignmentTemplateTitle || 'Untitled Assignment');
       setOpenAtInput(toLocalInputValue(item.openAt));
       setDueAtInput(toLocalInputValue(item.dueAt));
 
       const cName = courses.find((c) => c.id === item.courseId)?.name;
       setCourseName(cName ?? (item.courseId ? `Course #${item.courseId}` : '-'));
 
-      if (viewerRole === 'STUDENT' && template) {
+      if (viewerRole === 'STUDENT' && content) {
         try {
           const sub = await getStudentSubmission(viewerId, assignmentId);
           setSubmission(sub);
-          setStudentAnswers(hydrateStudentAnswers(template.questions, sub));
+          setStudentAnswers(hydrateStudentAnswers(content.questions, sub));
           if (sub.status === 'SUBMITTED' || sub.status === 'GRADED') {
             setStudentFlowStage('submitted');
             setStudentSubmittedAt(sub.submittedAt ? new Date(sub.submittedAt) : null);
@@ -311,53 +249,14 @@ export default function AssignmentDetailView({
     return canMutate && assignment?.status === 'ACTIVE';
   }, [assignment?.status, canMutate]);
 
-  const groupedQuestionBuckets = useMemo(() => {
-    if (!assignmentTemplate) {
-      return [] as Array<{
-        key: string;
-        title: string;
-        questions: Question[];
-      }>;
-    }
-
-    const byGroupId = new Map<number, Question[]>();
-    const ungrouped: Question[] = [];
-
-    for (const question of assignmentTemplate.questions) {
-      if (question.groupId != null) {
-        const arr = byGroupId.get(question.groupId) ?? [];
-        arr.push(question);
-        byGroupId.set(question.groupId, arr);
-      } else {
-        ungrouped.push(question);
-      }
-    }
-
-    const buckets: Array<{ key: string; title: string; questions: Question[] }> = [];
-
-    for (const group of [...assignmentTemplate.questionGroups].sort((a, b) => a.orderIndex - b.orderIndex)) {
-      buckets.push({
-        key: `group-${group.id}`,
-        title: group.name,
-        questions: byGroupId.get(group.id) ?? [],
-      });
-    }
-
-    if (ungrouped.length > 0 || buckets.length === 0) {
-      buckets.push({ key: 'ungrouped', title: 'Ungrouped', questions: ungrouped });
-    }
-
-    return buckets;
-  }, [assignmentTemplate]);
-
   const totalPoints = useMemo(() => {
-    if (!assignmentTemplate) return 0;
-    return assignmentTemplate.questions.reduce((sum, q) => sum + q.maxPoints, 0);
-  }, [assignmentTemplate]);
+    if (!assignmentContent) return 0;
+    return assignmentContent.questions.reduce((sum, q) => sum + q.maxPoints, 0);
+  }, [assignmentContent]);
 
   const flatQuestions = useMemo(() => {
-    return assignmentTemplate?.questions ?? [];
-  }, [assignmentTemplate]);
+    return assignmentContent?.questions ?? [];
+  }, [assignmentContent]);
 
   const clampedStudentQuestionIndex = useMemo(() => {
     if (flatQuestions.length === 0) return 0;
@@ -397,7 +296,7 @@ export default function AssignmentDetailView({
       setStudentFlowStage('attempt');
       setStudentSubmittedAt(null);
     }
-  }, [assignmentTemplate?.id, previewMode, submission]);
+  }, [assignmentContent?.assignmentId, previewMode, submission]);
 
   useEffect(() => {
     if (flatQuestions.length === 0) {
@@ -602,7 +501,7 @@ export default function AssignmentDetailView({
 
       <AssignmentMetadataPanel
         assignment={assignment}
-        assignmentTemplate={assignmentTemplate}
+        assignmentTemplate={assignmentContent}
         courseName={courseName}
         totalPoints={totalPoints}
         canMutate={canMutate}
@@ -631,7 +530,7 @@ export default function AssignmentDetailView({
           </span>
         </div>
 
-        {!assignmentTemplate || (assignmentTemplate.questions.length === 0 && assignmentTemplate.submissionMode === 'DIGITAL') ? (
+        {!assignmentContent || (assignmentContent.questions.length === 0 && assignmentContent.submissionMode === 'DIGITAL') ? (
           <p className="text-sm text-muted-foreground">No questions in this assignment template.</p>
         ) : previewMode === 'student' ? (
           <StudentSubmissionForm
@@ -639,7 +538,7 @@ export default function AssignmentDetailView({
             assignmentArchived={assignmentArchived}
             assignmentNotOpen={assignmentNotOpen}
             openAt={assignment?.openAt ?? null}
-            submissionMode={assignmentTemplate?.submissionMode ?? 'DIGITAL'}
+            submissionMode={assignmentContent?.submissionMode ?? 'DIGITAL'}
             flatQuestions={flatQuestions}
             studentAnswers={studentAnswers}
             studentFlowStage={studentFlowStage}
@@ -664,44 +563,12 @@ export default function AssignmentDetailView({
             onSetSubmittedAt={setStudentSubmittedAt}
           />
         ) : (
-          <div className="space-y-4">
-            {groupedQuestionBuckets.map((bucket) => (
-              <div key={bucket.key} className="rounded-sm border border-border p-4 space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">
-                    {bucket.title}
-                  </h3>
-                  <span className="text-xs text-muted-foreground">
-                    {bucket.questions.length} question(s)
-                  </span>
-                </div>
-
-                {bucket.questions.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No questions in this group.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {bucket.questions.map((question, index) => (
-                      <div key={question.questionId} className="rounded-sm border border-border bg-muted/10 p-4 space-y-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-foreground">
-                              Q{index + 1}. {question.prompt}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatQuestionKind(question.type)} • {formatPoints(question.maxPoints)} pts
-                              {previewMode === 'teacher' ? ` • Grading: ${question.gradingStrategy}` : ''}
-                            </p>
-                          </div>
-                        </div>
-
-                        <TeacherQuestionDetails question={question} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          <AssignmentComposerPanel
+            assignmentId={assignment.id}
+            content={assignmentContent}
+            canCompose={canEditAssignment}
+            onContentChange={setAssignmentContent}
+          />
         )}
       </div>
     </div>

@@ -24,6 +24,22 @@ const sampleAssignment = {
   status: "ACTIVE",
 };
 
+const sampleAssignmentContent = {
+  id: 10,
+  title: "Math Quiz",
+  assignmentId: 1,
+  assignmentTemplateId: 10,
+  assignmentTemplateTitle: "Math Quiz",
+  category: "Quiz",
+  gradingMode: "HYBRID",
+  scoringPolicy: "STANDARD",
+  submissionMode: "DIGITAL",
+  rubricId: 50,
+  questionGroups: [],
+  teacherCriteria: [],
+  questions: [],
+};
+
 describe("assignment api", () => {
   describe("createAssignment", () => {
     it("creates and returns a new assignment", async () => {
@@ -90,6 +106,126 @@ describe("assignment api", () => {
       const result = await updateAssignment(1, { title: "HW 1 Updated" });
 
       expect(result.title).toBe("HW 1 Updated");
+    });
+  });
+
+  describe("getAssignmentContent", () => {
+    it("fetches the effective assignment content snapshot", async () => {
+      server.use(
+        http.get(`${API_BASE}/assignments/1/template`, () =>
+          HttpResponse.json(sampleAssignmentContent),
+        ),
+      );
+
+      const { getAssignmentContent } = await loadAssignmentApi();
+      const result = await getAssignmentContent(1);
+
+      expect(result.assignmentId).toBe(1);
+      expect(result.assignmentTemplateTitle).toBe("Math Quiz");
+    });
+  });
+
+  describe("assignment extension helpers", () => {
+    it("posts a teacher-authored assignment question", async () => {
+      server.use(
+        http.post(`${API_BASE}/assignments/1/questions`, async ({ request }) => {
+          const body = (await request.json()) as { prompt?: string };
+          return HttpResponse.json(
+            {
+              ...sampleAssignmentContent,
+              questions: [
+                {
+                  questionId: 111,
+                  id: 111,
+                  type: "SHORT_ANSWER",
+                  prompt: body.prompt,
+                  maxPoints: 5,
+                  autoGradable: false,
+                  graded: false,
+                  image: null,
+                  data: {},
+                  selectAll: null,
+                  min: null,
+                  max: null,
+                  groupId: null,
+                  rubricId: null,
+                  gradingStrategy: "MANUAL",
+                  orderIndex: 0,
+                  origin: "TEACHER_ADDITION",
+                  lockedFromSource: false,
+                  sourceQuestionId: null,
+                },
+              ],
+            },
+            { status: 201 },
+          );
+        }),
+      );
+
+      const { addAssignmentQuestion } = await loadAssignmentApi();
+      const result = await addAssignmentQuestion(1, {
+        type: "SHORT_ANSWER",
+        prompt: "Teacher follow-up",
+        maxPoints: 5,
+      });
+
+      expect(result.questions[0].prompt).toBe("Teacher follow-up");
+      expect(result.questions[0].origin).toBe("TEACHER_ADDITION");
+    });
+
+    it("posts a teacher-authored rubric criterion", async () => {
+      server.use(
+        http.post(`${API_BASE}/assignments/1/teacher-criteria`, async ({ request }) => {
+          const body = (await request.json()) as { title?: string; weight?: number };
+          return HttpResponse.json(
+            {
+              ...sampleAssignmentContent,
+              teacherCriteria: [
+                {
+                  id: 801,
+                  title: body.title,
+                  description: "",
+                  weight: body.weight,
+                  orderIndex: 0,
+                },
+              ],
+            },
+            { status: 201 },
+          );
+        }),
+      );
+
+      const { addAssignmentTeacherCriterion } = await loadAssignmentApi();
+      const result = await addAssignmentTeacherCriterion(1, {
+        title: "Local rigor",
+        weight: 2,
+      });
+
+      expect(result.teacherCriteria[0].title).toBe("Local rigor");
+      expect(result.teacherCriteria[0].weight).toBe(2);
+    });
+
+    it("lists reusable assignment question images", async () => {
+      server.use(
+        http.get(`${API_BASE}/assignments/1/images`, () =>
+          HttpResponse.json([
+            {
+              id: "img-1",
+              storageKey: "questions/img-1.png",
+              url: "/api/v1/assignments/images/questions/img-1.png",
+              originalFilename: "img-1.png",
+              mimeType: "image/png",
+              sizeBytes: 1234,
+            },
+          ]),
+        ),
+      );
+
+      const { listReusableAssignmentImages } = await loadAssignmentApi();
+      const result = await listReusableAssignmentImages(1);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("img-1");
     });
   });
 

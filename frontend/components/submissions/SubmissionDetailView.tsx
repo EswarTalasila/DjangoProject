@@ -16,19 +16,20 @@ import {
   type SubmissionDTO,
   type SubmissionImageDTO,
 } from '@/lib/submission-api';
-import { getAssignment, getAssignmentTemplate, type Assignment } from '@/lib/assignment-api';
-import type {
-  AssignmentTemplate,
-  GradingMode,
-  Question,
-  QuestionGroup,
-} from '@/lib/assignment-template-api';
+import {
+  getAssignment,
+  getAssignmentContent,
+  type Assignment,
+  type AssignmentContent,
+  type AssignmentQuestion as Question,
+} from '@/lib/assignment-api';
 import { listRubrics, type Rubric } from '@/lib/rubric-api';
 import RubricGridPreview from '@/components/rubrics/RubricGridPreview';
 import { toErrorMessage, formatDate, formatScore, cn } from '@/lib/utils';
 
 type Role = 'ADMIN' | 'TEACHER' | 'RESEARCHER' | 'STUDENT';
 type RubricSource = 'Question' | 'Group' | 'AssignmentTemplate' | 'N/A';
+type GradingMode = AssignmentContent['gradingMode'];
 
 type SubmissionDetailViewProps = {
   submissionId: number;
@@ -90,7 +91,7 @@ function isManualQuestion(question: Question | undefined, gradingMode: GradingMo
 
 function getEffectiveRubricMeta(
   question: Question | undefined,
-  questionGroups: QuestionGroup[],
+  questionGroups: AssignmentContent['questionGroups'],
   assignmentTemplateRubricId: number | null,
   rubricById: Map<number, Rubric>,
 ): { rubricId: number | null; rubric: Rubric | null; source: RubricSource } {
@@ -145,7 +146,7 @@ function getSubmissionStatusLabel(status: SubmissionDTO['status']): string {
 export default function SubmissionDetailView({ submissionId, viewerRole }: SubmissionDetailViewProps) {
   const [submission, setSubmission] = useState<SubmissionDTO | null>(null);
   const [assignment, setAssignment] = useState<Assignment | null>(null);
-  const [assignmentTemplate, setAssignmentTemplate] = useState<AssignmentTemplate | null>(null);
+  const [assignmentTemplate, setAssignmentTemplate] = useState<AssignmentContent | null>(null);
   const [rubricById, setRubricById] = useState<Map<number, Rubric>>(new Map());
   const [expandedRubricQuestionIds, setExpandedRubricQuestionIds] = useState<Set<number>>(new Set());
   const [scoreInputs, setScoreInputs] = useState<Record<number, string>>({});
@@ -162,7 +163,7 @@ export default function SubmissionDetailView({ submissionId, viewerRole }: Submi
       const currentSubmission = await getSubmission(submissionId);
       const [assignmentRecord, template, rubrics] = await Promise.all([
         getAssignment(currentSubmission.assignmentId),
-        getAssignmentTemplate(currentSubmission.assignmentId),
+        getAssignmentContent(currentSubmission.assignmentId),
         listRubrics().catch(() => [] as Rubric[]),
       ]);
       setSubmission(currentSubmission);

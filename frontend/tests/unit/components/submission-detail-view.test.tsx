@@ -6,7 +6,7 @@ const mockGetSubmission = vi.fn();
 const mockOverrideSubmissionScore = vi.fn();
 const mockListSubmissionImages = vi.fn();
 const mockGetAssignment = vi.fn();
-const mockGetAssignmentTemplate = vi.fn();
+const mockGetAssignmentContent = vi.fn();
 const mockListRubrics = vi.fn();
 const mockToast = { success: vi.fn(), error: vi.fn(), message: vi.fn() };
 
@@ -27,7 +27,7 @@ function setupModuleMocks() {
   }));
   vi.doMock("@/lib/assignment-api", () => ({
     getAssignment: mockGetAssignment,
-    getAssignmentTemplate: mockGetAssignmentTemplate,
+    getAssignmentContent: mockGetAssignmentContent,
   }));
   vi.doMock("@/lib/rubric-api", () => ({
     listRubrics: mockListRubrics,
@@ -176,7 +176,7 @@ describe("SubmissionDetailView", () => {
   it("renders submission detail after loading", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -193,7 +193,7 @@ describe("SubmissionDetailView", () => {
   it("renders score and total points", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -206,7 +206,7 @@ describe("SubmissionDetailView", () => {
   it("renders answers section with questions", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -225,7 +225,7 @@ describe("SubmissionDetailView", () => {
   it("renders Multiple Choice answer with label", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -238,7 +238,7 @@ describe("SubmissionDetailView", () => {
   it("renders Short Answer text", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -250,7 +250,7 @@ describe("SubmissionDetailView", () => {
   it("shows question type labels", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -263,7 +263,7 @@ describe("SubmissionDetailView", () => {
   it("shows Save Scores button for TEACHER", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -277,7 +277,7 @@ describe("SubmissionDetailView", () => {
   it("shows Save Grades button for ADMIN", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="ADMIN" />);
 
@@ -291,7 +291,7 @@ describe("SubmissionDetailView", () => {
   it("does not show Save Grades for STUDENT", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="STUDENT" />);
 
@@ -306,7 +306,7 @@ describe("SubmissionDetailView", () => {
   it("does not show Save Grades for RESEARCHER", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="RESEARCHER" />);
 
@@ -321,7 +321,7 @@ describe("SubmissionDetailView", () => {
   it("calls overrideSubmissionScore on Save Grades click", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
 
     const updatedSubmission = {
       ...baseSubmission,
@@ -358,7 +358,7 @@ describe("SubmissionDetailView", () => {
   it("shows toast error when score override fails", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     mockOverrideSubmissionScore.mockRejectedValueOnce({
       response: { data: { detail: "Score exceeds max" } },
     });
@@ -389,7 +389,7 @@ describe("SubmissionDetailView", () => {
     const emptySubmission = { ...baseSubmission, answers: [] };
     mockGetSubmission.mockResolvedValueOnce(emptySubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -427,7 +427,7 @@ describe("SubmissionDetailView", () => {
     };
     mockGetSubmission.mockResolvedValueOnce(sub);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(tmpl);
+    mockGetAssignmentContent.mockResolvedValueOnce(tmpl);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="STUDENT" />);
 
@@ -453,7 +453,7 @@ describe("SubmissionDetailView", () => {
     };
     mockGetSubmission.mockResolvedValueOnce(sub);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="STUDENT" />);
 
@@ -476,7 +476,7 @@ describe("SubmissionDetailView", () => {
     };
     mockGetSubmission.mockResolvedValueOnce(sub);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="STUDENT" />);
 
@@ -499,7 +499,7 @@ describe("SubmissionDetailView", () => {
     };
     mockGetSubmission.mockResolvedValueOnce(sub);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce({
+    mockGetAssignmentContent.mockResolvedValueOnce({
       ...baseTemplate,
       questions: [],
     });
@@ -515,7 +515,7 @@ describe("SubmissionDetailView", () => {
     const hybridTemplate = { ...baseTemplate, gradingMode: "HYBRID" as const };
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(hybridTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(hybridTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -530,7 +530,7 @@ describe("SubmissionDetailView", () => {
   it("shows override message for non-HYBRID mode", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -546,7 +546,7 @@ describe("SubmissionDetailView", () => {
   it("shows Back to Submissions link", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="STUDENT" />);
 
@@ -558,7 +558,7 @@ describe("SubmissionDetailView", () => {
   it("shows assignment fallback title when assignment is null", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce({ ...baseAssignment, title: "" });
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="STUDENT" />);
 
@@ -570,7 +570,7 @@ describe("SubmissionDetailView", () => {
   it("shows toast error for NaN score input on save", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -609,7 +609,7 @@ describe("SubmissionDetailView", () => {
     const hybridTemplate = { ...baseTemplate, gradingMode: "HYBRID" as const };
     mockGetSubmission.mockResolvedValueOnce(sub);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(hybridTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(hybridTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 

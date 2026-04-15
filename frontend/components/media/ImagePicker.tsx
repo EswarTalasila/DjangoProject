@@ -33,7 +33,7 @@ type ImagePickerProps = {
   /** Currently attached image (null if none) */
   image: PickedImage | null;
   /** Called when user selects/uploads an image */
-  onSelect: (image: PickedImage) => void;
+  onSelect: (image: PickedImage) => void | Promise<void>;
   /** Called when user removes the image */
   onRemove: () => void;
   /** Fetch previously uploaded images for the browse dialog */
@@ -241,7 +241,7 @@ export default function ImagePicker({
                       key={img.id}
                       type="button"
                       onClick={() => {
-                        onSelect(img);
+                        void onSelect(img);
                         setBrowseOpen(false);
                       }}
                       className="group relative aspect-square rounded-lg border border-border overflow-hidden hover:ring-2 hover:ring-primary transition-all"
@@ -275,6 +275,15 @@ export default function ImagePicker({
   // Image attached — show preview with replace/remove
   return (
     <div className="relative rounded-lg overflow-hidden border border-border bg-card group shadow-sm">
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleInputChange}
+        accept="image/jpeg,image/png,image/webp"
+        disabled={disabled}
+        aria-label="Replace image file"
+      />
       <div className="aspect-video bg-muted flex items-center justify-center overflow-hidden">
         <img
           src={image.url}
@@ -285,19 +294,10 @@ export default function ImagePicker({
 
       {/* Overlay actions on hover */}
       <div className="absolute inset-0 bg-background/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
-        <div className="relative">
-          <input
-            type="file"
-            className="absolute inset-0 opacity-0 cursor-pointer"
-            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-            accept="image/jpeg,image/png,image/webp"
-            disabled={disabled}
-          />
-          <Button type="button" size="sm" className="gap-2" disabled={disabled}>
-            <RefreshCw className="h-4 w-4" />
-            {replaceLabel}
-          </Button>
-        </div>
+        <Button type="button" size="sm" className="gap-2" disabled={disabled} onClick={openFileDialog}>
+          <RefreshCw className="h-4 w-4" />
+          {replaceLabel}
+        </Button>
         <Button
           type="button"
           variant="destructive"
@@ -322,6 +322,37 @@ export default function ImagePicker({
         <span className="text-xs font-mono text-muted-foreground flex-shrink-0 ml-2">
           {formatSize(image.sizeBytes)} &middot; {image.mimeType.split('/')[1]?.toUpperCase()}
         </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-border bg-background px-3 py-3 sm:hidden">
+        <Button type="button" size="sm" variant="outline" className="gap-2" disabled={disabled} onClick={openFileDialog}>
+          <RefreshCw className="h-4 w-4" />
+          {replaceLabel}
+        </Button>
+        {onBrowse && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="gap-2"
+            disabled={disabled}
+            onClick={() => void openBrowse()}
+          >
+            <FolderOpen className="h-4 w-4" />
+            {browseLabel}
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          onClick={onRemove}
+          disabled={disabled}
+          className="gap-2"
+        >
+          <X className="h-4 w-4" />
+          Remove
+        </Button>
       </div>
     </div>
   );

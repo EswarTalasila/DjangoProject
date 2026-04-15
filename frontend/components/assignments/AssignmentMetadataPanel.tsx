@@ -16,8 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { Assignment } from '@/lib/assignment-api';
-import type { AssignmentTemplate } from '@/lib/assignment-template-api';
+import type { Assignment, AssignmentContent } from '@/lib/assignment-api';
 import { formatDate } from '@/lib/utils';
 
 type PreviewMode = 'teacher' | 'student';
@@ -29,7 +28,7 @@ function formatPoints(value: number): string {
 
 export type AssignmentMetadataPanelProps = {
   assignment: Assignment;
-  assignmentTemplate: AssignmentTemplate | null;
+  assignmentTemplate: AssignmentContent | null;
   courseName: string;
   totalPoints: number;
   canMutate: boolean;

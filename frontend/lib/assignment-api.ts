@@ -1,4 +1,10 @@
 import api from '@/lib/api';
+import type {
+  QuestionData,
+  QuestionGroup,
+  QuestionImage,
+  QuestionKind,
+} from '@/lib/assignment-template-api';
 
 export type AudienceType = 'COURSE' | 'TEACHER';
 export type AssignmentStatus = 'ACTIVE' | 'ARCHIVED';
@@ -28,6 +34,54 @@ export type AssignmentArchiveArtifact = {
   manifest: Record<string, unknown>;
 };
 
+export type AssignmentQuestionOrigin = 'TEMPLATE' | 'TEACHER_ADDITION';
+
+export type AssignmentQuestion = {
+  questionId: number;
+  id: number;
+  type: QuestionKind;
+  prompt: string;
+  maxPoints: number;
+  autoGradable: boolean;
+  graded: boolean;
+  image: QuestionImage | null;
+  data: QuestionData | null;
+  selectAll: boolean | null;
+  min: number | null;
+  max: number | null;
+  groupId: number | null;
+  rubricId: number | null;
+  gradingStrategy: 'AUTO' | 'MANUAL';
+  orderIndex: number;
+  origin: AssignmentQuestionOrigin | null;
+  lockedFromSource: boolean;
+  sourceQuestionId: number | null;
+};
+
+export type AssignmentTeacherCriterion = {
+  id: number;
+  title: string;
+  description: string;
+  weight: number;
+  orderIndex: number;
+};
+
+export type AssignmentContent = {
+  id: number;
+  title: string;
+  assignmentId: number;
+  assignmentTemplateId: number;
+  assignmentTemplateTitle: string;
+  category: string | null;
+  gradingMode: string;
+  scoringPolicy: string;
+  submissionMode: string;
+  rubricId: number | null;
+  questions: AssignmentQuestion[];
+  questionGroups: QuestionGroup[];
+  teacherCriteria: AssignmentTeacherCriterion[];
+};
+
 export type AssignmentCreateInput = {
   title?: string;
   assignmentTemplateId: number;
@@ -41,6 +95,20 @@ export type AssignmentUpdateInput = {
   title?: string;
   openAt?: string;
   dueAt?: string | null;
+};
+
+export type AssignmentQuestionCreateInput = {
+  type: QuestionKind;
+  prompt: string;
+  maxPoints: number;
+  data?: QuestionData;
+  gradingStrategy?: 'AUTO' | 'MANUAL';
+};
+
+export type AssignmentTeacherCriterionInput = {
+  title: string;
+  description?: string;
+  weight: number;
 };
 
 type Paginated<T> = {
@@ -59,6 +127,12 @@ export async function createAssignment(payload: AssignmentCreateInput): Promise<
 /** GET /assignments/:id — Fetch a single assignment by ID. */
 export async function getAssignment(assignmentId: number): Promise<Assignment> {
   const response = await api.get<Assignment>(`/assignments/${assignmentId}`);
+  return response.data;
+}
+
+/** GET /assignments/:id/template — Fetch the effective assignment content snapshot. */
+export async function getAssignmentContent(assignmentId: number): Promise<AssignmentContent> {
+  const response = await api.get<AssignmentContent>(`/assignments/${assignmentId}/template`);
   return response.data;
 }
 
@@ -86,6 +160,70 @@ export async function archiveAssignment(assignmentId: number): Promise<Assignmen
 export async function restoreAssignment(assignmentId: number): Promise<Assignment> {
   const response = await api.post<Assignment>(`/assignments/${assignmentId}/restore`, {});
   return response.data;
+}
+
+/** POST /assignments/:id/questions — Add a teacher-authored question to an assignment. */
+export async function addAssignmentQuestion(
+  assignmentId: number,
+  payload: AssignmentQuestionCreateInput,
+): Promise<AssignmentContent> {
+  const response = await api.post<AssignmentContent>(`/assignments/${assignmentId}/questions`, payload);
+  return response.data;
+}
+
+/** POST /assignments/:id/teacher-criteria — Add a teacher-authored criterion to an assignment. */
+export async function addAssignmentTeacherCriterion(
+  assignmentId: number,
+  payload: AssignmentTeacherCriterionInput,
+): Promise<AssignmentContent> {
+  const response = await api.post<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria`,
+    payload,
+  );
+  return response.data;
+}
+
+/** GET /assignments/:id/images — List reusable question images visible from the assignment context. */
+export async function listReusableAssignmentImages(assignmentId: number): Promise<QuestionImage[]> {
+  const response = await api.get<QuestionImage[]>(`/assignments/${assignmentId}/images`);
+  return response.data;
+}
+
+/** POST /assignments/:assignmentId/questions/:questionId/image — Upload question image. */
+export async function uploadAssignmentQuestionImage(
+  assignmentId: number,
+  questionId: number,
+  file: File,
+): Promise<QuestionImage> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await api.post<QuestionImage>(
+    `/assignments/${assignmentId}/questions/${questionId}/image`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return response.data;
+}
+
+/** POST /assignments/:assignmentId/questions/:questionId/image/reuse — Attach a previous image. */
+export async function reuseAssignmentQuestionImage(
+  assignmentId: number,
+  questionId: number,
+  assetId: string,
+): Promise<QuestionImage> {
+  const response = await api.post<QuestionImage>(
+    `/assignments/${assignmentId}/questions/${questionId}/image/reuse`,
+    { assetId },
+  );
+  return response.data;
+}
+
+/** DELETE /assignments/:assignmentId/questions/:questionId/image — Remove assignment question image. */
+export async function deleteAssignmentQuestionImage(
+  assignmentId: number,
+  questionId: number,
+): Promise<void> {
+  await api.delete(`/assignments/${assignmentId}/questions/${questionId}/image`);
 }
 
 /** GET /assignments/:id/archive-bundle — Fetch archive bundle metadata for an archived assignment. */
