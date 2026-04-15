@@ -6,21 +6,16 @@ from django.utils import timezone
 from assignment_templates.models import (
     AssignmentTemplate,
     AssignmentTemplateStatus,
-    QuestionKind,
 )
-from core.helpers import answer_type_from_question
 from courses.models import Course, Enrollment, EnrollmentStatus
 from courses.services import can_manage_course
 from submissions.models import (
-    Answer,
-    MultipleChoiceAnswer,
-    NumberScaleAnswer,
-    ShortAnswerAnswer,
     Submission,
     SubmissionStatus,
 )
 
 from ..models import Assignment, AssignmentStatus, AudienceType
+from ._content import provision_submission_answers, snapshot_assignment_content
 
 
 class ConflictError(Exception):
@@ -86,6 +81,11 @@ def create_assignment(creator_user, payload: dict) -> Assignment:
         open_at=open_at,
         due_at=due_at,
         status=AssignmentStatus.ACTIVE,
+    )
+    snapshot_assignment_content(
+        assignment,
+        assignment_template,
+        creator_user_id=creator_user.id,
     )
 
     update_fields: list[str] = []
@@ -199,10 +199,7 @@ def purge_assignment(assignment: Assignment) -> None:
 @transaction.atomic
 def _create_submissions_for_course(assignment: Assignment) -> None:
     """Create placeholder submissions for all enrolled students in the course."""
-    assignment_template = AssignmentTemplate.objects.filter(
-        id=assignment.assignment_template_id
-    ).first()
-    if not assignment_template or assignment.course_id is None:
+    if assignment.course_id is None:
         return
 
     student_ids = Enrollment.objects.filter(
@@ -220,17 +217,4 @@ def _create_submissions_for_course(assignment: Assignment) -> None:
             submitted_at=None,
             status=SubmissionStatus.NOT_STARTED,
         )
-        for question in assignment_template.questions.all():
-            answer = Answer.objects.create(
-                submission=submission,
-                question=question,
-                answer_type=answer_type_from_question(question),
-                score=0.0,
-                skipped=False,
-            )
-            if question.kind == QuestionKind.MULTIPLE_CHOICE:
-                MultipleChoiceAnswer.objects.create(answer=answer)
-            elif question.kind == QuestionKind.SHORT_ANSWER:
-                ShortAnswerAnswer.objects.create(answer=answer, text="")
-            elif question.kind == QuestionKind.NUMBER_SCALE:
-                NumberScaleAnswer.objects.create(answer=answer, val=None)
+        provision_submission_answers(submission)

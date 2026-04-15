@@ -670,56 +670,42 @@ class TestRemoveStudentFromCourse(_NoopAtomicMixin):
 class TestCreateSubmissionsForStudent:
     """Tests for _create_submissions_for_student internal helper."""
 
+    @patch("assignments.services._content.provision_submission_answers")
     @patch("courses.services._mutations.Assignment")
-    @patch("courses.services._mutations.AssignmentTemplate")
-    def test_skips_when_assessment_not_found(self, mock_assessment_model, mock_assignment_model):
-        """Skips when assignment_template does not exist."""
+    def test_skips_when_assignment_already_has_submission(
+        self, mock_assignment_model, mock_provision_answers
+    ):
+        """Skips submission creation when the student already has one."""
         from courses.services._mutations import _create_submissions_for_student
 
         fake_assignment = SimpleNamespace(id=1, assignment_template_id=99)
         mock_assignment_model.objects.filter.return_value = [fake_assignment]
-        mock_assessment_model.objects.filter.return_value.first.return_value = None
 
-        _create_submissions_for_student(SimpleNamespace(id=1), SimpleNamespace(id=1))
+        with patch("courses.services._mutations.Submission") as mock_submission_model:
+            mock_submission_model.objects.filter.return_value.exists.return_value = True
+            _create_submissions_for_student(SimpleNamespace(id=1), SimpleNamespace(id=1))
 
-    @patch("courses.services._mutations.NumberScaleAnswer")
-    @patch("courses.services._mutations.ShortAnswerAnswer")
-    @patch("courses.services._mutations.MultipleChoiceAnswer")
-    @patch("courses.services._mutations.Answer")
+        mock_provision_answers.assert_not_called()
+
     @patch("courses.services._mutations.Submission")
-    @patch("courses.services._mutations.AssignmentTemplate")
+    @patch("assignments.services._content.provision_submission_answers")
     @patch("courses.services._mutations.Assignment")
-    @patch("courses.services._mutations.answer_type_from_question")
     def test_creates_submissions_with_answers(
-        self, mock_answer_type, mock_assignment_model, mock_assignment_template_model,
-        mock_submission_model, mock_answer_model, mock_mca, mock_saa, mock_nsa,
+        self,
+        mock_assignment_model,
+        mock_provision_answers,
+        mock_submission_model,
     ):
-        """Creates submission with correct answer types for each question kind."""
-        from assignment_templates.models import QuestionKind
+        """Creates placeholder submissions and delegates answer provisioning."""
         from courses.services._mutations import _create_submissions_for_student
 
         fake_assignment = SimpleNamespace(id=1, assignment_template_id=10)
         mock_assignment_model.objects.filter.return_value = [fake_assignment]
-
-        mc_q = SimpleNamespace(kind=QuestionKind.MULTIPLE_CHOICE)
-        sa_q = SimpleNamespace(kind=QuestionKind.SHORT_ANSWER)
-        ns_q = SimpleNamespace(kind=QuestionKind.NUMBER_SCALE)
-
-        fake_assignment_template = MagicMock()
-        fake_assignment_template.id = 10
-        fake_assignment_template.questions.all.return_value = [mc_q, sa_q, ns_q]
-        mock_assignment_template_model.objects.filter.return_value.first.return_value = (
-            fake_assignment_template
-        )
         mock_submission_model.objects.filter.return_value.exists.return_value = False
-        mock_submission_model.objects.create.return_value = SimpleNamespace(id=100)
-        mock_answer_type.return_value = "MC"
-        mock_answer_model.objects.create.return_value = SimpleNamespace(id=200)
+        created_submission = SimpleNamespace(id=100)
+        mock_submission_model.objects.create.return_value = created_submission
 
         _create_submissions_for_student(SimpleNamespace(id=1), SimpleNamespace(id=5))
 
         mock_submission_model.objects.create.assert_called_once()
-        assert mock_answer_model.objects.create.call_count == 3
-        mock_mca.objects.create.assert_called_once()
-        mock_saa.objects.create.assert_called_once()
-        mock_nsa.objects.create.assert_called_once()
+        mock_provision_answers.assert_called_once_with(created_submission)

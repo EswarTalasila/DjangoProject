@@ -8,6 +8,7 @@ from django.utils import timezone
 from accounts.models import Role, StudentProfile, TeacherProfile, UserRole
 from assignment_templates.models import AssignmentTemplate, AssignmentTemplateStatus, GradingMode, Question, QuestionKind
 from assignments.models import Assignment, AssignmentStatus
+from assignments.services._content import snapshot_assignment_content
 from courses.models import Course, Enrollment, EnrollmentStatus
 from submissions.models import Answer, Submission, SubmissionStatus
 from tests.factories import UserFactory
@@ -32,7 +33,7 @@ def _make_course(teacher_user):
 
 
 def _make_assignment(assignment_template, course, teacher_user, **kwargs):
-    return Assignment.objects.create(
+    assignment = Assignment.objects.create(
         title=kwargs.get("title", None),
         assignment_template=assignment_template,
         audience_type="COURSE",
@@ -42,6 +43,8 @@ def _make_assignment(assignment_template, course, teacher_user, **kwargs):
         due_at=kwargs.get("due_at", None),
         status=kwargs.get("status", AssignmentStatus.ACTIVE),
     )
+    snapshot_assignment_content(assignment, assignment_template, creator_user_id=teacher_user.id)
+    return assignment
 
 
 def _enroll(course, student_user):
@@ -562,6 +565,101 @@ class TestGetDetail:
         api_client.force_authenticate(user=student_user)
         resp = api_client.get(f"/api/v1/assignments/{assignment.id}/template")
         assert resp.status_code == 403
+
+
+# ===========================================================================
+# ASGN-UC-04A — Extend Assignment Content
+# ===========================================================================
+
+
+@pytest.mark.django_db
+class TestExtendAssignmentContent:
+    """Assignment-local teacher extension routes."""
+
+    def test_teacher_can_add_assignment_local_question_and_provision_answers(
+        self, api_client, teacher_user, student_user, admin_user
+    ):
+        """Teacher adds a local question and existing submissions receive answer shells."""
+        assignment_template = _make_assignment_template(admin_user)
+        course = _make_course(teacher_user)
+        _enroll(course, student_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
+        submission = Submission.objects.create(
+            assignment=assignment,
+            student=student_user,
+            status=SubmissionStatus.NOT_STARTED,
+        )
+
+        api_client.force_authenticate(user=teacher_user)
+        resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/questions",
+            {
+                "type": "SHORT_ANSWER",
+                "prompt": "Teacher follow-up",
+                "maxPoints": 4,
+            },
+            format="json",
+        )
+
+        assert resp.status_code == 201
+        payload = resp.json()
+        teacher_questions = [q for q in payload["questions"] if q["origin"] == "TEACHER_ADDITION"]
+        assert len(teacher_questions) == 1
+        assert teacher_questions[0]["prompt"] == "Teacher follow-up"
+        assert Answer.objects.filter(submission=submission).count() == 1
+
+    def test_teacher_can_add_assignment_local_criterion(
+        self, api_client, teacher_user, admin_user
+    ):
+        """Teacher adds a local rubric criterion layered onto the assignment."""
+        assignment_template = _make_assignment_template(admin_user)
+        course = _make_course(teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
+
+        api_client.force_authenticate(user=teacher_user)
+        resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria",
+            {
+                "title": "Local rigor",
+                "description": "Check local classroom expectations.",
+                "weight": 2,
+            },
+            format="json",
+        )
+
+        assert resp.status_code == 201
+        payload = resp.json()
+        assert len(payload["teacherCriteria"]) == 1
+        assert payload["teacherCriteria"][0]["title"] == "Local rigor"
+
+    def test_archived_assignment_rejects_extension_routes(
+        self, api_client, teacher_user, admin_user
+    ):
+        """Archived assignments reject new questions and criteria with 409."""
+        assignment_template = _make_assignment_template(admin_user)
+        course = _make_course(teacher_user)
+        assignment = _make_assignment(
+            assignment_template,
+            course,
+            teacher_user,
+            status=AssignmentStatus.ARCHIVED,
+        )
+
+        api_client.force_authenticate(user=teacher_user)
+        q_resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/questions",
+            {"type": "SHORT_ANSWER", "prompt": "Blocked", "maxPoints": 1},
+            format="json",
+        )
+        c_resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria",
+            {"title": "Blocked", "weight": 1},
+            format="json",
+        )
+
+        assert q_resp.status_code == 409
+        assert c_resp.status_code == 409
+        assert "cannot be extended" in q_resp.json()["detail"].lower()
 
 
 # ===========================================================================

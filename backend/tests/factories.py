@@ -33,7 +33,12 @@ from assignment_templates.models import (
     QuestionKind,
     ScoringPolicy,
 )
-from assignments.models import Assignment, AssignmentStatus, AudienceType
+from assignments.models import (
+    Assignment,
+    AssignmentQuestion,
+    AssignmentStatus,
+    AudienceType,
+)
 from courses.models import Course, Enrollment, EnrollmentStatus
 from submissions.models import Answer, AnswerType, Submission, SubmissionStatus
 
@@ -119,6 +124,22 @@ class AssignmentFactory(factory.django.DjangoModelFactory):
     open_at = factory.LazyFunction(timezone.now)
     due_at = None
     status = AssignmentStatus.ACTIVE
+
+    @factory.post_generation
+    def snapshot_content(self, create, extracted, **kwargs):
+        """Mirror template content into assignment-owned rows by default for integration tests."""
+        if not create or extracted is False:
+            return
+        if self.questions.exists():
+            return
+
+        from assignments.services._content import snapshot_assignment_content
+
+        snapshot_assignment_content(
+            self,
+            self.assignment_template,
+            creator_user_id=self.created_by_id,
+        )
 
 
 class QuestionFactory(factory.django.DjangoModelFactory):
@@ -249,7 +270,54 @@ class AnswerFactory(factory.django.DjangoModelFactory):
         model = Answer
 
     submission = factory.SubFactory(SubmissionFactory)
-    question = factory.SubFactory(QuestionFactory)
     answer_type = AnswerType.SHORT_ANSWER
     score = None
     skipped = False
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        """Route test answers through assignment-owned questions even when callers pass template rows."""
+        submission = kwargs.get("submission") or SubmissionFactory()
+        kwargs["submission"] = submission
+        question = kwargs.get("question")
+        kwargs["question"] = _resolve_assignment_question(submission.assignment, question)
+        return super()._create(model_class, *args, **kwargs)
+
+
+def _resolve_assignment_question(assignment: Assignment, question=None) -> AssignmentQuestion:
+    """Return an assignment-owned question compatible with the submission schema."""
+    if isinstance(question, AssignmentQuestion):
+        return question
+
+    if question is None:
+        assignment_question = assignment.questions.order_by("order_index", "id").first()
+        if assignment_question is not None:
+            return assignment_question
+        source_question = QuestionFactory(assignment_template=assignment.assignment_template)
+    else:
+        source_question = question
+
+    assignment_question = AssignmentQuestion.objects.filter(
+        assignment=assignment,
+        source_template_question=source_question,
+    ).first()
+    if assignment_question is not None:
+        return assignment_question
+
+    return AssignmentQuestion.objects.create(
+        assignment=assignment,
+        source_template_question=source_question,
+        created_by=assignment.created_by,
+        kind=source_question.kind,
+        prompt=source_question.prompt,
+        max_points=source_question.max_points,
+        auto_gradable=source_question.auto_gradable,
+        graded=source_question.graded,
+        image=getattr(source_question, "image", None),
+        image_asset=getattr(source_question, "image_asset", None),
+        grading_strategy=getattr(source_question, "grading_strategy", "AUTO"),
+        data=getattr(source_question, "data", {}) or {},
+        order_index=getattr(source_question, "order_index", 0),
+        origin="TEMPLATE",
+        locked_from_source=True,
+    )

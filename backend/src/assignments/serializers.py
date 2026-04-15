@@ -38,3 +38,27 @@ class AssignmentUpdateSerializer(serializers.Serializer):
     title = serializers.CharField(required=False, allow_blank=False, max_length=255)
     openAt = serializers.DateTimeField(required=False)
     dueAt = serializers.DateTimeField(required=False, allow_null=True)
+
+
+class AssignmentQuestionCreateSerializer(serializers.Serializer):
+    """Validates teacher-authored assignment-local question payloads."""
+
+    type = serializers.ChoiceField(
+        choices=["MULTIPLE_CHOICE", "SHORT_ANSWER", "NUMBER_SCALE", "MOOD_METER"]
+    )
+    prompt = serializers.CharField(allow_blank=False)
+    maxPoints = serializers.FloatField(min_value=0)
+    data = serializers.DictField(required=False)  # type: ignore[assignment]
+    gradingStrategy = serializers.ChoiceField(
+        choices=["AUTO", "MANUAL"],
+        required=False,
+        default="AUTO",
+    )
+
+
+class AssignmentTeacherCriterionCreateSerializer(serializers.Serializer):
+    """Validates teacher-authored assignment-local criterion payloads."""
+
+    title = serializers.CharField(allow_blank=False, max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True)
+    weight = serializers.FloatField(min_value=0.01)

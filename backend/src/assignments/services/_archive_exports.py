@@ -24,6 +24,7 @@ from rubrics.services import rubric_to_dto
 from submissions.models import AnswerType, SubmissionStatus
 
 from ..models import Assignment, AssignmentArchiveArtifact, AssignmentStatus
+from ._content import assignment_content_to_dto
 from ._mutations import ConflictError
 from ._queries import assignment_to_dto
 
@@ -170,6 +171,7 @@ def _build_bundle_bytes(
     assignment = _load_assignment_for_bundle(assignment.id)
     participant_labels = _build_participant_labels(assignment)
     template_dto = assignment_template_to_dto(assignment.assignment_template).model_dump(mode="json")
+    content_dto = assignment_content_to_dto(assignment).model_dump(mode="json")
     assignment_dto = assignment_to_dto(assignment).model_dump(mode="json")
     manifest = _build_manifest(assignment, request_user, identifiable, participant_labels)
     root = _build_bundle_root(assignment)
@@ -181,6 +183,10 @@ def _build_bundle_bytes(
         archive.writestr(
             f"{root}/template/template.json",
             json.dumps(template_dto, indent=2, sort_keys=True),
+        )
+        archive.writestr(
+            f"{root}/assignment/content.json",
+            json.dumps(content_dto, indent=2, sort_keys=True),
         )
         archive.writestr(
             f"{root}/assignment/assignment.json",
@@ -232,6 +238,9 @@ def _load_assignment_for_bundle(assignment_id: int) -> Assignment:
             "assignment_template__questions__number_scale",
             "assignment_template__questions__rubric",
             "assignment_template__questions__mcq_correct_answers",
+            "question_groups",
+            "questions",
+            "teacher_criteria",
             "submissions__student",
             "submissions__teacher",
             "submissions__answers__question",
@@ -363,8 +372,8 @@ def _serialize_rubrics(assignment: Assignment) -> dict[str, dict]:
 def _write_question_images(archive: ZipFile, assignment: Assignment, root: str) -> None:
     """Add question image binaries to the bundle when present."""
     backend = get_storage_backend()
-    for question in assignment.assignment_template.questions.all():
-        meta = parse_question_image(question)
+    for question in assignment.questions.all():
+        meta = _parse_snapshot_image(question.image)
         if not meta:
             continue
         storage_key = meta.get("storageKey")
@@ -380,6 +389,17 @@ def _write_question_images(archive: ZipFile, assignment: Assignment, root: str) 
             f"{root}/template/question-images/question-{question.id}{ext}",
             data,
         )
+
+
+def _parse_snapshot_image(raw_value: str | None) -> dict | None:
+    """Parse assignment snapshot image metadata."""
+    if not raw_value:
+        return None
+    try:
+        payload = json.loads(raw_value)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def _write_submission_payloads(

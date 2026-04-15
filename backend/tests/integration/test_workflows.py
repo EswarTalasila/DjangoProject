@@ -5,8 +5,6 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from assignment_templates.models import Question
-
 
 def login(client: APIClient, username: str, password: str) -> dict:
     response = client.post(
@@ -70,9 +68,6 @@ class TestWorkflows:
         )
         assert assignment_template_response.status_code == 201
         assignment_template_id = assignment_template_response.json()["id"]
-        question = Question.objects.filter(assignment_template_id=assignment_template_id).first()
-        assert question is not None
-
         step("Admin creates teacher")
         teacher_payload = {
             "email": "teacher@example.com",
@@ -120,6 +115,11 @@ class TestWorkflows:
         )
         assert assignment_response.status_code == 201
         assignment_id = assignment_response.json()["id"]
+        assignment_content_response = teacher_client.get(
+            f"/api/v1/assignments/{assignment_id}/template"
+        )
+        assert assignment_content_response.status_code == 200
+        assignment_question_id = assignment_content_response.json()["questions"][0]["id"]
 
         student_client = APIClient()
         step("Student login")
@@ -136,7 +136,7 @@ class TestWorkflows:
             {
                 "answers": [
                     {
-                        "questionId": question.id,
+                        "questionId": assignment_question_id,
                         "type": "SHORT_ANSWER",
                         "data": {"text": "Draft"},
                     }
@@ -156,7 +156,7 @@ class TestWorkflows:
                 "status": "SUBMITTED",
                 "answers": [
                     {
-                        "questionId": question.id,
+                        "questionId": assignment_question_id,
                         "type": "SHORT_ANSWER",
                         "data": {"text": "Final"},
                     }

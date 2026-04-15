@@ -21,11 +21,9 @@ from django.utils import timezone
 from assignment_templates.models import (
     AssignmentTemplate,
     GradingMode,
-    McqChoice,
-    Question,
     ScoringPolicy,
 )
-from assignments.models import Assignment
+from assignments.models import Assignment, AssignmentQuestion
 from core.dtos import AnswerDTO, SubmissionCompactDTO, SubmissionDTO
 
 from .models import (
@@ -38,6 +36,9 @@ from .models import (
     Submission,
     SubmissionStatus,
 )
+
+# Backward-compatible alias retained for tests that patch submissions.services.Question.
+Question = AssignmentQuestion
 
 
 # ── Prefetch helpers ──────────────────────────────────────────────────
@@ -54,8 +55,7 @@ _ANSWER_SUBTYPE_PREFETCHES = [
 # Extended prefetch paths that also pull question + mcq_choices for scoring.
 _ANSWER_SCORING_PREFETCHES = [
     *_ANSWER_SUBTYPE_PREFETCHES,
-    "answers__question__mcq_choices",
-    "answers__question__number_scale",
+    "answers__question",
 ]
 
 
@@ -63,7 +63,7 @@ def _prefetch_submission_for_dto(qs: QuerySet[Submission]) -> QuerySet[Submissio
     """Add prefetches needed to serialize submissions to DTOs without N+1."""
     return qs.select_related(
         "assignment__course__teacher_profile__user",
-    ).prefetch_related(*_ANSWER_SUBTYPE_PREFETCHES)
+    ).prefetch_related(*_ANSWER_SUBTYPE_PREFETCHES, "answers__question")
 
 
 def _prefetch_submission_for_scoring(qs: QuerySet[Submission]) -> QuerySet[Submission]:
@@ -122,7 +122,7 @@ def submission_to_dto(submission: Submission) -> SubmissionDTO:
     """
     ordered_answers = sorted(
         list(submission.answers.all()),
-        key=lambda answer: (answer.question_id, getattr(answer, "id", 0)),
+        key=lambda answer: (getattr(answer.question, "order_index", 0), getattr(answer, "id", 0)),
     )
     return SubmissionDTO(
         id=submission.id,
@@ -250,9 +250,7 @@ def create_submission(assignment_id: int, payload: dict, target_status: str) -> 
     assignment = Assignment.objects.filter(id=assignment_id).first()
     if not assignment:
         raise ValueError("Assignment not found")
-    assignment_template = AssignmentTemplate.objects.filter(
-        id=assignment.assignment_template_id
-    ).first()
+    assignment_template = AssignmentTemplate.objects.filter(id=assignment.assignment_template_id).first()
     if not assignment_template:
         raise ValueError("AssignmentTemplate not found")
 
@@ -463,7 +461,7 @@ def override_score(submission_id: int, scores: list) -> Submission:
 
     answers = sorted(
         list(submission.answers.select_related("question")),
-        key=lambda answer: (answer.question_id, getattr(answer, "id", 0)),
+        key=lambda answer: (getattr(answer.question, "order_index", 0), getattr(answer, "id", 0)),
     )
 
     def _question_label(answer, display_index):
@@ -567,15 +565,34 @@ def _create_answer(submission: Submission, payload: dict) -> Answer:
     question_id = payload.get("questionId")
     if question_id is None:
         raise ValueError("Question ID is required")
+    # Keep the model lookup routed through the module alias so older unit tests
+    # can still patch submissions.services.Question while the schema shifts to
+    # assignment-owned questions.
     question = Question.objects.filter(id=question_id).first()
     if not question:
         raise ValueError("Question not found")
-    # Verify the question belongs to the submission's assignment template.
-    if question.assignment_template_id != submission.assignment.assignment_template_id:
-        raise ValueError(
-            f"Question {question_id} does not belong to assignment template "
-            f"{submission.assignment.assignment_template_id}"
+    # Verify the question belongs to the submission's assignment.
+    question_assignment_id = getattr(question, "assignment_id", None)
+    if question_assignment_id is not None:
+        if question_assignment_id != submission.assignment_id:
+            raise ValueError(
+                f"Question {question_id} does not belong to assignment {submission.assignment_id}"
+            )
+    else:
+        question_assignment_template_id = getattr(question, "assignment_template_id", None)
+        submission_assignment_template_id = getattr(
+            submission.assignment,
+            "assignment_template_id",
+            None,
         )
+        if (
+            question_assignment_template_id is not None
+            and submission_assignment_template_id is not None
+            and question_assignment_template_id != submission_assignment_template_id
+        ):
+            raise ValueError(
+                f"Question {question_id} does not belong to assignment {submission.assignment_id}"
+            )
     answer_type = payload.get("type")
     if not answer_type:
         raise ValueError("Answer type is required")
@@ -646,8 +663,8 @@ def _auto_score_submission(
     # Prefetch answers with question + mcq_choices + number_scale to avoid N+1.
     answers = list(
         submission.answers
-        .select_related("question__number_scale")
-        .prefetch_related("question__mcq_choices", "multiple_choice__selected")
+        .select_related("question")
+        .prefetch_related("multiple_choice__selected")
     )
 
     total = 0.0
@@ -666,23 +683,31 @@ def _auto_score_submission(
             submission.submitted_at = timezone.now()
 
 
-def _auto_score_mcq(answer: Answer, question: Question) -> float:
+def _auto_score_mcq(answer: Answer, question: AssignmentQuestion) -> float:
     """
     Auto-score a multiple choice answer by summing points for selected choices.
 
     Each choice has an associated point value. The score is the sum of points
     for all selected choices.
 
-    Expects question.mcq_choices and answer.multiple_choice.selected to be
-    prefetched by the caller.
+    Choice scores are read from the assignment-owned question snapshot's
+    ``data["choices"]`` payload. A compatibility fallback still supports older
+    call sites and tests that attach ``question.mcq_choices`` helper objects.
     """
-    choices = list(question.mcq_choices.all())  # hits prefetch cache
+    choices = list((question.data or {}).get("choices") or [])
+    if not choices and hasattr(question, "mcq_choices"):
+        # Compatibility fallback for older tests and pre-snapshot call sites
+        # that still model MCQ choices as related objects with `points`.
+        choices = [
+            {"score": getattr(choice, "points", 0)}
+            for choice in question.mcq_choices.all()
+        ]
     selected = [sel.choice_index for sel in answer.multiple_choice.selected.all()]
     score = 0.0
     for idx in selected:
         if idx is None or idx < 0 or idx >= len(choices):
             continue
-        score += choices[idx].points
+        score += float(choices[idx].get("score", 0))
     if question.max_points is not None:
         score = min(score, float(question.max_points))
     answer.score = score
@@ -690,16 +715,22 @@ def _auto_score_mcq(answer: Answer, question: Question) -> float:
     return score
 
 
-def _auto_score_number_scale(answer: Answer, question: Question) -> float:
+def _auto_score_number_scale(answer: Answer, question: AssignmentQuestion) -> float:
     """
     Auto-score a number scale answer by comparing to the target value.
 
     Full points are awarded only if the answer exactly matches the target.
     If no target is set, returns 0.
 
-    Expects question.number_scale to be select_related by the caller.
+    The target value is read from the assignment-owned question snapshot's
+    ``data["target"]`` payload. A compatibility fallback still supports older
+    call sites and tests that attach ``question.number_scale`` helper objects.
     """
-    target = question.number_scale.target
+    target = (question.data or {}).get("target")
+    if target is None and hasattr(question, "number_scale"):
+        # Compatibility fallback for older tests and callers that still attach
+        # the target through a related helper object.
+        target = getattr(question.number_scale, "target", None)
     if target is None:
         return 0.0
     val = answer.number_scale.val

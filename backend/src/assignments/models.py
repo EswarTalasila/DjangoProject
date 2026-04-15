@@ -28,7 +28,14 @@ Note:
 from django.db import models
 
 from accounts.models import User
-from assignment_templates.models import AssignmentTemplate
+from assignment_templates.models import (
+    AssignmentTemplate,
+    AssignmentTemplateQuestionGroup,
+    GradingStrategy,
+    Question,
+    QuestionKind,
+)
+from core.media.models import ImageAsset
 from courses.models import Course
 
 
@@ -169,6 +176,174 @@ class Assignment(models.Model):
     def __str__(self):
         """Return a readable string representation."""
         return f"Assignment({self.id})"
+
+
+class AssignmentContentOrigin(models.TextChoices):
+    """Source provenance for assignment-owned content rows."""
+
+    TEMPLATE = "TEMPLATE", "Template"
+    TEACHER_ADDITION = "TEACHER_ADDITION", "Teacher Addition"
+
+
+class AssignmentQuestionGroup(models.Model):
+    """Assignment-owned snapshot of a template question group or teacher group."""
+
+    assignment = models.ForeignKey(
+        Assignment,
+        on_delete=models.CASCADE,
+        related_name="question_groups",
+    )
+    source_template_group = models.ForeignKey(
+        AssignmentTemplateQuestionGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assignment_group_snapshots",
+    )
+    name = models.CharField(max_length=255)
+    order_index = models.IntegerField(default=0)
+    origin = models.CharField(
+        max_length=32,
+        choices=AssignmentContentOrigin.choices,
+        default=AssignmentContentOrigin.TEMPLATE,
+    )
+    locked_from_source = models.BooleanField(default=False)
+
+    class Meta:
+        """Database table configuration for AssignmentQuestionGroup."""
+
+        db_table = "assignment_question_groups"
+        indexes = [
+            models.Index(fields=["assignment", "order_index"], name="idx_asgn_qgroup_order"),
+        ]
+
+    def __str__(self):
+        """Return a readable string representation."""
+        return f"AssignmentQuestionGroup({self.assignment_id}:{self.name})"
+
+
+class AssignmentQuestion(models.Model):
+    """Assignment-owned question snapshot used by submissions and archive/export flows."""
+
+    assignment = models.ForeignKey(
+        Assignment,
+        on_delete=models.CASCADE,
+        related_name="questions",
+    )
+    source_template_question = models.ForeignKey(
+        Question,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assignment_question_snapshots",
+    )
+    question_group = models.ForeignKey(
+        AssignmentQuestionGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="questions",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assignment_questions_created",
+    )
+    kind = models.CharField(max_length=255, choices=QuestionKind.choices, db_column="type")
+    prompt = models.TextField()
+    max_points = models.FloatField()
+    auto_gradable = models.BooleanField(default=False)
+    graded = models.BooleanField(default=False)
+    image = models.TextField(null=True, blank=True)
+    image_asset = models.ForeignKey(
+        ImageAsset,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assignment_questions",
+    )
+    grading_strategy = models.CharField(
+        max_length=10,
+        choices=GradingStrategy.choices,
+        default=GradingStrategy.AUTO,
+    )
+    data = models.JSONField(default=dict, blank=True)
+    order_index = models.IntegerField(default=0)
+    origin = models.CharField(
+        max_length=32,
+        choices=AssignmentContentOrigin.choices,
+        default=AssignmentContentOrigin.TEMPLATE,
+    )
+    locked_from_source = models.BooleanField(default=False)
+
+    class Meta:
+        """Database table configuration for AssignmentQuestion."""
+
+        db_table = "assignment_questions"
+        indexes = [
+            models.Index(fields=["assignment", "order_index"], name="idx_asgn_question_order"),
+            models.Index(fields=["origin"], name="idx_asgn_question_origin"),
+        ]
+
+    @property
+    def question_type(self) -> str:
+        """Compatibility alias matching the template Question API."""
+        return self.kind
+
+    @property
+    def assignment_template_id(self) -> int | None:
+        """Compatibility alias for legacy code and tests still keyed to template ownership."""
+        return getattr(self.assignment, "assignment_template_id", None)
+
+    @property
+    def assignment_template(self):
+        """Compatibility alias exposing the linked source template through the assignment."""
+        return getattr(self.assignment, "assignment_template", None)
+
+    def __str__(self):
+        """Return a readable string representation."""
+        return f"AssignmentQuestion({self.assignment_id}:{self.kind})"
+
+
+class AssignmentTeacherCriterion(models.Model):
+    """Teacher-authored rubric criteria layered on top of the researcher template."""
+
+    assignment = models.ForeignKey(
+        Assignment,
+        on_delete=models.CASCADE,
+        related_name="teacher_criteria",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assignment_teacher_criteria_created",
+    )
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, default="")
+    weight = models.FloatField(default=1.0)
+    order_index = models.IntegerField(default=0)
+
+    class Meta:
+        """Database table configuration for AssignmentTeacherCriterion."""
+
+        db_table = "assignment_teacher_criteria"
+        indexes = [
+            models.Index(fields=["assignment", "order_index"], name="idx_asgn_criterion_order"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(weight__gt=0),
+                name="ck_assignment_teacher_criterion_weight_positive",
+            )
+        ]
+
+    def __str__(self):
+        """Return a readable string representation."""
+        return f"AssignmentTeacherCriterion({self.assignment_id}:{self.title})"
 
 
 class AssignmentArchiveArtifact(models.Model):

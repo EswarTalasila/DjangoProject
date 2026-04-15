@@ -33,7 +33,7 @@ from django.db import models
 
 from accounts.models import User
 from assignment_templates.models import Question
-from assignments.models import Assignment
+from assignments.models import Assignment, AssignmentQuestion
 
 
 class SubmissionStatus(models.TextChoices):
@@ -178,7 +178,10 @@ class Answer(models.Model):
 
     # The question being answered
     question = models.ForeignKey(
-        Question, on_delete=models.CASCADE, db_column="question_id", related_name="answers"
+        AssignmentQuestion,
+        on_delete=models.CASCADE,
+        db_column="question_id",
+        related_name="answers",
     )
 
     # Parent submission containing this answer

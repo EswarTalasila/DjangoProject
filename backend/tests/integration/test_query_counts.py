@@ -36,6 +36,7 @@ from submissions.models import (
     SubmissionStatus,
 )
 from tests.factories import UserFactory
+from assignments.models import AssignmentQuestion
 
 pytestmark = [pytest.mark.django_db, pytest.mark.integration]
 
@@ -109,10 +110,30 @@ def _create_submission_with_answers(assignment, student, questions):
         status=SubmissionStatus.SUBMITTED,
     )
     for q in questions:
+        assignment_question = AssignmentQuestion.objects.filter(
+            assignment=assignment,
+            source_template_question=q,
+        ).first()
+        if assignment_question is None:
+            assignment_question = AssignmentQuestion.objects.create(
+                assignment=assignment,
+                source_template_question=q,
+                created_by=assignment.created_by,
+                kind=q.kind,
+                    prompt=q.prompt,
+                    max_points=q.max_points,
+                    auto_gradable=q.auto_gradable,
+                    graded=q.graded,
+                    grading_strategy=getattr(q, "grading_strategy", "AUTO"),
+                    data=getattr(q, "data", {}) or {},
+                    order_index=getattr(q, "order_index", 0),
+                    origin="TEMPLATE",
+                    locked_from_source=True,
+                )
         if q.kind == QuestionKind.MULTIPLE_CHOICE:
             ans = Answer.objects.create(
                 submission=sub,
-                question=q,
+                question=assignment_question,
                 answer_type=AnswerType.MULTIPLE_CHOICE,
             )
             mc = MultipleChoiceAnswer.objects.create(answer=ans)
@@ -121,14 +142,14 @@ def _create_submission_with_answers(assignment, student, questions):
         elif q.kind == QuestionKind.SHORT_ANSWER:
             ans = Answer.objects.create(
                 submission=sub,
-                question=q,
+                question=assignment_question,
                 answer_type=AnswerType.SHORT_ANSWER,
             )
             ShortAnswerAnswer.objects.create(answer=ans, text="answer text")
         elif q.kind == QuestionKind.NUMBER_SCALE:
             ans = Answer.objects.create(
                 submission=sub,
-                question=q,
+                question=assignment_question,
                 answer_type=AnswerType.NUMBER_SCALE,
             )
             NumberScaleAnswer.objects.create(answer=ans, val=5)
@@ -181,11 +202,12 @@ class TestSubmissionDtoQueryCount:
             s = get_submission_for_dto(sub.id)
             submission_to_dto(s)
 
-        # One query to fetch submission + 4 prefetch queries
-        # (answers, mc_answers+selected, short_answers, number_scale_answers).
-        # The exact count may vary slightly, but should NOT scale with N.
-        assert len(ctx.captured_queries) <= 8, (
-            f"Expected <= 8 queries for submission DTO, got {len(ctx.captured_queries)}:\n"
+        # One query to fetch submission plus answer/question subtype prefetches.
+        # Assignment-owned questions add one extra constant query versus the
+        # older template-backed model, but the count must still stay flat as N
+        # grows.
+        assert len(ctx.captured_queries) <= 9, (
+            f"Expected <= 9 queries for submission DTO, got {len(ctx.captured_queries)}:\n"
             + "\n".join(q["sql"][:120] for q in ctx.captured_queries)
         )
 

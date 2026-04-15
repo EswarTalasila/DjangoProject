@@ -4,7 +4,7 @@ from django.urls import path
 
 from submissions import views as submission_views
 
-from . import views
+from . import image_views, views
 
 urlpatterns = [
     path("", views.create, name="assignments-create"),
@@ -13,6 +13,36 @@ urlpatterns = [
         "<int:assignment_id>/template",
         views.get_assignment_template,
         name="assignments-template",
+    ),
+    path(
+        "<int:assignment_id>/questions",
+        views.create_assignment_question,
+        name="assignments-question-create",
+    ),
+    path(
+        "<int:assignment_id>/teacher-criteria",
+        views.create_assignment_teacher_criterion,
+        name="assignments-teacher-criterion-create",
+    ),
+    path(
+        "<int:assignment_id>/images",
+        views.reusable_images,
+        name="assignments-reusable-images",
+    ),
+    path(
+        "<int:assignment_id>/questions/<int:question_id>/image",
+        image_views.upload_or_delete,
+        name="assignments-question-image",
+    ),
+    path(
+        "<int:assignment_id>/questions/<int:question_id>/image/reuse",
+        image_views.reuse_image,
+        name="assignments-question-image-reuse",
+    ),
+    path(
+        "images/<path:storage_key>",
+        image_views.serve_image,
+        name="assignments-image-serve",
     ),
     path(
         "<int:assignment_id>/archive",

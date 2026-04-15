@@ -51,6 +51,7 @@ def _mock_submission(
     sub.id = id
     sub.assignment_id = assignment_id
     sub.assignment.assignment_template_id = assignment_template_id
+    sub.assignment.id = assignment_id
     sub.student_id = student_id
     sub.student = SimpleNamespace(name="Test Student", username="test-student") if student_id else None
     sub.teacher_id = teacher_id
@@ -84,6 +85,8 @@ def _mock_answer(*, answer_type, question_id=1, score=None, max_points=100.0):
     answer.question_id = question_id
     answer.score = score
     answer.question.max_points = max_points
+    answer.question.order_index = question_id
+    answer.question.prompt = ""
     return answer
 
 
@@ -103,14 +106,26 @@ def _mock_assessment(*, id=20, grading_mode=GradingMode.AUTO):
     return a
 
 
-def _mock_question(*, id=1, auto_gradable=True, max_points=5.0, assignment_template_id=20, question_type="SHORT_ANSWER"):
+def _mock_question(
+    *,
+    id=1,
+    auto_gradable=True,
+    max_points=5.0,
+    assignment_id=10,
+    assignment_template_id=20,
+    question_type="SHORT_ANSWER",
+):
     """Build a lightweight mock Question."""
     q = MagicMock()
     q.id = id
     q.auto_gradable = auto_gradable
     q.max_points = max_points
+    q.assignment_id = assignment_id
     q.assignment_template_id = assignment_template_id
     q.question_type = question_type
+    q.order_index = id
+    q.prompt = ""
+    q.data = {}
     return q
 
 

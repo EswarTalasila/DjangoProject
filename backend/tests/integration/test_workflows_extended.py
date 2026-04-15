@@ -273,7 +273,6 @@ class TestExtendedWorkflows:
         )
         assert assignment_template_response.status_code == 201
         assignment_template_id = assignment_template_response.json()["id"]
-        question_id = assignment_template_response.json()["questions"][0]["id"]
 
         step("Teacher creates courses")
         course_response = teacher_client.post(
@@ -299,6 +298,11 @@ class TestExtendedWorkflows:
         )
         assert assignment_response.status_code == 201
         assignment_id = assignment_response.json()["id"]
+        assignment_content_response = teacher_client.get(
+            f"/api/v1/assignments/{assignment_id}/template"
+        )
+        assert assignment_content_response.status_code == 200
+        question_id = assignment_content_response.json()["questions"][0]["id"]
 
         step("Teacher creates students")
         student_id, student_username = create_student(

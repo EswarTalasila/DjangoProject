@@ -24,10 +24,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import Role, User
-from assignment_templates.services import (
-    _assignment_template_with_related,
-    assignment_template_to_dto,
-)
 from core.audit import complete_audit, get_client_ip, log_audit
 from core.errors import error_response
 from core.models import AuditAction, AuditOutcome
@@ -37,19 +33,29 @@ from core.permissions import IsTeacher, IsTeacherOrAbove, has_role, primary_role
 from courses.models import Enrollment, EnrollmentStatus
 from courses.services import can_view_course
 
-from .serializers import AssignmentSerializer, AssignmentUpdateSerializer
+from .serializers import (
+    AssignmentQuestionCreateSerializer,
+    AssignmentSerializer,
+    AssignmentTeacherCriterionCreateSerializer,
+    AssignmentUpdateSerializer,
+)
 from .services import (
     ConflictError,
     ForbiddenError,
+    add_assignment_question,
+    add_assignment_teacher_criterion,
     archive_assignment,
     assignment_archive_artifact_to_dict,
+    assignment_content_to_dto,
     assignment_to_dto,
     create_assignment,
     generate_assignment_archive_artifact,
     get_assignment,
     get_assignment_archive_artifact,
+    get_assignment_with_content,
     list_by_course,
     list_for_user,
+    list_reusable_question_images,
     purge_assignment,
     restore_assignment,
     update_assignment,
@@ -258,18 +264,74 @@ def restore(request, assignment_id: int):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_assignment_template(request, assignment_id: int):
-    """Get the template attached to an assignment using assignment access rules."""
-    assignment = get_assignment(assignment_id)
+    """Get the effective assignment content snapshot using assignment access rules."""
+    assignment = get_assignment_with_content(assignment_id)
     if not assignment:
         return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
     if not _can_read_assignment(request.user, assignment):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
 
-    assignment_template = _assignment_template_with_related(assignment.assignment_template_id)
-    return Response(
-        assignment_template_to_dto(assignment_template).model_dump(),
-        status=status.HTTP_200_OK,
-    )
+    return Response(assignment_content_to_dto(assignment).model_dump(), status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_assignment_question(request, assignment_id: int):
+    """Add a teacher-authored question to an assignment-local content snapshot."""
+    assignment = get_assignment_with_content(assignment_id)
+    if not assignment:
+        return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
+    if assignment.status == "ARCHIVED":
+        return Response(
+            {"detail": "Archived assignments cannot be extended."},
+            status=status.HTTP_409_CONFLICT,
+        )
+    serializer = AssignmentQuestionCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    try:
+        question = add_assignment_question(assignment, request.user, serializer.validated_data)
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    except ValueError as exc:
+        return error_response(exc)
+    assignment = get_assignment_with_content(assignment_id)
+    return Response(assignment_content_to_dto(assignment).model_dump(), status=status.HTTP_201_CREATED)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_assignment_teacher_criterion(request, assignment_id: int):
+    """Add a teacher-authored criterion to an assignment-local rubric overlay."""
+    assignment = get_assignment_with_content(assignment_id)
+    if not assignment:
+        return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
+    if assignment.status == "ARCHIVED":
+        return Response(
+            {"detail": "Archived assignments cannot be extended."},
+            status=status.HTTP_409_CONFLICT,
+        )
+    serializer = AssignmentTeacherCriterionCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    try:
+        add_assignment_teacher_criterion(assignment, request.user, serializer.validated_data)
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    except ValueError as exc:
+        return error_response(exc)
+    assignment = get_assignment_with_content(assignment_id)
+    return Response(assignment_content_to_dto(assignment).model_dump(), status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def reusable_images(request, assignment_id: int):
+    """List reusable question images visible from the assignment context."""
+    assignment = get_assignment_with_content(assignment_id)
+    if not assignment:
+        return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
+    if not _can_read_assignment(request.user, assignment):
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+    return Response(list_reusable_question_images(assignment), status=status.HTTP_200_OK)
 
 
 @api_view(["GET", "POST"])

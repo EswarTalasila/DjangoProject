@@ -393,14 +393,14 @@ def mood_meter_summary(user, assignment: Assignment) -> dict:
     )
 
     ns_question_cfg = list(
-        assignment.assignment_template.questions.filter(kind=QuestionKind.NUMBER_SCALE)
-        .select_related("number_scale")
-        .order_by("id")[:2]
+        assignment.questions.filter(kind=QuestionKind.NUMBER_SCALE).order_by("order_index", "id")[:2]
     )
     if len(ns_question_cfg) == 2:
         row_cfg, col_cfg = ns_question_cfg
-        mid_r = (row_cfg.number_scale.min + row_cfg.number_scale.max) / 2
-        mid_c = (col_cfg.number_scale.min + col_cfg.number_scale.max) / 2
+        row_data = row_cfg.data if isinstance(row_cfg.data, dict) else {}
+        col_data = col_cfg.data if isinstance(col_cfg.data, dict) else {}
+        mid_r = ((row_data.get("min", 1)) + (row_data.get("max", 5))) / 2
+        mid_c = ((col_data.get("min", 1)) + (col_data.get("max", 5))) / 2
     else:
         # Backward-safe fallback for legacy mood-meter templates.
         mid_r, mid_c = 3, 3

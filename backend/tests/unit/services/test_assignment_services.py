@@ -292,6 +292,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
                 },
             )
 
+    @patch("assignments.services._mutations.snapshot_assignment_content")
     @patch("assignments.services._mutations._create_submissions_for_course")
     @patch("assignments.services._mutations.Assignment")
     @patch("assignments.services._mutations.can_manage_course", return_value=True)
@@ -299,7 +300,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
     @patch("assignments.services._mutations.AssignmentTemplate")
     def test_creates_course_assignment_with_submissions(
         self, mock_assignment_template_model, mock_course_model, mock_can_manage,
-        mock_assignment_model, mock_create_subs
+        mock_assignment_model, mock_create_subs, mock_snapshot
     ):
         """Creates COURSE assignment and triggers submission creation."""
         from assignments.services._mutations import create_assignment
@@ -332,9 +333,15 @@ class TestCreateAssignment(_NoopAtomicMixin):
         result = create_assignment(user, payload)
 
         assert result is fake_assignment
+        mock_snapshot.assert_called_once_with(
+            fake_assignment,
+            fake_assignment_template,
+            creator_user_id=user.id,
+        )
         mock_create_subs.assert_called_once_with(fake_assignment)
 
     @patch("assignments.services._mutations.timezone")
+    @patch("assignments.services._mutations.snapshot_assignment_content")
     @patch("assignments.services._mutations._create_submissions_for_course")
     @patch("assignments.services._mutations.Assignment")
     @patch("assignments.services._mutations.can_manage_course", return_value=True)
@@ -347,6 +354,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
         mock_can_manage,
         mock_assignment_model,
         mock_create_subs,
+        mock_snapshot,
         mock_tz,
     ):
         """Creating the first assignment stamps durable usage metadata on the template."""
@@ -552,87 +560,33 @@ class TestCreateAssignment(_NoopAtomicMixin):
 class TestCreateSubmissionsForCourse(_NoopAtomicMixin):
     """Tests for _create_submissions_for_course internal helper."""
 
-    @patch("assignments.services._mutations.AssignmentTemplate")
-    def test_skips_when_assignment_template_not_found(self, mock_assignment_template_model):
-        """Skips when assignment_template does not exist."""
+    def test_skips_when_assignment_has_no_course_id(self):
+        """Skips submission creation when assignment has no course."""
         from assignments.services._mutations import _create_submissions_for_course
 
-        mock_assignment_template_model.objects.filter.return_value.first.return_value = None
-        assignment = SimpleNamespace(assignment_template_id=999)
+        assignment = SimpleNamespace(course_id=None)
 
         # Should not raise
         _create_submissions_for_course(assignment)
 
-    @patch("assignments.services._mutations.AssignmentTemplate")
-    def test_skips_when_no_course_id_is_none(self, mock_assignment_template_model):
-        """Skips submission creation when assignment has no course_id."""
-        from assignments.services._mutations import _create_submissions_for_course
-
-        fake_assignment_template = MagicMock()
-        mock_assignment_template_model.objects.filter.return_value.first.return_value = (
-            fake_assignment_template
-        )
-        assignment = SimpleNamespace(assignment_template_id=1, course_id=None)
-
-        _create_submissions_for_course(assignment)
-
-    @patch("assignments.services._mutations.AssignmentTemplate")
-    def test_skips_when_assignment_template_not_found_returns_early(
-        self,
-        mock_assignment_template_model,
-    ):
-        """Skips when assignment_template does not exist (returns early)."""
-        from assignments.services._mutations import _create_submissions_for_course
-
-        mock_assignment_template_model.objects.filter.return_value.first.return_value = None
-        assignment = SimpleNamespace(assignment_template_id=999)
-
-        # Should not raise
-        _create_submissions_for_course(assignment)
-
-    @patch("assignments.services._mutations.NumberScaleAnswer")
-    @patch("assignments.services._mutations.ShortAnswerAnswer")
-    @patch("assignments.services._mutations.MultipleChoiceAnswer")
-    @patch("assignments.services._mutations.Answer")
+    @patch("assignments.services._mutations.provision_submission_answers")
     @patch("assignments.services._mutations.Submission")
     @patch("assignments.services._mutations.Enrollment")
-    @patch("assignments.services._mutations.AssignmentTemplate")
-    @patch("assignments.services._mutations.answer_type_from_question")
     def test_creates_submissions_for_enrolled_students(
         self,
-        mock_answer_type,
-        mock_assignment_template_model,
         mock_enrollment_model,
         mock_submission_model,
-        mock_answer_model,
-        mock_mca,
-        mock_saa,
-        mock_nsa,
+        mock_provision,
     ):
-        """Creates submissions with answers for each enrolled student."""
-        from assignment_templates.models import QuestionKind
+        """Creates submissions and provisions placeholder answers for each student."""
         from assignments.services._mutations import _create_submissions_for_course
 
-        mc_question = SimpleNamespace(kind=QuestionKind.MULTIPLE_CHOICE)
-        sa_question = SimpleNamespace(kind=QuestionKind.SHORT_ANSWER)
-        ns_question = SimpleNamespace(kind=QuestionKind.NUMBER_SCALE)
-
-        fake_assignment_template = MagicMock()
-        fake_assignment_template.questions.all.return_value = [
-            mc_question, sa_question, ns_question
-        ]
-        mock_assignment_template_model.objects.filter.return_value.first.return_value = (
-            fake_assignment_template
-        )
         mock_enrollment_model.objects.filter.return_value.values_list.return_value = [
             100, 200
         ]
         mock_submission_model.objects.filter.return_value.exists.return_value = False
         fake_submission = SimpleNamespace(id=1)
         mock_submission_model.objects.create.return_value = fake_submission
-        mock_answer_type.return_value = "MC"
-        fake_answer = SimpleNamespace(id=10)
-        mock_answer_model.objects.create.return_value = fake_answer
 
         assignment = SimpleNamespace(id=1, assignment_template_id=5, course_id=10)
 
@@ -640,25 +594,18 @@ class TestCreateSubmissionsForCourse(_NoopAtomicMixin):
 
         # 2 students, each gets 1 submission
         assert mock_submission_model.objects.create.call_count == 2
-        # 2 students x 3 questions = 6 answers
-        assert mock_answer_model.objects.create.call_count == 6
+        assert mock_provision.call_count == 2
 
     @patch("assignments.services._mutations.Submission")
     @patch("assignments.services._mutations.Enrollment")
-    @patch("assignments.services._mutations.AssignmentTemplate")
     def test_skips_existing_submissions(
         self,
-        mock_assessment_model,
         mock_enrollment_model,
         mock_submission_model,
     ):
         """Skips submission creation when submission already exists for student."""
         from assignments.services._mutations import _create_submissions_for_course
 
-        fake_assessment = MagicMock()
-        mock_assessment_model.objects.filter.return_value.first.return_value = (
-            fake_assessment
-        )
         mock_enrollment_model.objects.filter.return_value.values_list.return_value = [100]
         mock_submission_model.objects.filter.return_value.exists.return_value = True
 

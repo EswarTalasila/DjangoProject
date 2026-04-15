@@ -94,6 +94,10 @@ class QuestionDTO(BaseModel):
     groupId: int | None = None
     rubricId: int | None = None
     gradingStrategy: str = "AUTO"
+    orderIndex: int = 0
+    origin: str | None = None
+    lockedFromSource: bool = False
+    sourceQuestionId: int | None = None
 
 
 class QuestionGroupDTO(BaseModel):
@@ -120,6 +124,38 @@ class AssignmentTemplateDTO(BaseModel):
     rubricId: int | None = None
     questions: list[QuestionDTO]
     questionGroups: list[QuestionGroupDTO] = []
+
+
+class TeacherCriterionDTO(BaseModel):
+    """Teacher-authored assignment-local criterion layered onto a template rubric."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    description: str
+    weight: float
+    orderIndex: int
+
+
+class AssignmentContentDTO(BaseModel):
+    """Effective assignment content shown to teachers and students."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    assignmentId: int
+    assignmentTemplateId: int
+    assignmentTemplateTitle: str
+    category: str | None
+    gradingMode: str
+    scoringPolicy: str = "STANDARD"
+    submissionMode: str = "DIGITAL"
+    rubricId: int | None = None
+    questions: list[QuestionDTO]
+    questionGroups: list[QuestionGroupDTO] = []
+    teacherCriteria: list[TeacherCriterionDTO] = []
 
 
 # =============================================================================
@@ -241,4 +277,3 @@ class SubmissionImageDTO(BaseModel):
     uploadedByUserId: int | None
     status: str
     createdAt: datetime
-
