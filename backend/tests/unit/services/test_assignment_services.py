@@ -309,6 +309,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
         fake_assignment_template.id = 5
         fake_assignment_template.title = "Test"
         fake_assignment_template.status = AssignmentTemplateStatus.ACTIVE
+        fake_assignment_template.has_been_used = False
         fake_assignment_template.used_at = None
         mock_assignment_template_model.objects.filter.return_value.first.return_value = (
             fake_assignment_template
@@ -348,7 +349,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
         mock_create_subs,
         mock_tz,
     ):
-        """Creating the first assignment stamps the template with a durable used_at marker."""
+        """Creating the first assignment stamps durable usage metadata on the template."""
         from assignments.services._mutations import create_assignment
         from assignment_templates.models import AssignmentTemplateStatus
 
@@ -359,6 +360,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
         fake_assignment_template.id = 5
         fake_assignment_template.title = "Test"
         fake_assignment_template.status = AssignmentTemplateStatus.ACTIVE
+        fake_assignment_template.has_been_used = False
         fake_assignment_template.used_at = None
         mock_assignment_template_model.objects.filter.return_value.first.return_value = (
             fake_assignment_template
@@ -380,8 +382,11 @@ class TestCreateAssignment(_NoopAtomicMixin):
 
         create_assignment(user, payload)
 
+        assert fake_assignment_template.has_been_used is True
         assert fake_assignment_template.used_at == now
-        fake_assignment_template.save.assert_called_once_with(update_fields=["used_at"])
+        fake_assignment_template.save.assert_called_once_with(
+            update_fields=["has_been_used", "used_at"]
+        )
 
     @patch("assignments.services._mutations._create_submissions_for_course")
     @patch("assignments.services._mutations.Assignment")
@@ -404,6 +409,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
         fake_assignment_template.id = 5
         fake_assignment_template.title = "Test"
         fake_assignment_template.status = AssignmentTemplateStatus.ACTIVE
+        fake_assignment_template.has_been_used = False
         fake_assignment_template.used_at = None
         mock_assignment_template_model.objects.filter.return_value.first.return_value = (
             fake_assignment_template
@@ -424,6 +430,8 @@ class TestCreateAssignment(_NoopAtomicMixin):
         with pytest.raises(RuntimeError, match="boom"):
             create_assignment(user, payload)
 
+        assert fake_assignment_template.has_been_used is False
+        assert fake_assignment_template.used_at is None
         fake_assignment_template.save.assert_not_called()
 
     def test_raises_when_open_at_after_due_at(self):

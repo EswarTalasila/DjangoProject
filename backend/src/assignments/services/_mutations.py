@@ -88,9 +88,15 @@ def create_assignment(creator_user, payload: dict) -> Assignment:
         status=AssignmentStatus.ACTIVE,
     )
 
+    update_fields: list[str] = []
+    if not getattr(assignment_template, "has_been_used", False):
+        assignment_template.has_been_used = True
+        update_fields.append("has_been_used")
     if assignment_template.used_at is None:
         assignment_template.used_at = timezone.now()
-        assignment_template.save(update_fields=["used_at"])
+        update_fields.append("used_at")
+    if update_fields:
+        assignment_template.save(update_fields=update_fields)
 
     if assignment.course_id:
         _create_submissions_for_course(assignment)

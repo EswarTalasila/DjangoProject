@@ -93,6 +93,10 @@ class AssignmentTemplate(models.Model):
         blank=True,
         related_name="restored_assignment_templates",
     )
+    has_been_used = models.BooleanField(
+        default=False,
+        help_text="Whether any assignment has ever been created from this template.",
+    )
     used_at = models.DateTimeField(
         null=True,
         blank=True,
@@ -103,6 +107,7 @@ class AssignmentTemplate(models.Model):
         db_table = "assignment_templates"
         indexes = [
             models.Index(fields=["status"], name="idx_assignment_template_status"),
+            models.Index(fields=["has_been_used"], name="idx_atmpl_used_flag"),
             models.Index(fields=["used_at"], name="idx_atmpl_used_at"),
         ]
 

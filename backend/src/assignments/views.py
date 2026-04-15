@@ -38,7 +38,6 @@ from .services import (
     archive_assignment,
     assignment_to_dto,
     create_assignment,
-    delete_assignment,
     get_assignment,
     list_by_course,
     list_for_user,
@@ -130,11 +129,15 @@ def detail(request, assignment_id: int):
         complete_audit(audit_id, AuditOutcome.SUCCESS)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    try:
-        delete_assignment(assignment, caller_user=request.user)
-    except ForbiddenError as exc:
-        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
-    return Response(status=status.HTTP_204_NO_CONTENT)
+    if not request.user.is_staff and assignment.created_by_id != request.user.id:
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+    detail = (
+        "Assignment is archived. Use DELETE ?purge=true to permanently remove it."
+        if assignment.status == "ARCHIVED"
+        else "Use POST /archive to archive first. Permanent deletion requires DELETE ?purge=true on an archived assignment."
+    )
+    return Response({"detail": detail}, status=status.HTTP_409_CONFLICT)
 
 
 @api_view(["GET"])

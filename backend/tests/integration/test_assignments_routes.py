@@ -657,7 +657,7 @@ class TestDeleteAssignment:
     def test_ASGN_UC_06_TEACHER_CREATOR(
         self, api_client, teacher_user, student_user, admin_user
     ):
-        """Creator can DELETE assignment with NOT_STARTED submissions."""
+        """Creator cannot plain-delete an assignment and is directed to archive-first flow."""
         assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         assignment = _make_assignment(assignment_template, course, teacher_user)
@@ -667,8 +667,10 @@ class TestDeleteAssignment:
 
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.delete(f"/api/v1/assignments/{assignment.id}")
-        assert resp.status_code == 204
-        assert not Assignment.objects.filter(id=assignment.id).exists()
+        assert resp.status_code == 409
+        assert "archive" in resp.json()["detail"].lower()
+        assert Assignment.objects.filter(id=assignment.id).exists()
+        assert Submission.objects.filter(assignment=assignment, student=student_user).exists()
 
     def test_ASGN_UC_06_E2_not_creator(self, api_client, teacher_user, admin_user):
         """Non-creator teacher cannot delete (403)."""
@@ -684,7 +686,7 @@ class TestDeleteAssignment:
     def test_ASGN_UC_06_E3_submissions_progressed(
         self, api_client, teacher_user, student_user, admin_user
     ):
-        """Creator can DELETE assignment even with progressed submissions."""
+        """Plain DELETE remains blocked even when submissions have progressed."""
         assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         assignment = _make_assignment(assignment_template, course, teacher_user)
@@ -694,19 +696,39 @@ class TestDeleteAssignment:
 
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.delete(f"/api/v1/assignments/{assignment.id}")
-        assert resp.status_code == 204
-        assert not Assignment.objects.filter(id=assignment.id).exists()
+        assert resp.status_code == 409
+        assert Assignment.objects.filter(id=assignment.id).exists()
+        assert Submission.objects.filter(assignment=assignment, student=student_user).exists()
 
     def test_ASGN_CN_06_creator_can_delete(self, api_client, teacher_user, admin_user):
-        """Creator can DELETE an assignment."""
+        """Creator must archive first instead of plain-deleting an assignment."""
         assignment_template = _make_assignment_template(admin_user)
         course = _make_course(teacher_user)
         assignment = _make_assignment(assignment_template, course, teacher_user)
 
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.delete(f"/api/v1/assignments/{assignment.id}")
-        assert resp.status_code == 204
-        assert not Assignment.objects.filter(id=assignment.id).exists()
+        assert resp.status_code == 409
+        assert Assignment.objects.filter(id=assignment.id).exists()
+
+    def test_ASGN_CN_06_archived_assignment_still_requires_purge_flag(
+        self, api_client, teacher_user, admin_user
+    ):
+        """Archived assignments still require ?purge=true for permanent removal."""
+        assignment_template = _make_assignment_template(admin_user)
+        course = _make_course(teacher_user)
+        assignment = _make_assignment(
+            assignment_template,
+            course,
+            teacher_user,
+            status=AssignmentStatus.ARCHIVED,
+        )
+
+        api_client.force_authenticate(user=teacher_user)
+        resp = api_client.delete(f"/api/v1/assignments/{assignment.id}")
+        assert resp.status_code == 409
+        assert "purge=true" in resp.json()["detail"].lower()
+        assert Assignment.objects.filter(id=assignment.id).exists()
 
 
 # ===========================================================================

@@ -348,6 +348,41 @@ class TestATMPL_UC_05:
         assert AssignmentTemplate.objects.filter(id=a_referenced.id).exists()
         assert AssignmentTemplate.objects.filter(id=a_free.id).exists()
 
+    def test_ATMPL_CN_05_real_assignment_usage_survives_assignment_removal(
+        self, api_client, admin_user, teacher_user
+    ):
+        """Real assignment creation stamps historical usage even after the assignment row is removed."""
+        template = _make_assignment_template(admin_user, title="Historically Used")
+        course = Course.objects.create(
+            name="Usage Course",
+            teacher_profile=teacher_user.teacher_profile,
+        )
+
+        api_client.force_authenticate(user=teacher_user)
+        create_resp = api_client.post(
+            "/api/v1/assignments/",
+            {
+                "assignmentTemplateId": template.id,
+                "audienceType": "COURSE",
+                "courseId": course.id,
+                "openAt": timezone.now().isoformat(),
+            },
+            format="json",
+        )
+        assert create_resp.status_code == 201
+
+        created_assignment = Assignment.objects.get(id=create_resp.json()["id"])
+        created_assignment.delete()
+
+        template.refresh_from_db()
+        assert template.has_been_used is True
+        assert template.used_at is not None
+
+        api_client.force_authenticate(user=admin_user)
+        delete_resp = api_client.delete(f"/api/v1/assignment-templates/{template.id}")
+        assert delete_resp.status_code == 409
+        assert AssignmentTemplate.objects.filter(id=template.id).exists()
+
 
 # ===========================================================================
 # ATMPL-CN-02 — No Student Access (additional)

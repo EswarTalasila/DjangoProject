@@ -323,6 +323,7 @@ class TestUpdateAssignmentTemplate(_NoopAtomicMixin):
         assignment_template.grading_mode = GradingMode.AUTO
         assignment_template.scoring_policy = "STANDARD"
         assignment_template.rubric_id = None
+        assignment_template.has_been_used = False
         assignment_template.used_at = None
 
         payload = {
@@ -356,6 +357,7 @@ class TestUpdateAssignmentTemplate(_NoopAtomicMixin):
 
         assignment_template = MagicMock()
         assignment_template.status = "ACTIVE"
+        assignment_template.has_been_used = False
         assignment_template.used_at = "2026-04-15T00:00:00Z"
 
         with pytest.raises(AssignmentTemplateReferencedError, match="used"):
@@ -380,6 +382,7 @@ class TestUpdateAssignmentTemplate(_NoopAtomicMixin):
         assignment_template.grading_mode = GradingMode.AUTO
         assignment_template.scoring_policy = "STANDARD"
         assignment_template.rubric_id = None
+        assignment_template.has_been_used = False
         assignment_template.used_at = None
 
         payload = {"category": "New"}
@@ -406,6 +409,7 @@ class TestDeleteAssignmentTemplate(_NoopAtomicMixin):
 
         mock_assignment_model.objects.filter.return_value.exists.return_value = False
         assignment_template = MagicMock()
+        assignment_template.has_been_used = False
         assignment_template.used_at = None
 
         delete_assignment_template(assignment_template)
@@ -437,7 +441,23 @@ class TestDeleteAssignmentTemplate(_NoopAtomicMixin):
 
         mock_assignment_model.objects.filter.return_value.exists.return_value = False
         assignment_template = MagicMock()
+        assignment_template.has_been_used = False
         assignment_template.used_at = "2026-04-15T00:00:00Z"
+
+        with pytest.raises(AssignmentTemplateReferencedError, match="used"):
+            delete_assignment_template(assignment_template)
+
+    @patch("assignment_templates.services.Assignment")
+    def test_raises_when_assignment_template_has_backfilled_usage_flag(
+        self, mock_assignment_model
+    ):
+        """Backfilled usage flag alone is enough to keep templates archive-first."""
+        from assignment_templates.services import AssignmentTemplateReferencedError, delete_assignment_template
+
+        mock_assignment_model.objects.filter.return_value.exists.return_value = False
+        assignment_template = MagicMock()
+        assignment_template.has_been_used = True
+        assignment_template.used_at = None
 
         with pytest.raises(AssignmentTemplateReferencedError, match="used"):
             delete_assignment_template(assignment_template)

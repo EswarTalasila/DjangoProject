@@ -35,7 +35,8 @@ class AssignmentTemplateReferencedError(Exception):
 
 def _assignment_template_has_usage(assignment_template: AssignmentTemplate) -> bool:
     """Return True when a template has ever been used by an assignment."""
-    return bool(assignment_template.used_at) or Assignment.objects.filter(
+    used_flag = getattr(assignment_template, "has_been_used", False) is True
+    return used_flag or bool(assignment_template.used_at) or Assignment.objects.filter(
         assignment_template=assignment_template
     ).exists()
 
