@@ -18,6 +18,6 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="assignmenttemplate",
-            index=models.Index(fields=["used_at"], name="idx_assignment_template_used_at"),
+            index=models.Index(fields=["used_at"], name="idx_atmpl_used_at"),
         ),
     ]

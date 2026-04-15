@@ -103,7 +103,7 @@ class AssignmentTemplate(models.Model):
         db_table = "assignment_templates"
         indexes = [
             models.Index(fields=["status"], name="idx_assignment_template_status"),
-            models.Index(fields=["used_at"], name="idx_assignment_template_used_at"),
+            models.Index(fields=["used_at"], name="idx_atmpl_used_at"),
         ]
 
     def __str__(self):
