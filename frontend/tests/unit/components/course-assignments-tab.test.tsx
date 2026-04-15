@@ -114,7 +114,9 @@ describe("CourseAssignmentsTab", () => {
     render(<Component courseId={1} userRole="TEACHER" userId={1} />);
     await waitFor(() => {
       expect(
-        screen.getByText("No assignments for this course yet."),
+        screen.getByText(
+          "No active assignments for this course. Turn on Show archived to review archived assignments or restore them after a course restore.",
+        ),
       ).toBeInTheDocument();
     });
   });

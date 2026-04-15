@@ -131,15 +131,6 @@ def update_assignment(assignment: Assignment, caller_user, payload: dict) -> Ass
 
 
 @transaction.atomic
-def delete_assignment(assignment: Assignment, caller_user=None) -> None:
-    """Delete an assignment and its submissions."""
-    if caller_user is not None and assignment.created_by_id != caller_user.id:
-        raise ForbiddenError("Only the assignment creator can delete it.")
-    Submission.objects.filter(assignment=assignment).delete()
-    assignment.delete()
-
-
-@transaction.atomic
 def archive_assignment(request_user, assignment: Assignment) -> Assignment:
     """Archive an assignment."""
     if not request_user.is_staff and assignment.created_by_id != request_user.id:

@@ -545,35 +545,6 @@ class TestCreateAssignment(_NoopAtomicMixin):
 
 
 # ---------------------------------------------------------------------------
-# delete_assignment (mutation)
-# ---------------------------------------------------------------------------
-
-
-class TestDeleteAssignment(_NoopAtomicMixin):
-    """Tests for delete_assignment mutation."""
-
-    @patch("assignments.services._mutations.Submission")
-    def test_deletes_submissions_then_assignment(
-        self, mock_submission_model
-    ):
-        """Deletes all submissions before the assignment when none have progressed."""
-        from assignments.services._mutations import delete_assignment
-
-        assignment = MagicMock()
-        assignment.created_by_id = 1
-        # First filter call is the progressed check (.exclude().exists())
-        # Second filter call is the deletion
-        mock_qs = MagicMock()
-        mock_qs.exclude.return_value.exists.return_value = False
-        mock_submission_model.objects.filter.return_value = mock_qs
-
-        caller = SimpleNamespace(id=1)
-        delete_assignment(assignment, caller)
-
-        assignment.delete.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
 # _create_submissions_for_course (internal)
 # ---------------------------------------------------------------------------
 
@@ -998,48 +969,4 @@ class TestPurgeAssignment(_NoopAtomicMixin):
         purge_assignment(assignment)
 
         assert mock_cleanup.call_count == 2
-        assignment.delete.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# delete_assignment - additional edge cases
-# ---------------------------------------------------------------------------
-
-
-class TestDeleteAssignmentEdgeCases(_NoopAtomicMixin):
-
-    @patch("assignments.services._mutations.Submission")
-    def test_raises_when_not_creator(self, mock_sub):
-        """Raises ForbiddenError when non-creator tries to delete."""
-        from assignments.services._mutations import ForbiddenError, delete_assignment
-
-        assignment = MagicMock()
-        assignment.created_by_id = 1
-
-        with pytest.raises(ForbiddenError, match="Only the assignment creator"):
-            delete_assignment(assignment, SimpleNamespace(id=2))
-
-    @patch("assignments.services._mutations.Submission")
-    def test_cascades_submissions_on_delete(self, mock_sub):
-        """Deletes all submissions when deleting assignment."""
-        from assignments.services._mutations import delete_assignment
-
-        assignment = MagicMock()
-        assignment.created_by_id = 1
-
-        delete_assignment(assignment, SimpleNamespace(id=1))
-
-        mock_sub.objects.filter.assert_called_once_with(assignment=assignment)
-        mock_sub.objects.filter.return_value.delete.assert_called_once()
-        assignment.delete.assert_called_once()
-
-    @patch("assignments.services._mutations.Submission")
-    def test_allows_delete_without_caller(self, mock_sub):
-        """Allows deletion when caller_user is None (system-initiated)."""
-        from assignments.services._mutations import delete_assignment
-
-        assignment = MagicMock()
-
-        delete_assignment(assignment, caller_user=None)
-
         assignment.delete.assert_called_once()

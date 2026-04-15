@@ -101,6 +101,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
   const canManageCourses = role === 'TEACHER' || role === 'ADMIN';
   const canManageAssignmentTemplates = role === 'RESEARCHER' || role === 'ADMIN';
   const canManageAssignments = role === 'TEACHER' || role === 'ADMIN';
+  const canPurgeArchivedRecords = role === 'ADMIN';
   const defaultTab = canManageCourses
     ? 'courses'
     : canManageAssignmentTemplates
@@ -462,7 +463,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
       {/* Title area with HelpTip */}
       <div className="flex items-center gap-2">
         <h2 className="text-lg font-semibold text-foreground">Archive Records</h2>
-        <HelpTip text="Archive keeps records available for later restore or controlled cleanup. Purge permanently removes archived records only when the lifecycle rules allow it." />
+        <HelpTip text="Archive keeps records available for later restore or controlled cleanup. Purge permanently removes archived records only when the lifecycle rules allow it, and only admins can do it." />
       </div>
 
       <Tabs defaultValue={defaultTab}>
@@ -564,31 +565,33 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                                 >
                                   {isBusy ? 'Restoring...' : 'Restore'}
                                 </Button>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button variant="destructive" size="xs" disabled={isBusy}>
-                                      Purge
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Purge course</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Permanently purge {course.name}? This cannot be undone. All
-                                        archived course data will be removed.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction
-                                        variant="destructive"
-                                        onClick={() => void handlePurgeCourse(course)}
-                                      >
+                                {canPurgeArchivedRecords && (
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button variant="destructive" size="xs" disabled={isBusy}>
                                         Purge
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Purge course</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Permanently purge {course.name}? This cannot be undone.
+                                          All archived course data will be removed.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          variant="destructive"
+                                          onClick={() => void handlePurgeCourse(course)}
+                                        >
+                                          Purge
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                )}
                               </>
                             ) : (
                               <AlertDialog>
@@ -710,31 +713,33 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                                 >
                                   {isBusy ? 'Restoring...' : 'Restore'}
                                 </Button>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button variant="destructive" size="xs" disabled={isBusy}>
-                                      Purge
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Purge assignment template</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Permanently purge {template.title}? This cannot be
-                                        undone.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction
-                                        variant="destructive"
-                                        onClick={() => void handlePurgeAssignmentTemplate(template)}
-                                      >
+                                {canPurgeArchivedRecords && (
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button variant="destructive" size="xs" disabled={isBusy}>
                                         Purge
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Purge assignment template</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Permanently purge {template.title}? This cannot be
+                                          undone.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          variant="destructive"
+                                          onClick={() => void handlePurgeAssignmentTemplate(template)}
+                                        >
+                                          Purge
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                )}
                               </>
                             ) : isDraft ? (
                               <AlertDialog>
@@ -895,31 +900,33 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                                 >
                                   {isBusy ? 'Restoring...' : 'Restore'}
                                 </Button>
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <Button variant="destructive" size="xs" disabled={isBusy}>
-                                      Purge
-                                    </Button>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Purge assignment</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Permanently purge {assignment.title}? This cannot be
-                                        undone.
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                      <AlertDialogAction
-                                        variant="destructive"
-                                        onClick={() => void handlePurgeAssignment(assignment)}
-                                      >
+                                {canPurgeArchivedRecords && (
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button variant="destructive" size="xs" disabled={isBusy}>
                                         Purge
-                                      </AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Purge assignment</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          Permanently purge {assignment.title}? This cannot be
+                                          undone.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          variant="destructive"
+                                          onClick={() => void handlePurgeAssignment(assignment)}
+                                        >
+                                          Purge
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                )}
                               </>
                             ) : (
                               <AlertDialog>

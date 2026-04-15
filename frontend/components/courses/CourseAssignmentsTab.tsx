@@ -152,7 +152,11 @@ export default function CourseAssignmentsTab({
 
       {!isLoading && !loadError && sortedAssignments.length === 0 && (
         <div className="rounded-sm border border-border bg-card p-8 text-center">
-          <p className="text-sm text-muted-foreground">No assignments for this course yet.</p>
+          <p className="text-sm text-muted-foreground">
+            {canManageLifecycle && !showArchived
+              ? 'No active assignments for this course. Turn on Show archived to review archived assignments or restore them after a course restore.'
+              : 'No assignments for this course yet.'}
+          </p>
         </div>
       )}
 

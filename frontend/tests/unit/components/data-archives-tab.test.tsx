@@ -60,9 +60,9 @@ async function loadComponent() {
   return imported.default;
 }
 
-async function renderDataArchivesAndWait() {
+async function renderDataArchivesAndWait(role: "TEACHER" | "RESEARCHER" | "ADMIN" = "ADMIN") {
   const DataArchivesTab = await loadComponent();
-  render(<DataArchivesTab role="ADMIN" />);
+  render(<DataArchivesTab role={role} />);
   await waitFor(() => {
     expect(
       screen.queryByText("Loading courses...")
@@ -421,5 +421,16 @@ describe("DataArchivesTab", () => {
 
     expect(screen.queryByText("Courses")).toBeNull();
     expect(screen.queryByText("Assignments")).toBeNull();
+  });
+
+  it("hides purge actions from teachers", async () => {
+    await renderDataArchivesAndWait("TEACHER");
+
+    await waitFor(() => {
+      expect(screen.getByText("Courses")).toBeInTheDocument();
+      expect(screen.getByText("Assignments")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("Purge")).toBeNull();
   });
 });
