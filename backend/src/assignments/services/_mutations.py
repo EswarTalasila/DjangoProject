@@ -188,9 +188,11 @@ def purge_assignment(assignment: Assignment) -> None:
         raise ConflictError("Cannot purge: assignment has progressed submissions.")
 
     from submissions.image_services import cleanup_images_for_submission
+    from ._archive_exports import cleanup_assignment_archive_artifacts
 
     for submission in assignment.submissions.all():
         cleanup_images_for_submission(submission.id)
+    cleanup_assignment_archive_artifacts(assignment)
     assignment.delete()
 
 

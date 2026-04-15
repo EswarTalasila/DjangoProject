@@ -25,6 +25,16 @@ urlpatterns = [
         name="assignments-restore",
     ),
     path(
+        "<int:assignment_id>/archive-bundle",
+        views.archive_bundle,
+        name="assignments-archive-bundle",
+    ),
+    path(
+        "<int:assignment_id>/archive-bundle/download",
+        views.download_archive_bundle,
+        name="assignments-archive-bundle-download",
+    ),
+    path(
         "<int:assignment_id>/submissions",
         submission_views.assignment_submissions,
         name="assignments-submissions",

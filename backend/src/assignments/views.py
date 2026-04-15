@@ -8,10 +8,16 @@ Endpoints:
     DELETE /api/v1/assignments/{id}          - Delete assignment
     GET    /api/v1/assignments/{id}/template - Get assignment template
     POST   /api/v1/assignments/{id}/archive  - Archive assignment
+    GET    /api/v1/assignments/{id}/archive-bundle - Get archive bundle metadata
+    POST   /api/v1/assignments/{id}/archive-bundle - Generate archive bundle
+    GET    /api/v1/assignments/{id}/archive-bundle/download - Download archive bundle
     GET    /api/v1/assignments/courses/{id}  - List assignments for course
     GET    /api/v1/assignments/users/{id}    - List assignments for user
 """
 
+from pathlib import Path
+
+from django.http import FileResponse
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -36,9 +42,12 @@ from .services import (
     ConflictError,
     ForbiddenError,
     archive_assignment,
+    assignment_archive_artifact_to_dict,
     assignment_to_dto,
     create_assignment,
+    generate_assignment_archive_artifact,
     get_assignment,
+    get_assignment_archive_artifact,
     list_by_course,
     list_for_user,
     purge_assignment,
@@ -61,6 +70,18 @@ def _can_read_assignment(user: User, assignment) -> bool:
     if role == Role.TEACHER and assignment.course_id is not None:
         return can_view_course(user, assignment.course)
     return True
+
+
+def _parse_identifiable(value: str | None) -> bool | None:
+    """Parse an optional identifiable=true/false query parameter."""
+    if value is None or value == "":
+        return None
+    lowered = value.lower()
+    if lowered in {"true", "1", "yes"}:
+        return True
+    if lowered in {"false", "0", "no"}:
+        return False
+    raise ValueError("identifiable must be true or false.")
 
 
 @api_view(["POST"])
@@ -248,4 +269,78 @@ def get_assignment_template(request, assignment_id: int):
     return Response(
         assignment_template_to_dto(assignment_template).model_dump(),
         status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def archive_bundle(request, assignment_id: int):
+    """Get or generate assignment archive bundle metadata."""
+    assignment = get_assignment(assignment_id)
+    if not assignment:
+        return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        identifiable = _parse_identifiable(request.query_params.get("identifiable"))
+    except ValueError as exc:
+        return error_response(exc)
+
+    try:
+        if request.method == "POST":
+            artifact = generate_assignment_archive_artifact(
+                assignment,
+                request.user,
+                identifiable=identifiable,
+            )
+        else:
+            artifact = get_assignment_archive_artifact(
+                assignment,
+                request.user,
+                identifiable=identifiable,
+            )
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    except ConflictError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+
+    if artifact is None:
+        return Response({"detail": "Archive bundle not found"}, status=status.HTTP_404_NOT_FOUND)
+    return Response(
+        assignment_archive_artifact_to_dict(artifact),
+        status=status.HTTP_201_CREATED if request.method == "POST" else status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def download_archive_bundle(request, assignment_id: int):
+    """Download an existing assignment archive bundle."""
+    assignment = get_assignment(assignment_id)
+    if not assignment:
+        return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        identifiable = _parse_identifiable(request.query_params.get("identifiable"))
+    except ValueError as exc:
+        return error_response(exc)
+
+    try:
+        artifact = get_assignment_archive_artifact(
+            assignment,
+            request.user,
+            identifiable=identifiable,
+        )
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+
+    if artifact is None:
+        return Response({"detail": "Archive bundle not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    path = Path(artifact.file_path)
+    if not path.exists():
+        return Response({"detail": "Archive bundle file missing"}, status=status.HTTP_404_NOT_FOUND)
+
+    return FileResponse(
+        open(path, "rb"),
+        as_attachment=True,
+        filename=artifact.filename,
+        content_type="application/zip",
     )

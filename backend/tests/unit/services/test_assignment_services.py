@@ -951,9 +951,15 @@ class TestPurgeAssignment(_NoopAtomicMixin):
         with pytest.raises(ConflictError, match="progressed"):
             purge_assignment(assignment)
 
+    @patch("assignments.services._archive_exports.cleanup_assignment_archive_artifacts")
     @patch("submissions.image_services.cleanup_images_for_submission")
     @patch("assignments.services._mutations.Submission")
-    def test_purges_successfully(self, mock_sub, mock_cleanup):
+    def test_purges_successfully(
+        self,
+        mock_sub,
+        mock_cleanup_images,
+        mock_cleanup_artifacts,
+    ):
         """Permanently deletes an archived assignment and cleans up submission images."""
         from assignments.services._mutations import purge_assignment
         from assignments.models import AssignmentStatus
@@ -968,5 +974,6 @@ class TestPurgeAssignment(_NoopAtomicMixin):
 
         purge_assignment(assignment)
 
-        assert mock_cleanup.call_count == 2
+        assert mock_cleanup_images.call_count == 2
+        mock_cleanup_artifacts.assert_called_once_with(assignment)
         assignment.delete.assert_called_once()

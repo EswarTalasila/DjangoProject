@@ -169,3 +169,49 @@ class Assignment(models.Model):
     def __str__(self):
         """Return a readable string representation."""
         return f"Assignment({self.id})"
+
+
+class AssignmentArchiveArtifact(models.Model):
+    """Generated ZIP artifact for an archived assignment bundle."""
+
+    assignment = models.ForeignKey(
+        Assignment,
+        on_delete=models.CASCADE,
+        related_name="archive_artifacts",
+    )
+    identifiable = models.BooleanField(default=True)
+    generated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="generated_assignment_archive_artifacts",
+    )
+    filename = models.CharField(max_length=255)
+    file_path = models.CharField(max_length=512, unique=True)
+    size_bytes = models.PositiveBigIntegerField(default=0)
+    sha256_hash = models.CharField(max_length=64)
+    manifest = models.JSONField(default=dict, blank=True)
+    generated_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        """Database table configuration for AssignmentArchiveArtifact."""
+
+        db_table = "assignment_archive_artifacts"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["assignment", "identifiable"],
+                name="uq_assignment_archive_artifact_variant",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["assignment", "generated_at"],
+                name="idx_asgn_archive_artf",
+            )
+        ]
+
+    def __str__(self):
+        """Return a readable string representation."""
+        variant = "identifiable" if self.identifiable else "anonymized"
+        return f"AssignmentArchiveArtifact({self.assignment_id}:{variant})"

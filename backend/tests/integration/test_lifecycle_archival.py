@@ -11,6 +11,10 @@ Naming convention per FR-14 Section 8:
 
 from __future__ import annotations
 
+import io
+from pathlib import Path
+from zipfile import ZipFile
+
 import pytest
 from django.utils import timezone
 from rest_framework import status
@@ -18,7 +22,7 @@ from rest_framework.test import APIClient
 
 from accounts.models import Role, TeacherProfile, UserRole
 from assignment_templates.models import AssignmentTemplateStatus
-from assignments.models import AssignmentStatus
+from assignments.models import AssignmentArchiveArtifact, AssignmentStatus
 from core.models import AuditAction, AuditLog, AuditOutcome
 from courses.models import CourseStatus, Enrollment, EnrollmentStatus
 from submissions.models import SubmissionStatus
@@ -408,6 +412,73 @@ class TestARCH_UC_06:
             f"/api/v1/assignments/{teacher_assignment.id}?purge=true"
         )
         assert resp.status_code == status.HTTP_204_NO_CONTENT
+
+    def test_ARCH_UC_06_assignment_archive_bundle_generation_and_download(
+        self,
+        teacher_client,
+        teacher_assignment,
+        settings,
+        tmp_path,
+    ):
+        """Archived assignments can generate and download a human-readable archive bundle."""
+        settings.ARTIFACT_ROOT = tmp_path / "artifacts"
+        Path(settings.ARTIFACT_ROOT).mkdir(parents=True, exist_ok=True)
+
+        teacher_assignment.status = AssignmentStatus.ARCHIVED
+        teacher_assignment.archived_at = timezone.now()
+        teacher_assignment.save(update_fields=["status", "archived_at"])
+
+        generate = teacher_client.post(
+            f"/api/v1/assignments/{teacher_assignment.id}/archive-bundle"
+        )
+        assert generate.status_code == status.HTTP_201_CREATED
+        payload = generate.json()
+        assert payload["assignmentId"] == teacher_assignment.id
+        assert payload["identifiable"] is True
+        assert payload["filename"].endswith(".zip")
+
+        artifact = AssignmentArchiveArtifact.objects.get(assignment=teacher_assignment)
+        assert Path(artifact.file_path).exists()
+
+        download = teacher_client.get(
+            f"/api/v1/assignments/{teacher_assignment.id}/archive-bundle/download"
+        )
+        assert download.status_code == status.HTTP_200_OK
+        archive = ZipFile(io.BytesIO(b"".join(download.streaming_content)))
+        names = set(archive.namelist())
+        assert any(name.endswith("manifest.json") for name in names)
+        assert any(name.endswith("template/template.json") for name in names)
+        assert any(name.endswith("assignment/assignment.json") for name in names)
+        assert any(name.endswith("assignment/submissions.csv") for name in names)
+
+    def test_ARCH_UC_06_purging_assignment_removes_archive_bundle(
+        self,
+        admin_client,
+        teacher_assignment,
+        settings,
+        tmp_path,
+    ):
+        """Purging an archived assignment also deletes its generated archive bundle."""
+        settings.ARTIFACT_ROOT = tmp_path / "artifacts"
+        Path(settings.ARTIFACT_ROOT).mkdir(parents=True, exist_ok=True)
+
+        teacher_assignment.status = AssignmentStatus.ARCHIVED
+        teacher_assignment.archived_at = timezone.now()
+        teacher_assignment.save(update_fields=["status", "archived_at"])
+
+        artifact = admin_client.post(
+            f"/api/v1/assignments/{teacher_assignment.id}/archive-bundle"
+        )
+        assert artifact.status_code == status.HTTP_201_CREATED
+        file_path = Path(AssignmentArchiveArtifact.objects.get(assignment=teacher_assignment).file_path)
+        assert file_path.exists()
+
+        purge = admin_client.delete(f"/api/v1/assignments/{teacher_assignment.id}?purge=true")
+        assert purge.status_code == status.HTTP_204_NO_CONTENT
+        assert not AssignmentArchiveArtifact.objects.filter(
+            assignment_id=teacher_assignment.id
+        ).exists()
+        assert not file_path.exists()
 
     def test_ARCH_UC_06_E1_non_admin_forbidden(self, teacher_client, teacher_course):
         """Non-admin purge returns 403."""
