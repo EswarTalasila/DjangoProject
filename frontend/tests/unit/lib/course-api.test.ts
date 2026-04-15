@@ -85,12 +85,12 @@ describe("course-api", () => {
     });
   });
 
-  describe("deleteCourse", () => {
+  describe("purgeCourse", () => {
     it("deletes a course by ID", async () => {
       mockDelete.mockResolvedValueOnce({});
-      const { deleteCourse } = await loadModule();
-      await deleteCourse(7);
-      expect(mockDelete).toHaveBeenCalledWith("/courses/7");
+      const { purgeCourse } = await loadModule();
+      await purgeCourse(7);
+      expect(mockDelete).toHaveBeenCalledWith("/courses/7?purge=true");
     });
   });
 

@@ -87,11 +87,11 @@ describe("lifecycle-api", () => {
   });
 
   describe("purgeCourse delegates to course-api deleteCourse", () => {
-    it("calls api.delete with /courses/:id", async () => {
+    it("calls api.delete with /courses/:id?purge=true", async () => {
       mockDelete.mockResolvedValueOnce({});
       const { purgeCourse } = await loadModule();
       await purgeCourse(1);
-      expect(mockDelete).toHaveBeenCalledWith("/courses/1");
+      expect(mockDelete).toHaveBeenCalledWith("/courses/1?purge=true");
     });
   });
 

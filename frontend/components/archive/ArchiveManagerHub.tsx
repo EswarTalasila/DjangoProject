@@ -1,10 +1,9 @@
 'use client';
 
-import { Archive, Package, Upload } from 'lucide-react';
+import { Archive, Upload } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { HelpTip } from '@/components/ui/help-tip';
 import QuickExportTab from '@/components/archive/QuickExportTab';
-import PackageBuilderTab from '@/components/archive/PackageBuilderTab';
 import DataArchivesTab from '@/components/archive/DataArchivesTab';
 
 type ArchiveManagerHubProps = {
@@ -16,38 +15,31 @@ export default function ArchiveManagerHub({
   role,
   canExportIdentifiable,
 }: ArchiveManagerHubProps) {
-  const showAdvancedPackaging = role !== 'TEACHER';
-
   return (
     <div className="space-y-6 p-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
           Archive Manager
         </h1>
-        <p className="text-muted-foreground mt-1">
-          Export live data, manage archive records, and use advanced packaging only when you need a structured handoff.
-          <HelpTip text="Quick Export is for current live data. Archive Records is where courses, assignment templates, and assignments move through archive and restore flows. Advanced Packaging remains available for structured legacy packaging workflows." />
+        <p className="mt-1 max-w-3xl text-muted-foreground">
+          Use live exports for current reporting and archive records for restore,
+          purge, and assignment bundle downloads.
+          <HelpTip text="Live Exports pulls current CSV data without changing lifecycle state. Archive Records is where courses, assignment templates, and assignments move through archive, restore, purge, and assignment-bundle flows." />
         </p>
       </div>
 
-      <Tabs defaultValue="quick-export">
-        <TabsList>
-          <TabsTrigger value="quick-export" className="gap-2">
+      <Tabs defaultValue="live-exports">
+        <TabsList className="grid w-full grid-cols-2 md:inline-flex md:w-auto">
+          <TabsTrigger value="live-exports" className="gap-2">
             <Upload className="size-4" />
-            Quick Export
+            Live Exports
           </TabsTrigger>
           <TabsTrigger value="archive-records" className="gap-2">
             <Archive className="size-4" />
             Archive Records
           </TabsTrigger>
-          {showAdvancedPackaging && (
-            <TabsTrigger value="advanced-packaging" className="gap-2">
-              <Package className="size-4" />
-              Advanced Packaging
-            </TabsTrigger>
-          )}
         </TabsList>
-        <TabsContent value="quick-export">
+        <TabsContent value="live-exports">
           <QuickExportTab
             role={role}
             canExportIdentifiable={canExportIdentifiable}
@@ -56,14 +48,6 @@ export default function ArchiveManagerHub({
         <TabsContent value="archive-records">
           <DataArchivesTab role={role} />
         </TabsContent>
-        {showAdvancedPackaging && (
-          <TabsContent value="advanced-packaging">
-            <PackageBuilderTab
-              role={role}
-              canExportIdentifiable={canExportIdentifiable}
-            />
-          </TabsContent>
-        )}
       </Tabs>
     </div>
   );

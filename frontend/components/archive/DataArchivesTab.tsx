@@ -26,7 +26,14 @@ import {
   listAssignmentTemplates,
   type AssignmentTemplate,
 } from '@/lib/assignment-template-api';
-import { listAssignmentsByCourse, type Assignment } from '@/lib/assignment-api';
+import {
+  downloadAssignmentArchiveBundle,
+  generateAssignmentArchiveBundle,
+  getAssignmentArchiveBundle,
+  listAssignmentsByCourse,
+  type Assignment,
+  type AssignmentArchiveArtifact,
+} from '@/lib/assignment-api';
 import {
   archiveCourse,
   restoreCourse,
@@ -38,7 +45,7 @@ import {
   restoreAssignment,
   purgeAssignment,
 } from '@/lib/lifecycle-api';
-import { toErrorMessage } from '@/lib/utils';
+import { toErrorMessage, triggerBrowserDownload } from '@/lib/utils';
 
 // ── Props ──
 
@@ -125,6 +132,8 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
   const [loadingAssignments, setLoadingAssignments] = useState(true);
   const [showArchivedAssignments, setShowArchivedAssignments] = useState(false);
   const [busyAssignmentId, setBusyAssignmentId] = useState<number | null>(null);
+  const [assignmentBundles, setAssignmentBundles] = useState<Record<number, AssignmentArchiveArtifact | null>>({});
+  const [busyAssignmentBundleId, setBusyAssignmentBundleId] = useState<number | null>(null);
 
   // -- Sort state per tab --
   const [courseSortField, setCourseSortField] = useState('name');
@@ -216,6 +225,41 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     }
     void fetchCoursesForAssignments();
   }, [loadAssignments]);
+
+  useEffect(() => {
+    const archivedIds = assignments
+      .filter((assignment) => assignment.status === 'ARCHIVED')
+      .map((assignment) => assignment.id);
+    if (archivedIds.length === 0) {
+      return;
+    }
+
+    let active = true;
+    async function loadBundleMetadata() {
+      const results = await Promise.allSettled(
+        archivedIds.map(async (assignmentId) => {
+          const artifact = await getAssignmentArchiveBundle(assignmentId);
+          return [assignmentId, artifact] as const;
+        }),
+      );
+      if (!active) return;
+      setAssignmentBundles((prev) => {
+        const next = { ...prev };
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            const [assignmentId, artifact] = result.value;
+            next[assignmentId] = artifact;
+          }
+        }
+        return next;
+      });
+    }
+
+    void loadBundleMetadata();
+    return () => {
+      active = false;
+    };
+  }, [assignments]);
 
   // ── Filtered & sorted data ──
 
@@ -456,6 +500,32 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
     }
   }
 
+  async function handleGenerateBundle(assignment: Assignment) {
+    setBusyAssignmentBundleId(assignment.id);
+    try {
+      const artifact = await generateAssignmentArchiveBundle(assignment.id);
+      setAssignmentBundles((prev) => ({ ...prev, [assignment.id]: artifact }));
+      toast.success('Archive bundle generated.');
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    } finally {
+      setBusyAssignmentBundleId(null);
+    }
+  }
+
+  async function handleDownloadBundle(assignment: Assignment) {
+    setBusyAssignmentBundleId(assignment.id);
+    try {
+      const { blob, filename } = await downloadAssignmentArchiveBundle(assignment.id);
+      triggerBrowserDownload(blob, filename);
+      toast.success('Archive bundle download started.');
+    } catch (error) {
+      toast.error(toErrorMessage(error));
+    } finally {
+      setBusyAssignmentBundleId(null);
+    }
+  }
+
   // ── Render ──
 
   return (
@@ -467,7 +537,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
       </div>
 
       <Tabs defaultValue={defaultTab}>
-        <TabsList>
+        <TabsList className="grid w-full grid-cols-1 gap-1 sm:grid-cols-2 lg:inline-flex lg:w-auto">
           {canManageCourses && <TabsTrigger value="courses">Courses</TabsTrigger>}
           {canManageAssignmentTemplates && (
             <TabsTrigger value="assignment-templates">Assignment Templates</TabsTrigger>
@@ -495,8 +565,102 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
               No archived courses yet. Restoring a course does not restore its assignments, so use the course detail view or assignment archive tools to bring back archived work deliberately.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="space-y-3">
+              <div className="grid gap-3 md:hidden">
+                {sortedCourses().map((course) => {
+                  const isArchived = course.status === 'ARCHIVED';
+                  const isBusy = busyCourseId === course.id;
+                  return (
+                    <div
+                      key={course.id}
+                      className="rounded-lg border border-border bg-card p-4 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="truncate font-medium text-foreground">{course.name}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {course.teacherName ?? 'Unassigned teacher'}
+                          </p>
+                        </div>
+                        <StatusBadge status={isArchived ? 'ARCHIVED' : 'ACTIVE'} />
+                      </div>
+                      <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
+                        <div>Students: {course.studentCount}</div>
+                        <div>
+                          Restoring a course does not restore its assignments. Use the
+                          assignments tab to bring archived work back deliberately.
+                        </div>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {isArchived ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              disabled={isBusy}
+                              onClick={() => void handleRestoreCourse(course)}
+                            >
+                              {isBusy ? 'Restoring...' : 'Restore'}
+                            </Button>
+                            {canPurgeArchivedRecords && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="destructive" size="xs" disabled={isBusy}>
+                                    Purge
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Purge course</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Permanently purge {course.name}? This cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      variant="destructive"
+                                      onClick={() => void handlePurgeCourse(course)}
+                                    >
+                                      Purge
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </>
+                        ) : (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="secondary" size="xs" disabled={isBusy}>
+                                Archive
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Archive course</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Archive {course.name}? This will also archive all assignments in
+                                  this course.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => void handleArchiveCourse(course)}>
+                                  Archive
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
                     <th className="pb-2 pr-4">
@@ -626,7 +790,8 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                     );
                   })}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           )}
         </TabsContent>}
@@ -651,8 +816,125 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
               No archived assignment templates yet. Used templates should be archived instead of edited or deleted in place.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="space-y-3">
+              <div className="grid gap-3 md:hidden">
+                {sortedAssignmentTemplates().map((template) => {
+                  const status = template.status ?? 'ACTIVE';
+                  const isArchived = status === 'ARCHIVED';
+                  const isDraft = status === 'DRAFT';
+                  const isBusy = busyAssignmentTemplateId === template.id;
+                  return (
+                    <div
+                      key={template.id}
+                      className="rounded-lg border border-border bg-card p-4 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="truncate font-medium text-foreground">{template.title}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {template.category ?? 'Uncategorized'}
+                          </p>
+                        </div>
+                        <StatusBadge status={status} />
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {isArchived ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              disabled={isBusy}
+                              onClick={() => void handleRestoreAssignmentTemplate(template)}
+                            >
+                              {isBusy ? 'Restoring...' : 'Restore'}
+                            </Button>
+                            {canPurgeArchivedRecords && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="destructive" size="xs" disabled={isBusy}>
+                                    Purge
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Purge assignment template</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Permanently purge {template.title}? This cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      variant="destructive"
+                                      onClick={() => void handlePurgeAssignmentTemplate(template)}
+                                    >
+                                      Purge
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </>
+                        ) : isDraft ? (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="destructive" size="xs" disabled={isBusy}>
+                                Delete Draft
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete draft template</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Permanently delete the draft {template.title}? This cannot be
+                                  undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  variant="destructive"
+                                  onClick={() => void handlePurgeAssignmentTemplate(template)}
+                                >
+                                  Delete Draft
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        ) : (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="secondary" size="xs" disabled={isBusy}>
+                                Archive
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Archive assignment template</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Archive {template.title}? It will no longer appear in active
+                                  views.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => void handleArchiveAssignmentTemplate(template)}
+                                >
+                                  Archive
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
                     <th className="pb-2 pr-4">
@@ -801,7 +1083,8 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                     );
                   })}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           )}
         </TabsContent>}
@@ -826,8 +1109,127 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
               No archived assignments yet. Archived assignments linked to restored courses will appear here and can be restored individually.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="space-y-3">
+              <div className="grid gap-3 md:hidden">
+                {sortedAssignments().map((assignment, index) => {
+                  const isArchived = assignment.status === 'ARCHIVED';
+                  const isBusy = busyAssignmentId === assignment.id;
+                  const isBundleBusy = busyAssignmentBundleId === assignment.id;
+                  const bundle = assignmentBundles[assignment.id] ?? null;
+                  return (
+                    <div
+                      key={`${assignment.courseId ?? 'none'}-${assignment.id}-${index}`}
+                      className="rounded-lg border border-border bg-card p-4 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="truncate font-medium text-foreground">{assignment.title}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {assignment.courseName ?? 'No course'} •{' '}
+                            {assignment.dueAt
+                              ? new Date(assignment.dueAt).toLocaleDateString()
+                              : 'No due date'}
+                          </p>
+                        </div>
+                        <StatusBadge status={isArchived ? 'ARCHIVED' : 'ACTIVE'} />
+                      </div>
+                      {isArchived && (
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          {bundle
+                            ? `Bundle ready • ${bundle.filename}`
+                            : 'Generate a bundle when you need a frozen handoff for this archived assignment.'}
+                        </p>
+                      )}
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {isArchived ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              disabled={isBusy}
+                              onClick={() => void handleRestoreAssignment(assignment)}
+                            >
+                              {isBusy ? 'Restoring...' : 'Restore'}
+                            </Button>
+                            <Button
+                              variant={bundle ? 'outline' : 'secondary'}
+                              size="xs"
+                              disabled={isBundleBusy}
+                              onClick={() =>
+                                void (bundle
+                                  ? handleDownloadBundle(assignment)
+                                  : handleGenerateBundle(assignment))
+                              }
+                            >
+                              {isBundleBusy
+                                ? bundle
+                                  ? 'Downloading...'
+                                  : 'Generating...'
+                                : bundle
+                                  ? 'Download Bundle'
+                                  : 'Generate Bundle'}
+                            </Button>
+                            {canPurgeArchivedRecords && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="destructive" size="xs" disabled={isBusy}>
+                                    Purge
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Purge assignment</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Permanently purge {assignment.title}? This cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      variant="destructive"
+                                      onClick={() => void handlePurgeAssignment(assignment)}
+                                    >
+                                      Purge
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </>
+                        ) : (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="secondary" size="xs" disabled={isBusy}>
+                                Archive
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Archive assignment</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Archive {assignment.title}? Students will no longer be able to
+                                  submit responses.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => void handleArchiveAssignment(assignment)}
+                                >
+                                  Archive
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
                     <th className="pb-2 pr-4">
@@ -866,6 +1268,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                         onSort={handleAssignmentSort}
                       />
                     </th>
+                    <th className="pb-2 pr-4 font-medium">Bundle</th>
                     <th className="pb-2 font-medium">Actions</th>
                   </tr>
                 </thead>
@@ -873,6 +1276,8 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                   {sortedAssignments().map((assignment, index) => {
                     const isArchived = assignment.status === 'ARCHIVED';
                     const isBusy = busyAssignmentId === assignment.id;
+                    const isBundleBusy = busyAssignmentBundleId === assignment.id;
+                    const bundle = assignmentBundles[assignment.id] ?? null;
                     return (
                       <tr
                         key={`${assignment.courseId ?? 'none'}-${assignment.id}-${index}`}
@@ -887,6 +1292,33 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                         </td>
                         <td className="py-2 pr-4">
                           <StatusBadge status={isArchived ? 'ARCHIVED' : 'ACTIVE'} />
+                        </td>
+                        <td className="py-2 pr-4">
+                          {isArchived ? (
+                            bundle ? (
+                              <Button
+                                variant="outline"
+                                size="xs"
+                                disabled={isBundleBusy}
+                                onClick={() => void handleDownloadBundle(assignment)}
+                              >
+                                {isBundleBusy ? 'Downloading...' : 'Download Bundle'}
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="secondary"
+                                size="xs"
+                                disabled={isBundleBusy}
+                                onClick={() => void handleGenerateBundle(assignment)}
+                              >
+                                {isBundleBusy ? 'Generating...' : 'Generate Bundle'}
+                              </Button>
+                            )
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              Available after archive
+                            </span>
+                          )}
                         </td>
                         <td className="py-2">
                           <div className="flex items-center gap-2">
@@ -960,7 +1392,8 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                     );
                   })}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
           )}
         </TabsContent>}

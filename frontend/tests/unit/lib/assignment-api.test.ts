@@ -93,7 +93,7 @@ describe("assignment api", () => {
     });
   });
 
-  describe("deleteAssignment", () => {
+  describe("purgeAssignment", () => {
     it("purges an archived assignment without error", async () => {
       server.use(
         http.delete(`${API_BASE}/assignments/1`, ({ request }) => {
@@ -102,8 +102,8 @@ describe("assignment api", () => {
         }),
       );
 
-      const { deleteAssignment } = await loadAssignmentApi();
-      await expect(deleteAssignment(1)).resolves.toBeUndefined();
+      const { purgeAssignment } = await loadAssignmentApi();
+      await expect(purgeAssignment(1)).resolves.toBeUndefined();
     });
   });
 
@@ -134,6 +134,75 @@ describe("assignment api", () => {
       const result = await restoreAssignment(1);
 
       expect(result.status).toBe("ACTIVE");
+    });
+  });
+
+  describe("archive bundle helpers", () => {
+    it("fetches archive bundle metadata", async () => {
+      server.use(
+        http.get(`${API_BASE}/assignments/1/archive-bundle`, () =>
+          HttpResponse.json({
+            id: 7,
+            assignmentId: 1,
+            identifiable: true,
+            filename: "bundle.zip",
+            sizeBytes: 1234,
+            sha256Hash: "abc",
+            generatedAt: "2026-01-01T00:00:00Z",
+            generatedByUserId: 3,
+            manifest: {},
+          }),
+        ),
+      );
+
+      const { getAssignmentArchiveBundle } = await loadAssignmentApi();
+      const result = await getAssignmentArchiveBundle(1);
+
+      expect(result.filename).toBe("bundle.zip");
+      expect(result.assignmentId).toBe(1);
+    });
+
+    it("generates archive bundle metadata", async () => {
+      server.use(
+        http.post(`${API_BASE}/assignments/1/archive-bundle`, () =>
+          HttpResponse.json(
+            {
+              id: 7,
+              assignmentId: 1,
+              identifiable: true,
+              filename: "bundle.zip",
+              sizeBytes: 1234,
+              sha256Hash: "abc",
+              generatedAt: "2026-01-01T00:00:00Z",
+              generatedByUserId: 3,
+              manifest: {},
+            },
+            { status: 201 },
+          ),
+        ),
+      );
+
+      const { generateAssignmentArchiveBundle } = await loadAssignmentApi();
+      const result = await generateAssignmentArchiveBundle(1);
+
+      expect(result.filename).toBe("bundle.zip");
+    });
+
+    it("downloads archive bundle zip data", async () => {
+      server.use(
+        http.get(`${API_BASE}/assignments/1/archive-bundle/download`, () =>
+          new HttpResponse(new Blob(["zipdata"]), {
+            status: 200,
+            headers: { "content-disposition": 'attachment; filename="archive.zip"' },
+          }),
+        ),
+      );
+
+      const { downloadAssignmentArchiveBundle } = await loadAssignmentApi();
+      const result = await downloadAssignmentArchiveBundle(1);
+
+      expect(result.filename).toBe("archive.zip");
+      expect(result.blob).toBeInstanceOf(Blob);
     });
   });
 

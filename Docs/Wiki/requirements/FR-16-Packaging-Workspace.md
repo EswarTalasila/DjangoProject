@@ -1,8 +1,8 @@
-# FR-16 Packaging Workspace (PKG) — Detailed Spec (v5 draft)
+# FR-16 Packaging Workspace (PKG) — Transitional Spec
 
 | Field | Value |
 |-------|-------|
-| **Status** | DRAFT |
+| **Status** | TRANSITIONAL / LEGACY BACKEND |
 | **Date** | 2026-03-03 |
 | **Domain** | PKG |
 | **Applies To** | ADMIN (system role), RESEARCHER, TEACHER |
@@ -34,6 +34,10 @@
 
 ### Core Intent
 - Bridge FR-10 exports with FR-14 archival so users can assemble reproducible, structured data packages without ad-hoc manual downloads.
+
+> **Current product direction:** PKG is no longer the primary operator-facing export workflow.
+> Live exports and assignment archive bundles are the active archive-manager surfaces.
+> The PKG backend remains temporarily for transitional/internal use while archive-bundle coverage expands.
 
 ---
 
@@ -284,6 +288,7 @@ Expected statuses:
 ## 11) Current Implementation Alignment Notes
 
 Current implementation has a functional PKG backend baseline with workspace CRUD, node management, validation, build, and download flows.
+That backend is retained as transitional infrastructure, not as the primary export/archive product surface.
 
 Implemented alignment:
 1. **PKG domain models implemented.** `PackageWorkspace`, `PackageNode`, `PackageBuildJob`, `PackageArtifact`, and `PackageAuditLog` exist with initial migration.
@@ -298,4 +303,4 @@ Known deferreds / follow-ups:
 2. **Snapshot store integration deferred.** Snapshot validation currently uses a placeholder check and does not yet bind to FR-14 snapshot persistence.
 3. **Full row/byte caps deferred.** File-count cap is enforced; row/byte cap enforcement needs deeper preflight estimation integration.
 4. **Artifact GC deferred.** Expired artifacts are blocked at download time but not yet garbage-collected from disk.
-5. **Frontend workspace UI deferred.** Backend is available; PKG UX builder remains a separate frontend phase.
+5. **Frontend workspace UI retired from the primary product.** The archive manager now centers live exports and archive records; PKG builder UX is no longer part of the supported operator workflow.

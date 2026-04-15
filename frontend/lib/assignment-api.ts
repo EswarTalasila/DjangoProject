@@ -16,6 +16,18 @@ export type Assignment = {
   status: AssignmentStatus;
 };
 
+export type AssignmentArchiveArtifact = {
+  id: number;
+  assignmentId: number;
+  identifiable: boolean;
+  filename: string;
+  sizeBytes: number;
+  sha256Hash: string;
+  generatedAt: string | null;
+  generatedByUserId: number | null;
+  manifest: Record<string, unknown>;
+};
+
 export type AssignmentCreateInput = {
   title?: string;
   assignmentTemplateId: number;
@@ -60,7 +72,7 @@ export async function updateAssignment(
 }
 
 /** DELETE /assignments/:id?purge=true — Permanently delete an archived assignment. */
-export async function deleteAssignment(assignmentId: number): Promise<void> {
+export async function purgeAssignment(assignmentId: number): Promise<void> {
   await api.delete(`/assignments/${assignmentId}?purge=true`);
 }
 
@@ -74,6 +86,48 @@ export async function archiveAssignment(assignmentId: number): Promise<Assignmen
 export async function restoreAssignment(assignmentId: number): Promise<Assignment> {
   const response = await api.post<Assignment>(`/assignments/${assignmentId}/restore`, {});
   return response.data;
+}
+
+/** GET /assignments/:id/archive-bundle — Fetch archive bundle metadata for an archived assignment. */
+export async function getAssignmentArchiveBundle(
+  assignmentId: number,
+  options?: { identifiable?: boolean },
+): Promise<AssignmentArchiveArtifact> {
+  const params = options?.identifiable === undefined ? undefined : { identifiable: options.identifiable };
+  const response = await api.get<AssignmentArchiveArtifact>(`/assignments/${assignmentId}/archive-bundle`, { params });
+  return response.data;
+}
+
+/** POST /assignments/:id/archive-bundle — Generate or replace an archived assignment bundle. */
+export async function generateAssignmentArchiveBundle(
+  assignmentId: number,
+  options?: { identifiable?: boolean },
+): Promise<AssignmentArchiveArtifact> {
+  const params = options?.identifiable === undefined ? undefined : { identifiable: options.identifiable };
+  const response = await api.post<AssignmentArchiveArtifact>(
+    `/assignments/${assignmentId}/archive-bundle`,
+    {},
+    { params },
+  );
+  return response.data;
+}
+
+/** GET /assignments/:id/archive-bundle/download — Download an archived assignment bundle ZIP. */
+export async function downloadAssignmentArchiveBundle(
+  assignmentId: number,
+  options?: { identifiable?: boolean },
+): Promise<{ blob: Blob; filename: string }> {
+  const params = options?.identifiable === undefined ? undefined : { identifiable: options.identifiable };
+  const response = await api.get<Blob>(`/assignments/${assignmentId}/archive-bundle/download`, {
+    params,
+    responseType: 'blob',
+  });
+  const disposition = response.headers['content-disposition'] as string | undefined;
+  const match = disposition?.match(/filename="?([^"]+)"?/i);
+  return {
+    blob: response.data,
+    filename: match?.[1] ?? `assignment-${assignmentId}-archive.zip`,
+  };
 }
 
 /** GET /assignments/courses/:id — List assignments for a given course. */
