@@ -228,7 +228,7 @@
 
 **Policy Requirements:**
 - Archive is the recommended action when deletion is blocked by `ATMPL-CN-05`.
-- Once archived, an assignment template can be hard-deleted only after all referencing assignments are removed.
+- Once archived, an assignment template can be hard-deleted only when it satisfies the archive/purge lifecycle rules for historically used templates.
 
 **Errors:**
 - `ATMPL-UC-06-E1`: AssignmentTemplate not found.
@@ -261,14 +261,14 @@
 - Grading mode determines auto-grading eligibility and rubric linkage requirements.
 - Applies to: ATMPL-UC-01, ATMPL-UC-04.
 
-### ATMPL-CN-05 — Deletion Blocked When Referenced
-- AssignmentTemplate deletion returns `409 Conflict` when any assignments reference the assignment template.
-- Hard delete is permitted only when no assignments exist for the assignment template.
+### ATMPL-CN-05 — Historically Used Templates Are Archive-First
+- AssignmentTemplate deletion returns `409 Conflict` when the assignment template has ever been used by an assignment.
+- Hard delete is permitted only for drafts and active templates that have never been used.
 - Applies to: ATMPL-UC-05.
 
-### ATMPL-CN-06 — Update Blocked When Referenced
-- AssignmentTemplate updates return `409 Conflict` when any assignments reference the assignment template.
-- Prevents invalidation of existing submissions tied to the assignment template's question structure.
+### ATMPL-CN-06 — Update Blocked After Use
+- AssignmentTemplate updates return `409 Conflict` when the assignment template has ever been used by an assignment.
+- Prevents invalidation of downstream assignment and submission context tied to the assignment template's question structure.
 - Applies to: ATMPL-UC-04.
 
 ### ATMPL-CN-07 — Rubric Linkage Within AssignmentTemplate Domain
@@ -310,7 +310,7 @@
 - AssignmentTemplates gain a `status` field with values `ACTIVE` (default) and `ARCHIVED`.
 - Archived assignment templates remain readable and their existing assignments continue to function.
 - No new assignments can be created from an archived assignment template (enforced by FR-07 ASGN at assignment creation time).
-- Archived assignment templates can be hard-deleted via ATMPL-UC-05 once all referencing assignments are removed.
+- Archived assignment templates can be hard-deleted via ATMPL-UC-05 only through the explicit purge path and only when lifecycle eligibility checks pass.
 - Archive is the recommended resolution when ATMPL-CN-05 blocks deletion.
 - Applies to: ATMPL-UC-05, ATMPL-UC-06.
 
@@ -403,7 +403,7 @@ Expected statuses by UC:
 | Domain | ATMPL dependency | Integration note |
 |--------|-----------------|------------------|
 | FR-05 CRS | Course context for assignment creation | AssignmentTemplates are global templates; course scoping happens at assignment level (FR-07) |
-| FR-07 ASGN | Assignment references block mutation | ASGN-CN-04 enforces archived assignment template check; ATMPL-CN-05/06 block delete/update when assignments exist |
+| FR-07 ASGN | Assignment usage establishes lifecycle history | ASGN-CN-04 enforces archived assignment template check; ATMPL-CN-05/06 block delete/update once a template has been used |
 | FR-08 SUB | Submission answers tied to question structure | Question replacement (ATMPL-CN-08) is blocked when submissions exist via assignment reference check |
 | FR-14 ARCH | AssignmentTemplate archive lifecycle | ARCH-UC-01 archives assignment templates; blocks new assignment creation from archived templates |
 
@@ -411,11 +411,12 @@ Expected statuses by UC:
 
 ## 11) Current Implementation Alignment Notes
 
-The active implementation now matches the route-level FR-06 contract for assignment template CRUD, archival lifecycle, and referenced-template mutation blocking. Remaining follow-up work for this domain is documentation/tooling cleanup rather than route behavior.
-6. Stop delete service from cascading through assignments; current `delete_assignment_template` hard-deletes downstream assignments first, which violates ATMPL-CN-05.
-7. Add `status` field (`ACTIVE`/`ARCHIVED`) to AssignmentTemplate model and archive endpoint (ATMPL-CN-13). Implementation deferred; archive lifecycle will be addressed in a future release.
-8. Add missing FR-06 traceability tests for constraints and error paths.
-9. Preserve paginated listing behavior on `GET /api/v1/assignment-templates` during FR-06 changes.
+The active implementation now matches the route-level FR-06 contract for assignment template CRUD and lifecycle enforcement:
+1. Draft templates can be hard-deleted but cannot be archived.
+2. Active unused templates can be hard-deleted.
+3. Historically used templates are archive-first even if downstream assignments have since been removed.
+4. Archived templates are readable to researcher/admin callers and purge-only on the destructive path.
+5. Remaining FR-06 follow-up is limited to documentation and broader archive/export integration work, not core route semantics.
 
 ---
 

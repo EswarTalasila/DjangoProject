@@ -326,7 +326,7 @@ class TestATMPL_UC_05:
         resp = api_client.delete(f"/api/v1/assignment-templates/{a.id}")
         assert resp.status_code == 403
 
-    def test_ATMPL_UC_05_E3_referenced(self, api_client, admin_user, teacher_user):
+    def test_ATMPL_UC_05_E3_used(self, api_client, admin_user, teacher_user):
         """Used assignment_template still returns conflict on plain DELETE."""
         a = _make_assignment_template(admin_user)
         _reference_assignment_template(a, teacher_user)

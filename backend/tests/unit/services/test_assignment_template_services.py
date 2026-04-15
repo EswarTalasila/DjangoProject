@@ -401,7 +401,7 @@ class TestDeleteAssignmentTemplate(_NoopAtomicMixin):
     def test_deletes_assignment_template_when_no_assignments(
         self, mock_assignment_model
     ):
-        """Deletes an unused assignment_template when no assignments reference it."""
+        """Deletes an unused assignment_template that has never been used."""
         from assignment_templates.services import delete_assignment_template
 
         mock_assignment_model.objects.filter.return_value.exists.return_value = False
@@ -419,7 +419,7 @@ class TestDeleteAssignmentTemplate(_NoopAtomicMixin):
     def test_raises_when_assignments_reference(
         self, mock_assignment_model
     ):
-        """Raises AssignmentTemplateReferencedError when assignments reference the assignment_template."""
+        """Raises AssignmentTemplateReferencedError when live assignments still use the assignment_template."""
         from assignment_templates.services import AssignmentTemplateReferencedError, delete_assignment_template
 
         mock_assignment_model.objects.filter.return_value.exists.return_value = True
@@ -866,7 +866,7 @@ class TestPurgeAssignmentTemplate(_NoopAtomicMixin):
 
     @patch("assignment_templates.services.Assignment")
     def test_raises_when_has_assignments(self, mock_assignment):
-        """Raises ConflictError when assignment_template has associated assignments."""
+        """Raises ConflictError when archived assignment_template still has live assignment dependents."""
         from assignment_templates.services import purge_assignment_template
         from assignment_templates.models import AssignmentTemplateStatus
         from core.lifecycle import ConflictError

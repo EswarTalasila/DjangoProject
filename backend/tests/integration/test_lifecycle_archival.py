@@ -585,7 +585,7 @@ class TestARCH_CN_07:
     def test_ARCH_CN_07_purge_assignment_template_with_assignments(
         self, admin_client, teacher_assignment
     ):
-        """Cannot purge assignment_template that has assignments."""
+        """Cannot purge assignment_template while live assignments still depend on it."""
         asmt = teacher_assignment.assignment_template
         asmt.status = AssignmentTemplateStatus.ARCHIVED
         asmt.save()
