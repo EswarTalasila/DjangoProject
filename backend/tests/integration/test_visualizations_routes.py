@@ -297,6 +297,7 @@ class TestVizAssignmentSummary:
         resp = api_client.get(ASSIGNMENT_URL.format(assignment.id))
         assert resp.status_code == 200
         data = resp.json()
+        assert data["assignmentTitle"] == assignment.title
         assert data["totalStudents"] == 3
         assert data["submittedCount"] == 3
         assert data["gradedCount"] == 2

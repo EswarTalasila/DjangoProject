@@ -41,6 +41,7 @@ const sampleCourseSummary = {
   assignments: [
     {
       assignmentId: 10,
+      assignmentTitle: "Quiz 1 - Period A",
       assignmentTemplateTitle: "Quiz 1",
       assignmentTemplateCategory: "MATH",
       submittedCount: 25,
@@ -57,6 +58,7 @@ const sampleAssignmentSummary = {
   generatedAt: "2026-01-15T10:00:00Z",
   filters: { startDate: null, endDate: null },
   assignmentId: 10,
+  assignmentTitle: "Quiz 1 - Period A",
   assignmentTemplateTitle: "Quiz 1",
   assignmentTemplateCategory: "MATH",
   totalStudents: 30,

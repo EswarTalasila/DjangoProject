@@ -40,6 +40,7 @@ const courseSummaryData = {
   assignments: [
     {
       assignmentId: 10,
+      assignmentTitle: "Biology Midterm",
       assignmentTemplateTitle: "Midterm Exam",
       assignmentTemplateCategory: "EXAM",
       submittedCount: 25,
@@ -51,6 +52,7 @@ const courseSummaryData = {
     },
     {
       assignmentId: 11,
+      assignmentTitle: "Lab Report Week 3",
       assignmentTemplateTitle: "Lab Report 1",
       assignmentTemplateCategory: "LAB",
       submittedCount: 28,
@@ -131,9 +133,9 @@ describe("VizCourseSummaryView (assignment-template-summary-view)", () => {
     render(<Component courseId={1} role="TEACHER" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Midterm Exam")).toBeInTheDocument();
+      expect(screen.getByText("Biology Midterm")).toBeInTheDocument();
     });
-    expect(screen.getByText("Lab Report 1")).toBeInTheDocument();
+    expect(screen.getByText("Lab Report Week 3")).toBeInTheDocument();
   });
 
   it("renders assignment_template categories", async () => {

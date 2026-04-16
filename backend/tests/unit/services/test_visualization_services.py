@@ -199,6 +199,7 @@ class TestAssignmentGradeSummary:
 
         assignment = MagicMock()
         assignment.id = 5
+        assignment.title = "Period 2 Quiz"
         assignment.course = course
         assignment.assignment_template.title = "Quiz 1"
         assignment.assignment_template.category = "Math"
@@ -224,6 +225,7 @@ class TestAssignmentGradeSummary:
         assert "totalStudents" in result
         assert result["totalStudents"] == 10
         assert result["assignmentId"] == 5
+        assert result["assignmentTitle"] == "Period 2 Quiz"
         assert result["assignmentTemplateTitle"] == "Quiz 1"
         assert result["assignmentTemplateCategory"] == "Math"
 
@@ -241,6 +243,7 @@ class TestAssignmentGradeSummary:
 
         assignment = MagicMock()
         assignment.id = 1
+        assignment.title = "Exit Ticket"
         assignment.course = course
         assignment.assignment_template.title = "Quiz"
         assignment.assignment_template.category = None

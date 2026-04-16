@@ -288,6 +288,7 @@ class TestCourseToDto:
             id=100, name="Math 101", teacher_profile_id=42,
             teacher_profile=SimpleNamespace(user=teacher_user),
             created_at=None,
+            status="ARCHIVED",
         )
 
         dto = course_to_dto(course)
@@ -298,6 +299,7 @@ class TestCourseToDto:
         assert dto.assignmentIds == [5, 6]
         assert dto.teacherId == 42
         assert dto.teacherName == "Teacher Smith"
+        assert dto.status == "ARCHIVED"
 
     def test_converts_course_to_dto_using_prefetched_relations(self):
         """Prefetched enrollments and assignments avoid extra ORM lookups."""
@@ -317,6 +319,7 @@ class TestCourseToDto:
             teacher_profile_id=42,
             teacher_profile=SimpleNamespace(user=teacher_user),
             created_at=None,
+            status="ACTIVE",
             _prefetched_objects_cache={
                 "enrollments": [enrollment],
                 "assignments": [assignment],
@@ -327,6 +330,7 @@ class TestCourseToDto:
 
         assert dto.studentCount == 1
         assert dto.assignmentIds == [5]
+        assert dto.status == "ACTIVE"
 
     @patch("courses.services._queries.Assignment")
     @patch("courses.services._queries.Enrollment")
@@ -341,6 +345,7 @@ class TestCourseToDto:
             id=1, name="Empty", teacher_profile_id=None,
             teacher_profile=None,
             created_at=None,
+            status="ACTIVE",
         )
 
         dto = course_to_dto(course)
@@ -349,6 +354,7 @@ class TestCourseToDto:
         assert dto.students == []
         assert dto.assignmentIds == []
         assert dto.teacherId is None
+        assert dto.status == "ACTIVE"
 
 
 # ---------------------------------------------------------------------------

@@ -247,6 +247,7 @@ def course_summary(
         }
         if not anonymize:
             entry["assignmentId"] = assignment.id
+            entry["assignmentTitle"] = assignment.title
             entry["assignmentTemplateTitle"] = assignment.assignment_template.title
 
         items.append(entry)
@@ -374,6 +375,7 @@ def assignment_grade_summary(
     }
     if not anonymize:
         result["assignmentId"] = assignment.id
+        result["assignmentTitle"] = assignment.title
         result["assignmentTemplateTitle"] = assignment.assignment_template.title
 
     return result

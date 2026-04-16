@@ -22,6 +22,7 @@ export type DashboardDTO = {
 
 export type CourseSummaryAssignment = {
   assignmentId?: number;
+  assignmentTitle?: string;
   assignmentTemplateTitle?: string;
   assignmentTemplateCategory: string | null;
   submittedCount: number;
@@ -55,6 +56,7 @@ export type AssignmentSummaryDTO = {
   generatedAt: string;
   filters: { startDate: string | null; endDate: string | null };
   assignmentId?: number;
+  assignmentTitle?: string;
   assignmentTemplateTitle?: string;
   assignmentTemplateCategory: string | null;
   totalStudents: number;

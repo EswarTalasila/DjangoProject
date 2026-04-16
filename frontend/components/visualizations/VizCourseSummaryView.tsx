@@ -83,7 +83,7 @@ export default function VizCourseSummaryView({
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted border-b border-border">
-                      {data.assignments[0]?.assignmentTemplateTitle !== undefined && (
+                      {data.assignments[0]?.assignmentTitle !== undefined && (
                         <TableHead className="text-xs font-semibold uppercase tracking-wider">
                           Title
                         </TableHead>
@@ -130,9 +130,9 @@ export default function VizCourseSummaryView({
                           tabIndex={isNavigable ? 0 : undefined}
                           aria-label={isNavigable ? `Open assignment ${a.assignmentId}` : undefined}
                         >
-                        {a.assignmentTemplateTitle !== undefined && (
+                        {a.assignmentTitle !== undefined && (
                             <TableCell className="font-medium text-sm">
-                              {a.assignmentTemplateTitle}
+                              {a.assignmentTitle}
                             </TableCell>
                           )}
                           <TableCell className="text-sm">

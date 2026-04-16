@@ -69,6 +69,7 @@ def course_to_dto(course: Course) -> CourseDTO:
         teacherId=course.teacher_profile_id,
         teacherName=teacher_user.name if teacher_user else None,
         createdAt=course.created_at,
+        status=course.status,
     )
 
 

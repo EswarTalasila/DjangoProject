@@ -49,6 +49,7 @@ class CourseDTO(BaseModel):
     teacherId: int | None
     teacherName: str | None
     createdAt: datetime | None
+    status: str = "ACTIVE"
 
 
 # =============================================================================
