@@ -1,10 +1,23 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Check, Lock, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  FileText,
+  Lock,
+  Pencil,
+  Plus,
+  Sparkles,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
+import QuestionTypeConfig from '@/components/assignment-templates/studio/QuestionTypeConfig';
 import ImagePicker from '@/components/media/ImagePicker';
+import RubricGridPreview from '@/components/rubrics/RubricGridPreview';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,25 +34,25 @@ import {
   addAssignmentTeacherCriterion,
   addAssignmentTeacherCriterionLevel,
   deleteAssignmentQuestion,
+  deleteAssignmentQuestionImage,
   deleteAssignmentTeacherCriterion,
   deleteAssignmentTeacherCriterionLevel,
-  deleteAssignmentQuestionImage,
   listReusableAssignmentImages,
   reorderAssignmentQuestions,
   reorderAssignmentTeacherCriteria,
   reorderAssignmentTeacherCriterionLevels,
   reuseAssignmentQuestionImage,
-  uploadAssignmentQuestionImage,
   updateAssignmentQuestion,
   updateAssignmentTeacherCriterion,
   updateAssignmentTeacherCriterionLevel,
+  uploadAssignmentQuestionImage,
   type AssignmentContent,
   type AssignmentQuestion,
   type AssignmentTeacherCriterion,
 } from '@/lib/assignment-api';
 import type { QuestionData, QuestionKind } from '@/lib/assignment-template-api';
 import { getRubric, type Rubric } from '@/lib/rubric-api';
-import { toErrorMessage } from '@/lib/utils';
+import { cn, toErrorMessage } from '@/lib/utils';
 
 type Props = {
   assignmentId: number;
@@ -52,6 +65,7 @@ type QuestionDraft = {
   type: QuestionKind;
   prompt: string;
   maxPoints: string;
+  data: QuestionData;
 };
 
 type CriterionDraft = {
@@ -66,11 +80,7 @@ type CriterionLevelDraft = {
   points: string;
 };
 
-const EMPTY_QUESTION: QuestionDraft = {
-  type: 'SHORT_ANSWER',
-  prompt: '',
-  maxPoints: '1',
-};
+type SelectedQuestionState = number | 'new' | null;
 
 const EMPTY_CRITERION: CriterionDraft = {
   title: '',
@@ -113,7 +123,25 @@ function buildQuestionData(kind: QuestionKind): QuestionData | undefined {
   if (kind === 'SHORT_ANSWER') {
     return { trim: true, caseSensitive: false };
   }
-  return undefined;
+  return {};
+}
+
+function makeEmptyQuestionDraft(kind: QuestionKind = 'SHORT_ANSWER'): QuestionDraft {
+  return {
+    type: kind,
+    prompt: '',
+    maxPoints: '1',
+    data: buildQuestionData(kind) ?? {},
+  };
+}
+
+function toQuestionDraft(question: AssignmentQuestion): QuestionDraft {
+  return {
+    type: question.type,
+    prompt: question.prompt,
+    maxPoints: String(question.maxPoints),
+    data: question.data ?? buildQuestionData(question.type) ?? {},
+  };
 }
 
 function confirmDestructiveAction(message: string): boolean {
@@ -123,285 +151,671 @@ function confirmDestructiveAction(message: string): boolean {
   return window.confirm(message);
 }
 
-function InheritedQuestionCard({ question }: { question: AssignmentQuestion }) {
-  return (
-    <article className="rounded-2xl border border-border/70 bg-background p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              <Lock className="h-3 w-3" />
-              Locked template
-            </span>
-            <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              {question.type.replaceAll('_', ' ')}
-            </span>
-          </div>
-          <h3 className="text-sm font-semibold text-foreground">{question.prompt}</h3>
-          <p className="text-xs text-muted-foreground">{formatPoints(question.maxPoints)} points</p>
+function formatQuestionKind(kind: QuestionKind): string {
+  switch (kind) {
+    case 'MULTIPLE_CHOICE':
+      return 'Multiple choice';
+    case 'SHORT_ANSWER':
+      return 'Short answer';
+    case 'NUMBER_SCALE':
+      return 'Number scale';
+    case 'MOOD_METER':
+      return 'Mood meter';
+    case 'FILE_UPLOAD':
+      return 'File upload';
+    default:
+      return kind;
+  }
+}
+
+function describeQuestionData(question: AssignmentQuestion): JSX.Element | null {
+  const data = question.data ?? {};
+
+  if (question.type === 'MULTIPLE_CHOICE') {
+    const choices = data.choices ?? [];
+    return (
+      <div className="space-y-2">
+        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          Answer options
+        </p>
+        <div className="space-y-2">
+          {choices.map((choice, index) => (
+            <div
+              key={`${question.id}-choice-${index}`}
+              className="flex items-center justify-between rounded-xl border border-border/60 bg-card px-3 py-2"
+            >
+              <span className="text-sm text-foreground">
+                {choice.prompt || `Choice ${index + 1}`}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {formatPoints(choice.score ?? 0)} pts
+              </span>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {data.selectAll
+            ? 'Students can select multiple options.'
+            : 'Students select one option.'}
+        </p>
+      </div>
+    );
+  }
+
+  if (question.type === 'NUMBER_SCALE') {
+    return (
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-border/60 bg-card px-3 py-3">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Min</p>
+          <p className="mt-1 text-sm font-medium text-foreground">{data.min ?? 1}</p>
+        </div>
+        <div className="rounded-xl border border-border/60 bg-card px-3 py-3">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Max</p>
+          <p className="mt-1 text-sm font-medium text-foreground">{data.max ?? 5}</p>
+        </div>
+        <div className="rounded-xl border border-border/60 bg-card px-3 py-3">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Target</p>
+          <p className="mt-1 text-sm font-medium text-foreground">
+            {data.target == null ? 'No exact target' : data.target}
+          </p>
         </div>
       </div>
-      {question.image && (
-        <div className="mt-4 overflow-hidden rounded-xl border border-border/60">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={question.image.url}
-            alt={question.image.originalFilename}
-            className="h-44 w-full object-cover"
-          />
+    );
+  }
+
+  if (question.type === 'SHORT_ANSWER') {
+    return (
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-border/60 bg-card px-3 py-3">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Whitespace</p>
+          <p className="mt-1 text-sm font-medium text-foreground">
+            {data.trim === false ? 'Preserved' : 'Trimmed'}
+          </p>
         </div>
-      )}
-    </article>
+        <div className="rounded-xl border border-border/60 bg-card px-3 py-3">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Case sensitivity</p>
+          <p className="mt-1 text-sm font-medium text-foreground">
+            {data.caseSensitive ? 'Sensitive' : 'Insensitive'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (question.type === 'MOOD_METER') {
+    return (
+      <div className="rounded-xl border border-border/60 bg-card px-3 py-3">
+        <p className="text-sm text-muted-foreground">
+          Students respond on the Yale RULER Mood Meter. The response grid stays fixed and cannot
+          be reconfigured here.
+        </p>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function QuestionRail({
+  questions,
+  selectedQuestion,
+  canCompose,
+  onSelectQuestion,
+  onStartNewQuestion,
+}: {
+  questions: AssignmentQuestion[];
+  selectedQuestion: SelectedQuestionState;
+  canCompose: boolean;
+  onSelectQuestion: (questionId: number) => void;
+  onStartNewQuestion: () => void;
+}) {
+  return (
+    <aside className="rounded-3xl border border-border bg-card shadow-sm xl:sticky xl:top-4">
+      <div className="border-b border-border px-4 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              Assignment Builder
+            </p>
+            <h2 className="mt-2 text-lg font-semibold text-foreground">Question structure</h2>
+          </div>
+          <span className="rounded-full border border-border/70 bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+            {questions.length} total
+          </span>
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Questions from the shared template stay locked. Add your own questions below without
+          changing the original template.
+        </p>
+        <Button
+          type="button"
+          className="mt-4 w-full gap-2"
+          onClick={onStartNewQuestion}
+          disabled={!canCompose}
+        >
+          <Plus className="h-4 w-4" />
+          Add local question
+        </Button>
+      </div>
+
+      <div className="space-y-2 p-3">
+        {questions.map((question, index) => {
+          const isSelected = selectedQuestion === question.id;
+          const isLocked = question.lockedFromSource;
+          return (
+            <button
+              key={question.id}
+              type="button"
+              onClick={() => onSelectQuestion(question.id)}
+              className={cn(
+                'w-full rounded-2xl border px-3 py-3 text-left transition-colors',
+                isSelected
+                  ? 'border-primary/50 bg-primary/5 shadow-sm'
+                  : 'border-border/70 bg-background hover:bg-muted/40',
+                isLocked && 'bg-muted/45',
+              )}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      Q{index + 1}
+                    </span>
+                    <span
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-medium uppercase tracking-wide',
+                        isLocked
+                          ? 'bg-muted text-muted-foreground'
+                          : 'bg-primary/10 text-primary',
+                      )}
+                    >
+                      {isLocked ? <Lock className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
+                      {isLocked ? 'Locked' : 'Local'}
+                    </span>
+                  </div>
+                  <p
+                    className={cn(
+                      'line-clamp-2 text-sm font-medium',
+                      isLocked ? 'text-muted-foreground' : 'text-foreground',
+                    )}
+                  >
+                    {question.prompt}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    {formatQuestionKind(question.type)}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {formatPoints(question.maxPoints)} pts
+                  </p>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+
+        <button
+          type="button"
+          onClick={onStartNewQuestion}
+          disabled={!canCompose}
+          className={cn(
+            'w-full rounded-2xl border border-dashed px-3 py-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+            selectedQuestion === 'new'
+              ? 'border-primary/50 bg-primary/5'
+              : 'border-border/70 bg-background hover:bg-muted/40',
+          )}
+        >
+          <div className="flex items-center gap-3">
+            <div className="rounded-full bg-primary/10 p-2 text-primary">
+              <Plus className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">New local question</p>
+              <p className="text-xs text-muted-foreground">
+                Add a teacher-only question after the locked researcher sequence.
+              </p>
+            </div>
+          </div>
+        </button>
+      </div>
+    </aside>
   );
 }
 
-function TeacherQuestionCard({
+function LockedQuestionStudio({ question }: { question: AssignmentQuestion }) {
+  return (
+    <section className="rounded-3xl border border-border bg-card shadow-sm">
+      <div className="border-b border-border px-5 py-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              Shared template
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-foreground">Locked template question</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              This question was provided by the shared template. You can review it here, but its
+              wording, response setup, points, and order stay fixed.
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            <Lock className="h-3 w-3" />
+            Locked
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-6 px-5 py-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-border/70 bg-muted/35 px-4 py-3">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Type</p>
+            <p className="mt-1 text-sm font-medium text-foreground">{formatQuestionKind(question.type)}</p>
+          </div>
+          <div className="rounded-2xl border border-border/70 bg-muted/35 px-4 py-3">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Points</p>
+            <p className="mt-1 text-sm font-medium text-foreground">{formatPoints(question.maxPoints)}</p>
+          </div>
+          <div className="rounded-2xl border border-border/70 bg-muted/35 px-4 py-3">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Origin</p>
+            <p className="mt-1 text-sm font-medium text-foreground">Shared template</p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Label className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
+            Prompt
+          </Label>
+          <div className="rounded-2xl border border-border/70 bg-muted/35 px-4 py-4">
+            <p className="text-base leading-relaxed text-foreground">{question.prompt}</p>
+          </div>
+        </div>
+
+        {question.image && (
+          <div className="space-y-3">
+            <Label className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
+              Attached image
+            </Label>
+            <div className="overflow-hidden rounded-2xl border border-border/60">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={question.image.url}
+                alt={question.image.originalFilename}
+                className="h-60 w-full object-cover"
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <Label className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
+            Response configuration
+          </Label>
+          {describeQuestionData(question)}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function InheritedRubricList({ rubric }: { rubric: Rubric }) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="text-sm font-semibold text-foreground">{rubric.title}</p>
+        {rubric.description ? (
+          <p className="mt-1 text-sm text-muted-foreground">{rubric.description}</p>
+        ) : null}
+      </div>
+
+      {rubric.criteria.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No locked rubric criteria were provided.</p>
+      ) : (
+        <div className="space-y-3">
+          {rubric.criteria.map((criterion) => (
+            <div
+              key={criterion.id}
+              className="rounded-2xl border border-border/60 bg-card px-4 py-3"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{criterion.title}</p>
+                  {criterion.description ? (
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {criterion.description}
+                    </p>
+                  ) : null}
+                </div>
+                <span className="rounded-full bg-muted px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {formatPoints(criterion.weight)} wt
+                </span>
+              </div>
+              {criterion.levels.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  {criterion.levels.map((level) => (
+                    <div
+                      key={level.id}
+                      className="rounded-xl border border-border/50 bg-background px-3 py-2"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-foreground">{level.label}</p>
+                        <span className="text-xs text-muted-foreground">
+                          {formatPoints(level.points)} pts
+                        </span>
+                      </div>
+                      {level.description ? (
+                        <p className="mt-1 text-xs text-muted-foreground">{level.description}</p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TeacherQuestionStudio({
   assignmentId,
   question,
+  draft,
   canCompose,
   canMoveUp,
   canMoveDown,
+  activeImage,
+  isSaving,
+  isDeleting,
+  onDraftChange,
   onMoveUp,
   onMoveDown,
-  onContentChange,
+  onSave,
+  onDelete,
+  onImageChange,
 }: {
   assignmentId: number;
   question: AssignmentQuestion;
+  draft: QuestionDraft;
   canCompose: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  activeImage: AssignmentQuestion['image'];
+  isSaving: boolean;
+  isDeleting: boolean;
+  onDraftChange: (next: QuestionDraft) => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
-  onContentChange: (next: AssignmentContent) => void;
+  onSave: () => void;
+  onDelete: () => void;
+  onImageChange: (next: AssignmentQuestion['image']) => void;
 }) {
-  const [image, setImage] = useState(question.image);
-  const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState<QuestionDraft>({
-    type: question.type,
-    prompt: question.prompt,
-    maxPoints: String(question.maxPoints),
-  });
-  const [isSaving, setIsSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  useEffect(() => {
-    setImage(question.image);
-    setDraft({
-      type: question.type,
-      prompt: question.prompt,
-      maxPoints: String(question.maxPoints),
-    });
-  }, [question]);
-
-  async function handleSave() {
-    const prompt = draft.prompt.trim();
-    const maxPoints = Number(draft.maxPoints);
-    if (!prompt) {
-      toast.error('Question prompt is required.');
-      return;
-    }
-    if (!Number.isFinite(maxPoints) || maxPoints < 0) {
-      toast.error('Max points must be a valid non-negative number.');
-      return;
-    }
-
-    setIsSaving(true);
-    try {
-      const next = await updateAssignmentQuestion(assignmentId, question.id, {
-        type: draft.type,
-        prompt,
-        maxPoints,
-        data:
-          draft.type === question.type
-            ? (question.data ?? buildQuestionData(draft.type))
-            : buildQuestionData(draft.type),
-      });
-      onContentChange(next);
-      setIsEditing(false);
-      toast.success('Assignment question updated.');
-    } catch (error: unknown) {
-      toast.error(toErrorMessage(error, 'Failed to update question.'));
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  async function handleDelete() {
-    if (!confirmDestructiveAction('Remove this teacher-added question from the assignment?')) {
-      return;
-    }
-    setIsDeleting(true);
-    try {
-      const next = await deleteAssignmentQuestion(assignmentId, question.id);
-      onContentChange(next);
-      toast.success('Assignment question removed.');
-    } catch (error: unknown) {
-      toast.error(toErrorMessage(error, 'Failed to remove question.'));
-    } finally {
-      setIsDeleting(false);
-    }
-  }
-
   return (
-    <article className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-primary">
-            <Sparkles className="h-3 w-3" />
-            Teacher added
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">{question.prompt}</h3>
-          <p className="text-xs text-muted-foreground">
-            {question.type.replaceAll('_', ' ')} • {formatPoints(question.maxPoints)} points
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            className="h-8 w-8"
-            disabled={!canCompose || isSaving || isDeleting}
-            onClick={() => setIsEditing((current) => !current)}
-            aria-label={isEditing ? `Cancel editing ${question.prompt}` : `Edit ${question.prompt}`}
-          >
-            {isEditing ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            className="h-8 w-8 text-destructive hover:text-destructive"
-            disabled={!canCompose || isSaving || isDeleting || isEditing}
-            onClick={() => void handleDelete()}
-            aria-label={`Remove ${question.prompt}`}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            className="h-8 w-8"
-            disabled={!canCompose || isSaving || isDeleting || isEditing || !canMoveUp}
-            onClick={onMoveUp}
-            aria-label={`Move ${question.prompt} earlier`}
-          >
-            <ArrowUp className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            className="h-8 w-8"
-            disabled={!canCompose || isSaving || isDeleting || isEditing || !canMoveDown}
-            onClick={onMoveDown}
-            aria-label={`Move ${question.prompt} later`}
-          >
-            <ArrowDown className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-      {isEditing && (
-        <div className="mt-4 rounded-2xl border border-dashed border-border/80 bg-background p-4">
-          <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_140px]">
-            <div className="space-y-2">
-              <Label htmlFor={`edit-question-type-${question.id}`}>Type</Label>
-              <Select
-                value={draft.type}
-                onValueChange={(value) =>
-                  setDraft((current) => ({ ...current, type: value as QuestionKind }))
-                }
-                disabled={!canCompose || isSaving}
-              >
-                <SelectTrigger id={`edit-question-type-${question.id}`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SHORT_ANSWER">Short answer</SelectItem>
-                  <SelectItem value="MULTIPLE_CHOICE">Multiple choice</SelectItem>
-                  <SelectItem value="NUMBER_SCALE">Number scale</SelectItem>
-                  <SelectItem value="MOOD_METER">Mood meter</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`edit-question-prompt-${question.id}`}>Prompt</Label>
-              <Input
-                id={`edit-question-prompt-${question.id}`}
-                value={draft.prompt}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, prompt: event.target.value }))
-                }
-                disabled={!canCompose || isSaving}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor={`edit-question-points-${question.id}`}>Points</Label>
-              <Input
-                id={`edit-question-points-${question.id}`}
-                type="number"
-                min="0"
-                step="0.5"
-                value={draft.maxPoints}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, maxPoints: event.target.value }))
-                }
-                disabled={!canCompose || isSaving}
-              />
-            </div>
+    <section className="rounded-3xl border border-border bg-card shadow-sm">
+      <div className="border-b border-border px-5 py-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              Local addition
+            </p>
+            <h2 className="mt-2 text-xl font-semibold text-foreground">Editable question</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              This question belongs only to this assignment. You can change its prompt, response
+              settings, image, and order without affecting the shared template.
+            </p>
           </div>
-          <div className="mt-3 flex justify-end gap-2">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-primary">
+              <Sparkles className="h-3 w-3" />
+              Local
+            </span>
             <Button
               type="button"
-              variant="ghost"
-              disabled={isSaving}
-              onClick={() => {
-                setDraft({
-                  type: question.type,
-                  prompt: question.prompt,
-                  maxPoints: String(question.maxPoints),
-                });
-                setIsEditing(false);
-              }}
+              size="icon"
+              variant="outline"
+              className="h-9 w-9"
+              disabled={!canCompose || isSaving || isDeleting || !canMoveUp}
+              onClick={onMoveUp}
+              aria-label={`Move ${question.prompt} earlier`}
             >
-              Cancel
+              <ArrowUp className="h-4 w-4" />
             </Button>
-            <Button type="button" onClick={() => void handleSave()} disabled={isSaving}>
-              <Check className="mr-2 h-4 w-4" />
-              Save question
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              className="h-9 w-9"
+              disabled={!canCompose || isSaving || isDeleting || !canMoveDown}
+              onClick={onMoveDown}
+              aria-label={`Move ${question.prompt} later`}
+            >
+              <ArrowDown className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              className="h-9 w-9 text-destructive hover:text-destructive"
+              disabled={!canCompose || isSaving || isDeleting}
+              onClick={onDelete}
+              aria-label={`Remove ${question.prompt}`}
+            >
+              <Trash2 className="h-4 w-4" />
             </Button>
           </div>
         </div>
-      )}
-      <div className="mt-4">
-        <ImagePicker
-          image={image}
-          disabled={!canCompose || isSaving || isDeleting}
-          emptyLabel="Attach a supporting image"
-          emptyHint="Reuse an earlier question image or upload a new one."
-          browseLabel="Reuse Existing Image"
-          browseDialogTitle="Choose a reusable question image"
-          onBrowse={() => listReusableAssignmentImages(assignmentId)}
-          onUpload={async (file) => {
-            const next = await uploadAssignmentQuestionImage(assignmentId, question.id, file);
-            setImage(next);
-            toast.success('Question image uploaded.');
-            return next;
-          }}
-          onSelect={async (picked) => {
-            const next = await reuseAssignmentQuestionImage(assignmentId, question.id, picked.id);
-            setImage(next);
-            toast.success('Question image attached.');
-          }}
-          onRemove={async () => {
-            await deleteAssignmentQuestionImage(assignmentId, question.id);
-            setImage(null);
-            toast.success('Question image removed.');
-          }}
-        />
       </div>
-    </article>
+
+      <div className="space-y-6 px-5 py-5">
+        <div className="grid gap-4 lg:grid-cols-[180px_minmax(0,1fr)_140px]">
+          <div className="space-y-2">
+            <Label htmlFor={`edit-question-type-${question.id}`}>Type</Label>
+            <Select
+              value={draft.type}
+              onValueChange={(value) =>
+                onDraftChange({
+                  ...draft,
+                  type: value as QuestionKind,
+                  data: buildQuestionData(value as QuestionKind) ?? {},
+                })
+              }
+              disabled={!canCompose || isSaving}
+            >
+              <SelectTrigger id={`edit-question-type-${question.id}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="SHORT_ANSWER">Short answer</SelectItem>
+                <SelectItem value="MULTIPLE_CHOICE">Multiple choice</SelectItem>
+                <SelectItem value="NUMBER_SCALE">Number scale</SelectItem>
+                <SelectItem value="MOOD_METER">Mood meter</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`edit-question-prompt-${question.id}`}>Prompt</Label>
+            <Textarea
+              id={`edit-question-prompt-${question.id}`}
+              value={draft.prompt}
+              onChange={(event) => onDraftChange({ ...draft, prompt: event.target.value })}
+              disabled={!canCompose || isSaving}
+              rows={4}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`edit-question-points-${question.id}`}>Points</Label>
+            <Input
+              id={`edit-question-points-${question.id}`}
+              type="number"
+              min="0"
+              step="0.5"
+              value={draft.maxPoints}
+              onChange={(event) => onDraftChange({ ...draft, maxPoints: event.target.value })}
+              disabled={!canCompose || isSaving}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Label className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
+            Response configuration
+          </Label>
+          <div className="rounded-2xl border border-border/70 bg-background px-4 py-4">
+            <QuestionTypeConfig
+              type={draft.type}
+              data={draft.data}
+              onChange={(nextData) => onDraftChange({ ...draft, data: nextData })}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Label className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
+            Question image
+          </Label>
+          <div className="rounded-2xl border border-border/70 bg-background px-4 py-4">
+            <ImagePicker
+              image={activeImage}
+              disabled={!canCompose || isSaving || isDeleting}
+              emptyLabel="Attach a supporting image"
+              emptyHint="Reuse an earlier image or upload a new one for this assignment-only question."
+              browseLabel="Reuse Existing Image"
+              browseDialogTitle="Choose a reusable question image"
+              onBrowse={() => listReusableAssignmentImages(assignmentId)}
+              onUpload={async (file) => {
+                const next = await uploadAssignmentQuestionImage(assignmentId, question.id, file);
+                onImageChange(next);
+                toast.success('Question image uploaded.');
+                return next;
+              }}
+              onSelect={async (picked) => {
+                const next = await reuseAssignmentQuestionImage(assignmentId, question.id, picked.id);
+                onImageChange(next);
+                toast.success('Question image attached.');
+              }}
+              onRemove={async () => {
+                await deleteAssignmentQuestionImage(assignmentId, question.id);
+                onImageChange(null);
+                toast.success('Question image removed.');
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <Button type="button" onClick={onSave} disabled={!canCompose || isSaving}>
+            <Check className="mr-2 h-4 w-4" />
+            Save question
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function NewQuestionStudio({
+  draft,
+  canCompose,
+  onDraftChange,
+  onCreate,
+}: {
+  draft: QuestionDraft;
+  canCompose: boolean;
+  onDraftChange: (next: QuestionDraft) => void;
+  onCreate: () => void;
+}) {
+  return (
+    <section className="rounded-3xl border border-border bg-card shadow-sm">
+      <div className="border-b border-border px-5 py-5">
+        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          Local addition
+        </p>
+        <h2 className="mt-2 text-xl font-semibold text-foreground">New local question</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Add a question that only exists on this assignment. It will appear after the locked
+          template questions and can be edited or reordered later.
+        </p>
+      </div>
+
+      <div className="space-y-6 px-5 py-5">
+        <div className="grid gap-4 lg:grid-cols-[180px_minmax(0,1fr)_140px]">
+          <div className="space-y-2">
+            <Label htmlFor="assignment-question-type">Type</Label>
+            <Select
+              value={draft.type}
+              onValueChange={(value) =>
+                onDraftChange({
+                  ...draft,
+                  type: value as QuestionKind,
+                  data: buildQuestionData(value as QuestionKind) ?? {},
+                })
+              }
+              disabled={!canCompose}
+            >
+              <SelectTrigger id="assignment-question-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="SHORT_ANSWER">Short answer</SelectItem>
+                <SelectItem value="MULTIPLE_CHOICE">Multiple choice</SelectItem>
+                <SelectItem value="NUMBER_SCALE">Number scale</SelectItem>
+                <SelectItem value="MOOD_METER">Mood meter</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="assignment-question-prompt">Prompt</Label>
+            <Textarea
+              id="assignment-question-prompt"
+              value={draft.prompt}
+              onChange={(event) => onDraftChange({ ...draft, prompt: event.target.value })}
+              disabled={!canCompose}
+              rows={4}
+              placeholder="Add an assignment-only question"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="assignment-question-points">Points</Label>
+            <Input
+              id="assignment-question-points"
+              type="number"
+              min="0"
+              step="0.5"
+              value={draft.maxPoints}
+              onChange={(event) => onDraftChange({ ...draft, maxPoints: event.target.value })}
+              disabled={!canCompose}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <Label className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
+            Response configuration
+          </Label>
+          <div className="rounded-2xl border border-border/70 bg-background px-4 py-4">
+            <QuestionTypeConfig
+              type={draft.type}
+              data={draft.data}
+              onChange={(nextData) => onDraftChange({ ...draft, data: nextData })}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-dashed border-border/70 bg-background px-4 py-4">
+          <p className="text-sm text-muted-foreground">
+            You can attach or reuse an image after the question is created. That keeps the media
+            library tied to a saved assignment question instead of a temporary draft.
+          </p>
+        </div>
+
+        <div className="flex justify-end">
+          <Button type="button" onClick={onCreate} disabled={!canCompose}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add question
+          </Button>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -977,8 +1391,9 @@ export default function AssignmentComposerPanel({
   canCompose,
   onContentChange,
 }: Props) {
-  const [questionDraft, setQuestionDraft] = useState<QuestionDraft>(EMPTY_QUESTION);
+  const [questionDraft, setQuestionDraft] = useState<QuestionDraft>(makeEmptyQuestionDraft());
   const [criterionDraft, setCriterionDraft] = useState<CriterionDraft>(EMPTY_CRITERION);
+  const [selectedQuestion, setSelectedQuestion] = useState<SelectedQuestionState>(null);
   const [isSavingQuestion, setIsSavingQuestion] = useState(false);
   const [isSavingCriterion, setIsSavingCriterion] = useState(false);
   const [isReorderingQuestions, setIsReorderingQuestions] = useState(false);
@@ -994,6 +1409,29 @@ export default function AssignmentComposerPanel({
     () => content.questions.filter((question) => question.origin === 'TEACHER_ADDITION'),
     [content.questions],
   );
+  const activeQuestion = useMemo(
+    () =>
+      selectedQuestion && selectedQuestion !== 'new'
+        ? content.questions.find((question) => question.id === selectedQuestion) ?? null
+        : null,
+    [content.questions, selectedQuestion],
+  );
+  const combinedRubricCriteria = useMemo(
+    () => [...(templateRubric?.criteria ?? []), ...content.teacherCriteria],
+    [content.teacherCriteria, templateRubric],
+  );
+
+  function updateTeacherQuestionImage(
+    questionId: number,
+    image: AssignmentQuestion['image'],
+  ) {
+    onContentChange({
+      ...content,
+      questions: content.questions.map((question) =>
+        question.id === questionId ? { ...question, image } : question,
+      ),
+    });
+  }
 
   useEffect(() => {
     if (!content.rubricId) {
@@ -1022,6 +1460,21 @@ export default function AssignmentComposerPanel({
     };
   }, [content.rubricId]);
 
+  useEffect(() => {
+    if (selectedQuestion === 'new') return;
+    if (selectedQuestion && content.questions.some((question) => question.id === selectedQuestion)) {
+      return;
+    }
+    const nextSelection = teacherQuestions[0]?.id ?? content.questions[0]?.id ?? null;
+    setSelectedQuestion(nextSelection);
+  }, [content.questions, selectedQuestion, teacherQuestions]);
+
+  useEffect(() => {
+    if (activeQuestion && activeQuestion.origin === 'TEACHER_ADDITION') {
+      setQuestionDraft(toQuestionDraft(activeQuestion));
+    }
+  }, [activeQuestion]);
+
   async function handleAddQuestion() {
     const prompt = questionDraft.prompt.trim();
     const maxPoints = Number(questionDraft.maxPoints);
@@ -1040,10 +1493,13 @@ export default function AssignmentComposerPanel({
         type: questionDraft.type,
         prompt,
         maxPoints,
-        data: buildQuestionData(questionDraft.type),
+        data: questionDraft.data,
       });
       onContentChange(next);
-      setQuestionDraft(EMPTY_QUESTION);
+      setQuestionDraft(makeEmptyQuestionDraft());
+      const nextTeacherQuestion =
+        next.questions.filter((question) => question.origin === 'TEACHER_ADDITION').at(-1) ?? null;
+      setSelectedQuestion(nextTeacherQuestion?.id ?? null);
       toast.success('Assignment question added.');
     } catch (error: unknown) {
       toast.error(toErrorMessage(error, 'Failed to add question.'));
@@ -1117,220 +1573,169 @@ export default function AssignmentComposerPanel({
     }
   }
 
+  const activeTeacherQuestion =
+    activeQuestion && activeQuestion.origin === 'TEACHER_ADDITION' ? activeQuestion : null;
+  const activeTeacherQuestionIndex =
+    activeTeacherQuestion == null
+      ? -1
+      : teacherQuestions.findIndex((question) => question.id === activeTeacherQuestion.id);
+
   return (
-    <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.85fr)]">
+    <section className="grid gap-6 xl:grid-cols-[300px_minmax(0,1.2fr)_minmax(320px,0.95fr)]">
+      <QuestionRail
+        questions={content.questions}
+        selectedQuestion={selectedQuestion}
+        canCompose={canCompose}
+        onSelectQuestion={setSelectedQuestion}
+        onStartNewQuestion={() => {
+          if (!canCompose) return;
+          setQuestionDraft(makeEmptyQuestionDraft());
+          setSelectedQuestion('new');
+        }}
+      />
+
       <div className="space-y-6">
         <div className="rounded-3xl border border-border bg-card p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="rounded-full bg-primary/10 p-2 text-primary">
+              <FileText className="h-5 w-5" />
+            </div>
             <div>
               <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                Researcher Template
+                Assignment editing
               </p>
               <h2 className="mt-2 text-xl font-semibold text-foreground">
-                Locked source content
+                Extend the assignment
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Teachers can review inherited prompts and visuals, but cannot change what the
-                researcher published.
+                Template questions and rubric items stay locked. Add your own questions and rubric
+                criteria here where needed for this class.
               </p>
             </div>
-            <div className="rounded-2xl border border-border/70 bg-muted/40 px-3 py-2 text-right">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Inherited</p>
-              <p className="text-lg font-semibold text-foreground">{inheritedQuestions.length}</p>
-            </div>
-          </div>
-
-          <div className="mt-5 space-y-3">
-            {inheritedQuestions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No inherited questions in this template.</p>
-            ) : (
-              inheritedQuestions.map((question) => (
-                <InheritedQuestionCard key={question.id} question={question} />
-              ))
-            )}
           </div>
         </div>
 
-        <div className="rounded-3xl border border-border bg-card p-5 shadow-sm">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-              Teacher Additions
-            </p>
-            <h2 className="mt-2 text-xl font-semibold text-foreground">Assignment-only questions</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Add local prompts and supporting images without changing the researcher template.
-            </p>
-          </div>
+        {selectedQuestion === 'new' ? (
+          <NewQuestionStudio
+            draft={questionDraft}
+            canCompose={canCompose && !isSavingQuestion}
+            onDraftChange={setQuestionDraft}
+            onCreate={() => void handleAddQuestion()}
+          />
+        ) : activeTeacherQuestion ? (
+          <TeacherQuestionStudio
+            assignmentId={assignmentId}
+            question={activeTeacherQuestion}
+            draft={questionDraft}
+            canCompose={canCompose && !isReorderingQuestions}
+            canMoveUp={activeTeacherQuestionIndex > 0}
+            canMoveDown={activeTeacherQuestionIndex < teacherQuestions.length - 1}
+            activeImage={activeTeacherQuestion.image}
+            isSaving={isSavingQuestion}
+            isDeleting={false}
+            onDraftChange={setQuestionDraft}
+            onMoveUp={() => void moveTeacherQuestion(activeTeacherQuestionIndex, -1)}
+            onMoveDown={() => void moveTeacherQuestion(activeTeacherQuestionIndex, 1)}
+            onSave={async () => {
+              const prompt = questionDraft.prompt.trim();
+              const maxPoints = Number(questionDraft.maxPoints);
+              if (!prompt) {
+                toast.error('Question prompt is required.');
+                return;
+              }
+              if (!Number.isFinite(maxPoints) || maxPoints < 0) {
+                toast.error('Max points must be a valid non-negative number.');
+                return;
+              }
 
-          <div className="mt-5 rounded-2xl border border-dashed border-border/80 bg-background p-4">
-            <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_140px_auto]">
-              <div className="space-y-2">
-                <Label htmlFor="assignment-question-type">Type</Label>
-                <Select
-                  value={questionDraft.type}
-                  onValueChange={(value) =>
-                    setQuestionDraft((current) => ({
-                      ...current,
-                      type: value as QuestionKind,
-                    }))
-                  }
-                  disabled={!canCompose || isSavingQuestion}
-                >
-                  <SelectTrigger id="assignment-question-type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="SHORT_ANSWER">Short answer</SelectItem>
-                    <SelectItem value="MULTIPLE_CHOICE">Multiple choice</SelectItem>
-                    <SelectItem value="NUMBER_SCALE">Number scale</SelectItem>
-                    <SelectItem value="MOOD_METER">Mood meter</SelectItem>
-                  </SelectContent>
-                </Select>
+              setIsSavingQuestion(true);
+              try {
+                const next = await updateAssignmentQuestion(assignmentId, activeTeacherQuestion.id, {
+                  type: questionDraft.type,
+                  prompt,
+                  maxPoints,
+                  data: questionDraft.data,
+                });
+                onContentChange(next);
+                toast.success('Assignment question updated.');
+              } catch (error: unknown) {
+                toast.error(toErrorMessage(error, 'Failed to update question.'));
+              } finally {
+                setIsSavingQuestion(false);
+              }
+            }}
+            onDelete={async () => {
+              if (!confirmDestructiveAction('Remove this teacher-added question from the assignment?')) {
+                return;
+              }
+              setIsSavingQuestion(true);
+              try {
+                const next = await deleteAssignmentQuestion(assignmentId, activeTeacherQuestion.id);
+                onContentChange(next);
+                const nextTeacherQuestion =
+                  next.questions.find((question) => question.origin === 'TEACHER_ADDITION') ??
+                  next.questions[0] ??
+                  null;
+                setSelectedQuestion(nextTeacherQuestion?.id ?? null);
+                toast.success('Assignment question removed.');
+              } catch (error: unknown) {
+                toast.error(toErrorMessage(error, 'Failed to remove question.'));
+              } finally {
+                setIsSavingQuestion(false);
+              }
+            }}
+            onImageChange={(nextImage) =>
+              updateTeacherQuestionImage(activeTeacherQuestion.id, nextImage)
+            }
+          />
+        ) : activeQuestion ? (
+          <LockedQuestionStudio question={activeQuestion} />
+        ) : (
+          <section className="rounded-3xl border border-border bg-card px-5 py-12 text-center shadow-sm">
+            <div className="mx-auto flex max-w-md flex-col items-center">
+              <div className="rounded-full bg-muted p-3 text-muted-foreground">
+                <FileText className="h-6 w-6" />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="assignment-question-prompt">Prompt</Label>
-                <Input
-                  id="assignment-question-prompt"
-                  value={questionDraft.prompt}
-                  onChange={(event) =>
-                    setQuestionDraft((current) => ({
-                      ...current,
-                      prompt: event.target.value,
-                    }))
-                  }
-                  disabled={!canCompose || isSavingQuestion}
-                  placeholder="Add an assignment-only question"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="assignment-question-points">Points</Label>
-                <Input
-                  id="assignment-question-points"
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  value={questionDraft.maxPoints}
-                  onChange={(event) =>
-                    setQuestionDraft((current) => ({
-                      ...current,
-                      maxPoints: event.target.value,
-                    }))
-                  }
-                  disabled={!canCompose || isSavingQuestion}
-                />
-              </div>
-              <div className="flex items-end">
-                <Button
-                  type="button"
-                  className="w-full"
-                  onClick={() => void handleAddQuestion()}
-                  disabled={!canCompose || isSavingQuestion}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-5 space-y-3">
-            {teacherQuestions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No teacher-added questions yet. Add local prompts here instead of editing the
-                researcher template.
+              <h2 className="mt-4 text-xl font-semibold text-foreground">Select a question</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Pick a locked researcher question to review it, or start a new local question from
+                the structure rail.
               </p>
-            ) : (
-              teacherQuestions.map((question) => (
-                <TeacherQuestionCard
-                  key={question.id}
-                  assignmentId={assignmentId}
-                  question={question}
-                  canCompose={canCompose && !isReorderingQuestions}
-                  onContentChange={onContentChange}
-                  canMoveUp={teacherQuestions.findIndex((item) => item.id === question.id) > 0}
-                  canMoveDown={
-                    teacherQuestions.findIndex((item) => item.id === question.id) <
-                    teacherQuestions.length - 1
-                  }
-                  onMoveUp={() =>
-                    void moveTeacherQuestion(
-                      teacherQuestions.findIndex((item) => item.id === question.id),
-                      -1,
-                    )
-                  }
-                  onMoveDown={() =>
-                    void moveTeacherQuestion(
-                      teacherQuestions.findIndex((item) => item.id === question.id),
-                      1,
-                    )
-                  }
-                />
-              ))
-            )}
-          </div>
-        </div>
+            </div>
+          </section>
+        )}
       </div>
 
       <aside className="space-y-6">
-        <div className="rounded-3xl border border-border bg-card p-5 shadow-sm">
+        <section className="rounded-3xl border border-border bg-card p-5 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-            Rubric Context
+            Rubric
           </p>
           <h2 className="mt-2 text-xl font-semibold text-foreground">Template rubric stays locked</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Teachers cannot edit researcher criteria. Add assignment-only criteria below when you
-            need extra grading context.
+            Template rubric items stay fixed. Add assignment-only criteria and levels below when
+            you need extra grading detail for this class.
           </p>
 
           <div className="mt-4 rounded-2xl border border-border/70 bg-background p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Template rubric</p>
             {!content.rubricId ? (
-              <p className="mt-2 text-sm text-foreground">No template rubric attached.</p>
+              <p className="text-sm text-foreground">No template rubric attached.</p>
             ) : isLoadingRubric ? (
-              <p className="mt-2 text-sm text-muted-foreground">Loading locked rubric…</p>
+              <p className="text-sm text-muted-foreground">Loading locked rubric…</p>
             ) : templateRubric ? (
-              <div className="mt-3 space-y-3">
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{templateRubric.title}</p>
-                  {templateRubric.description && (
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {templateRubric.description}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  {templateRubric.criteria.map((criterion) => (
-                    <article
-                      key={criterion.id}
-                      className="rounded-2xl border border-border/60 bg-card px-3 py-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">
-                            {criterion.title}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Weight {formatPoints(criterion.weight)}
-                          </p>
-                        </div>
-                        <span className="rounded-full bg-muted px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                          Locked
-                        </span>
-                      </div>
-                      {criterion.description && (
-                        <p className="mt-3 text-sm text-muted-foreground">
-                          {criterion.description}
-                        </p>
-                      )}
-                    </article>
-                  ))}
-                </div>
-              </div>
+              <InheritedRubricList rubric={templateRubric} />
             ) : (
-              <p className="mt-2 text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Template rubric #{content.rubricId} is attached but could not be loaded.
               </p>
             )}
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-border/70 bg-background p-4">
+            <RubricGridPreview
+              criteria={combinedRubricCriteria}
+              title="Current rubric preview"
+            />
           </div>
 
           <div className="mt-5 rounded-2xl border border-dashed border-border/80 bg-background p-4 space-y-3">
@@ -1399,9 +1804,7 @@ export default function AssignmentComposerPanel({
 
           <div className="mt-5 space-y-3">
             {content.teacherCriteria.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No assignment-only criteria yet.
-              </p>
+              <p className="text-sm text-muted-foreground">No assignment-only criteria yet.</p>
             ) : (
               content.teacherCriteria.map((criterion) => (
                 <TeacherCriterionCard
@@ -1431,7 +1834,7 @@ export default function AssignmentComposerPanel({
               ))
             )}
           </div>
-        </div>
+        </section>
       </aside>
     </section>
   );

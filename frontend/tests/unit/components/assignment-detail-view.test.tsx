@@ -166,16 +166,6 @@ function setupModuleMocks() {
 
   vi.doMock("sonner", () => ({ toast: mockToast }));
 
-  vi.doMock("@/components/assignments/AssignmentComposerPanel", () => ({
-    default: ({ assignmentId, content, canCompose }: any) => (
-      <div data-testid="assignment-composer">
-        <span>Composer assignment {assignmentId}</span>
-        <span>{canCompose ? "compose-enabled" : "compose-disabled"}</span>
-        <span>{content.questions.length} questions loaded</span>
-      </div>
-    ),
-  }));
-
   vi.doMock("@/lib/assignment-api", () => ({
     getAssignment: mockGetAssignment,
     getAssignmentContent: mockGetAssignmentContent,
@@ -246,7 +236,7 @@ describe("AssignmentDetailView", () => {
     expect(screen.getByText("Back to Assignments")).toBeInTheDocument();
   });
 
-  it("renders assignment metadata and the teacher composer for teacher view", async () => {
+  it("renders assignment metadata and a teacher-facing overview for teacher view", async () => {
     setupTeacherDefaults();
     const Component = await loadComponent();
 
@@ -255,9 +245,13 @@ describe("AssignmentDetailView", () => {
     expect(await screen.findByText("Unit Test Assignment")).toBeInTheDocument();
     expect(screen.getAllByText(/Assignment Template Alpha/).length).toBeGreaterThan(0);
     expect(screen.getByText("Science 101")).toBeInTheDocument();
-    expect(screen.getByText("Teacher template view")).toBeInTheDocument();
-    expect(screen.getByTestId("assignment-composer")).toBeInTheDocument();
-    expect(screen.getByText("3 questions loaded")).toBeInTheDocument();
+    expect(screen.getByText("Teacher view")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Edit assignment" })).toHaveAttribute(
+      "href",
+      "/dashboard/assignments/1/edit",
+    );
+    expect(screen.getByText("Template questions")).toBeInTheDocument();
+    expect(screen.getByText("Pick the correct answer")).toBeInTheDocument();
   });
 
   it("archives and restores the assignment through the manage panel", async () => {

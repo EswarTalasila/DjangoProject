@@ -181,6 +181,62 @@ describe("assignments/[id]/page.tsx", () => {
 });
 
 /* ================================================================== */
+/*  assignments/[id]/edit/page.tsx — edit page                         */
+/* ================================================================== */
+describe("assignments/[id]/edit/page.tsx", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  function setup() {
+    vi.doMock("next/navigation", () => ({ redirect: mockRedirect }));
+    vi.doMock("@/lib/auth-session", () => ({
+      getSessionProfile: mockGetSessionProfile,
+    }));
+    vi.doMock("@/components/assignments/AssignmentDetailView", () => ({
+      default: (props: any) => (
+        <div>
+          AssignmentEdit id={props.assignmentId} canMutate={String(props.canMutate)} role={props.viewerRole} mode={props.mode}
+        </div>
+      ),
+    }));
+  }
+
+  it("renders the edit route for TEACHER", async () => {
+    vi.resetModules();
+    setup();
+    mockGetSessionProfile.mockResolvedValue(teacherProfile());
+    const mod = await import("@/app/(dashboard)/dashboard/assignments/[id]/edit/page");
+    const el = await mod.default({ params: Promise.resolve({ id: "7" }) });
+    render(el as any);
+    expect(screen.getByText(/id=7/)).toBeInTheDocument();
+    expect(screen.getByText(/canMutate=true/)).toBeInTheDocument();
+    expect(screen.getByText(/role=TEACHER/)).toBeInTheDocument();
+    expect(screen.getByText(/mode=edit/)).toBeInTheDocument();
+  });
+
+  it("redirects ADMIN to /dashboard/assignments", async () => {
+    vi.resetModules();
+    setup();
+    mockGetSessionProfile.mockResolvedValue(adminProfile());
+    const mod = await import("@/app/(dashboard)/dashboard/assignments/[id]/edit/page");
+    try {
+      await mod.default({ params: Promise.resolve({ id: "7" }) });
+    } catch {}
+    expect(mockRedirect).toHaveBeenCalledWith("/dashboard/assignments");
+  });
+
+  it("redirects STUDENT to /dashboard/assignments", async () => {
+    vi.resetModules();
+    setup();
+    mockGetSessionProfile.mockResolvedValue(studentProfile());
+    const mod = await import("@/app/(dashboard)/dashboard/assignments/[id]/edit/page");
+    try {
+      await mod.default({ params: Promise.resolve({ id: "7" }) });
+    } catch {}
+    expect(mockRedirect).toHaveBeenCalledWith("/dashboard/assignments");
+  });
+});
+
+/* ================================================================== */
 /*  assignments/new/page.tsx — create page                             */
 /* ================================================================== */
 describe("assignments/new/page.tsx", () => {

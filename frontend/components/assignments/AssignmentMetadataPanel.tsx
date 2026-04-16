@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Loader2 } from 'lucide-react';
 
 import {
@@ -41,6 +42,8 @@ export type AssignmentMetadataPanelProps = {
   onDueAtInputChange: (value: string) => void;
   previewMode: PreviewMode;
   onPreviewModeChange: (mode: PreviewMode) => void;
+  showPreviewModeToggle?: boolean;
+  editHref?: string | null;
   isUpdating: boolean;
   isArchiving: boolean;
   isRestoring: boolean;
@@ -64,6 +67,8 @@ export default function AssignmentMetadataPanel({
   onDueAtInputChange,
   previewMode,
   onPreviewModeChange,
+  showPreviewModeToggle = true,
+  editHref = null,
   isUpdating,
   isArchiving,
   isRestoring,
@@ -157,29 +162,36 @@ export default function AssignmentMetadataPanel({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Preview Mode</p>
-            <div className="rounded border border-border p-1 inline-flex items-center gap-1 bg-card">
-              <Button
-                type="button"
-                size="sm"
-                variant={previewMode === 'teacher' ? 'default' : 'ghost'}
-                onClick={() => onPreviewModeChange('teacher')}
-              >
-                Teacher View
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant={previewMode === 'student' ? 'default' : 'ghost'}
-                onClick={() => onPreviewModeChange('student')}
-              >
-                Student View
-              </Button>
+          {showPreviewModeToggle ? (
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Preview Mode</p>
+              <div className="rounded border border-border p-1 inline-flex items-center gap-1 bg-card">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={previewMode === 'teacher' ? 'default' : 'ghost'}
+                  onClick={() => onPreviewModeChange('teacher')}
+                >
+                  Teacher View
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={previewMode === 'student' ? 'default' : 'ghost'}
+                  onClick={() => onPreviewModeChange('student')}
+                >
+                  Student View
+                </Button>
+              </div>
             </div>
-          </div>
+          ) : null}
 
           <div className="flex items-center gap-3 flex-wrap">
+            {editHref && canEditAssignment ? (
+              <Button asChild variant="outline">
+                <Link href={editHref}>Edit assignment</Link>
+              </Button>
+            ) : null}
             <Button onClick={onUpdate} disabled={!canEditAssignment || isUpdating}>
               {isUpdating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Changes

@@ -35,6 +35,7 @@ type AssignmentDetailViewProps = {
   canMutate: boolean;
   viewerRole: 'TEACHER' | 'RESEARCHER' | 'ADMIN' | 'STUDENT';
   viewerId: number;
+  mode?: 'detail' | 'edit';
 };
 
 type PreviewMode = 'teacher' | 'student';
@@ -167,6 +168,7 @@ export default function AssignmentDetailView({
   canMutate,
   viewerRole,
   viewerId,
+  mode = 'detail',
 }: AssignmentDetailViewProps) {
   const [assignment, setAssignment] = useState<Assignment | null>(null);
   const [assignmentContent, setAssignmentContent] = useState<AssignmentContent | null>(null);
@@ -318,6 +320,7 @@ export default function AssignmentDetailView({
   const submissionStatus: SubmissionStatus = submission?.status ?? 'NOT_STARTED';
 
   const assignmentArchived = assignment?.status === 'ARCHIVED';
+  const editHref = canEditAssignment ? `/dashboard/assignments/${assignmentId}/edit` : null;
   const assignmentNotOpen = useMemo(() => {
     if (!assignment?.openAt) return false;
     return new Date(assignment.openAt) > new Date();
@@ -492,11 +495,11 @@ export default function AssignmentDetailView({
   return (
     <div className="w-full space-y-6 p-6">
       <Link
-        href="/dashboard/assignments"
+        href={mode === 'edit' ? `/dashboard/assignments/${assignmentId}` : '/dashboard/assignments'}
         className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
       >
         <ArrowLeft className="h-4 w-4" />
-        Back to Assignments
+        {mode === 'edit' ? 'Back to Assignment' : 'Back to Assignments'}
       </Link>
 
       <AssignmentMetadataPanel
@@ -514,6 +517,8 @@ export default function AssignmentDetailView({
         onDueAtInputChange={setDueAtInput}
         previewMode={previewMode}
         onPreviewModeChange={setPreviewMode}
+        showPreviewModeToggle={mode !== 'edit'}
+        editHref={mode === 'detail' ? editHref : null}
         isUpdating={isUpdating}
         isArchiving={isArchiving}
         isRestoring={isRestoring}
@@ -524,14 +529,27 @@ export default function AssignmentDetailView({
 
       <div className="rounded-sm border border-border bg-card p-6 space-y-4 min-h-[760px]">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">Assignment Content</h2>
+          <h2 className="text-lg font-semibold text-foreground">
+            {mode === 'edit' ? 'Edit Assignment' : 'Assignment Content'}
+          </h2>
           <span className="text-xs uppercase tracking-wide text-muted-foreground">
-            {previewMode === 'teacher' ? 'Teacher template view' : 'Student preview'}
+            {mode === 'edit'
+              ? 'Teacher editor'
+              : previewMode === 'teacher'
+                ? 'Teacher view'
+                : 'Student preview'}
           </span>
         </div>
 
         {!assignmentContent || (assignmentContent.questions.length === 0 && assignmentContent.submissionMode === 'DIGITAL') ? (
           <p className="text-sm text-muted-foreground">No questions in this assignment template.</p>
+        ) : mode === 'edit' ? (
+          <AssignmentComposerPanel
+            assignmentId={assignment.id}
+            content={assignmentContent}
+            canCompose={canEditAssignment}
+            onContentChange={setAssignmentContent}
+          />
         ) : previewMode === 'student' ? (
           <StudentSubmissionForm
             viewerRole={viewerRole}
@@ -563,12 +581,39 @@ export default function AssignmentDetailView({
             onSetSubmittedAt={setStudentSubmittedAt}
           />
         ) : (
-          <AssignmentComposerPanel
-            assignmentId={assignment.id}
-            content={assignmentContent}
-            canCompose={canEditAssignment}
-            onContentChange={setAssignmentContent}
-          />
+          <section className="space-y-6">
+            <div className="rounded-2xl border border-border/70 bg-background p-5">
+              <h3 className="text-base font-semibold text-foreground">Template questions</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Questions from the shared template stay fixed. Use Edit assignment if you want to
+                add local questions or rubric items for this class.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {assignmentContent.questions.map((question, index) => (
+                <div
+                  key={question.id}
+                  className="rounded-2xl border border-border/70 bg-background px-4 py-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        Question {index + 1}
+                      </p>
+                      <p className="mt-1 text-base font-medium text-foreground">{question.prompt}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        {question.type.replaceAll('_', ' ')}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">{question.maxPoints} pts</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         )}
       </div>
     </div>
