@@ -219,11 +219,19 @@ describe('AssignmentComposerPanel', () => {
     renderComposer();
 
     expect(screen.getByText('Question structure')).toBeInTheDocument();
-    expect(screen.getByText('Locked rubric + local additions')).toBeInTheDocument();
-    expect(screen.getByText('Editable question')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Teacher prompt')).toBeInTheDocument();
+    expect(screen.getByText('Assignment rubric')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /shared rubric/i }));
     expect(await screen.findByText('Locked Research Rubric')).toBeInTheDocument();
     expect(screen.getAllByText('Evidence quality')).toHaveLength(2);
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /teacher prompt/i,
+      }),
+    );
+
+    expect(screen.getByText('Editable question')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Teacher prompt')).toBeInTheDocument();
 
     await userEvent.click(
       screen.getByRole('button', {
@@ -320,6 +328,7 @@ describe('AssignmentComposerPanel', () => {
       />,
     );
 
+    await user.click(screen.getByRole('button', { name: /teacher prompt/i }));
     const choiceInputs = screen.getAllByPlaceholderText('Choice text');
     await user.clear(choiceInputs[0]);
     await user.type(choiceInputs[0], 'Gamma');
@@ -748,6 +757,7 @@ describe('AssignmentComposerPanel', () => {
 
     renderComposer();
 
+    await user.click(screen.getByRole('button', { name: /teacher prompt/i }));
     await user.click(screen.getByRole('button', { name: 'reuse-image' }));
     await waitFor(() => expect(mockListReusableAssignmentImages).toHaveBeenCalledWith(1));
     await waitFor(() =>
@@ -773,6 +783,7 @@ describe('AssignmentComposerPanel', () => {
       />,
     );
 
+    await userEvent.click(screen.getByRole('button', { name: /shared rubric/i }));
     await screen.findByText('Locked Research Rubric');
     expect(screen.getByRole('button', { name: /add local question/i })).toBeDisabled();
     expect(
@@ -780,6 +791,7 @@ describe('AssignmentComposerPanel', () => {
         name: /new local question/i,
       }),
     ).toBeDisabled();
+    await userEvent.click(screen.getByRole('button', { name: /teacher prompt/i }));
     expect(screen.getByLabelText('Prompt', { selector: '#edit-question-prompt-102' })).toBeDisabled();
   });
 });

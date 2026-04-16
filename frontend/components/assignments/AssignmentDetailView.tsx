@@ -589,10 +589,9 @@ export default function AssignmentDetailView({
         ) : (
           <section className="space-y-6">
             <div className="rounded-2xl border border-border/70 bg-background p-5">
-              <h3 className="text-base font-semibold text-foreground">Template questions</h3>
+              <h3 className="text-base font-semibold text-foreground">Assignment questions</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Questions from the shared template stay fixed. Use Edit assignment if you want to
-                add local questions or rubric items for this class.
+                Shared questions stay fixed. Any teacher-added questions appear here too. Use Edit assignment if you want to add or adjust local questions or rubric items for this class.
               </p>
             </div>
 

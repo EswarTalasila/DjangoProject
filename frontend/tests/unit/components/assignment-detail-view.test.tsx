@@ -250,7 +250,7 @@ describe("AssignmentDetailView", () => {
       "href",
       "/dashboard/assignments/1/edit",
     );
-    expect(screen.getByText("Template questions")).toBeInTheDocument();
+    expect(screen.getByText("Assignment questions")).toBeInTheDocument();
     expect(screen.getByText("Pick the correct answer")).toBeInTheDocument();
   });
 

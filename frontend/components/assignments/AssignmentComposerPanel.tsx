@@ -5,6 +5,8 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  ChevronDown,
+  ChevronRight,
   FileText,
   Lock,
   Pencil,
@@ -1413,6 +1415,7 @@ export default function AssignmentComposerPanel({
   const [templateRubric, setTemplateRubric] = useState<Rubric | null>(null);
   const [isLoadingRubric, setIsLoadingRubric] = useState(false);
   const [mobileView, setMobileView] = useState<'structure' | 'editor' | 'settings'>('editor');
+  const [showLockedRubric, setShowLockedRubric] = useState(false);
 
   const inheritedQuestions = useMemo(
     () => content.questions.filter((question) => question.origin === 'TEMPLATE'),
@@ -1478,7 +1481,7 @@ export default function AssignmentComposerPanel({
     if (selectedQuestion && content.questions.some((question) => question.id === selectedQuestion)) {
       return;
     }
-    const nextSelection = teacherQuestions[0]?.id ?? content.questions[0]?.id ?? null;
+    const nextSelection = content.questions[0]?.id ?? null;
     setSelectedQuestion(nextSelection);
   }, [content.questions, selectedQuestion, teacherQuestions]);
 
@@ -1748,7 +1751,7 @@ export default function AssignmentComposerPanel({
 
         <aside
           className={cn(
-            'w-[320px] shrink-0 overflow-y-auto border-l border-border bg-muted/30 transition-transform duration-200',
+            'w-[360px] shrink-0 overflow-y-auto border-l border-border bg-muted/30 transition-transform duration-200 xl:w-[380px]',
             'max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-20 max-lg:w-full max-lg:bg-background',
             mobileView === 'settings'
               ? 'max-lg:translate-x-0'
@@ -1769,31 +1772,10 @@ export default function AssignmentComposerPanel({
               <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                 Rubric
               </p>
-              <h2 className="mt-2 text-xl font-semibold text-foreground">Locked rubric + local additions</h2>
+              <h2 className="mt-2 text-xl font-semibold text-foreground">Assignment rubric</h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 Shared rubric criteria stay fixed. Add your own criteria or levels here for this assignment.
               </p>
-
-              <div className="mt-4 rounded-2xl border border-border/70 bg-background p-4">
-            {!content.rubricId ? (
-              <p className="text-sm text-foreground">No template rubric attached.</p>
-            ) : isLoadingRubric ? (
-              <p className="text-sm text-muted-foreground">Loading locked rubric…</p>
-            ) : templateRubric ? (
-              <InheritedRubricList rubric={templateRubric} />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Template rubric #{content.rubricId} is attached but could not be loaded.
-              </p>
-            )}
-              </div>
-
-              <div className="mt-5 rounded-2xl border border-border/70 bg-background p-4">
-                <RubricGridPreview
-                  criteria={combinedRubricCriteria}
-                  title="Rubric preview"
-                />
-              </div>
 
               <div className="mt-5 rounded-2xl border border-dashed border-border/80 bg-background p-4 space-y-3">
                 <div className="space-y-2">
@@ -1827,35 +1809,33 @@ export default function AssignmentComposerPanel({
                     rows={4}
                   />
                 </div>
-                <div className="grid gap-3 md:grid-cols-[120px_auto]">
-                  <div className="space-y-2">
-                    <Label htmlFor="assignment-criterion-weight">Weight</Label>
-                    <Input
-                      id="assignment-criterion-weight"
-                      type="number"
-                      min="0.01"
-                      step="0.25"
-                      value={criterionDraft.weight}
-                      onChange={(event) =>
-                        setCriterionDraft((current) => ({
-                          ...current,
-                          weight: event.target.value,
-                        }))
-                      }
-                      disabled={!canCompose || isSavingCriterion}
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <Button
-                      type="button"
-                      className="w-full"
-                      onClick={() => void handleAddCriterion()}
-                      disabled={!canCompose || isSavingCriterion}
-                    >
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add criterion
-                    </Button>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="assignment-criterion-weight">Weight</Label>
+                  <Input
+                    id="assignment-criterion-weight"
+                    type="number"
+                    min="0.01"
+                    step="0.25"
+                    value={criterionDraft.weight}
+                    onChange={(event) =>
+                      setCriterionDraft((current) => ({
+                        ...current,
+                        weight: event.target.value,
+                      }))
+                    }
+                    disabled={!canCompose || isSavingCriterion}
+                  />
+                </div>
+                <div className="pt-1">
+                  <Button
+                    type="button"
+                    className="w-full"
+                    onClick={() => void handleAddCriterion()}
+                    disabled={!canCompose || isSavingCriterion}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add criterion
+                  </Button>
                 </div>
               </div>
 
@@ -1890,6 +1870,48 @@ export default function AssignmentComposerPanel({
                     />
                   ))
                 )}
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-border/70 bg-background p-4">
+                <RubricGridPreview
+                  criteria={combinedRubricCriteria}
+                  title="Rubric preview"
+                />
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-border/70 bg-background">
+                <button
+                  type="button"
+                  onClick={() => setShowLockedRubric((current) => !current)}
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Shared rubric</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Review the locked rubric that came from the shared template.
+                    </p>
+                  </div>
+                  {showLockedRubric ? (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </button>
+                {showLockedRubric ? (
+                  <div className="border-t border-border/70 px-4 py-4">
+                    {!content.rubricId ? (
+                      <p className="text-sm text-foreground">No template rubric attached.</p>
+                    ) : isLoadingRubric ? (
+                      <p className="text-sm text-muted-foreground">Loading locked rubric…</p>
+                    ) : templateRubric ? (
+                      <InheritedRubricList rubric={templateRubric} />
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Template rubric #{content.rubricId} is attached but could not be loaded.
+                      </p>
+                    )}
+                  </div>
+                ) : null}
               </div>
             </section>
           </div>
