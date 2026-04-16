@@ -218,8 +218,8 @@ describe('AssignmentComposerPanel', () => {
   it('renders the builder with locked researcher content and editable teacher content', async () => {
     renderComposer();
 
-    expect(screen.getByText('Assignment Builder')).toBeInTheDocument();
-    expect(screen.getByText('Extend the assignment')).toBeInTheDocument();
+    expect(screen.getByText('Question structure')).toBeInTheDocument();
+    expect(screen.getByText('Locked rubric + local additions')).toBeInTheDocument();
     expect(screen.getByText('Editable question')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Teacher prompt')).toBeInTheDocument();
     expect(await screen.findByText('Locked Research Rubric')).toBeInTheDocument();

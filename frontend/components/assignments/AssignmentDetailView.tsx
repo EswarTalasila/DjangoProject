@@ -25,7 +25,7 @@ import {
   type SubmissionDTO,
   type SubmissionStatus,
 } from '@/lib/submission-api';
-import { toErrorMessage } from '@/lib/utils';
+import { cn, toErrorMessage } from '@/lib/utils';
 import AssignmentComposerPanel from './AssignmentComposerPanel';
 import AssignmentMetadataPanel from './AssignmentMetadataPanel';
 import StudentSubmissionForm from './StudentSubmissionForm';
@@ -493,41 +493,46 @@ export default function AssignmentDetailView({
   }
 
   return (
-    <div className="w-full space-y-6 p-6">
-      <Link
-        href={mode === 'edit' ? `/dashboard/assignments/${assignmentId}` : '/dashboard/assignments'}
-        className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        {mode === 'edit' ? 'Back to Assignment' : 'Back to Assignments'}
-      </Link>
+    <div className={cn('w-full', mode === 'edit' ? 'p-0' : 'space-y-6 p-6')}>
+      <div className={cn(mode === 'edit' ? 'px-6 pt-6' : '')}>
+        <Link
+          href={mode === 'edit' ? `/dashboard/assignments/${assignmentId}` : '/dashboard/assignments'}
+          className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {mode === 'edit' ? 'Back to Assignment' : 'Back to Assignments'}
+        </Link>
+      </div>
 
-      <AssignmentMetadataPanel
-        assignment={assignment}
-        assignmentTemplate={assignmentContent}
-        courseName={courseName}
-        totalPoints={totalPoints}
-        canMutate={canMutate}
-        canEditAssignment={canEditAssignment}
-        titleInput={titleInput}
-        onTitleInputChange={setTitleInput}
-        openAtInput={openAtInput}
-        onOpenAtInputChange={setOpenAtInput}
-        dueAtInput={dueAtInput}
-        onDueAtInputChange={setDueAtInput}
-        previewMode={previewMode}
-        onPreviewModeChange={setPreviewMode}
-        showPreviewModeToggle={mode !== 'edit'}
-        editHref={mode === 'detail' ? editHref : null}
-        isUpdating={isUpdating}
-        isArchiving={isArchiving}
-        isRestoring={isRestoring}
-        onUpdate={() => void handleUpdateAssignment()}
-        onArchive={() => void handleArchive()}
-        onRestore={() => void handleRestore()}
-      />
+      {mode !== 'edit' ? (
+        <AssignmentMetadataPanel
+          assignment={assignment}
+          assignmentTemplate={assignmentContent}
+          courseName={courseName}
+          totalPoints={totalPoints}
+          canMutate={canMutate}
+          canEditAssignment={canEditAssignment}
+          titleInput={titleInput}
+          onTitleInputChange={setTitleInput}
+          openAtInput={openAtInput}
+          onOpenAtInputChange={setOpenAtInput}
+          dueAtInput={dueAtInput}
+          onDueAtInputChange={setDueAtInput}
+          previewMode={previewMode}
+          onPreviewModeChange={setPreviewMode}
+          showPreviewModeToggle
+          editHref={editHref}
+          isUpdating={isUpdating}
+          isArchiving={isArchiving}
+          isRestoring={isRestoring}
+          onUpdate={() => void handleUpdateAssignment()}
+          onArchive={() => void handleArchive()}
+          onRestore={() => void handleRestore()}
+        />
+      ) : null}
 
-      <div className="rounded-sm border border-border bg-card p-6 space-y-4 min-h-[760px]">
+      <div className={cn(mode === 'edit' ? 'px-6 pb-6 pt-4' : 'rounded-sm border border-border bg-card p-6 space-y-4 min-h-[760px]')}>
+        {mode !== 'edit' ? (
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-foreground">
             {mode === 'edit' ? 'Edit Assignment' : 'Assignment Content'}
@@ -540,6 +545,7 @@ export default function AssignmentDetailView({
                 : 'Student preview'}
           </span>
         </div>
+        ) : null}
 
         {!assignmentContent || (assignmentContent.questions.length === 0 && assignmentContent.submissionMode === 'DIGITAL') ? (
           <p className="text-sm text-muted-foreground">No questions in this assignment template.</p>

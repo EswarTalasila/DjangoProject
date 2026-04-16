@@ -262,20 +262,32 @@ function QuestionRail({
   canCompose,
   onSelectQuestion,
   onStartNewQuestion,
+  onBackToEditor,
 }: {
   questions: AssignmentQuestion[];
   selectedQuestion: SelectedQuestionState;
   canCompose: boolean;
   onSelectQuestion: (questionId: number) => void;
   onStartNewQuestion: () => void;
+  onBackToEditor?: () => void;
 }) {
   return (
-    <aside className="rounded-3xl border border-border bg-card shadow-sm xl:sticky xl:top-4">
+    <div className="flex h-full flex-col overflow-hidden">
       <div className="border-b border-border px-4 py-4">
+        <div className="mb-3 flex items-center justify-between lg:hidden">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            Structure
+          </span>
+          {onBackToEditor ? (
+            <Button type="button" variant="ghost" size="sm" onClick={onBackToEditor}>
+              Back
+            </Button>
+          ) : null}
+        </div>
         <div className="flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-              Assignment Builder
+              Structure
             </p>
             <h2 className="mt-2 text-lg font-semibold text-foreground">Question structure</h2>
           </div>
@@ -379,7 +391,7 @@ function QuestionRail({
           </div>
         </button>
       </div>
-    </aside>
+    </div>
   );
 }
 
@@ -1400,6 +1412,7 @@ export default function AssignmentComposerPanel({
   const [isReorderingCriteria, setIsReorderingCriteria] = useState(false);
   const [templateRubric, setTemplateRubric] = useState<Rubric | null>(null);
   const [isLoadingRubric, setIsLoadingRubric] = useState(false);
+  const [mobileView, setMobileView] = useState<'structure' | 'editor' | 'settings'>('editor');
 
   const inheritedQuestions = useMemo(
     () => content.questions.filter((question) => question.origin === 'TEMPLATE'),
@@ -1581,41 +1594,67 @@ export default function AssignmentComposerPanel({
       : teacherQuestions.findIndex((question) => question.id === activeTeacherQuestion.id);
 
   return (
-    <section className="grid gap-6 xl:grid-cols-[300px_minmax(0,1.2fr)_minmax(320px,0.95fr)]">
-      <QuestionRail
-        questions={content.questions}
-        selectedQuestion={selectedQuestion}
-        canCompose={canCompose}
-        onSelectQuestion={setSelectedQuestion}
-        onStartNewQuestion={() => {
-          if (!canCompose) return;
-          setQuestionDraft(makeEmptyQuestionDraft());
-          setSelectedQuestion('new');
-        }}
-      />
+    <section className="flex h-[calc(100vh-64px)] flex-col overflow-hidden rounded-2xl border border-border bg-background">
+      <div className="flex border-b border-border bg-muted/30 lg:hidden">
+        {(
+          [
+            { key: 'structure', label: 'Structure' },
+            { key: 'editor', label: 'Editor' },
+            { key: 'settings', label: 'Rubric' },
+          ] as const
+        ).map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setMobileView(tab.key)}
+            className={cn(
+              'flex-1 py-2.5 text-[10px] font-bold uppercase tracking-widest transition-colors',
+              mobileView === tab.key
+                ? 'border-b-2 border-primary bg-card text-foreground'
+                : 'text-muted-foreground',
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-      <div className="space-y-6">
-        <div className="rounded-3xl border border-border bg-card p-5 shadow-sm">
-          <div className="flex items-start gap-3">
-            <div className="rounded-full bg-primary/10 p-2 text-primary">
-              <FileText className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                Assignment editing
-              </p>
-              <h2 className="mt-2 text-xl font-semibold text-foreground">
-                Extend the assignment
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Template questions and rubric items stay locked. Add your own questions and rubric
-                criteria here where needed for this class.
-              </p>
-            </div>
-          </div>
-        </div>
+      <div className="relative flex flex-1 overflow-hidden">
+        <aside
+          className={cn(
+            'flex w-[320px] shrink-0 flex-col overflow-hidden border-r border-border bg-muted/30 transition-transform duration-200',
+            'max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:z-20 max-lg:w-full max-lg:bg-background',
+            mobileView === 'structure'
+              ? 'max-lg:translate-x-0'
+              : 'max-lg:-translate-x-full lg:translate-x-0',
+          )}
+        >
+          <QuestionRail
+            questions={content.questions}
+            selectedQuestion={selectedQuestion}
+            canCompose={canCompose}
+            onSelectQuestion={(questionId) => {
+              setSelectedQuestion(questionId);
+              setMobileView('editor');
+            }}
+            onStartNewQuestion={() => {
+              if (!canCompose) return;
+              setQuestionDraft(makeEmptyQuestionDraft());
+              setSelectedQuestion('new');
+              setMobileView('editor');
+            }}
+            onBackToEditor={() => setMobileView('editor')}
+          />
+        </aside>
 
-        {selectedQuestion === 'new' ? (
+        <main
+          className={cn(
+            'flex-1 overflow-y-auto bg-background transition-opacity duration-200',
+            mobileView !== 'editor' && 'max-lg:hidden',
+          )}
+        >
+          <div className="px-4 py-4 lg:px-6">
+            {selectedQuestion === 'new' ? (
           <NewQuestionStudio
             draft={questionDraft}
             canCompose={canCompose && !isSavingQuestion}
@@ -1704,20 +1743,38 @@ export default function AssignmentComposerPanel({
             </div>
           </section>
         )}
-      </div>
+          </div>
+        </main>
 
-      <aside className="space-y-6">
-        <section className="rounded-3xl border border-border bg-card p-5 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-            Rubric
-          </p>
-          <h2 className="mt-2 text-xl font-semibold text-foreground">Template rubric stays locked</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Template rubric items stay fixed. Add assignment-only criteria and levels below when
-            you need extra grading detail for this class.
-          </p>
+        <aside
+          className={cn(
+            'w-[320px] shrink-0 overflow-y-auto border-l border-border bg-muted/30 transition-transform duration-200',
+            'max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-20 max-lg:w-full max-lg:bg-background',
+            mobileView === 'settings'
+              ? 'max-lg:translate-x-0'
+              : 'max-lg:translate-x-full lg:translate-x-0',
+          )}
+        >
+          <div className="flex flex-col gap-6 p-4">
+            <div className="lg:hidden -m-4 mb-2 flex items-center justify-between border-b border-border bg-card p-3">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                Rubric
+              </span>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setMobileView('editor')}>
+                Back
+              </Button>
+            </div>
 
-          <div className="mt-4 rounded-2xl border border-border/70 bg-background p-4">
+            <section className="rounded-3xl border border-border bg-card p-5 shadow-sm">
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                Rubric
+              </p>
+              <h2 className="mt-2 text-xl font-semibold text-foreground">Locked rubric + local additions</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Shared rubric criteria stay fixed. Add your own criteria or levels here for this assignment.
+              </p>
+
+              <div className="mt-4 rounded-2xl border border-border/70 bg-background p-4">
             {!content.rubricId ? (
               <p className="text-sm text-foreground">No template rubric attached.</p>
             ) : isLoadingRubric ? (
@@ -1729,113 +1786,115 @@ export default function AssignmentComposerPanel({
                 Template rubric #{content.rubricId} is attached but could not be loaded.
               </p>
             )}
-          </div>
+              </div>
 
-          <div className="mt-5 rounded-2xl border border-border/70 bg-background p-4">
-            <RubricGridPreview
-              criteria={combinedRubricCriteria}
-              title="Current rubric preview"
-            />
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-dashed border-border/80 bg-background p-4 space-y-3">
-            <div className="space-y-2">
-              <Label htmlFor="assignment-criterion-title">Criterion title</Label>
-              <Input
-                id="assignment-criterion-title"
-                value={criterionDraft.title}
-                onChange={(event) =>
-                  setCriterionDraft((current) => ({
-                    ...current,
-                    title: event.target.value,
-                  }))
-                }
-                disabled={!canCompose || isSavingCriterion}
-                placeholder="Add an assignment-only criterion"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="assignment-criterion-description">Description</Label>
-              <Textarea
-                id="assignment-criterion-description"
-                value={criterionDraft.description}
-                onChange={(event) =>
-                  setCriterionDraft((current) => ({
-                    ...current,
-                    description: event.target.value,
-                  }))
-                }
-                disabled={!canCompose || isSavingCriterion}
-                placeholder="Explain how this local criterion should be used."
-                rows={4}
-              />
-            </div>
-            <div className="grid gap-3 md:grid-cols-[120px_auto]">
-              <div className="space-y-2">
-                <Label htmlFor="assignment-criterion-weight">Weight</Label>
-                <Input
-                  id="assignment-criterion-weight"
-                  type="number"
-                  min="0.01"
-                  step="0.25"
-                  value={criterionDraft.weight}
-                  onChange={(event) =>
-                    setCriterionDraft((current) => ({
-                      ...current,
-                      weight: event.target.value,
-                    }))
-                  }
-                  disabled={!canCompose || isSavingCriterion}
+              <div className="mt-5 rounded-2xl border border-border/70 bg-background p-4">
+                <RubricGridPreview
+                  criteria={combinedRubricCriteria}
+                  title="Rubric preview"
                 />
               </div>
-              <div className="flex items-end">
-                <Button
-                  type="button"
-                  className="w-full"
-                  onClick={() => void handleAddCriterion()}
-                  disabled={!canCompose || isSavingCriterion}
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add criterion
-                </Button>
-              </div>
-            </div>
-          </div>
 
-          <div className="mt-5 space-y-3">
-            {content.teacherCriteria.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No assignment-only criteria yet.</p>
-            ) : (
-              content.teacherCriteria.map((criterion) => (
-                <TeacherCriterionCard
-                  key={criterion.id}
-                  assignmentId={assignmentId}
-                  criterion={criterion}
-                  canCompose={canCompose && !isReorderingCriteria}
-                  canMoveUp={content.teacherCriteria.findIndex((item) => item.id === criterion.id) > 0}
-                  canMoveDown={
-                    content.teacherCriteria.findIndex((item) => item.id === criterion.id) <
-                    content.teacherCriteria.length - 1
-                  }
-                  onMoveUp={() =>
-                    void moveTeacherCriterion(
-                      content.teacherCriteria.findIndex((item) => item.id === criterion.id),
-                      -1,
-                    )
-                  }
-                  onMoveDown={() =>
-                    void moveTeacherCriterion(
-                      content.teacherCriteria.findIndex((item) => item.id === criterion.id),
-                      1,
-                    )
-                  }
-                  onContentChange={onContentChange}
-                />
-              ))
-            )}
+              <div className="mt-5 rounded-2xl border border-dashed border-border/80 bg-background p-4 space-y-3">
+                <div className="space-y-2">
+                  <Label htmlFor="assignment-criterion-title">Criterion title</Label>
+                  <Input
+                    id="assignment-criterion-title"
+                    value={criterionDraft.title}
+                    onChange={(event) =>
+                      setCriterionDraft((current) => ({
+                        ...current,
+                        title: event.target.value,
+                      }))
+                    }
+                    disabled={!canCompose || isSavingCriterion}
+                    placeholder="Add an assignment-only criterion"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="assignment-criterion-description">Description</Label>
+                  <Textarea
+                    id="assignment-criterion-description"
+                    value={criterionDraft.description}
+                    onChange={(event) =>
+                      setCriterionDraft((current) => ({
+                        ...current,
+                        description: event.target.value,
+                      }))
+                    }
+                    disabled={!canCompose || isSavingCriterion}
+                    placeholder="Explain how this local criterion should be used."
+                    rows={4}
+                  />
+                </div>
+                <div className="grid gap-3 md:grid-cols-[120px_auto]">
+                  <div className="space-y-2">
+                    <Label htmlFor="assignment-criterion-weight">Weight</Label>
+                    <Input
+                      id="assignment-criterion-weight"
+                      type="number"
+                      min="0.01"
+                      step="0.25"
+                      value={criterionDraft.weight}
+                      onChange={(event) =>
+                        setCriterionDraft((current) => ({
+                          ...current,
+                          weight: event.target.value,
+                        }))
+                      }
+                      disabled={!canCompose || isSavingCriterion}
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      className="w-full"
+                      onClick={() => void handleAddCriterion()}
+                      disabled={!canCompose || isSavingCriterion}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add criterion
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {content.teacherCriteria.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No assignment-only criteria yet.</p>
+                ) : (
+                  content.teacherCriteria.map((criterion) => (
+                    <TeacherCriterionCard
+                      key={criterion.id}
+                      assignmentId={assignmentId}
+                      criterion={criterion}
+                      canCompose={canCompose && !isReorderingCriteria}
+                      canMoveUp={content.teacherCriteria.findIndex((item) => item.id === criterion.id) > 0}
+                      canMoveDown={
+                        content.teacherCriteria.findIndex((item) => item.id === criterion.id) <
+                        content.teacherCriteria.length - 1
+                      }
+                      onMoveUp={() =>
+                        void moveTeacherCriterion(
+                          content.teacherCriteria.findIndex((item) => item.id === criterion.id),
+                          -1,
+                        )
+                      }
+                      onMoveDown={() =>
+                        void moveTeacherCriterion(
+                          content.teacherCriteria.findIndex((item) => item.id === criterion.id),
+                          1,
+                        )
+                      }
+                      onContentChange={onContentChange}
+                    />
+                  ))
+                )}
+              </div>
+            </section>
           </div>
-        </section>
-      </aside>
+        </aside>
+      </div>
     </section>
   );
 }
