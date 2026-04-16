@@ -34,9 +34,11 @@ from courses.models import Enrollment, EnrollmentStatus
 from courses.services import can_view_course
 
 from .serializers import (
+    AssignmentOrderedIdsSerializer,
     AssignmentQuestionCreateSerializer,
     AssignmentSerializer,
     AssignmentTeacherCriterionCreateSerializer,
+    AssignmentTeacherCriterionLevelCreateSerializer,
     AssignmentUpdateSerializer,
 )
 from .services import (
@@ -44,6 +46,7 @@ from .services import (
     ForbiddenError,
     add_assignment_question,
     add_assignment_teacher_criterion,
+    add_assignment_teacher_criterion_level,
     archive_assignment,
     assignment_archive_artifact_to_dict,
     assignment_content_to_dto,
@@ -57,6 +60,9 @@ from .services import (
     list_for_user,
     list_reusable_question_images,
     purge_assignment,
+    reorder_assignment_questions,
+    reorder_assignment_teacher_criteria,
+    reorder_assignment_teacher_criterion_levels,
     restore_assignment,
     update_assignment,
 )
@@ -300,6 +306,25 @@ def create_assignment_question(request, assignment_id: int):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+def reorder_questions(request, assignment_id: int):
+    """Reorder teacher-authored assignment-local questions."""
+    assignment = get_assignment_with_content(assignment_id)
+    if not assignment:
+        return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
+    serializer = AssignmentOrderedIdsSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    try:
+        reorder_assignment_questions(assignment, request.user, serializer.validated_data["orderedIds"])
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    except ValueError as exc:
+        return error_response(exc)
+    assignment = get_assignment_with_content(assignment_id)
+    return Response(assignment_content_to_dto(assignment).model_dump(), status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def create_assignment_teacher_criterion(request, assignment_id: int):
     """Add a teacher-authored criterion to an assignment-local rubric overlay."""
     assignment = get_assignment_with_content(assignment_id)
@@ -320,6 +345,77 @@ def create_assignment_teacher_criterion(request, assignment_id: int):
         return error_response(exc)
     assignment = get_assignment_with_content(assignment_id)
     return Response(assignment_content_to_dto(assignment).model_dump(), status=status.HTTP_201_CREATED)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def reorder_teacher_criteria(request, assignment_id: int):
+    """Reorder teacher-authored assignment-local rubric criteria."""
+    assignment = get_assignment_with_content(assignment_id)
+    if not assignment:
+        return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
+    serializer = AssignmentOrderedIdsSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    try:
+        reorder_assignment_teacher_criteria(
+            assignment,
+            request.user,
+            serializer.validated_data["orderedIds"],
+        )
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    except ValueError as exc:
+        return error_response(exc)
+    assignment = get_assignment_with_content(assignment_id)
+    return Response(assignment_content_to_dto(assignment).model_dump(), status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def create_teacher_criterion_level(request, assignment_id: int, criterion_id: int):
+    """Add a teacher-authored rubric level to a teacher-owned criterion."""
+    assignment = get_assignment_with_content(assignment_id)
+    if not assignment:
+        return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
+    serializer = AssignmentTeacherCriterionLevelCreateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    try:
+        add_assignment_teacher_criterion_level(
+            assignment,
+            criterion_id,
+            request.user,
+            serializer.validated_data,
+        )
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    except ValueError as exc:
+        return error_response(exc)
+    assignment = get_assignment_with_content(assignment_id)
+    return Response(assignment_content_to_dto(assignment).model_dump(), status=status.HTTP_201_CREATED)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def reorder_teacher_criterion_levels(request, assignment_id: int, criterion_id: int):
+    """Reorder teacher-authored levels on a teacher-owned criterion."""
+    assignment = get_assignment_with_content(assignment_id)
+    if not assignment:
+        return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
+    serializer = AssignmentOrderedIdsSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    try:
+        reorder_assignment_teacher_criterion_levels(
+            assignment,
+            criterion_id,
+            request.user,
+            serializer.validated_data["orderedIds"],
+        )
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    except ValueError as exc:
+        return error_response(exc)
+    assignment = get_assignment_with_content(assignment_id)
+    return Response(assignment_content_to_dto(assignment).model_dump(), status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])

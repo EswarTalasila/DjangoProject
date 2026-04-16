@@ -22,6 +22,7 @@ from core.dtos import (
     QuestionGroupDTO,
     QuestionImageDTO,
     TeacherCriterionDTO,
+    TeacherCriterionLevelDTO,
 )
 from core.helpers import answer_type_from_question
 from submissions.models import (
@@ -40,6 +41,7 @@ from ..models import (
     AssignmentQuestion,
     AssignmentQuestionGroup,
     AssignmentTeacherCriterion,
+    AssignmentTeacherCriterionLevel,
 )
 
 
@@ -58,9 +60,24 @@ def _content_queryset():
         ),
         Prefetch(
             "teacher_criteria",
-            queryset=AssignmentTeacherCriterion.objects.order_by("order_index", "id"),
+            queryset=AssignmentTeacherCriterion.objects.prefetch_related(
+                Prefetch(
+                    "levels",
+                    queryset=AssignmentTeacherCriterionLevel.objects.order_by("order_index", "id"),
+                )
+            ).order_by("order_index", "id"),
         ),
     )
+
+
+def _assert_can_compose(assignment: Assignment, caller_user) -> None:
+    """Enforce the shared mutability rules for teacher-managed assignment additions."""
+    if assignment.created_by_id != caller_user.id and not caller_user.is_staff:
+        raise PermissionError("Only the assignment owner or an admin can extend this assignment.")
+    if assignment.status == "ARCHIVED":
+        raise ValueError("Archived assignments cannot be extended.")
+    if assignment_has_progressed_submissions(assignment):
+        raise ValueError("Cannot extend an assignment after submissions have started.")
 
 
 def _create_answer_shell(submission: Submission, question: AssignmentQuestion) -> Answer:
@@ -187,6 +204,16 @@ def assignment_content_to_dto(assignment: Assignment) -> AssignmentContentDTO:
             description=criterion.description,
             weight=criterion.weight,
             orderIndex=criterion.order_index,
+            levels=[
+                TeacherCriterionLevelDTO(
+                    id=level.id,
+                    label=level.label,
+                    points=level.points,
+                    description=level.description,
+                    orderIndex=level.order_index,
+                )
+                for level in criterion.levels.all()
+            ],
         )
         for criterion in assignment.teacher_criteria.all()
     ]
@@ -278,15 +305,27 @@ def _next_teacher_criterion_order(assignment: Assignment) -> int:
     return int(assignment.teacher_criteria.aggregate(value=Max("order_index")).get("value") or 0) + 1
 
 
+def _next_teacher_criterion_level_order(criterion: AssignmentTeacherCriterion) -> int:
+    """Return the next order index for teacher-authored levels on a criterion."""
+    return int(criterion.levels.aggregate(value=Max("order_index")).get("value") or 0) + 1
+
+
+def _get_teacher_criterion(assignment: Assignment, criterion_id: int) -> AssignmentTeacherCriterion:
+    """Resolve a teacher-authored criterion for the assignment or fail with ValueError."""
+    criterion = (
+        AssignmentTeacherCriterion.objects.prefetch_related("levels")
+        .filter(id=criterion_id, assignment=assignment)
+        .first()
+    )
+    if not criterion:
+        raise ValueError("Teacher criterion not found.")
+    return criterion
+
+
 @transaction.atomic
 def add_assignment_question(assignment: Assignment, caller_user, payload: dict) -> AssignmentQuestion:
     """Create a teacher-owned assignment-local question and provision it onto existing submissions."""
-    if assignment.created_by_id != caller_user.id and not caller_user.is_staff:
-        raise PermissionError("Only the assignment owner or an admin can extend this assignment.")
-    if assignment.status == "ARCHIVED":
-        raise ValueError("Archived assignments cannot be extended.")
-    if assignment_has_progressed_submissions(assignment):
-        raise ValueError("Cannot extend an assignment after submissions have started.")
+    _assert_can_compose(assignment, caller_user)
 
     kind = payload.get("type")
     prompt = (payload.get("prompt") or "").strip()
@@ -324,12 +363,7 @@ def add_assignment_teacher_criterion(
     payload: dict,
 ) -> AssignmentTeacherCriterion:
     """Create a teacher-authored assignment-local criterion."""
-    if assignment.created_by_id != caller_user.id and not caller_user.is_staff:
-        raise PermissionError("Only the assignment owner or an admin can extend this assignment.")
-    if assignment.status == "ARCHIVED":
-        raise ValueError("Archived assignments cannot be extended.")
-    if assignment_has_progressed_submissions(assignment):
-        raise ValueError("Cannot extend an assignment after submissions have started.")
+    _assert_can_compose(assignment, caller_user)
 
     title = (payload.get("title") or "").strip()
     if not title:
@@ -346,6 +380,103 @@ def add_assignment_teacher_criterion(
         weight=weight,
         order_index=_next_teacher_criterion_order(assignment),
     )
+
+
+@transaction.atomic
+def reorder_assignment_questions(
+    assignment: Assignment,
+    caller_user,
+    ordered_ids: list[int],
+) -> None:
+    """Reorder teacher-added assignment questions while keeping inherited content fixed."""
+    _assert_can_compose(assignment, caller_user)
+    teacher_questions = list(
+        assignment.questions.filter(origin=AssignmentContentOrigin.TEACHER_ADDITION).order_by(
+            "order_index", "id"
+        )
+    )
+    if not teacher_questions:
+        raise ValueError("No teacher-added questions are available to reorder.")
+    expected_ids = [question.id for question in teacher_questions]
+    if sorted(expected_ids) != sorted(ordered_ids) or len(expected_ids) != len(ordered_ids):
+        raise ValueError("orderedIds must contain every teacher-added question exactly once.")
+
+    base_order = assignment.questions.filter(origin=AssignmentContentOrigin.TEMPLATE).count()
+    question_by_id = {question.id: question for question in teacher_questions}
+    for offset, question_id in enumerate(ordered_ids):
+        question_by_id[question_id].order_index = base_order + offset
+    AssignmentQuestion.objects.bulk_update(list(question_by_id.values()), ["order_index"])
+
+
+@transaction.atomic
+def reorder_assignment_teacher_criteria(
+    assignment: Assignment,
+    caller_user,
+    ordered_ids: list[int],
+) -> None:
+    """Reorder the teacher-authored rubric overlay criteria for an assignment."""
+    _assert_can_compose(assignment, caller_user)
+    criteria = list(assignment.teacher_criteria.order_by("order_index", "id"))
+    if not criteria:
+        raise ValueError("No teacher-added criteria are available to reorder.")
+    expected_ids = [criterion.id for criterion in criteria]
+    if sorted(expected_ids) != sorted(ordered_ids) or len(expected_ids) != len(ordered_ids):
+        raise ValueError("orderedIds must contain every teacher-added criterion exactly once.")
+
+    criterion_by_id = {criterion.id: criterion for criterion in criteria}
+    for offset, criterion_id in enumerate(ordered_ids):
+        criterion_by_id[criterion_id].order_index = offset
+    AssignmentTeacherCriterion.objects.bulk_update(list(criterion_by_id.values()), ["order_index"])
+
+
+@transaction.atomic
+def add_assignment_teacher_criterion_level(
+    assignment: Assignment,
+    criterion_id: int,
+    caller_user,
+    payload: dict,
+) -> AssignmentTeacherCriterionLevel:
+    """Add a teacher-authored level to a teacher-authored criterion."""
+    _assert_can_compose(assignment, caller_user)
+    criterion = _get_teacher_criterion(assignment, criterion_id)
+
+    label = (payload.get("label") or "").strip()
+    if not label:
+        raise ValueError("label is required")
+    points = payload.get("points")
+    if points is None:
+        raise ValueError("points is required")
+
+    return AssignmentTeacherCriterionLevel.objects.create(
+        criterion=criterion,
+        label=label,
+        points=points,
+        description=(payload.get("description") or "").strip(),
+        order_index=_next_teacher_criterion_level_order(criterion),
+    )
+
+
+@transaction.atomic
+def reorder_assignment_teacher_criterion_levels(
+    assignment: Assignment,
+    criterion_id: int,
+    caller_user,
+    ordered_ids: list[int],
+) -> None:
+    """Reorder the levels for a teacher-authored criterion."""
+    _assert_can_compose(assignment, caller_user)
+    criterion = _get_teacher_criterion(assignment, criterion_id)
+    levels = list(criterion.levels.order_by("order_index", "id"))
+    if not levels:
+        raise ValueError("No teacher-added levels are available to reorder.")
+    expected_ids = [level.id for level in levels]
+    if sorted(expected_ids) != sorted(ordered_ids) or len(expected_ids) != len(ordered_ids):
+        raise ValueError("orderedIds must contain every teacher-added level exactly once.")
+
+    level_by_id = {level.id: level for level in levels}
+    for offset, level_id in enumerate(ordered_ids):
+        level_by_id[level_id].order_index = offset
+    AssignmentTeacherCriterionLevel.objects.bulk_update(list(level_by_id.values()), ["order_index"])
 
 
 def list_reusable_question_images(assignment: Assignment) -> list[dict[str, Any]]:

@@ -346,6 +346,41 @@ class AssignmentTeacherCriterion(models.Model):
         return f"AssignmentTeacherCriterion({self.assignment_id}:{self.title})"
 
 
+class AssignmentTeacherCriterionLevel(models.Model):
+    """Teacher-authored rubric level nested under an assignment-local criterion."""
+
+    criterion = models.ForeignKey(
+        AssignmentTeacherCriterion,
+        on_delete=models.CASCADE,
+        related_name="levels",
+    )
+    label = models.CharField(max_length=255)
+    points = models.FloatField()
+    description = models.TextField(blank=True, default="")
+    order_index = models.IntegerField(default=0)
+
+    class Meta:
+        """Database table configuration for AssignmentTeacherCriterionLevel."""
+
+        db_table = "assignment_teacher_criterion_levels"
+        indexes = [
+            models.Index(
+                fields=["criterion", "order_index"],
+                name="idx_asgn_criterion_level_order",
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(points__gte=0),
+                name="ck_assignment_teacher_criterion_level_points_non_negative",
+            )
+        ]
+
+    def __str__(self):
+        """Return a readable string representation."""
+        return f"AssignmentTeacherCriterionLevel({self.criterion_id}:{self.label})"
+
+
 class AssignmentArchiveArtifact(models.Model):
     """Generated ZIP artifact for an archived assignment bundle."""
 

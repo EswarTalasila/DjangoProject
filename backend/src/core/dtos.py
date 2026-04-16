@@ -126,6 +126,18 @@ class AssignmentTemplateDTO(BaseModel):
     questionGroups: list[QuestionGroupDTO] = []
 
 
+class TeacherCriterionLevelDTO(BaseModel):
+    """Teacher-authored rubric level nested under an assignment-local criterion."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    label: str
+    points: float
+    description: str
+    orderIndex: int
+
+
 class TeacherCriterionDTO(BaseModel):
     """Teacher-authored assignment-local criterion layered onto a template rubric."""
 
@@ -136,6 +148,7 @@ class TeacherCriterionDTO(BaseModel):
     description: str
     weight: float
     orderIndex: int
+    levels: list[TeacherCriterionLevelDTO] = []
 
 
 class AssignmentContentDTO(BaseModel):

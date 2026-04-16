@@ -187,6 +187,7 @@ describe("assignment api", () => {
                   description: "",
                   weight: body.weight,
                   orderIndex: 0,
+                  levels: [],
                 },
               ],
             },
@@ -203,6 +204,135 @@ describe("assignment api", () => {
 
       expect(result.teacherCriteria[0].title).toBe("Local rigor");
       expect(result.teacherCriteria[0].weight).toBe(2);
+    });
+
+    it("reorders teacher-authored assignment questions", async () => {
+      server.use(
+        http.post(`${API_BASE}/assignments/1/questions/reorder`, async ({ request }) => {
+          const body = (await request.json()) as { orderedIds?: number[] };
+          return HttpResponse.json({
+            ...sampleAssignmentContent,
+            questions: body.orderedIds?.map((id, index) => ({
+              questionId: id,
+              id,
+              type: "SHORT_ANSWER",
+              prompt: `Teacher ${index + 1}`,
+              maxPoints: 1,
+              autoGradable: false,
+              graded: false,
+              image: null,
+              data: {},
+              selectAll: null,
+              min: null,
+              max: null,
+              groupId: null,
+              rubricId: null,
+              gradingStrategy: "MANUAL",
+              orderIndex: index + 1,
+              origin: "TEACHER_ADDITION",
+              lockedFromSource: false,
+              sourceQuestionId: null,
+            })),
+          });
+        }),
+      );
+
+      const { reorderAssignmentQuestions } = await loadAssignmentApi();
+      const result = await reorderAssignmentQuestions(1, [103, 102]);
+
+      expect(result.questions.map((question) => question.id)).toEqual([103, 102]);
+    });
+
+    it("adds levels and reorders teacher-authored rubric criteria", async () => {
+      server.use(
+        http.post(
+          `${API_BASE}/assignments/1/teacher-criteria/801/levels`,
+          async ({ request }) => {
+            const body = (await request.json()) as { label?: string; points?: number };
+            return HttpResponse.json(
+              {
+                ...sampleAssignmentContent,
+                teacherCriteria: [
+                  {
+                    id: 801,
+                    title: "Local rigor",
+                    description: "",
+                    weight: 2,
+                    orderIndex: 0,
+                    levels: [
+                      {
+                        id: 901,
+                        label: body.label,
+                        points: body.points,
+                        description: "",
+                        orderIndex: 0,
+                      },
+                    ],
+                  },
+                ],
+              },
+              { status: 201 },
+            );
+          },
+        ),
+        http.post(`${API_BASE}/assignments/1/teacher-criteria/reorder`, async ({ request }) => {
+          const body = (await request.json()) as { orderedIds?: number[] };
+          return HttpResponse.json({
+            ...sampleAssignmentContent,
+            teacherCriteria: body.orderedIds?.map((id, index) => ({
+              id,
+              title: `Criterion ${id}`,
+              description: "",
+              weight: 1,
+              orderIndex: index,
+              levels: [],
+            })),
+          });
+        }),
+        http.post(
+          `${API_BASE}/assignments/1/teacher-criteria/801/levels/reorder`,
+          async ({ request }) => {
+            const body = (await request.json()) as { orderedIds?: number[] };
+            return HttpResponse.json({
+              ...sampleAssignmentContent,
+              teacherCriteria: [
+                {
+                  id: 801,
+                  title: "Local rigor",
+                  description: "",
+                  weight: 2,
+                  orderIndex: 0,
+                  levels: body.orderedIds?.map((id, index) => ({
+                    id,
+                    label: `Level ${id}`,
+                    points: index,
+                    description: "",
+                    orderIndex: index,
+                  })),
+                },
+              ],
+            });
+          },
+        ),
+      );
+
+      const {
+        addAssignmentTeacherCriterionLevel,
+        reorderAssignmentTeacherCriteria,
+        reorderAssignmentTeacherCriterionLevels,
+      } = await loadAssignmentApi();
+
+      const leveled = await addAssignmentTeacherCriterionLevel(1, 801, {
+        label: "Exceeds",
+        points: 4,
+      });
+      expect(leveled.teacherCriteria[0].levels[0].label).toBe("Exceeds");
+
+      const reordered = await reorderAssignmentTeacherCriteria(1, [802, 801]);
+      expect(reordered.teacherCriteria.map((criterion) => criterion.id)).toEqual([802, 801]);
+
+      const reorderedLevels = await reorderAssignmentTeacherCriterionLevels(1, 801, [902, 901]);
+      expect(reorderedLevels.teacherCriteria[0].levels.map((level) => level.id)).toEqual([902, 901]);
     });
 
     it("lists reusable assignment question images", async () => {

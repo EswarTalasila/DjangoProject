@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Lock, Plus, Sparkles } from 'lucide-react';
+import { ArrowDown, ArrowUp, Lock, Plus, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 
 import ImagePicker from '@/components/media/ImagePicker';
@@ -19,12 +19,17 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   addAssignmentQuestion,
   addAssignmentTeacherCriterion,
+  addAssignmentTeacherCriterionLevel,
   deleteAssignmentQuestionImage,
   listReusableAssignmentImages,
+  reorderAssignmentQuestions,
+  reorderAssignmentTeacherCriteria,
+  reorderAssignmentTeacherCriterionLevels,
   reuseAssignmentQuestionImage,
   uploadAssignmentQuestionImage,
   type AssignmentContent,
   type AssignmentQuestion,
+  type AssignmentTeacherCriterion,
 } from '@/lib/assignment-api';
 import type { QuestionData, QuestionKind } from '@/lib/assignment-template-api';
 import { getRubric, type Rubric } from '@/lib/rubric-api';
@@ -49,6 +54,12 @@ type CriterionDraft = {
   weight: string;
 };
 
+type CriterionLevelDraft = {
+  label: string;
+  description: string;
+  points: string;
+};
+
 const EMPTY_QUESTION: QuestionDraft = {
   type: 'SHORT_ANSWER',
   prompt: '',
@@ -60,6 +71,20 @@ const EMPTY_CRITERION: CriterionDraft = {
   description: '',
   weight: '1',
 };
+
+const EMPTY_LEVEL: CriterionLevelDraft = {
+  label: '',
+  description: '',
+  points: '1',
+};
+
+function moveItem<T>(items: T[], from: number, to: number): T[] {
+  if (from === to || to < 0 || to >= items.length) return items;
+  const next = [...items];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}
 
 function formatPoints(value: number): string {
   if (Number.isInteger(value)) return String(value);
@@ -121,10 +146,18 @@ function TeacherQuestionCard({
   assignmentId,
   question,
   canCompose,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
 }: {
   assignmentId: number;
   question: AssignmentQuestion;
   canCompose: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 }) {
   const [image, setImage] = useState(question.image);
 
@@ -140,6 +173,30 @@ function TeacherQuestionCard({
           <p className="text-xs text-muted-foreground">
             {question.type.replaceAll('_', ' ')} • {formatPoints(question.maxPoints)} points
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-8 w-8"
+            disabled={!canCompose || !canMoveUp}
+            onClick={onMoveUp}
+            aria-label={`Move ${question.prompt} earlier`}
+          >
+            <ArrowUp className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-8 w-8"
+            disabled={!canCompose || !canMoveDown}
+            onClick={onMoveDown}
+            aria-label={`Move ${question.prompt} later`}
+          >
+            <ArrowDown className="h-4 w-4" />
+          </Button>
         </div>
       </div>
       <div className="mt-4">
@@ -173,6 +230,231 @@ function TeacherQuestionCard({
   );
 }
 
+function TeacherCriterionCard({
+  assignmentId,
+  criterion,
+  canCompose,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
+  onContentChange,
+}: {
+  assignmentId: number;
+  criterion: AssignmentTeacherCriterion;
+  canCompose: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onContentChange: (next: AssignmentContent) => void;
+}) {
+  const [draft, setDraft] = useState<CriterionLevelDraft>(EMPTY_LEVEL);
+  const [isSavingLevel, setIsSavingLevel] = useState(false);
+  const [isMovingLevels, setIsMovingLevels] = useState(false);
+
+  async function handleAddLevel() {
+    const label = draft.label.trim();
+    const points = Number(draft.points);
+    if (!label) {
+      toast.error('Level label is required.');
+      return;
+    }
+    if (!Number.isFinite(points) || points < 0) {
+      toast.error('Level points must be a valid non-negative number.');
+      return;
+    }
+
+    setIsSavingLevel(true);
+    try {
+      const next = await addAssignmentTeacherCriterionLevel(assignmentId, criterion.id, {
+        label,
+        description: draft.description.trim(),
+        points,
+      });
+      onContentChange(next);
+      setDraft(EMPTY_LEVEL);
+      toast.success('Teacher rubric level added.');
+    } catch (error: unknown) {
+      toast.error(toErrorMessage(error, 'Failed to add rubric level.'));
+    } finally {
+      setIsSavingLevel(false);
+    }
+  }
+
+  async function moveLevel(levelIndex: number, direction: -1 | 1) {
+    const currentOrder = criterion.levels.map((level) => level.id);
+    const nextOrder = moveItem(currentOrder, levelIndex, levelIndex + direction);
+    if (nextOrder.join(',') === currentOrder.join(',')) return;
+
+    setIsMovingLevels(true);
+    try {
+      const next = await reorderAssignmentTeacherCriterionLevels(
+        assignmentId,
+        criterion.id,
+        nextOrder,
+      );
+      onContentChange(next);
+    } catch (error: unknown) {
+      toast.error(toErrorMessage(error, 'Failed to reorder rubric levels.'));
+    } finally {
+      setIsMovingLevels(false);
+    }
+  }
+
+  return (
+    <article className="rounded-2xl border border-border/70 bg-background p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">{criterion.title}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Weight {formatPoints(criterion.weight)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-primary/10 px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-primary">
+            Local
+          </span>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-8 w-8"
+            disabled={!canCompose || !canMoveUp}
+            onClick={onMoveUp}
+            aria-label={`Move ${criterion.title} earlier`}
+          >
+            <ArrowUp className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-8 w-8"
+            disabled={!canCompose || !canMoveDown}
+            onClick={onMoveDown}
+            aria-label={`Move ${criterion.title} later`}
+          >
+            <ArrowDown className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      {criterion.description && (
+        <p className="mt-3 text-sm text-muted-foreground">{criterion.description}</p>
+      )}
+
+      <div className="mt-4 space-y-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            Teacher-added levels
+          </p>
+          <div className="mt-3 space-y-2">
+            {criterion.levels.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No local levels yet. Add grading bands for this assignment-only criterion.
+              </p>
+            ) : (
+              criterion.levels.map((level, levelIndex) => (
+                <div
+                  key={level.id}
+                  className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card px-3 py-3 sm:flex-row sm:items-start sm:justify-between"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{level.label}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatPoints(level.points)} points
+                    </p>
+                    {level.description && (
+                      <p className="mt-2 text-sm text-muted-foreground">{level.description}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 self-start">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8"
+                      disabled={!canCompose || isMovingLevels || levelIndex === 0}
+                      onClick={() => void moveLevel(levelIndex, -1)}
+                      aria-label={`Move ${level.label} earlier`}
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8"
+                      disabled={
+                        !canCompose || isMovingLevels || levelIndex === criterion.levels.length - 1
+                      }
+                      onClick={() => void moveLevel(levelIndex, 1)}
+                      aria-label={`Move ${level.label} later`}
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-dashed border-border/80 bg-card px-3 py-3">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px]">
+            <div className="space-y-2">
+              <Label htmlFor={`criterion-level-label-${criterion.id}`}>Level label</Label>
+              <Input
+                id={`criterion-level-label-${criterion.id}`}
+                value={draft.label}
+                onChange={(event) => setDraft((current) => ({ ...current, label: event.target.value }))}
+                disabled={!canCompose || isSavingLevel}
+                placeholder="Exceeds expectations"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`criterion-level-points-${criterion.id}`}>Points</Label>
+              <Input
+                id={`criterion-level-points-${criterion.id}`}
+                type="number"
+                min="0"
+                step="0.5"
+                value={draft.points}
+                onChange={(event) => setDraft((current) => ({ ...current, points: event.target.value }))}
+                disabled={!canCompose || isSavingLevel}
+              />
+            </div>
+          </div>
+          <div className="mt-3 space-y-2">
+            <Label htmlFor={`criterion-level-description-${criterion.id}`}>Description</Label>
+            <Textarea
+              id={`criterion-level-description-${criterion.id}`}
+              value={draft.description}
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, description: event.target.value }))
+              }
+              disabled={!canCompose || isSavingLevel}
+              rows={3}
+              placeholder="Describe what this band should look like."
+            />
+          </div>
+          <div className="mt-3 flex justify-end">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void handleAddLevel()}
+              disabled={!canCompose || isSavingLevel}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add level
+            </Button>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 export default function AssignmentComposerPanel({
   assignmentId,
   content,
@@ -183,6 +465,8 @@ export default function AssignmentComposerPanel({
   const [criterionDraft, setCriterionDraft] = useState<CriterionDraft>(EMPTY_CRITERION);
   const [isSavingQuestion, setIsSavingQuestion] = useState(false);
   const [isSavingCriterion, setIsSavingCriterion] = useState(false);
+  const [isReorderingQuestions, setIsReorderingQuestions] = useState(false);
+  const [isReorderingCriteria, setIsReorderingCriteria] = useState(false);
   const [templateRubric, setTemplateRubric] = useState<Rubric | null>(null);
   const [isLoadingRubric, setIsLoadingRubric] = useState(false);
 
@@ -278,6 +562,42 @@ export default function AssignmentComposerPanel({
       toast.error(toErrorMessage(error, 'Failed to add criterion.'));
     } finally {
       setIsSavingCriterion(false);
+    }
+  }
+
+  async function moveTeacherQuestion(questionIndex: number, direction: -1 | 1) {
+    const nextQuestions = moveItem(
+      teacherQuestions.map((question) => question.id),
+      questionIndex,
+      questionIndex + direction,
+    );
+
+    setIsReorderingQuestions(true);
+    try {
+      const next = await reorderAssignmentQuestions(assignmentId, nextQuestions);
+      onContentChange(next);
+    } catch (error: unknown) {
+      toast.error(toErrorMessage(error, 'Failed to reorder teacher questions.'));
+    } finally {
+      setIsReorderingQuestions(false);
+    }
+  }
+
+  async function moveTeacherCriterion(criterionIndex: number, direction: -1 | 1) {
+    const nextCriteria = moveItem(
+      content.teacherCriteria.map((criterion) => criterion.id),
+      criterionIndex,
+      criterionIndex + direction,
+    );
+
+    setIsReorderingCriteria(true);
+    try {
+      const next = await reorderAssignmentTeacherCriteria(assignmentId, nextCriteria);
+      onContentChange(next);
+    } catch (error: unknown) {
+      toast.error(toErrorMessage(error, 'Failed to reorder teacher criteria.'));
+    } finally {
+      setIsReorderingCriteria(false);
     }
   }
 
@@ -409,7 +729,24 @@ export default function AssignmentComposerPanel({
                   key={question.id}
                   assignmentId={assignmentId}
                   question={question}
-                  canCompose={canCompose}
+                  canCompose={canCompose && !isReorderingQuestions}
+                  canMoveUp={teacherQuestions.findIndex((item) => item.id === question.id) > 0}
+                  canMoveDown={
+                    teacherQuestions.findIndex((item) => item.id === question.id) <
+                    teacherQuestions.length - 1
+                  }
+                  onMoveUp={() =>
+                    void moveTeacherQuestion(
+                      teacherQuestions.findIndex((item) => item.id === question.id),
+                      -1,
+                    )
+                  }
+                  onMoveDown={() =>
+                    void moveTeacherQuestion(
+                      teacherQuestions.findIndex((item) => item.id === question.id),
+                      1,
+                    )
+                  }
                 />
               ))
             )}
@@ -550,25 +887,30 @@ export default function AssignmentComposerPanel({
               </p>
             ) : (
               content.teacherCriteria.map((criterion) => (
-                <article
+                <TeacherCriterionCard
                   key={criterion.id}
-                  className="rounded-2xl border border-border/70 bg-background p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">{criterion.title}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Weight {formatPoints(criterion.weight)}
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-primary/10 px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-primary">
-                      Local
-                    </span>
-                  </div>
-                  {criterion.description && (
-                    <p className="mt-3 text-sm text-muted-foreground">{criterion.description}</p>
-                  )}
-                </article>
+                  assignmentId={assignmentId}
+                  criterion={criterion}
+                  canCompose={canCompose && !isReorderingCriteria}
+                  canMoveUp={content.teacherCriteria.findIndex((item) => item.id === criterion.id) > 0}
+                  canMoveDown={
+                    content.teacherCriteria.findIndex((item) => item.id === criterion.id) <
+                    content.teacherCriteria.length - 1
+                  }
+                  onMoveUp={() =>
+                    void moveTeacherCriterion(
+                      content.teacherCriteria.findIndex((item) => item.id === criterion.id),
+                      -1,
+                    )
+                  }
+                  onMoveDown={() =>
+                    void moveTeacherCriterion(
+                      content.teacherCriteria.findIndex((item) => item.id === criterion.id),
+                      1,
+                    )
+                  }
+                  onContentChange={onContentChange}
+                />
               ))
             )}
           </div>

@@ -631,6 +631,140 @@ class TestExtendAssignmentContent:
         payload = resp.json()
         assert len(payload["teacherCriteria"]) == 1
         assert payload["teacherCriteria"][0]["title"] == "Local rigor"
+        assert payload["teacherCriteria"][0]["levels"] == []
+
+    def test_teacher_can_reorder_only_teacher_added_questions(
+        self, api_client, teacher_user, admin_user
+    ):
+        """Teacher-added questions can be reordered without moving inherited template questions."""
+        assignment_template = _make_assignment_template(admin_user)
+        Question.objects.create(
+            assignment_template=assignment_template,
+            question_type=QuestionKind.SHORT_ANSWER,
+            kind=QuestionKind.SHORT_ANSWER,
+            prompt="Researcher prompt",
+            max_points=5.0,
+            auto_gradable=False,
+            graded=False,
+        )
+        course = _make_course(teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
+
+        api_client.force_authenticate(user=teacher_user)
+        first = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/questions",
+            {"type": "SHORT_ANSWER", "prompt": "Teacher A", "maxPoints": 1},
+            format="json",
+        )
+        second = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/questions",
+            {"type": "SHORT_ANSWER", "prompt": "Teacher B", "maxPoints": 1},
+            format="json",
+        )
+        assert first.status_code == 201
+        assert second.status_code == 201
+
+        teacher_ids = [
+            question["id"]
+            for question in second.json()["questions"]
+            if question["origin"] == "TEACHER_ADDITION"
+        ]
+        resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/questions/reorder",
+            {"orderedIds": list(reversed(teacher_ids))},
+            format="json",
+        )
+
+        assert resp.status_code == 200
+        prompts = [question["prompt"] for question in resp.json()["questions"]]
+        assert prompts == ["Researcher prompt", "Teacher B", "Teacher A"]
+
+    def test_teacher_can_add_levels_and_reorder_teacher_criteria(
+        self, api_client, teacher_user, admin_user
+    ):
+        """Teacher criteria support local levels and can be reordered without affecting locked rubric content."""
+        assignment_template = _make_assignment_template(admin_user)
+        course = _make_course(teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
+
+        api_client.force_authenticate(user=teacher_user)
+        first = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria",
+            {"title": "Teacher Criterion A", "description": "", "weight": 1},
+            format="json",
+        )
+        second = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria",
+            {"title": "Teacher Criterion B", "description": "", "weight": 2},
+            format="json",
+        )
+        assert first.status_code == 201
+        assert second.status_code == 201
+
+        criteria = second.json()["teacherCriteria"]
+        first_id = criteria[0]["id"]
+        second_id = criteria[1]["id"]
+
+        level_resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria/{first_id}/levels",
+            {"label": "Exceeds", "description": "Local evidence is strong.", "points": 4},
+            format="json",
+        )
+        assert level_resp.status_code == 201
+        level_payload = next(
+            criterion for criterion in level_resp.json()["teacherCriteria"] if criterion["id"] == first_id
+        )
+        assert level_payload["levels"][0]["label"] == "Exceeds"
+
+        reorder_resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria/reorder",
+            {"orderedIds": [second_id, first_id]},
+            format="json",
+        )
+        assert reorder_resp.status_code == 200
+        reordered_titles = [criterion["title"] for criterion in reorder_resp.json()["teacherCriteria"]]
+        assert reordered_titles == ["Teacher Criterion B", "Teacher Criterion A"]
+
+    def test_teacher_can_reorder_levels_for_teacher_criterion(
+        self, api_client, teacher_user, admin_user
+    ):
+        """Teacher-owned criterion levels can be reordered independently of locked rubric content."""
+        assignment_template = _make_assignment_template(admin_user)
+        course = _make_course(teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
+
+        api_client.force_authenticate(user=teacher_user)
+        criterion_resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria",
+            {"title": "Local rigor", "description": "", "weight": 1},
+            format="json",
+        )
+        criterion_id = criterion_resp.json()["teacherCriteria"][0]["id"]
+        first_level = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria/{criterion_id}/levels",
+            {"label": "Meets", "description": "", "points": 2},
+            format="json",
+        )
+        second_level = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria/{criterion_id}/levels",
+            {"label": "Exceeds", "description": "", "points": 4},
+            format="json",
+        )
+        assert first_level.status_code == 201
+        assert second_level.status_code == 201
+        level_ids = [
+            level["id"]
+            for level in second_level.json()["teacherCriteria"][0]["levels"]
+        ]
+
+        reorder_resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria/{criterion_id}/levels/reorder",
+            {"orderedIds": list(reversed(level_ids))},
+            format="json",
+        )
+        assert reorder_resp.status_code == 200
+        labels = reorder_resp.json()["teacherCriteria"][0]["levels"]
+        assert [level["label"] for level in labels] == ["Exceeds", "Meets"]
 
     def test_archived_assignment_rejects_extension_routes(
         self, api_client, teacher_user, admin_user

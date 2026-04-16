@@ -64,6 +64,15 @@ export type AssignmentTeacherCriterion = {
   description: string;
   weight: number;
   orderIndex: number;
+  levels: AssignmentTeacherCriterionLevel[];
+};
+
+export type AssignmentTeacherCriterionLevel = {
+  id: number;
+  label: string;
+  points: number;
+  description: string;
+  orderIndex: number;
 };
 
 export type AssignmentContent = {
@@ -109,6 +118,12 @@ export type AssignmentTeacherCriterionInput = {
   title: string;
   description?: string;
   weight: number;
+};
+
+export type AssignmentTeacherCriterionLevelInput = {
+  label: string;
+  description?: string;
+  points: number;
 };
 
 type Paginated<T> = {
@@ -171,6 +186,17 @@ export async function addAssignmentQuestion(
   return response.data;
 }
 
+/** POST /assignments/:id/questions/reorder — Reorder teacher-authored questions. */
+export async function reorderAssignmentQuestions(
+  assignmentId: number,
+  orderedIds: number[],
+): Promise<AssignmentContent> {
+  const response = await api.post<AssignmentContent>(`/assignments/${assignmentId}/questions/reorder`, {
+    orderedIds,
+  });
+  return response.data;
+}
+
 /** POST /assignments/:id/teacher-criteria — Add a teacher-authored criterion to an assignment. */
 export async function addAssignmentTeacherCriterion(
   assignmentId: number,
@@ -179,6 +205,44 @@ export async function addAssignmentTeacherCriterion(
   const response = await api.post<AssignmentContent>(
     `/assignments/${assignmentId}/teacher-criteria`,
     payload,
+  );
+  return response.data;
+}
+
+/** POST /assignments/:id/teacher-criteria/reorder — Reorder teacher-authored criteria. */
+export async function reorderAssignmentTeacherCriteria(
+  assignmentId: number,
+  orderedIds: number[],
+): Promise<AssignmentContent> {
+  const response = await api.post<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria/reorder`,
+    { orderedIds },
+  );
+  return response.data;
+}
+
+/** POST /assignments/:id/teacher-criteria/:criterionId/levels — Add a teacher-authored level. */
+export async function addAssignmentTeacherCriterionLevel(
+  assignmentId: number,
+  criterionId: number,
+  payload: AssignmentTeacherCriterionLevelInput,
+): Promise<AssignmentContent> {
+  const response = await api.post<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria/${criterionId}/levels`,
+    payload,
+  );
+  return response.data;
+}
+
+/** POST /assignments/:id/teacher-criteria/:criterionId/levels/reorder — Reorder teacher-authored levels. */
+export async function reorderAssignmentTeacherCriterionLevels(
+  assignmentId: number,
+  criterionId: number,
+  orderedIds: number[],
+): Promise<AssignmentContent> {
+  const response = await api.post<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria/${criterionId}/levels/reorder`,
+    { orderedIds },
   );
   return response.data;
 }

@@ -62,3 +62,20 @@ class AssignmentTeacherCriterionCreateSerializer(serializers.Serializer):
     title = serializers.CharField(allow_blank=False, max_length=255)
     description = serializers.CharField(required=False, allow_blank=True)
     weight = serializers.FloatField(min_value=0.01)
+
+
+class AssignmentOrderedIdsSerializer(serializers.Serializer):
+    """Validates reorder payloads that supply a full ordered ID list."""
+
+    orderedIds = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+    )
+
+
+class AssignmentTeacherCriterionLevelCreateSerializer(serializers.Serializer):
+    """Validates teacher-authored rubric levels layered onto a local criterion."""
+
+    label = serializers.CharField(allow_blank=False, max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True)
+    points = serializers.FloatField(min_value=0)

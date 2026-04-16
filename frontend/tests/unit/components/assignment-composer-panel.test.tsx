@@ -7,7 +7,11 @@ import AssignmentComposerPanel from "@/components/assignments/AssignmentComposer
 const {
   mockAddAssignmentQuestion,
   mockAddAssignmentTeacherCriterion,
+  mockAddAssignmentTeacherCriterionLevel,
   mockListReusableAssignmentImages,
+  mockReorderAssignmentQuestions,
+  mockReorderAssignmentTeacherCriteria,
+  mockReorderAssignmentTeacherCriterionLevels,
   mockUploadAssignmentQuestionImage,
   mockReuseAssignmentQuestionImage,
   mockDeleteAssignmentQuestionImage,
@@ -17,7 +21,11 @@ const {
 } = vi.hoisted(() => ({
   mockAddAssignmentQuestion: vi.fn(),
   mockAddAssignmentTeacherCriterion: vi.fn(),
+  mockAddAssignmentTeacherCriterionLevel: vi.fn(),
   mockListReusableAssignmentImages: vi.fn(),
+  mockReorderAssignmentQuestions: vi.fn(),
+  mockReorderAssignmentTeacherCriteria: vi.fn(),
+  mockReorderAssignmentTeacherCriterionLevels: vi.fn(),
   mockUploadAssignmentQuestionImage: vi.fn(),
   mockReuseAssignmentQuestionImage: vi.fn(),
   mockDeleteAssignmentQuestionImage: vi.fn(),
@@ -33,7 +41,11 @@ vi.mock("sonner", () => ({
 vi.mock("@/lib/assignment-api", () => ({
   addAssignmentQuestion: mockAddAssignmentQuestion,
   addAssignmentTeacherCriterion: mockAddAssignmentTeacherCriterion,
+  addAssignmentTeacherCriterionLevel: mockAddAssignmentTeacherCriterionLevel,
   listReusableAssignmentImages: mockListReusableAssignmentImages,
+  reorderAssignmentQuestions: mockReorderAssignmentQuestions,
+  reorderAssignmentTeacherCriteria: mockReorderAssignmentTeacherCriteria,
+  reorderAssignmentTeacherCriterionLevels: mockReorderAssignmentTeacherCriterionLevels,
   uploadAssignmentQuestionImage: mockUploadAssignmentQuestionImage,
   reuseAssignmentQuestionImage: mockReuseAssignmentQuestionImage,
   deleteAssignmentQuestionImage: mockDeleteAssignmentQuestionImage,
@@ -257,6 +269,7 @@ describe("AssignmentComposerPanel", () => {
           description: "Check for local classroom expectations.",
           weight: 2,
           orderIndex: 0,
+          levels: [],
         },
       ],
     });
@@ -293,6 +306,149 @@ describe("AssignmentComposerPanel", () => {
       ),
     );
     expect(onContentChange).toHaveBeenCalledWith(nextContent);
+  });
+
+  it("reorders teacher-added questions without touching locked researcher content", async () => {
+    const nextContent = makeContent({
+      questions: [
+        makeContent().questions[0],
+        {
+          ...makeContent().questions[1],
+          id: 103,
+          questionId: 103,
+          prompt: "Teacher second",
+          orderIndex: 1,
+        },
+        {
+          ...makeContent().questions[1],
+          id: 102,
+          questionId: 102,
+          prompt: "Teacher prompt",
+          orderIndex: 2,
+        },
+      ],
+    });
+    mockReorderAssignmentQuestions.mockResolvedValue(nextContent);
+    const onContentChange = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <AssignmentComposerPanel
+        assignmentId={1}
+        content={makeContent({
+          questions: [
+            makeContent().questions[0],
+            makeContent().questions[1],
+            {
+              ...makeContent().questions[1],
+              id: 103,
+              questionId: 103,
+              prompt: "Teacher second",
+              orderIndex: 2,
+            },
+          ],
+        })}
+        canCompose={true}
+        onContentChange={onContentChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /move teacher second earlier/i }));
+
+    await waitFor(() =>
+      expect(mockReorderAssignmentQuestions).toHaveBeenCalledWith(1, [103, 102]),
+    );
+    expect(onContentChange).toHaveBeenCalledWith(nextContent);
+  });
+
+  it("adds teacher-authored levels and reorders local criteria", async () => {
+    const content = makeContent({
+      teacherCriteria: [
+        {
+          id: 701,
+          title: "Local rigor",
+          description: "Check for local classroom expectations.",
+          weight: 2,
+          orderIndex: 0,
+          levels: [],
+        },
+        {
+          id: 702,
+          title: "Second criterion",
+          description: "",
+          weight: 1,
+          orderIndex: 1,
+          levels: [],
+        },
+      ],
+    });
+    const leveledContent = makeContent({
+      ...content,
+      teacherCriteria: [
+        {
+          ...content.teacherCriteria[0],
+          levels: [
+            {
+              id: 901,
+              label: "Exceeds",
+              description: "Strong evidence",
+              points: 4,
+              orderIndex: 0,
+            },
+          ],
+        },
+        content.teacherCriteria[1],
+      ],
+    });
+    const reorderedContent = makeContent({
+      ...content,
+      teacherCriteria: [content.teacherCriteria[1], content.teacherCriteria[0]],
+    });
+    mockAddAssignmentTeacherCriterionLevel.mockResolvedValue(leveledContent);
+    mockReorderAssignmentTeacherCriteria.mockResolvedValue(reorderedContent);
+    const onContentChange = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <AssignmentComposerPanel
+        assignmentId={1}
+        content={content}
+        canCompose={true}
+        onContentChange={onContentChange}
+      />,
+    );
+
+    await user.type(screen.getByLabelText("Level label", { selector: "#criterion-level-label-701" }), "Exceeds");
+    await user.clear(screen.getByLabelText("Points", { selector: "#criterion-level-points-701" }));
+    await user.type(
+      screen.getByLabelText("Points", { selector: "#criterion-level-points-701" }),
+      "4",
+    );
+    await user.type(
+      screen.getByLabelText("Description", { selector: "#criterion-level-description-701" }),
+      "Strong evidence",
+    );
+    await user.click(screen.getAllByRole("button", { name: /add level/i })[0]);
+
+    await waitFor(() =>
+      expect(mockAddAssignmentTeacherCriterionLevel).toHaveBeenCalledWith(
+        1,
+        701,
+        expect.objectContaining({
+          label: "Exceeds",
+          description: "Strong evidence",
+          points: 4,
+        }),
+      ),
+    );
+
+    await user.click(screen.getByRole("button", { name: /move second criterion earlier/i }));
+
+    await waitFor(() =>
+      expect(mockReorderAssignmentTeacherCriteria).toHaveBeenCalledWith(1, [702, 701]),
+    );
+    expect(onContentChange).toHaveBeenNthCalledWith(1, leveledContent);
+    expect(onContentChange).toHaveBeenNthCalledWith(2, reorderedContent);
   });
 
   it("reuses, uploads, and removes teacher-question images through the assignment APIs", async () => {
