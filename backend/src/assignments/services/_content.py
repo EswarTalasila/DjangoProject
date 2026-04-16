@@ -322,6 +322,29 @@ def _get_teacher_criterion(assignment: Assignment, criterion_id: int) -> Assignm
     return criterion
 
 
+def _get_teacher_question(assignment: Assignment, question_id: int) -> AssignmentQuestion:
+    """Resolve a teacher-authored question for the assignment or fail with ValueError."""
+    question = AssignmentQuestion.objects.filter(
+        id=question_id,
+        assignment=assignment,
+        origin=AssignmentContentOrigin.TEACHER_ADDITION,
+    ).first()
+    if not question:
+        raise ValueError("Teacher question not found.")
+    return question
+
+
+def _get_teacher_criterion_level(
+    criterion: AssignmentTeacherCriterion,
+    level_id: int,
+) -> AssignmentTeacherCriterionLevel:
+    """Resolve a teacher-authored level under the supplied criterion."""
+    level = criterion.levels.filter(id=level_id).first()
+    if not level:
+        raise ValueError("Teacher criterion level not found.")
+    return level
+
+
 @transaction.atomic
 def add_assignment_question(assignment: Assignment, caller_user, payload: dict) -> AssignmentQuestion:
     """Create a teacher-owned assignment-local question and provision it onto existing submissions."""
@@ -357,6 +380,65 @@ def add_assignment_question(assignment: Assignment, caller_user, payload: dict) 
 
 
 @transaction.atomic
+def update_assignment_question(
+    assignment: Assignment,
+    question_id: int,
+    caller_user,
+    payload: dict,
+) -> AssignmentQuestion:
+    """Update a teacher-authored assignment-local question."""
+    _assert_can_compose(assignment, caller_user)
+    question = _get_teacher_question(assignment, question_id)
+
+    previous_kind = question.kind
+    next_kind = payload.get("type", question.kind)
+    next_prompt = payload.get("prompt", question.prompt)
+    next_max_points = payload.get("maxPoints", question.max_points)
+    next_data = payload.get("data", question.data)
+    next_strategy = payload.get("gradingStrategy", question.grading_strategy)
+
+    prompt = (next_prompt or "").strip()
+    if not prompt:
+        raise ValueError("prompt is required")
+    if next_max_points is None:
+        raise ValueError("maxPoints is required")
+
+    question.kind = next_kind
+    question.prompt = prompt
+    question.max_points = next_max_points
+    question.data = next_data or {}
+    question.grading_strategy = next_strategy
+    question.auto_gradable = bool(payload.get("autoGradable", next_kind != QuestionKind.SHORT_ANSWER))
+    question.save(
+        update_fields=[
+            "kind",
+            "prompt",
+            "max_points",
+            "data",
+            "grading_strategy",
+            "auto_gradable",
+        ]
+    )
+    if previous_kind != next_kind:
+        Answer.objects.filter(question=question).delete()
+        for submission in assignment.submissions.all():
+            _create_answer_shell(submission, question)
+    return question
+
+
+@transaction.atomic
+def delete_assignment_question(
+    assignment: Assignment,
+    question_id: int,
+    caller_user,
+) -> None:
+    """Delete a teacher-authored assignment-local question and its answer shells."""
+    _assert_can_compose(assignment, caller_user)
+    question = _get_teacher_question(assignment, question_id)
+    question.delete()
+
+
+@transaction.atomic
 def add_assignment_teacher_criterion(
     assignment: Assignment,
     caller_user,
@@ -380,6 +462,43 @@ def add_assignment_teacher_criterion(
         weight=weight,
         order_index=_next_teacher_criterion_order(assignment),
     )
+
+
+@transaction.atomic
+def update_assignment_teacher_criterion(
+    assignment: Assignment,
+    criterion_id: int,
+    caller_user,
+    payload: dict,
+) -> AssignmentTeacherCriterion:
+    """Update a teacher-authored assignment-local criterion."""
+    _assert_can_compose(assignment, caller_user)
+    criterion = _get_teacher_criterion(assignment, criterion_id)
+
+    title = (payload.get("title", criterion.title) or "").strip()
+    if not title:
+        raise ValueError("title is required")
+    weight = payload.get("weight", criterion.weight)
+    if weight is None:
+        raise ValueError("weight is required")
+
+    criterion.title = title
+    criterion.description = (payload.get("description", criterion.description) or "").strip()
+    criterion.weight = weight
+    criterion.save(update_fields=["title", "description", "weight"])
+    return criterion
+
+
+@transaction.atomic
+def delete_assignment_teacher_criterion(
+    assignment: Assignment,
+    criterion_id: int,
+    caller_user,
+) -> None:
+    """Delete a teacher-authored criterion and its local levels."""
+    _assert_can_compose(assignment, caller_user)
+    criterion = _get_teacher_criterion(assignment, criterion_id)
+    criterion.delete()
 
 
 @transaction.atomic
@@ -454,6 +573,47 @@ def add_assignment_teacher_criterion_level(
         description=(payload.get("description") or "").strip(),
         order_index=_next_teacher_criterion_level_order(criterion),
     )
+
+
+@transaction.atomic
+def update_assignment_teacher_criterion_level(
+    assignment: Assignment,
+    criterion_id: int,
+    level_id: int,
+    caller_user,
+    payload: dict,
+) -> AssignmentTeacherCriterionLevel:
+    """Update a teacher-authored level under a teacher-authored criterion."""
+    _assert_can_compose(assignment, caller_user)
+    criterion = _get_teacher_criterion(assignment, criterion_id)
+    level = _get_teacher_criterion_level(criterion, level_id)
+
+    label = (payload.get("label", level.label) or "").strip()
+    if not label:
+        raise ValueError("label is required")
+    points = payload.get("points", level.points)
+    if points is None:
+        raise ValueError("points is required")
+
+    level.label = label
+    level.description = (payload.get("description", level.description) or "").strip()
+    level.points = points
+    level.save(update_fields=["label", "description", "points"])
+    return level
+
+
+@transaction.atomic
+def delete_assignment_teacher_criterion_level(
+    assignment: Assignment,
+    criterion_id: int,
+    level_id: int,
+    caller_user,
+) -> None:
+    """Delete a teacher-authored level from a teacher-authored criterion."""
+    _assert_can_compose(assignment, caller_user)
+    criterion = _get_teacher_criterion(assignment, criterion_id)
+    level = _get_teacher_criterion_level(criterion, level_id)
+    level.delete()
 
 
 @transaction.atomic

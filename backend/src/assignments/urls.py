@@ -20,6 +20,11 @@ urlpatterns = [
         name="assignments-question-create",
     ),
     path(
+        "<int:assignment_id>/questions/<int:question_id>",
+        views.question_detail,
+        name="assignments-question-detail",
+    ),
+    path(
         "<int:assignment_id>/questions/reorder",
         views.reorder_questions,
         name="assignments-question-reorder",
@@ -30,6 +35,11 @@ urlpatterns = [
         name="assignments-teacher-criterion-create",
     ),
     path(
+        "<int:assignment_id>/teacher-criteria/<int:criterion_id>",
+        views.teacher_criterion_detail,
+        name="assignments-teacher-criterion-detail",
+    ),
+    path(
         "<int:assignment_id>/teacher-criteria/reorder",
         views.reorder_teacher_criteria,
         name="assignments-teacher-criterion-reorder",
@@ -38,6 +48,11 @@ urlpatterns = [
         "<int:assignment_id>/teacher-criteria/<int:criterion_id>/levels",
         views.create_teacher_criterion_level,
         name="assignments-teacher-criterion-level-create",
+    ),
+    path(
+        "<int:assignment_id>/teacher-criteria/<int:criterion_id>/levels/<int:level_id>",
+        views.teacher_criterion_level_detail,
+        name="assignments-teacher-criterion-level-detail",
     ),
     path(
         "<int:assignment_id>/teacher-criteria/<int:criterion_id>/levels/reorder",

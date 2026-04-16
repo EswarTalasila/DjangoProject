@@ -56,12 +56,36 @@ class AssignmentQuestionCreateSerializer(serializers.Serializer):
     )
 
 
+class AssignmentQuestionUpdateSerializer(serializers.Serializer):
+    """Validates updates to teacher-authored assignment-local questions."""
+
+    type = serializers.ChoiceField(
+        choices=["MULTIPLE_CHOICE", "SHORT_ANSWER", "NUMBER_SCALE", "MOOD_METER"],
+        required=False,
+    )
+    prompt = serializers.CharField(required=False, allow_blank=False)
+    maxPoints = serializers.FloatField(required=False, min_value=0)
+    data = serializers.DictField(required=False)  # type: ignore[assignment]
+    gradingStrategy = serializers.ChoiceField(
+        choices=["AUTO", "MANUAL"],
+        required=False,
+    )
+
+
 class AssignmentTeacherCriterionCreateSerializer(serializers.Serializer):
     """Validates teacher-authored assignment-local criterion payloads."""
 
     title = serializers.CharField(allow_blank=False, max_length=255)
     description = serializers.CharField(required=False, allow_blank=True)
     weight = serializers.FloatField(min_value=0.01)
+
+
+class AssignmentTeacherCriterionUpdateSerializer(serializers.Serializer):
+    """Validates updates to teacher-authored assignment-local criteria."""
+
+    title = serializers.CharField(required=False, allow_blank=False, max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True)
+    weight = serializers.FloatField(required=False, min_value=0.01)
 
 
 class AssignmentOrderedIdsSerializer(serializers.Serializer):
@@ -79,3 +103,11 @@ class AssignmentTeacherCriterionLevelCreateSerializer(serializers.Serializer):
     label = serializers.CharField(allow_blank=False, max_length=255)
     description = serializers.CharField(required=False, allow_blank=True)
     points = serializers.FloatField(min_value=0)
+
+
+class AssignmentTeacherCriterionLevelUpdateSerializer(serializers.Serializer):
+    """Validates updates to teacher-authored rubric levels."""
+
+    label = serializers.CharField(required=False, allow_blank=False, max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True)
+    points = serializers.FloatField(required=False, min_value=0)

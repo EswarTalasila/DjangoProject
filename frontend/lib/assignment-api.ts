@@ -186,6 +186,30 @@ export async function addAssignmentQuestion(
   return response.data;
 }
 
+/** PATCH /assignments/:id/questions/:questionId — Update a teacher-authored assignment question. */
+export async function updateAssignmentQuestion(
+  assignmentId: number,
+  questionId: number,
+  payload: AssignmentQuestionCreateInput,
+): Promise<AssignmentContent> {
+  const response = await api.patch<AssignmentContent>(
+    `/assignments/${assignmentId}/questions/${questionId}`,
+    payload,
+  );
+  return response.data;
+}
+
+/** DELETE /assignments/:id/questions/:questionId — Remove a teacher-authored assignment question. */
+export async function deleteAssignmentQuestion(
+  assignmentId: number,
+  questionId: number,
+): Promise<AssignmentContent> {
+  const response = await api.delete<AssignmentContent>(
+    `/assignments/${assignmentId}/questions/${questionId}`,
+  );
+  return response.data;
+}
+
 /** POST /assignments/:id/questions/reorder — Reorder teacher-authored questions. */
 export async function reorderAssignmentQuestions(
   assignmentId: number,
@@ -205,6 +229,30 @@ export async function addAssignmentTeacherCriterion(
   const response = await api.post<AssignmentContent>(
     `/assignments/${assignmentId}/teacher-criteria`,
     payload,
+  );
+  return response.data;
+}
+
+/** PATCH /assignments/:id/teacher-criteria/:criterionId — Update a teacher-authored criterion. */
+export async function updateAssignmentTeacherCriterion(
+  assignmentId: number,
+  criterionId: number,
+  payload: AssignmentTeacherCriterionInput,
+): Promise<AssignmentContent> {
+  const response = await api.patch<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria/${criterionId}`,
+    payload,
+  );
+  return response.data;
+}
+
+/** DELETE /assignments/:id/teacher-criteria/:criterionId — Remove a teacher-authored criterion. */
+export async function deleteAssignmentTeacherCriterion(
+  assignmentId: number,
+  criterionId: number,
+): Promise<AssignmentContent> {
+  const response = await api.delete<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria/${criterionId}`,
   );
   return response.data;
 }
@@ -230,6 +278,32 @@ export async function addAssignmentTeacherCriterionLevel(
   const response = await api.post<AssignmentContent>(
     `/assignments/${assignmentId}/teacher-criteria/${criterionId}/levels`,
     payload,
+  );
+  return response.data;
+}
+
+/** PATCH /assignments/:id/teacher-criteria/:criterionId/levels/:levelId — Update a teacher-authored level. */
+export async function updateAssignmentTeacherCriterionLevel(
+  assignmentId: number,
+  criterionId: number,
+  levelId: number,
+  payload: AssignmentTeacherCriterionLevelInput,
+): Promise<AssignmentContent> {
+  const response = await api.patch<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria/${criterionId}/levels/${levelId}`,
+    payload,
+  );
+  return response.data;
+}
+
+/** DELETE /assignments/:id/teacher-criteria/:criterionId/levels/:levelId — Remove a teacher-authored level. */
+export async function deleteAssignmentTeacherCriterionLevel(
+  assignmentId: number,
+  criterionId: number,
+  levelId: number,
+): Promise<AssignmentContent> {
+  const response = await api.delete<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria/${criterionId}/levels/${levelId}`,
   );
   return response.data;
 }

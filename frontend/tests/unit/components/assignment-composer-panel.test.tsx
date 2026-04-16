@@ -8,6 +8,9 @@ const {
   mockAddAssignmentQuestion,
   mockAddAssignmentTeacherCriterion,
   mockAddAssignmentTeacherCriterionLevel,
+  mockDeleteAssignmentQuestion,
+  mockDeleteAssignmentTeacherCriterion,
+  mockDeleteAssignmentTeacherCriterionLevel,
   mockListReusableAssignmentImages,
   mockReorderAssignmentQuestions,
   mockReorderAssignmentTeacherCriteria,
@@ -15,6 +18,9 @@ const {
   mockUploadAssignmentQuestionImage,
   mockReuseAssignmentQuestionImage,
   mockDeleteAssignmentQuestionImage,
+  mockUpdateAssignmentQuestion,
+  mockUpdateAssignmentTeacherCriterion,
+  mockUpdateAssignmentTeacherCriterionLevel,
   mockGetRubric,
   mockToastSuccess,
   mockToastError,
@@ -22,6 +28,9 @@ const {
   mockAddAssignmentQuestion: vi.fn(),
   mockAddAssignmentTeacherCriterion: vi.fn(),
   mockAddAssignmentTeacherCriterionLevel: vi.fn(),
+  mockDeleteAssignmentQuestion: vi.fn(),
+  mockDeleteAssignmentTeacherCriterion: vi.fn(),
+  mockDeleteAssignmentTeacherCriterionLevel: vi.fn(),
   mockListReusableAssignmentImages: vi.fn(),
   mockReorderAssignmentQuestions: vi.fn(),
   mockReorderAssignmentTeacherCriteria: vi.fn(),
@@ -29,6 +38,9 @@ const {
   mockUploadAssignmentQuestionImage: vi.fn(),
   mockReuseAssignmentQuestionImage: vi.fn(),
   mockDeleteAssignmentQuestionImage: vi.fn(),
+  mockUpdateAssignmentQuestion: vi.fn(),
+  mockUpdateAssignmentTeacherCriterion: vi.fn(),
+  mockUpdateAssignmentTeacherCriterionLevel: vi.fn(),
   mockGetRubric: vi.fn(),
   mockToastSuccess: vi.fn(),
   mockToastError: vi.fn(),
@@ -42,6 +54,9 @@ vi.mock("@/lib/assignment-api", () => ({
   addAssignmentQuestion: mockAddAssignmentQuestion,
   addAssignmentTeacherCriterion: mockAddAssignmentTeacherCriterion,
   addAssignmentTeacherCriterionLevel: mockAddAssignmentTeacherCriterionLevel,
+  deleteAssignmentQuestion: mockDeleteAssignmentQuestion,
+  deleteAssignmentTeacherCriterion: mockDeleteAssignmentTeacherCriterion,
+  deleteAssignmentTeacherCriterionLevel: mockDeleteAssignmentTeacherCriterionLevel,
   listReusableAssignmentImages: mockListReusableAssignmentImages,
   reorderAssignmentQuestions: mockReorderAssignmentQuestions,
   reorderAssignmentTeacherCriteria: mockReorderAssignmentTeacherCriteria,
@@ -49,6 +64,9 @@ vi.mock("@/lib/assignment-api", () => ({
   uploadAssignmentQuestionImage: mockUploadAssignmentQuestionImage,
   reuseAssignmentQuestionImage: mockReuseAssignmentQuestionImage,
   deleteAssignmentQuestionImage: mockDeleteAssignmentQuestionImage,
+  updateAssignmentQuestion: mockUpdateAssignmentQuestion,
+  updateAssignmentTeacherCriterion: mockUpdateAssignmentTeacherCriterion,
+  updateAssignmentTeacherCriterionLevel: mockUpdateAssignmentTeacherCriterionLevel,
 }));
 
 vi.mock("@/lib/rubric-api", () => ({
@@ -160,6 +178,7 @@ function makeContent(overrides: Record<string, unknown> = {}) {
 describe("AssignmentComposerPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
     mockGetRubric.mockResolvedValue({
       id: 51,
       title: "Locked Research Rubric",
@@ -199,6 +218,8 @@ describe("AssignmentComposerPanel", () => {
     expect(screen.getByText("Template rubric stays locked")).toBeInTheDocument();
     expect(await screen.findByText("Locked Research Rubric")).toBeInTheDocument();
     expect(screen.getByText("Evidence quality")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /edit researcher prompt/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /remove researcher prompt/i })).not.toBeInTheDocument();
   });
 
   it("adds a teacher-authored question and notifies the parent", async () => {
@@ -449,6 +470,277 @@ describe("AssignmentComposerPanel", () => {
     );
     expect(onContentChange).toHaveBeenNthCalledWith(1, leveledContent);
     expect(onContentChange).toHaveBeenNthCalledWith(2, reorderedContent);
+  });
+
+  it("updates and deletes teacher-added questions", async () => {
+    const updatedContent = makeContent({
+      questions: [
+        makeContent().questions[0],
+        {
+          ...makeContent().questions[1],
+          prompt: "Teacher prompt revised",
+          maxPoints: 6,
+        },
+      ],
+    });
+    const deletedContent = makeContent({
+      questions: [makeContent().questions[0]],
+    });
+    mockUpdateAssignmentQuestion.mockResolvedValue(updatedContent);
+    mockDeleteAssignmentQuestion.mockResolvedValue(deletedContent);
+    const onContentChange = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <AssignmentComposerPanel
+        assignmentId={1}
+        content={makeContent()}
+        canCompose={true}
+        onContentChange={onContentChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /edit teacher prompt/i }));
+    await user.clear(screen.getByLabelText("Prompt", { selector: "#edit-question-prompt-102" }));
+    await user.type(
+      screen.getByLabelText("Prompt", { selector: "#edit-question-prompt-102" }),
+      "Teacher prompt revised",
+    );
+    await user.clear(screen.getByLabelText("Points", { selector: "#edit-question-points-102" }));
+    await user.type(
+      screen.getByLabelText("Points", { selector: "#edit-question-points-102" }),
+      "6",
+    );
+    await user.click(screen.getByRole("button", { name: /save question/i }));
+
+    await waitFor(() =>
+      expect(mockUpdateAssignmentQuestion).toHaveBeenCalledWith(
+        1,
+        102,
+        expect.objectContaining({
+          prompt: "Teacher prompt revised",
+          maxPoints: 6,
+        }),
+      ),
+    );
+
+    await user.click(screen.getByRole("button", { name: /remove teacher prompt/i }));
+    await waitFor(() => expect(mockDeleteAssignmentQuestion).toHaveBeenCalledWith(1, 102));
+    expect(onContentChange).toHaveBeenNthCalledWith(1, updatedContent);
+    expect(onContentChange).toHaveBeenNthCalledWith(2, deletedContent);
+  });
+
+  it("preserves existing question-type data when editing teacher-added questions", async () => {
+    const content = makeContent({
+      questions: [
+        makeContent().questions[0],
+        {
+          ...makeContent().questions[1],
+          type: "MULTIPLE_CHOICE",
+          data: {
+            choices: [
+              { prompt: "Alpha", score: 0 },
+              { prompt: "Beta", score: 1 },
+            ],
+            selectAll: true,
+          },
+          selectAll: true,
+        },
+      ],
+    });
+    mockUpdateAssignmentQuestion.mockResolvedValue(content);
+    const user = userEvent.setup();
+
+    render(
+      <AssignmentComposerPanel
+        assignmentId={1}
+        content={content}
+        canCompose={true}
+        onContentChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /edit teacher prompt/i }));
+    await user.clear(screen.getByLabelText("Prompt", { selector: "#edit-question-prompt-102" }));
+    await user.type(
+      screen.getByLabelText("Prompt", { selector: "#edit-question-prompt-102" }),
+      "Teacher prompt revised",
+    );
+    await user.click(screen.getByRole("button", { name: /save question/i }));
+
+    await waitFor(() =>
+      expect(mockUpdateAssignmentQuestion).toHaveBeenCalledWith(
+        1,
+        102,
+        expect.objectContaining({
+          data: {
+            choices: [
+              { prompt: "Alpha", score: 0 },
+              { prompt: "Beta", score: 1 },
+            ],
+            selectAll: true,
+          },
+        }),
+      ),
+    );
+  });
+
+  it("disables destructive and reorder actions while editing a teacher-added question", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AssignmentComposerPanel
+        assignmentId={1}
+        content={makeContent()}
+        canCompose={true}
+        onContentChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /edit teacher prompt/i }));
+
+    expect(screen.getByRole("button", { name: /remove teacher prompt/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /move teacher prompt earlier/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /move teacher prompt later/i })).toBeDisabled();
+  });
+
+  it("updates and deletes teacher-authored criteria and levels", async () => {
+    const content = makeContent({
+      teacherCriteria: [
+        {
+          id: 701,
+          title: "Local rigor",
+          description: "Check for local classroom expectations.",
+          weight: 2,
+          orderIndex: 0,
+          levels: [
+            {
+              id: 901,
+              label: "Exceeds",
+              description: "Strong evidence",
+              points: 4,
+              orderIndex: 0,
+            },
+          ],
+        },
+      ],
+    });
+    const updatedCriterionContent = makeContent({
+      ...content,
+      teacherCriteria: [
+        {
+          ...content.teacherCriteria[0],
+          title: "Local rigor revised",
+          description: "Updated criterion",
+          weight: 3,
+        },
+      ],
+    });
+    const updatedLevelContent = makeContent({
+      ...updatedCriterionContent,
+      teacherCriteria: [
+        {
+          ...updatedCriterionContent.teacherCriteria[0],
+          levels: [
+            {
+              id: 901,
+              label: "Outstanding",
+              description: "Updated level",
+              points: 5,
+              orderIndex: 0,
+            },
+          ],
+        },
+      ],
+    });
+    const deletedLevelContent = makeContent({
+      ...updatedCriterionContent,
+      teacherCriteria: [
+        {
+          ...updatedCriterionContent.teacherCriteria[0],
+          levels: [],
+        },
+      ],
+    });
+    const deletedCriterionContent = makeContent({ teacherCriteria: [] });
+
+    mockUpdateAssignmentTeacherCriterion.mockResolvedValue(updatedCriterionContent);
+    mockUpdateAssignmentTeacherCriterionLevel.mockResolvedValue(updatedLevelContent);
+    mockDeleteAssignmentTeacherCriterionLevel.mockResolvedValue(deletedLevelContent);
+    mockDeleteAssignmentTeacherCriterion.mockResolvedValue(deletedCriterionContent);
+    const onContentChange = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <AssignmentComposerPanel
+        assignmentId={1}
+        content={content}
+        canCompose={true}
+        onContentChange={onContentChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /edit local rigor/i }));
+    await user.clear(screen.getByLabelText("Criterion title", { selector: "#edit-criterion-title-701" }));
+    await user.type(
+      screen.getByLabelText("Criterion title", { selector: "#edit-criterion-title-701" }),
+      "Local rigor revised",
+    );
+    await user.clear(screen.getByLabelText("Weight", { selector: "#edit-criterion-weight-701" }));
+    await user.type(
+      screen.getByLabelText("Weight", { selector: "#edit-criterion-weight-701" }),
+      "3",
+    );
+    await user.click(screen.getByRole("button", { name: /save criterion/i }));
+
+    await waitFor(() =>
+      expect(mockUpdateAssignmentTeacherCriterion).toHaveBeenCalledWith(
+        1,
+        701,
+        expect.objectContaining({
+          title: "Local rigor revised",
+          weight: 3,
+        }),
+      ),
+    );
+
+    await user.click(screen.getByRole("button", { name: /edit exceeds/i }));
+    await user.clear(screen.getByLabelText("Level label", { selector: "#edit-level-label-901" }));
+    await user.type(
+      screen.getByLabelText("Level label", { selector: "#edit-level-label-901" }),
+      "Outstanding",
+    );
+    await user.clear(screen.getByLabelText("Points", { selector: "#edit-level-points-901" }));
+    await user.type(
+      screen.getByLabelText("Points", { selector: "#edit-level-points-901" }),
+      "5",
+    );
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(mockUpdateAssignmentTeacherCriterionLevel).toHaveBeenCalledWith(
+        1,
+        701,
+        901,
+        expect.objectContaining({
+          label: "Outstanding",
+          points: 5,
+        }),
+      ),
+    );
+
+    await user.click(screen.getByRole("button", { name: /remove exceeds/i }));
+    await waitFor(() =>
+      expect(mockDeleteAssignmentTeacherCriterionLevel).toHaveBeenCalledWith(1, 701, 901),
+    );
+
+    await user.click(screen.getByRole("button", { name: /remove local rigor/i }));
+    await waitFor(() => expect(mockDeleteAssignmentTeacherCriterion).toHaveBeenCalledWith(1, 701));
+
+    expect(onContentChange).toHaveBeenNthCalledWith(1, updatedCriterionContent);
+    expect(onContentChange).toHaveBeenNthCalledWith(2, updatedLevelContent);
+    expect(onContentChange).toHaveBeenNthCalledWith(3, deletedLevelContent);
+    expect(onContentChange).toHaveBeenNthCalledWith(4, deletedCriterionContent);
   });
 
   it("reuses, uploads, and removes teacher-question images through the assignment APIs", async () => {

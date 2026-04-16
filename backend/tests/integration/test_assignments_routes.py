@@ -608,6 +608,134 @@ class TestExtendAssignmentContent:
         assert teacher_questions[0]["prompt"] == "Teacher follow-up"
         assert Answer.objects.filter(submission=submission).count() == 1
 
+    def test_teacher_can_update_and_delete_assignment_local_question(
+        self, api_client, teacher_user, student_user, admin_user
+    ):
+        """Teacher can edit and delete only teacher-authored assignment-local questions."""
+        assignment_template = _make_assignment_template(admin_user)
+        course = _make_course(teacher_user)
+        _enroll(course, student_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
+        submission = Submission.objects.create(
+            assignment=assignment,
+            student=student_user,
+            status=SubmissionStatus.NOT_STARTED,
+        )
+        api_client.force_authenticate(user=teacher_user)
+        create_resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/questions",
+            {
+                "type": "SHORT_ANSWER",
+                "prompt": "Teacher follow-up",
+                "maxPoints": 4,
+            },
+            format="json",
+        )
+        question_id = next(
+            question["id"]
+            for question in create_resp.json()["questions"]
+            if question["origin"] == "TEACHER_ADDITION"
+        )
+        update_resp = api_client.patch(
+            f"/api/v1/assignments/{assignment.id}/questions/{question_id}",
+            {
+                "type": "NUMBER_SCALE",
+                "prompt": "Teacher follow-up revised",
+                "maxPoints": 6,
+            },
+            format="json",
+        )
+        assert update_resp.status_code == 200
+        updated_question = next(
+            question
+            for question in update_resp.json()["questions"]
+            if question["id"] == question_id
+        )
+        assert updated_question["prompt"] == "Teacher follow-up revised"
+        assert updated_question["type"] == "NUMBER_SCALE"
+        assert updated_question["maxPoints"] == 6
+
+        delete_resp = api_client.delete(f"/api/v1/assignments/{assignment.id}/questions/{question_id}")
+        assert delete_resp.status_code == 200
+        assert all(
+            question["id"] != question_id
+            for question in delete_resp.json()["questions"]
+        )
+        assert Answer.objects.filter(submission=submission).count() == 0
+
+    def test_inherited_assignment_question_cannot_be_updated_or_deleted(
+        self, api_client, teacher_user, admin_user
+    ):
+        """Teacher cannot mutate locked researcher-provided assignment questions."""
+        assignment_template = _make_assignment_template(admin_user)
+        inherited = Question.objects.create(
+            assignment_template=assignment_template,
+            question_type=QuestionKind.SHORT_ANSWER,
+            kind=QuestionKind.SHORT_ANSWER,
+            prompt="Researcher prompt",
+            max_points=5.0,
+            auto_gradable=False,
+            graded=False,
+        )
+        course = _make_course(teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
+        inherited_assignment_question = assignment.questions.get(
+            source_template_question=inherited
+        )
+
+        api_client.force_authenticate(user=teacher_user)
+        update_resp = api_client.patch(
+            f"/api/v1/assignments/{assignment.id}/questions/{inherited_assignment_question.id}",
+            {"prompt": "Teacher override"},
+            format="json",
+        )
+        delete_resp = api_client.delete(
+            f"/api/v1/assignments/{assignment.id}/questions/{inherited_assignment_question.id}"
+        )
+
+        assert update_resp.status_code == 404
+        assert delete_resp.status_code == 404
+        assert "Teacher question not found." in update_resp.json()["detail"]
+        assert "Teacher question not found." in delete_resp.json()["detail"]
+
+    def test_admin_can_update_and_delete_teacher_added_question(
+        self, api_client, teacher_user, admin_user
+    ):
+        """Admin override can manage teacher-authored assignment-local questions."""
+        assignment_template = _make_assignment_template(admin_user)
+        course = _make_course(teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
+
+        api_client.force_authenticate(user=teacher_user)
+        create_resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/questions",
+            {"type": "SHORT_ANSWER", "prompt": "Teacher follow-up", "maxPoints": 4},
+            format="json",
+        )
+        question_id = next(
+            question["id"]
+            for question in create_resp.json()["questions"]
+            if question["origin"] == "TEACHER_ADDITION"
+        )
+
+        api_client.force_authenticate(user=admin_user)
+        update_resp = api_client.patch(
+            f"/api/v1/assignments/{assignment.id}/questions/{question_id}",
+            {"prompt": "Admin revised follow-up", "maxPoints": 5},
+            format="json",
+        )
+        delete_resp = api_client.delete(f"/api/v1/assignments/{assignment.id}/questions/{question_id}")
+
+        assert update_resp.status_code == 200
+        assert any(
+            question["prompt"] == "Admin revised follow-up"
+            for question in update_resp.json()["questions"]
+        )
+        assert delete_resp.status_code == 200
+        assert all(
+            question["id"] != question_id for question in delete_resp.json()["questions"]
+        )
+
     def test_teacher_can_add_assignment_local_criterion(
         self, api_client, teacher_user, admin_user
     ):
@@ -765,6 +893,62 @@ class TestExtendAssignmentContent:
         assert reorder_resp.status_code == 200
         labels = reorder_resp.json()["teacherCriteria"][0]["levels"]
         assert [level["label"] for level in labels] == ["Exceeds", "Meets"]
+
+    def test_teacher_can_update_and_delete_local_criterion_and_level(
+        self, api_client, teacher_user, admin_user
+    ):
+        """Teacher can edit and delete local rubric criteria and levels."""
+        assignment_template = _make_assignment_template(admin_user)
+        course = _make_course(teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
+
+        api_client.force_authenticate(user=teacher_user)
+        criterion_resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria",
+            {"title": "Local rigor", "description": "", "weight": 1},
+            format="json",
+        )
+        criterion_id = criterion_resp.json()["teacherCriteria"][0]["id"]
+        level_resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria/{criterion_id}/levels",
+            {"label": "Meets", "description": "", "points": 2},
+            format="json",
+        )
+        level_id = level_resp.json()["teacherCriteria"][0]["levels"][0]["id"]
+
+        update_criterion_resp = api_client.patch(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria/{criterion_id}",
+            {"title": "Local rigor revised", "description": "Updated", "weight": 1.5},
+            format="json",
+        )
+        assert update_criterion_resp.status_code == 200
+        updated_criterion = update_criterion_resp.json()["teacherCriteria"][0]
+        assert updated_criterion["title"] == "Local rigor revised"
+        assert updated_criterion["description"] == "Updated"
+        assert updated_criterion["weight"] == 1.5
+
+        update_level_resp = api_client.patch(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria/{criterion_id}/levels/{level_id}",
+            {"label": "Exceeds", "description": "Updated level", "points": 3},
+            format="json",
+        )
+        assert update_level_resp.status_code == 200
+        updated_level = update_level_resp.json()["teacherCriteria"][0]["levels"][0]
+        assert updated_level["label"] == "Exceeds"
+        assert updated_level["description"] == "Updated level"
+        assert updated_level["points"] == 3
+
+        delete_level_resp = api_client.delete(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria/{criterion_id}/levels/{level_id}"
+        )
+        assert delete_level_resp.status_code == 200
+        assert delete_level_resp.json()["teacherCriteria"][0]["levels"] == []
+
+        delete_criterion_resp = api_client.delete(
+            f"/api/v1/assignments/{assignment.id}/teacher-criteria/{criterion_id}"
+        )
+        assert delete_criterion_resp.status_code == 200
+        assert delete_criterion_resp.json()["teacherCriteria"] == []
 
     def test_archived_assignment_rejects_extension_routes(
         self, api_client, teacher_user, admin_user

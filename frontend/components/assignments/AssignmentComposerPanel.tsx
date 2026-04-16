@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Lock, Plus, Sparkles } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, Lock, Pencil, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import ImagePicker from '@/components/media/ImagePicker';
@@ -20,6 +20,9 @@ import {
   addAssignmentQuestion,
   addAssignmentTeacherCriterion,
   addAssignmentTeacherCriterionLevel,
+  deleteAssignmentQuestion,
+  deleteAssignmentTeacherCriterion,
+  deleteAssignmentTeacherCriterionLevel,
   deleteAssignmentQuestionImage,
   listReusableAssignmentImages,
   reorderAssignmentQuestions,
@@ -27,6 +30,9 @@ import {
   reorderAssignmentTeacherCriterionLevels,
   reuseAssignmentQuestionImage,
   uploadAssignmentQuestionImage,
+  updateAssignmentQuestion,
+  updateAssignmentTeacherCriterion,
+  updateAssignmentTeacherCriterionLevel,
   type AssignmentContent,
   type AssignmentQuestion,
   type AssignmentTeacherCriterion,
@@ -110,6 +116,13 @@ function buildQuestionData(kind: QuestionKind): QuestionData | undefined {
   return undefined;
 }
 
+function confirmDestructiveAction(message: string): boolean {
+  if (typeof window === 'undefined' || typeof window.confirm !== 'function') {
+    return true;
+  }
+  return window.confirm(message);
+}
+
 function InheritedQuestionCard({ question }: { question: AssignmentQuestion }) {
   return (
     <article className="rounded-2xl border border-border/70 bg-background p-4 shadow-sm">
@@ -150,6 +163,7 @@ function TeacherQuestionCard({
   canMoveDown,
   onMoveUp,
   onMoveDown,
+  onContentChange,
 }: {
   assignmentId: number;
   question: AssignmentQuestion;
@@ -158,8 +172,75 @@ function TeacherQuestionCard({
   canMoveDown: boolean;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onContentChange: (next: AssignmentContent) => void;
 }) {
   const [image, setImage] = useState(question.image);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState<QuestionDraft>({
+    type: question.type,
+    prompt: question.prompt,
+    maxPoints: String(question.maxPoints),
+  });
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    setImage(question.image);
+    setDraft({
+      type: question.type,
+      prompt: question.prompt,
+      maxPoints: String(question.maxPoints),
+    });
+  }, [question]);
+
+  async function handleSave() {
+    const prompt = draft.prompt.trim();
+    const maxPoints = Number(draft.maxPoints);
+    if (!prompt) {
+      toast.error('Question prompt is required.');
+      return;
+    }
+    if (!Number.isFinite(maxPoints) || maxPoints < 0) {
+      toast.error('Max points must be a valid non-negative number.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const next = await updateAssignmentQuestion(assignmentId, question.id, {
+        type: draft.type,
+        prompt,
+        maxPoints,
+        data:
+          draft.type === question.type
+            ? (question.data ?? buildQuestionData(draft.type))
+            : buildQuestionData(draft.type),
+      });
+      onContentChange(next);
+      setIsEditing(false);
+      toast.success('Assignment question updated.');
+    } catch (error: unknown) {
+      toast.error(toErrorMessage(error, 'Failed to update question.'));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirmDestructiveAction('Remove this teacher-added question from the assignment?')) {
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      const next = await deleteAssignmentQuestion(assignmentId, question.id);
+      onContentChange(next);
+      toast.success('Assignment question removed.');
+    } catch (error: unknown) {
+      toast.error(toErrorMessage(error, 'Failed to remove question.'));
+    } finally {
+      setIsDeleting(false);
+    }
+  }
 
   return (
     <article className="rounded-2xl border border-border bg-card p-4 shadow-sm">
@@ -180,7 +261,29 @@ function TeacherQuestionCard({
             size="icon"
             variant="outline"
             className="h-8 w-8"
-            disabled={!canCompose || !canMoveUp}
+            disabled={!canCompose || isSaving || isDeleting}
+            onClick={() => setIsEditing((current) => !current)}
+            aria-label={isEditing ? `Cancel editing ${question.prompt}` : `Edit ${question.prompt}`}
+          >
+            {isEditing ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-8 w-8 text-destructive hover:text-destructive"
+            disabled={!canCompose || isSaving || isDeleting || isEditing}
+            onClick={() => void handleDelete()}
+            aria-label={`Remove ${question.prompt}`}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-8 w-8"
+            disabled={!canCompose || isSaving || isDeleting || isEditing || !canMoveUp}
             onClick={onMoveUp}
             aria-label={`Move ${question.prompt} earlier`}
           >
@@ -191,7 +294,7 @@ function TeacherQuestionCard({
             size="icon"
             variant="outline"
             className="h-8 w-8"
-            disabled={!canCompose || !canMoveDown}
+            disabled={!canCompose || isSaving || isDeleting || isEditing || !canMoveDown}
             onClick={onMoveDown}
             aria-label={`Move ${question.prompt} later`}
           >
@@ -199,10 +302,82 @@ function TeacherQuestionCard({
           </Button>
         </div>
       </div>
+      {isEditing && (
+        <div className="mt-4 rounded-2xl border border-dashed border-border/80 bg-background p-4">
+          <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_140px]">
+            <div className="space-y-2">
+              <Label htmlFor={`edit-question-type-${question.id}`}>Type</Label>
+              <Select
+                value={draft.type}
+                onValueChange={(value) =>
+                  setDraft((current) => ({ ...current, type: value as QuestionKind }))
+                }
+                disabled={!canCompose || isSaving}
+              >
+                <SelectTrigger id={`edit-question-type-${question.id}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SHORT_ANSWER">Short answer</SelectItem>
+                  <SelectItem value="MULTIPLE_CHOICE">Multiple choice</SelectItem>
+                  <SelectItem value="NUMBER_SCALE">Number scale</SelectItem>
+                  <SelectItem value="MOOD_METER">Mood meter</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`edit-question-prompt-${question.id}`}>Prompt</Label>
+              <Input
+                id={`edit-question-prompt-${question.id}`}
+                value={draft.prompt}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, prompt: event.target.value }))
+                }
+                disabled={!canCompose || isSaving}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`edit-question-points-${question.id}`}>Points</Label>
+              <Input
+                id={`edit-question-points-${question.id}`}
+                type="number"
+                min="0"
+                step="0.5"
+                value={draft.maxPoints}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, maxPoints: event.target.value }))
+                }
+                disabled={!canCompose || isSaving}
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={isSaving}
+              onClick={() => {
+                setDraft({
+                  type: question.type,
+                  prompt: question.prompt,
+                  maxPoints: String(question.maxPoints),
+                });
+                setIsEditing(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void handleSave()} disabled={isSaving}>
+              <Check className="mr-2 h-4 w-4" />
+              Save question
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="mt-4">
         <ImagePicker
           image={image}
-          disabled={!canCompose}
+          disabled={!canCompose || isSaving || isDeleting}
           emptyLabel="Attach a supporting image"
           emptyHint="Reuse an earlier question image or upload a new one."
           browseLabel="Reuse Existing Image"
@@ -250,8 +425,27 @@ function TeacherCriterionCard({
   onContentChange: (next: AssignmentContent) => void;
 }) {
   const [draft, setDraft] = useState<CriterionLevelDraft>(EMPTY_LEVEL);
+  const [criterionDraft, setCriterionDraft] = useState<CriterionDraft>({
+    title: criterion.title,
+    description: criterion.description,
+    weight: String(criterion.weight),
+  });
+  const [editingLevelId, setEditingLevelId] = useState<number | null>(null);
+  const [editingLevelDraft, setEditingLevelDraft] = useState<CriterionLevelDraft>(EMPTY_LEVEL);
+  const [isEditingCriterion, setIsEditingCriterion] = useState(false);
   const [isSavingLevel, setIsSavingLevel] = useState(false);
+  const [isSavingCriterion, setIsSavingCriterion] = useState(false);
   const [isMovingLevels, setIsMovingLevels] = useState(false);
+  const [isDeletingCriterion, setIsDeletingCriterion] = useState(false);
+  const [deletingLevelId, setDeletingLevelId] = useState<number | null>(null);
+
+  useEffect(() => {
+    setCriterionDraft({
+      title: criterion.title,
+      description: criterion.description,
+      weight: String(criterion.weight),
+    });
+  }, [criterion]);
 
   async function handleAddLevel() {
     const label = draft.label.trim();
@@ -302,6 +496,97 @@ function TeacherCriterionCard({
     }
   }
 
+  async function handleSaveCriterion() {
+    const title = criterionDraft.title.trim();
+    const weight = Number(criterionDraft.weight);
+    if (!title) {
+      toast.error('Criterion title is required.');
+      return;
+    }
+    if (!Number.isFinite(weight) || weight <= 0) {
+      toast.error('Criterion weight must be greater than zero.');
+      return;
+    }
+
+    setIsSavingCriterion(true);
+    try {
+      const next = await updateAssignmentTeacherCriterion(assignmentId, criterion.id, {
+        title,
+        description: criterionDraft.description.trim(),
+        weight,
+      });
+      onContentChange(next);
+      setIsEditingCriterion(false);
+      toast.success('Teacher criterion updated.');
+    } catch (error: unknown) {
+      toast.error(toErrorMessage(error, 'Failed to update criterion.'));
+    } finally {
+      setIsSavingCriterion(false);
+    }
+  }
+
+  async function handleDeleteCriterion() {
+    if (!confirmDestructiveAction('Remove this teacher-added criterion and its levels?')) {
+      return;
+    }
+    setIsDeletingCriterion(true);
+    try {
+      const next = await deleteAssignmentTeacherCriterion(assignmentId, criterion.id);
+      onContentChange(next);
+      toast.success('Teacher criterion removed.');
+    } catch (error: unknown) {
+      toast.error(toErrorMessage(error, 'Failed to remove criterion.'));
+    } finally {
+      setIsDeletingCriterion(false);
+    }
+  }
+
+  async function handleSaveLevel(levelId: number) {
+    const label = editingLevelDraft.label.trim();
+    const points = Number(editingLevelDraft.points);
+    if (!label) {
+      toast.error('Level label is required.');
+      return;
+    }
+    if (!Number.isFinite(points) || points < 0) {
+      toast.error('Level points must be a valid non-negative number.');
+      return;
+    }
+
+    setIsSavingLevel(true);
+    try {
+      const next = await updateAssignmentTeacherCriterionLevel(assignmentId, criterion.id, levelId, {
+        label,
+        description: editingLevelDraft.description.trim(),
+        points,
+      });
+      onContentChange(next);
+      setEditingLevelId(null);
+      setEditingLevelDraft(EMPTY_LEVEL);
+      toast.success('Teacher rubric level updated.');
+    } catch (error: unknown) {
+      toast.error(toErrorMessage(error, 'Failed to update rubric level.'));
+    } finally {
+      setIsSavingLevel(false);
+    }
+  }
+
+  async function handleDeleteLevel(levelId: number) {
+    if (!confirmDestructiveAction('Remove this teacher-added rubric level?')) {
+      return;
+    }
+    setDeletingLevelId(levelId);
+    try {
+      const next = await deleteAssignmentTeacherCriterionLevel(assignmentId, criterion.id, levelId);
+      onContentChange(next);
+      toast.success('Teacher rubric level removed.');
+    } catch (error: unknown) {
+      toast.error(toErrorMessage(error, 'Failed to remove rubric level.'));
+    } finally {
+      setDeletingLevelId(null);
+    }
+  }
+
   return (
     <article className="rounded-2xl border border-border/70 bg-background p-4">
       <div className="flex items-start justify-between gap-3">
@@ -320,7 +605,42 @@ function TeacherCriterionCard({
             size="icon"
             variant="outline"
             className="h-8 w-8"
-            disabled={!canCompose || !canMoveUp}
+            disabled={!canCompose || isSavingCriterion || isDeletingCriterion}
+            onClick={() => setIsEditingCriterion((current) => !current)}
+            aria-label={isEditingCriterion ? `Cancel editing ${criterion.title}` : `Edit ${criterion.title}`}
+          >
+            {isEditingCriterion ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-8 w-8 text-destructive hover:text-destructive"
+            disabled={
+              !canCompose ||
+              isSavingCriterion ||
+              isDeletingCriterion ||
+              isEditingCriterion ||
+              editingLevelId !== null
+            }
+            onClick={() => void handleDeleteCriterion()}
+            aria-label={`Remove ${criterion.title}`}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="h-8 w-8"
+            disabled={
+              !canCompose ||
+              isSavingCriterion ||
+              isDeletingCriterion ||
+              isEditingCriterion ||
+              editingLevelId !== null ||
+              !canMoveUp
+            }
             onClick={onMoveUp}
             aria-label={`Move ${criterion.title} earlier`}
           >
@@ -331,7 +651,14 @@ function TeacherCriterionCard({
             size="icon"
             variant="outline"
             className="h-8 w-8"
-            disabled={!canCompose || !canMoveDown}
+            disabled={
+              !canCompose ||
+              isSavingCriterion ||
+              isDeletingCriterion ||
+              isEditingCriterion ||
+              editingLevelId !== null ||
+              !canMoveDown
+            }
             onClick={onMoveDown}
             aria-label={`Move ${criterion.title} later`}
           >
@@ -339,6 +666,70 @@ function TeacherCriterionCard({
           </Button>
         </div>
       </div>
+      {isEditingCriterion && (
+        <div className="mt-4 rounded-2xl border border-dashed border-border/80 bg-card px-3 py-3">
+          <div className="space-y-2">
+            <Label htmlFor={`edit-criterion-title-${criterion.id}`}>Criterion title</Label>
+            <Input
+              id={`edit-criterion-title-${criterion.id}`}
+              value={criterionDraft.title}
+              onChange={(event) =>
+                setCriterionDraft((current) => ({ ...current, title: event.target.value }))
+              }
+              disabled={!canCompose || isSavingCriterion}
+            />
+          </div>
+          <div className="mt-3 space-y-2">
+            <Label htmlFor={`edit-criterion-description-${criterion.id}`}>Description</Label>
+            <Textarea
+              id={`edit-criterion-description-${criterion.id}`}
+              value={criterionDraft.description}
+              onChange={(event) =>
+                setCriterionDraft((current) => ({ ...current, description: event.target.value }))
+              }
+              disabled={!canCompose || isSavingCriterion}
+              rows={3}
+            />
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-[120px_auto]">
+            <div className="space-y-2">
+              <Label htmlFor={`edit-criterion-weight-${criterion.id}`}>Weight</Label>
+              <Input
+                id={`edit-criterion-weight-${criterion.id}`}
+                type="number"
+                min="0.01"
+                step="0.25"
+                value={criterionDraft.weight}
+                onChange={(event) =>
+                  setCriterionDraft((current) => ({ ...current, weight: event.target.value }))
+                }
+                disabled={!canCompose || isSavingCriterion}
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={isSavingCriterion}
+              onClick={() => {
+                setCriterionDraft({
+                  title: criterion.title,
+                  description: criterion.description,
+                  weight: String(criterion.weight),
+                });
+                setIsEditingCriterion(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void handleSaveCriterion()} disabled={isSavingCriterion}>
+              <Check className="mr-2 h-4 w-4" />
+              Save criterion
+            </Button>
+          </div>
+        </div>
+      )}
       {criterion.description && (
         <p className="mt-3 text-sm text-muted-foreground">{criterion.description}</p>
       )}
@@ -359,13 +750,68 @@ function TeacherCriterionCard({
                   key={level.id}
                   className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card px-3 py-3 sm:flex-row sm:items-start sm:justify-between"
                 >
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{level.label}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatPoints(level.points)} points
-                    </p>
-                    {level.description && (
-                      <p className="mt-2 text-sm text-muted-foreground">{level.description}</p>
+                  <div className="min-w-0 flex-1">
+                    {editingLevelId === level.id ? (
+                      <div className="space-y-3">
+                        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_120px]">
+                          <div className="space-y-2">
+                            <Label htmlFor={`edit-level-label-${level.id}`}>Level label</Label>
+                            <Input
+                              id={`edit-level-label-${level.id}`}
+                              value={editingLevelDraft.label}
+                              onChange={(event) =>
+                                setEditingLevelDraft((current) => ({
+                                  ...current,
+                                  label: event.target.value,
+                                }))
+                              }
+                              disabled={!canCompose || isSavingLevel}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor={`edit-level-points-${level.id}`}>Points</Label>
+                            <Input
+                              id={`edit-level-points-${level.id}`}
+                              type="number"
+                              min="0"
+                              step="0.5"
+                              value={editingLevelDraft.points}
+                              onChange={(event) =>
+                                setEditingLevelDraft((current) => ({
+                                  ...current,
+                                  points: event.target.value,
+                                }))
+                              }
+                              disabled={!canCompose || isSavingLevel}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor={`edit-level-description-${level.id}`}>Description</Label>
+                          <Textarea
+                            id={`edit-level-description-${level.id}`}
+                            value={editingLevelDraft.description}
+                            onChange={(event) =>
+                              setEditingLevelDraft((current) => ({
+                                ...current,
+                                description: event.target.value,
+                              }))
+                            }
+                            disabled={!canCompose || isSavingLevel}
+                            rows={3}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">{level.label}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {formatPoints(level.points)} points
+                        </p>
+                        {level.description && (
+                          <p className="mt-2 text-sm text-muted-foreground">{level.description}</p>
+                        )}
+                      </div>
                     )}
                   </div>
                   <div className="flex items-center gap-2 self-start">
@@ -374,7 +820,61 @@ function TeacherCriterionCard({
                       size="icon"
                       variant="outline"
                       className="h-8 w-8"
-                      disabled={!canCompose || isMovingLevels || levelIndex === 0}
+                      disabled={!canCompose || isSavingLevel || deletingLevelId === level.id}
+                      onClick={() => {
+                        if (editingLevelId === level.id) {
+                          setEditingLevelId(null);
+                          setEditingLevelDraft(EMPTY_LEVEL);
+                          return;
+                        }
+                        setEditingLevelId(level.id);
+                        setEditingLevelDraft({
+                          label: level.label,
+                          description: level.description,
+                          points: String(level.points),
+                        });
+                      }}
+                      aria-label={
+                        editingLevelId === level.id
+                          ? `Cancel editing ${level.label}`
+                          : `Edit ${level.label}`
+                      }
+                    >
+                      {editingLevelId === level.id ? (
+                        <X className="h-4 w-4" />
+                      ) : (
+                        <Pencil className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      disabled={
+                        !canCompose ||
+                        isSavingLevel ||
+                        deletingLevelId === level.id ||
+                        (editingLevelId !== null && editingLevelId !== level.id)
+                      }
+                      onClick={() => void handleDeleteLevel(level.id)}
+                      aria-label={`Remove ${level.label}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8"
+                      disabled={
+                        !canCompose ||
+                        isMovingLevels ||
+                        isSavingLevel ||
+                        deletingLevelId === level.id ||
+                        editingLevelId === level.id ||
+                        levelIndex === 0
+                      }
                       onClick={() => void moveLevel(levelIndex, -1)}
                       aria-label={`Move ${level.label} earlier`}
                     >
@@ -386,13 +886,29 @@ function TeacherCriterionCard({
                       variant="outline"
                       className="h-8 w-8"
                       disabled={
-                        !canCompose || isMovingLevels || levelIndex === criterion.levels.length - 1
+                        !canCompose ||
+                        isMovingLevels ||
+                        isSavingLevel ||
+                        deletingLevelId === level.id ||
+                        editingLevelId === level.id ||
+                        levelIndex === criterion.levels.length - 1
                       }
                       onClick={() => void moveLevel(levelIndex, 1)}
                       aria-label={`Move ${level.label} later`}
                     >
                       <ArrowDown className="h-4 w-4" />
                     </Button>
+                    {editingLevelId === level.id && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={!canCompose || isSavingLevel}
+                        onClick={() => void handleSaveLevel(level.id)}
+                      >
+                        <Check className="mr-2 h-4 w-4" />
+                        Save
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))
@@ -443,7 +959,7 @@ function TeacherCriterionCard({
               type="button"
               variant="secondary"
               onClick={() => void handleAddLevel()}
-              disabled={!canCompose || isSavingLevel}
+              disabled={!canCompose || isSavingLevel || editingLevelId !== null || isEditingCriterion}
             >
               <Plus className="mr-2 h-4 w-4" />
               Add level
@@ -730,6 +1246,7 @@ export default function AssignmentComposerPanel({
                   assignmentId={assignmentId}
                   question={question}
                   canCompose={canCompose && !isReorderingQuestions}
+                  onContentChange={onContentChange}
                   canMoveUp={teacherQuestions.findIndex((item) => item.id === question.id) > 0}
                   canMoveDown={
                     teacherQuestions.findIndex((item) => item.id === question.id) <

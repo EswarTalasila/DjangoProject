@@ -173,6 +173,55 @@ describe("assignment api", () => {
       expect(result.questions[0].origin).toBe("TEACHER_ADDITION");
     });
 
+    it("updates and deletes a teacher-authored assignment question", async () => {
+      server.use(
+        http.patch(`${API_BASE}/assignments/1/questions/111`, async ({ request }) => {
+          const body = (await request.json()) as { prompt?: string; maxPoints?: number };
+          return HttpResponse.json({
+            ...sampleAssignmentContent,
+            questions: [
+              {
+                questionId: 111,
+                id: 111,
+                type: "SHORT_ANSWER",
+                prompt: body.prompt,
+                maxPoints: body.maxPoints,
+                autoGradable: false,
+                graded: false,
+                image: null,
+                data: {},
+                selectAll: null,
+                min: null,
+                max: null,
+                groupId: null,
+                rubricId: null,
+                gradingStrategy: "MANUAL",
+                orderIndex: 0,
+                origin: "TEACHER_ADDITION",
+                lockedFromSource: false,
+                sourceQuestionId: null,
+              },
+            ],
+          });
+        }),
+        http.delete(`${API_BASE}/assignments/1/questions/111`, () =>
+          HttpResponse.json({ ...sampleAssignmentContent, questions: [] }),
+        ),
+      );
+
+      const { updateAssignmentQuestion, deleteAssignmentQuestion } = await loadAssignmentApi();
+      const updated = await updateAssignmentQuestion(1, 111, {
+        type: "SHORT_ANSWER",
+        prompt: "Teacher revised",
+        maxPoints: 6,
+      });
+      expect(updated.questions[0].prompt).toBe("Teacher revised");
+      expect(updated.questions[0].maxPoints).toBe(6);
+
+      const deleted = await deleteAssignmentQuestion(1, 111);
+      expect(deleted.questions).toEqual([]);
+    });
+
     it("posts a teacher-authored rubric criterion", async () => {
       server.use(
         http.post(`${API_BASE}/assignments/1/teacher-criteria`, async ({ request }) => {
@@ -204,6 +253,107 @@ describe("assignment api", () => {
 
       expect(result.teacherCriteria[0].title).toBe("Local rigor");
       expect(result.teacherCriteria[0].weight).toBe(2);
+    });
+
+    it("updates and deletes teacher-authored rubric criteria and levels", async () => {
+      server.use(
+        http.patch(`${API_BASE}/assignments/1/teacher-criteria/801`, async ({ request }) => {
+          const body = (await request.json()) as { title?: string; description?: string; weight?: number };
+          return HttpResponse.json({
+            ...sampleAssignmentContent,
+            teacherCriteria: [
+              {
+                id: 801,
+                title: body.title,
+                description: body.description,
+                weight: body.weight,
+                orderIndex: 0,
+                levels: [
+                  {
+                    id: 901,
+                    label: "Meets",
+                    points: 2,
+                    description: "",
+                    orderIndex: 0,
+                  },
+                ],
+              },
+            ],
+          });
+        }),
+        http.patch(
+          `${API_BASE}/assignments/1/teacher-criteria/801/levels/901`,
+          async ({ request }) => {
+            const body = (await request.json()) as { label?: string; description?: string; points?: number };
+            return HttpResponse.json({
+              ...sampleAssignmentContent,
+              teacherCriteria: [
+                {
+                  id: 801,
+                  title: "Local rigor",
+                  description: "",
+                  weight: 2,
+                  orderIndex: 0,
+                  levels: [
+                    {
+                      id: 901,
+                      label: body.label,
+                      points: body.points,
+                      description: body.description,
+                      orderIndex: 0,
+                    },
+                  ],
+                },
+              ],
+            });
+          },
+        ),
+        http.delete(`${API_BASE}/assignments/1/teacher-criteria/801`, () =>
+          HttpResponse.json({ ...sampleAssignmentContent, teacherCriteria: [] }),
+        ),
+        http.delete(`${API_BASE}/assignments/1/teacher-criteria/801/levels/901`, () =>
+          HttpResponse.json({
+            ...sampleAssignmentContent,
+            teacherCriteria: [
+              {
+                id: 801,
+                title: "Local rigor",
+                description: "",
+                weight: 2,
+                orderIndex: 0,
+                levels: [],
+              },
+            ],
+          }),
+        ),
+      );
+
+      const {
+        updateAssignmentTeacherCriterion,
+        updateAssignmentTeacherCriterionLevel,
+        deleteAssignmentTeacherCriterion,
+        deleteAssignmentTeacherCriterionLevel,
+      } = await loadAssignmentApi();
+
+      const updatedCriterion = await updateAssignmentTeacherCriterion(1, 801, {
+        title: "Local rigor revised",
+        description: "Updated",
+        weight: 3,
+      });
+      expect(updatedCriterion.teacherCriteria[0].title).toBe("Local rigor revised");
+
+      const updatedLevel = await updateAssignmentTeacherCriterionLevel(1, 801, 901, {
+        label: "Exceeds",
+        description: "Updated level",
+        points: 4,
+      });
+      expect(updatedLevel.teacherCriteria[0].levels[0].label).toBe("Exceeds");
+
+      const deletedLevel = await deleteAssignmentTeacherCriterionLevel(1, 801, 901);
+      expect(deletedLevel.teacherCriteria[0].levels).toEqual([]);
+
+      const deletedCriterion = await deleteAssignmentTeacherCriterion(1, 801);
+      expect(deletedCriterion.teacherCriteria).toEqual([]);
     });
 
     it("reorders teacher-authored assignment questions", async () => {

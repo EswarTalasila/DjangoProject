@@ -36,9 +36,12 @@ from courses.services import can_view_course
 from .serializers import (
     AssignmentOrderedIdsSerializer,
     AssignmentQuestionCreateSerializer,
+    AssignmentQuestionUpdateSerializer,
     AssignmentSerializer,
     AssignmentTeacherCriterionCreateSerializer,
     AssignmentTeacherCriterionLevelCreateSerializer,
+    AssignmentTeacherCriterionLevelUpdateSerializer,
+    AssignmentTeacherCriterionUpdateSerializer,
     AssignmentUpdateSerializer,
 )
 from .services import (
@@ -52,6 +55,9 @@ from .services import (
     assignment_content_to_dto,
     assignment_to_dto,
     create_assignment,
+    delete_assignment_question,
+    delete_assignment_teacher_criterion,
+    delete_assignment_teacher_criterion_level,
     generate_assignment_archive_artifact,
     get_assignment,
     get_assignment_archive_artifact,
@@ -65,6 +71,9 @@ from .services import (
     reorder_assignment_teacher_criterion_levels,
     restore_assignment,
     update_assignment,
+    update_assignment_question,
+    update_assignment_teacher_criterion,
+    update_assignment_teacher_criterion_level,
 )
 
 
@@ -304,6 +313,32 @@ def create_assignment_question(request, assignment_id: int):
     return Response(assignment_content_to_dto(assignment).model_dump(), status=status.HTTP_201_CREATED)
 
 
+@api_view(["PATCH", "DELETE"])
+@permission_classes([IsAuthenticated])
+def question_detail(request, assignment_id: int, question_id: int):
+    """Update or delete a teacher-authored assignment-local question."""
+    assignment = get_assignment_with_content(assignment_id)
+    if not assignment:
+        return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        if request.method == "PATCH":
+            serializer = AssignmentQuestionUpdateSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            update_assignment_question(assignment, question_id, request.user, serializer.validated_data)
+        else:
+            delete_assignment_question(assignment, question_id, request.user)
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    except ConflictError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+    except ValueError as exc:
+        return error_response(exc)
+
+    assignment = get_assignment_with_content(assignment_id)
+    return Response(assignment_content_to_dto(assignment).model_dump(), status=status.HTTP_200_OK)
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def reorder_questions(request, assignment_id: int):
@@ -345,6 +380,37 @@ def create_assignment_teacher_criterion(request, assignment_id: int):
         return error_response(exc)
     assignment = get_assignment_with_content(assignment_id)
     return Response(assignment_content_to_dto(assignment).model_dump(), status=status.HTTP_201_CREATED)
+
+
+@api_view(["PATCH", "DELETE"])
+@permission_classes([IsAuthenticated])
+def teacher_criterion_detail(request, assignment_id: int, criterion_id: int):
+    """Update or delete a teacher-authored assignment-local rubric criterion."""
+    assignment = get_assignment_with_content(assignment_id)
+    if not assignment:
+        return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        if request.method == "PATCH":
+            serializer = AssignmentTeacherCriterionUpdateSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            update_assignment_teacher_criterion(
+                assignment,
+                criterion_id,
+                request.user,
+                serializer.validated_data,
+            )
+        else:
+            delete_assignment_teacher_criterion(assignment, criterion_id, request.user)
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    except ConflictError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+    except ValueError as exc:
+        return error_response(exc)
+
+    assignment = get_assignment_with_content(assignment_id)
+    return Response(assignment_content_to_dto(assignment).model_dump(), status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
@@ -392,6 +458,48 @@ def create_teacher_criterion_level(request, assignment_id: int, criterion_id: in
         return error_response(exc)
     assignment = get_assignment_with_content(assignment_id)
     return Response(assignment_content_to_dto(assignment).model_dump(), status=status.HTTP_201_CREATED)
+
+
+@api_view(["PATCH", "DELETE"])
+@permission_classes([IsAuthenticated])
+def teacher_criterion_level_detail(
+    request,
+    assignment_id: int,
+    criterion_id: int,
+    level_id: int,
+):
+    """Update or delete a teacher-authored rubric level."""
+    assignment = get_assignment_with_content(assignment_id)
+    if not assignment:
+        return Response({"detail": "Assignment not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        if request.method == "PATCH":
+            serializer = AssignmentTeacherCriterionLevelUpdateSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            update_assignment_teacher_criterion_level(
+                assignment,
+                criterion_id,
+                level_id,
+                request.user,
+                serializer.validated_data,
+            )
+        else:
+            delete_assignment_teacher_criterion_level(
+                assignment,
+                criterion_id,
+                level_id,
+                request.user,
+            )
+    except PermissionError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_403_FORBIDDEN)
+    except ConflictError as exc:
+        return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+    except ValueError as exc:
+        return error_response(exc)
+
+    assignment = get_assignment_with_content(assignment_id)
+    return Response(assignment_content_to_dto(assignment).model_dump(), status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])

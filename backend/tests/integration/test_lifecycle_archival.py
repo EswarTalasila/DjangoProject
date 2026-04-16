@@ -12,6 +12,7 @@ Naming convention per FR-14 Section 8:
 from __future__ import annotations
 
 import io
+import json
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -450,6 +451,77 @@ class TestARCH_UC_06:
         assert any(name.endswith("template/template.json") for name in names)
         assert any(name.endswith("assignment/assignment.json") for name in names)
         assert any(name.endswith("assignment/submissions.csv") for name in names)
+
+    def test_ARCH_UC_06_archive_bundle_preserves_teacher_added_content(
+        self,
+        teacher_client,
+        teacher_assignment,
+        settings,
+        tmp_path,
+    ):
+        """Archived assignment bundles include teacher-added questions and rubric extensions."""
+        settings.ARTIFACT_ROOT = tmp_path / "artifacts"
+        Path(settings.ARTIFACT_ROOT).mkdir(parents=True, exist_ok=True)
+
+        question_resp = teacher_client.post(
+            f"/api/v1/assignments/{teacher_assignment.id}/questions",
+            {
+                "type": "SHORT_ANSWER",
+                "prompt": "Explain the teacher extension.",
+                "maxPoints": 5,
+            },
+            format="json",
+        )
+        assert question_resp.status_code == status.HTTP_201_CREATED
+
+        criterion_resp = teacher_client.post(
+            f"/api/v1/assignments/{teacher_assignment.id}/teacher-criteria",
+            {
+                "title": "Teacher commentary",
+                "description": "Extension criterion",
+                "weight": 0.25,
+            },
+            format="json",
+        )
+        assert criterion_resp.status_code == status.HTTP_201_CREATED
+        criterion_id = criterion_resp.json()["teacherCriteria"][0]["id"]
+
+        level_resp = teacher_client.post(
+            f"/api/v1/assignments/{teacher_assignment.id}/teacher-criteria/{criterion_id}/levels",
+            {
+                "label": "Added level",
+                "description": "Teacher-owned rubric level",
+                "points": 2,
+            },
+            format="json",
+        )
+        assert level_resp.status_code == status.HTTP_201_CREATED
+
+        teacher_assignment.status = AssignmentStatus.ARCHIVED
+        teacher_assignment.archived_at = timezone.now()
+        teacher_assignment.save(update_fields=["status", "archived_at"])
+
+        generate = teacher_client.post(
+            f"/api/v1/assignments/{teacher_assignment.id}/archive-bundle"
+        )
+        assert generate.status_code == status.HTTP_201_CREATED
+
+        download = teacher_client.get(
+            f"/api/v1/assignments/{teacher_assignment.id}/archive-bundle/download"
+        )
+        assert download.status_code == status.HTTP_200_OK
+
+        archive = ZipFile(io.BytesIO(b"".join(download.streaming_content)))
+        content_name = next(
+            name for name in archive.namelist() if name.endswith("assignment/content.json")
+        )
+        content = json.loads(archive.read(content_name).decode("utf-8"))
+
+        prompts = [question["prompt"] for question in content["questions"]]
+        assert "Explain the teacher extension." in prompts
+        teacher_criteria = content["teacherCriteria"]
+        assert [criterion["title"] for criterion in teacher_criteria] == ["Teacher commentary"]
+        assert teacher_criteria[0]["levels"][0]["label"] == "Added level"
 
     def test_ARCH_UC_06_purging_assignment_removes_archive_bundle(
         self,

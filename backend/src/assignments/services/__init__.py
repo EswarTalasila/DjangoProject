@@ -25,6 +25,9 @@ from ._content import (
     assignment_content_to_dto,
     assignment_has_progressed_submissions,
     assignment_question_to_dto,
+    delete_assignment_question,
+    delete_assignment_teacher_criterion,
+    delete_assignment_teacher_criterion_level,
     get_assignment_with_content,
     list_reusable_question_images,
     provision_submission_answers,
@@ -32,6 +35,9 @@ from ._content import (
     reorder_assignment_teacher_criteria,
     reorder_assignment_teacher_criterion_levels,
     snapshot_assignment_content,
+    update_assignment_question,
+    update_assignment_teacher_criterion,
+    update_assignment_teacher_criterion_level,
 )
 from ._queries import (
     assignment_to_dto,
@@ -55,6 +61,9 @@ __all__ = [
     "assignment_to_dto",
     "cleanup_assignment_archive_artifacts",
     "create_assignment",
+    "delete_assignment_question",
+    "delete_assignment_teacher_criterion",
+    "delete_assignment_teacher_criterion_level",
     "generate_assignment_archive_artifact",
     "get_assignment",
     "get_assignment_archive_artifact",
@@ -70,4 +79,7 @@ __all__ = [
     "restore_assignment",
     "snapshot_assignment_content",
     "update_assignment",
+    "update_assignment_question",
+    "update_assignment_teacher_criterion",
+    "update_assignment_teacher_criterion_level",
 ]
