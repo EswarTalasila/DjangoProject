@@ -56,6 +56,8 @@ class TestTaskSurface:
             "test:",
             "test:backend:",
             "test:frontend:",
+            "seed:account:",
+            "seed:data:",
             "destroy:all:",
         ]:
             assert task_name in taskfile

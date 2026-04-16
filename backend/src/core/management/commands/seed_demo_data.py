@@ -500,15 +500,23 @@ class Command(BaseCommand):
             if question.kind == QuestionKind.MULTIPLE_CHOICE:
                 mc_answer, _ = MultipleChoiceAnswer.objects.get_or_create(answer=answer)
                 MultipleChoiceSelected.objects.filter(answer=mc_answer).delete()
-                choices = list(question.mcq_choices.all())
+                choices = list((question.data or {}).get("choices") or [])
+                if not choices and hasattr(question, "mcq_choices"):
+                    choices = [
+                        {"score": getattr(choice, "points", 0)}
+                        for choice in question.mcq_choices.all()
+                    ]
                 if choices:
-                    best_index = max(range(len(choices)), key=lambda idx: choices[idx].points)
+                    best_index = max(
+                        range(len(choices)),
+                        key=lambda idx: choices[idx].get("score", 0),
+                    )
                     MultipleChoiceSelected.objects.create(
                         answer=mc_answer,
                         choice_index=best_index,
                     )
                     if normalized_status in (SubmissionStatus.SUBMITTED, SubmissionStatus.GRADED):
-                        answer.score = float(choices[best_index].points)
+                        answer.score = float(choices[best_index].get("score", 0))
                         total_score += answer.score
                     else:
                         answer.score = None
@@ -531,8 +539,14 @@ class Command(BaseCommand):
                     answer=answer,
                     defaults={"val": None},
                 )
-                scale = question.number_scale
-                value = scale.target if scale.target is not None else scale.max
+                scale_data = question.data or {}
+                target = scale_data.get("target")
+                maximum = scale_data.get("max")
+                if target is None and hasattr(question, "number_scale"):
+                    scale = question.number_scale
+                    target = scale.target
+                    maximum = scale.max
+                value = target if target is not None else maximum
                 number_answer.val = value
                 number_answer.save(update_fields=["val"])
                 if normalized_status in (SubmissionStatus.SUBMITTED, SubmissionStatus.GRADED):

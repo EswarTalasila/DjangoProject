@@ -74,6 +74,21 @@ Rules:
 - `scripts/tasks/test.sh` owns orchestration.
 - Coverage is a final reporting concern and stays under `scripts/coverage`.
 
+### Seeding
+
+| Command | Intent |
+|---|---|
+| `task seed:account -- <all\|researcher\|teacher\|student>` | Ensure dev backend services and provision deterministic seeded account(s) |
+| `task seed:data` | Ensure dev backend services and seed the deterministic demo dataset |
+
+Rules:
+- Seed tasks run against development `db` + `backend` services only; the frontend is not required.
+- `scripts/tasks/seed-prepare.sh` owns service startup, migrations, and admin bootstrap.
+- `scripts/tasks/seed-account.sh` and `scripts/tasks/seed-data.sh` own wrapper UX and argument validation.
+- The underlying source of truth remains the Django management commands:
+  - `provision_account`
+  - `seed_demo_data`
+
 ### Destructive
 
 | Command | Intent |
@@ -100,6 +115,7 @@ Examples:
 - `_check:env:prod`
 - `_ensure:proxy`
 - `_ensure:test-stack`
+- `_ensure:dev-backend`
 
 ---
 

@@ -60,6 +60,8 @@ Run `task help` for the grouped command guide. The public command surface is int
 - `task test`
 - `task test:backend`
 - `task test:frontend`
+- `task seed:account -- <all|researcher|teacher|student>`
+- `task seed:data`
 - `task destroy:all`
 
 ## Compose Layout
@@ -91,3 +93,15 @@ task test:frontend
 ```
 
 `scripts/tasks/test.sh` owns orchestration. Coverage remains under `scripts/coverage` and is run as the final reporting step for task-driven test runs.
+
+## Deterministic Seeding
+
+Seed helpers run only against the development backend services (`db` + `backend`):
+
+```bash
+task seed:account -- all
+task seed:account -- researcher
+task seed:data
+```
+
+`task seed:account` provisions deterministic role accounts through the real registration pipeline and prints the resulting credentials. `task seed:data` provisions those accounts first, then seeds a fuller deterministic demo dataset for local development. Both commands prepare `env/.env.development`, start the required backend services, apply migrations, and ensure the admin bootstrap first.
