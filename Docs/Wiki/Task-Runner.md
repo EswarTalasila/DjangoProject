@@ -78,11 +78,12 @@ Rules:
 
 | Command | Intent |
 |---|---|
-| `task seed:account -- <all\|researcher\|teacher\|student>` | Ensure dev backend services and provision deterministic seeded account(s) |
-| `task seed:data` | Ensure dev backend services and seed the deterministic demo dataset |
+| `task seed:account -- <all\|researcher\|teacher\|student> [--profile dev\|test]` | Ensure backend services and provision deterministic seeded account(s) |
+| `task seed:data -- [--profile dev\|test]` | Ensure backend services and seed the deterministic demo dataset |
 
 Rules:
-- Seed tasks run against development `db` + `backend` services only; the frontend is not required.
+- Seed tasks run against backend `db` + `backend` services only; the frontend is not required.
+- The default profile is `dev`; `--profile test` targets the testing backend stack.
 - `scripts/tasks/seed-prepare.sh` owns service startup, migrations, and admin bootstrap.
 - `scripts/tasks/seed-account.sh` and `scripts/tasks/seed-data.sh` own wrapper UX and argument validation.
 - The underlying source of truth remains the Django management commands:
@@ -115,7 +116,6 @@ Examples:
 - `_check:env:prod`
 - `_ensure:proxy`
 - `_ensure:test-stack`
-- `_ensure:dev-backend`
 
 ---
 

@@ -178,7 +178,7 @@
 - **Profiles:** `up:dev`, `up:test`, `up:prod`, `down:dev`, `down:test`, `down:prod`
 - **Runtime:** `status:*`, `logs:*`, `restart:*`, `rebuild:*`
 - **Testing:** `test`, `test:backend`, `test:frontend`
-- **Seeding:** `seed:account -- <role>`, `seed:data` (dev backend services only)
+- **Seeding:** `seed:account -- <role> [--profile dev|test]`, `seed:data -- [--profile dev|test]`
 - **Dangerous:** `task destroy:all` with interactive confirmation
 
 **Postconditions:**

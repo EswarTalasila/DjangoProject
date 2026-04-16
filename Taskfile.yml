@@ -65,8 +65,8 @@ tasks:
         print_cmd "task test:frontend" "ensure testing stack and run frontend tests"
 
         print_section "Seed"
-        print_cmd "task seed:account -- <role>" "ensure dev backend services and provision deterministic account(s)"
-        print_cmd "task seed:data" "ensure dev backend services and seed deterministic demo data"
+        print_cmd "task seed:account -- <role> [--profile dev|test]" "ensure backend services and provision deterministic account(s)"
+        print_cmd "task seed:data -- [--profile dev|test]" "ensure backend services and seed deterministic demo data"
 
         print_section "Dangerous"
         printf '  %s%-28s%s %s%s%s\n' "$RED" "task destroy:all" "$RESET" "$DIM" "wipe all EElab containers, volumes, and proxy state" "$RESET"
@@ -118,16 +118,6 @@ tasks:
       - task: _check:env:test
       - task: _ensure:proxy
       - ./scripts/tasks/up.sh test
-
-  _ensure:dev-backend:
-    internal: true
-    desc: Ensure development db/backend services are prepared and running
-    cmds:
-      - task: _check:docker
-      - ./scripts/tasks/prepare-env.sh dev
-      - task: _check:env:dev
-      - task: _ensure:proxy
-      - ./scripts/tasks/seed-prepare.sh
 
   env:local:
     desc: Set root env topology for localhost development
@@ -276,15 +266,15 @@ tasks:
       - ./scripts/tasks/test.sh frontend
 
   seed:account:
-    desc: Ensure development backend services and provision deterministic seeded account(s)
+    desc: Ensure backend services and provision deterministic seeded account(s)
     cmds:
-      - task: _ensure:dev-backend
+      - task: _check:docker
       - ./scripts/tasks/seed-account.sh {{.CLI_ARGS}}
 
   seed:data:
-    desc: Ensure development backend services and seed deterministic demo data
+    desc: Ensure backend services and seed deterministic demo data
     cmds:
-      - task: _ensure:dev-backend
+      - task: _check:docker
       - ./scripts/tasks/seed-data.sh {{.CLI_ARGS}}
 
   destroy:all:
