@@ -535,8 +535,7 @@ class TestARCH_UC_06:
         Path(settings.ARTIFACT_ROOT).mkdir(parents=True, exist_ok=True)
 
         original_title = teacher_assignment.assignment_template.title
-        teacher_assignment.assignment_template.category = "Original category"
-        teacher_assignment.assignment_template.save(update_fields=["category"])
+        original_category = teacher_assignment.assignment_template.category
 
         teacher_assignment.assignment_template.title = "Mutated researcher title"
         teacher_assignment.assignment_template.category = "Mutated category"
@@ -567,9 +566,9 @@ class TestARCH_UC_06:
         content_payload = json.loads(archive.read(content_name).decode("utf-8"))
 
         assert template_payload["title"] == original_title
-        assert template_payload["category"] == "Original category"
+        assert template_payload["category"] == original_category
         assert content_payload["assignmentTemplateTitle"] == original_title
-        assert content_payload["category"] == "Original category"
+        assert content_payload["category"] == original_category
 
     def test_ARCH_UC_06_purging_assignment_removes_archive_bundle(
         self,

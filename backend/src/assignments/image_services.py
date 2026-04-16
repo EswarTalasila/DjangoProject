@@ -125,6 +125,8 @@ def _cleanup_asset_if_orphaned(asset: ImageAsset | None) -> None:
         return
     if SubmissionImage.objects.filter(asset_id=asset.id).exists():
         return
+    if _template_question_references_asset(asset):
+        return
     backend = get_storage_backend()
     try:
         backend.delete(asset.storage_key)
@@ -133,3 +135,23 @@ def _cleanup_asset_if_orphaned(asset: ImageAsset | None) -> None:
     asset.status = AssetStatus.DELETED
     asset.deleted_at = timezone.now()
     asset.save(update_fields=["status", "deleted_at"])
+
+
+def _template_question_references_asset(asset: ImageAsset) -> bool:
+    """Return True when any template question still points at the asset via stored image JSON.
+
+    Template questions still persist image references in JSON rather than a foreign key, so
+    assignment-side cleanup must respect those references before deleting the shared blob.
+    """
+    from assignment_templates.image_services import parse_question_image
+    from assignment_templates.models import Question
+
+    for question in Question.objects.exclude(image__isnull=True).exclude(image__exact="").only("image"):
+        meta = parse_question_image(question)
+        if not meta:
+            continue
+        if str(meta.get("assetId", "")) == str(asset.id):
+            return True
+        if meta.get("storageKey") == asset.storage_key:
+            return True
+    return False

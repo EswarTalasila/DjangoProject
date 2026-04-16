@@ -8,6 +8,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 
 from accounts.models import Role, StudentProfile, TeacherProfile, UserRole
+from assignment_templates.image_services import upload_question_image
 from assignment_templates.models import AssignmentTemplate, AssignmentTemplateStatus, GradingMode, Question, QuestionKind
 from assignments.models import Assignment, AssignmentStatus
 from core.media.models import ImageAsset
@@ -725,6 +726,70 @@ class TestExtendAssignmentContent:
         assert asset.status == "DELETED"
         assert asset.deleted_at is not None
         assert not blob_path.exists()
+
+    def test_teacher_question_delete_keeps_reused_template_image_asset(
+        self, api_client, teacher_user, admin_user, settings, tmp_path
+    ):
+        """Deleting a teacher-authored question preserves assets still referenced by a template."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        settings.IMAGE_ROOT = tmp_path / "images"
+
+        assignment_template = _make_assignment_template(admin_user)
+        template_question = Question.objects.create(
+            assignment_template=assignment_template,
+            question_type=QuestionKind.SHORT_ANSWER,
+            kind=QuestionKind.SHORT_ANSWER,
+            prompt="Researcher prompt",
+            max_points=4.0,
+            auto_gradable=False,
+            graded=False,
+        )
+        template_image = upload_question_image(
+            template_question,
+            _make_png_upload("template.png"),
+            uploader_id=admin_user.id,
+        )
+        asset = ImageAsset.objects.get(id=template_image["id"])
+        blob_path = Path(settings.IMAGE_ROOT) / asset.storage_key
+        assert blob_path.exists()
+
+        course = _make_course(teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
+
+        api_client.force_authenticate(user=teacher_user)
+        create_resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/questions",
+            {
+                "type": "SHORT_ANSWER",
+                "prompt": "Teacher reuse prompt",
+                "maxPoints": 4,
+            },
+            format="json",
+        )
+        question_id = next(
+            question["id"]
+            for question in create_resp.json()["questions"]
+            if question["origin"] == "TEACHER_ADDITION"
+        )
+
+        reuse_resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/questions/{question_id}/image/reuse",
+            {"assetId": str(asset.id)},
+            format="json",
+        )
+        assert reuse_resp.status_code == 200
+
+        delete_resp = api_client.delete(
+            f"/api/v1/assignments/{assignment.id}/questions/{question_id}"
+        )
+        assert delete_resp.status_code == 200
+
+        asset.refresh_from_db()
+        template_question.refresh_from_db()
+        assert asset.status == "ACTIVE"
+        assert asset.deleted_at is None
+        assert blob_path.exists()
+        assert template_question.image is not None
 
     def test_inherited_assignment_question_cannot_be_updated_or_deleted(
         self, api_client, teacher_user, admin_user
