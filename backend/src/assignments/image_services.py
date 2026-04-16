@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.utils import timezone
 
 from core.media.models import ImageAsset
 from core.media.services import (
@@ -17,6 +18,7 @@ from core.media.services import (
 )
 from core.media.storage import get_storage_backend
 from core.media.types import ImageStatus as AssetStatus
+from submissions.models import SubmissionImage
 
 from .models import AssignmentQuestion
 
@@ -63,6 +65,7 @@ def upload_assignment_question_image(
     uploader_id: int,
 ) -> dict:
     """Upload or replace an assignment-question image."""
+    previous_asset = question.image_asset
     mime_type = validate_mime_and_magic(file)
     validate_file_size(file)
 
@@ -88,21 +91,45 @@ def upload_assignment_question_image(
     question.image_asset = asset
     question.image = json.dumps(_image_meta_for_asset(asset))
     question.save(update_fields=["image_asset", "image"])
+    _cleanup_asset_if_orphaned(previous_asset)
     return assignment_question_image_to_dto(question)
 
 
 @transaction.atomic
 def attach_existing_question_image(question: AssignmentQuestion, asset: ImageAsset) -> dict:
     """Attach a previously uploaded asset to an assignment-local question without duplicating it."""
+    previous_asset = question.image_asset
     question.image_asset = asset
     question.image = json.dumps(_image_meta_for_asset(asset))
     question.save(update_fields=["image_asset", "image"])
+    if previous_asset and previous_asset.id != asset.id:
+        _cleanup_asset_if_orphaned(previous_asset)
     return assignment_question_image_to_dto(question)
 
 
 @transaction.atomic
 def remove_assignment_question_image(question: AssignmentQuestion) -> None:
     """Detach an image from an assignment-local question."""
+    previous_asset = question.image_asset
     question.image_asset = None
     question.image = None
     question.save(update_fields=["image_asset", "image"])
+    _cleanup_asset_if_orphaned(previous_asset)
+
+
+def _cleanup_asset_if_orphaned(asset: ImageAsset | None) -> None:
+    """Delete the blob and soft-delete the asset when nothing references it anymore."""
+    if asset is None:
+        return
+    if AssignmentQuestion.objects.filter(image_asset_id=asset.id).exists():
+        return
+    if SubmissionImage.objects.filter(asset_id=asset.id).exists():
+        return
+    backend = get_storage_backend()
+    try:
+        backend.delete(asset.storage_key)
+    except FileNotFoundError:
+        pass
+    asset.status = AssetStatus.DELETED
+    asset.deleted_at = timezone.now()
+    asset.save(update_fields=["status", "deleted_at"])

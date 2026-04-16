@@ -17,14 +17,12 @@ from django.utils.text import slugify
 
 from accounts.models import Role, SudoPermission
 from assignment_templates.image_services import parse_question_image
-from assignment_templates.services import assignment_template_to_dto
 from core.permissions import has_role, has_sudo_permission
 from core.media.storage import get_storage_backend
-from rubrics.services import rubric_to_dto
 from submissions.models import AnswerType, SubmissionStatus
 
 from ..models import Assignment, AssignmentArchiveArtifact, AssignmentStatus
-from ._content import assignment_content_to_dto
+from ._content import assignment_content_to_dto, snapshot_assignment_content
 from ._mutations import ConflictError
 from ._queries import assignment_to_dto
 
@@ -153,8 +151,10 @@ def _build_bundle_filename(assignment: Assignment, identifiable: bool) -> str:
 
 def _build_bundle_root(assignment: Assignment) -> str:
     """Build a human-readable ZIP root directory."""
-    template_slug = slugify(assignment.assignment_template.title) or f"template-{assignment.assignment_template_id}"
-    assignment_slug = slugify(assignment.title or assignment.assignment_template.title) or f"assignment-{assignment.id}"
+    template_payload = _get_template_snapshot_payload(assignment)
+    template_title = template_payload.get("title") or assignment.assignment_template.title
+    template_slug = slugify(template_title) or f"template-{assignment.assignment_template_id}"
+    assignment_slug = slugify(assignment.title or template_title) or f"assignment-{assignment.id}"
     return (
         f"template-{template_slug}-{assignment.assignment_template_id}/"
         f"assignment-{assignment_slug}-{assignment.id}"
@@ -169,8 +169,15 @@ def _build_bundle_bytes(
 ) -> tuple[bytes, dict]:
     """Construct the ZIP bytes and manifest for an assignment bundle."""
     assignment = _load_assignment_for_bundle(assignment.id)
+    if not assignment.template_snapshot:
+        snapshot_assignment_content(
+            assignment,
+            assignment.assignment_template,
+            creator_user_id=assignment.created_by_id,
+        )
+        assignment = _load_assignment_for_bundle(assignment.id)
     participant_labels = _build_participant_labels(assignment)
-    template_dto = assignment_template_to_dto(assignment.assignment_template).model_dump(mode="json")
+    template_dto = _get_template_snapshot_payload(assignment)
     content_dto = assignment_content_to_dto(assignment).model_dump(mode="json")
     assignment_dto = assignment_to_dto(assignment).model_dump(mode="json")
     manifest = _build_manifest(assignment, request_user, identifiable, participant_labels)
@@ -351,22 +358,22 @@ def _render_submission_csv(
 def _serialize_rubrics(assignment: Assignment) -> dict[str, dict]:
     """Serialize rubric snapshots referenced by the template."""
     payloads: dict[str, dict] = {}
-    template = assignment.assignment_template
-    if template.rubric_id and template.rubric:
-        payloads["{root}/template/rubrics/template-rubric.json"] = rubric_to_dto(
-            template.rubric
-        ).model_dump(mode="json")
-    for question_group in template.question_groups.all():
-        if question_group.rubric_id and question_group.rubric:
-            payloads[
-                f"{{root}}/template/rubrics/question-group-{question_group.id}.json"
-            ] = rubric_to_dto(question_group.rubric).model_dump(mode="json")
-    for question in template.questions.all():
-        if question.rubric_id and question.rubric:
-            payloads[f"{{root}}/template/rubrics/question-{question.id}.json"] = rubric_to_dto(
-                question.rubric
-            ).model_dump(mode="json")
+    snapshot = assignment.template_snapshot if isinstance(assignment.template_snapshot, dict) else {}
+    rubric_snapshot = snapshot.get("rubrics") if isinstance(snapshot.get("rubrics"), dict) else {}
+    if rubric_snapshot.get("template"):
+        payloads["{root}/template/rubrics/template-rubric.json"] = rubric_snapshot["template"]
+    for key, payload in rubric_snapshot.items():
+        if key == "template" or not isinstance(payload, dict):
+            continue
+        payloads[f"{{root}}/template/rubrics/{key}.json"] = payload
     return payloads
+
+
+def _get_template_snapshot_payload(assignment: Assignment) -> dict:
+    """Return the frozen template payload used for bundle serialization."""
+    snapshot = assignment.template_snapshot if isinstance(assignment.template_snapshot, dict) else {}
+    payload = snapshot.get("template")
+    return payload if isinstance(payload, dict) else {}
 
 
 def _write_question_images(archive: ZipFile, assignment: Assignment, root: str) -> None:

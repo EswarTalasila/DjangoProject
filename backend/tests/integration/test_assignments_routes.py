@@ -1,13 +1,16 @@
 """Integration tests for assignments routes — FR-07 traceability."""
 
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 
 from accounts.models import Role, StudentProfile, TeacherProfile, UserRole
 from assignment_templates.models import AssignmentTemplate, AssignmentTemplateStatus, GradingMode, Question, QuestionKind
 from assignments.models import Assignment, AssignmentStatus
+from core.media.models import ImageAsset
 from assignments.services._content import snapshot_assignment_content
 from courses.models import Course, Enrollment, EnrollmentStatus
 from submissions.models import Answer, Submission, SubmissionStatus
@@ -60,6 +63,19 @@ def _second_teacher():
     UserRole.objects.create(user=user, role=Role.TEACHER)
     TeacherProfile.objects.create(user=user)
     return user
+
+
+def _make_png_upload(name: str = "question.png") -> SimpleUploadedFile:
+    data = (
+        b"\x89PNG\r\n\x1a\n"
+        b"\x00\x00\x00\rIHDR"
+        b"\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00"
+        b"\x90wS\xde"
+        b"\x00\x00\x00\x0cIDAT\x08\xd7c\xf8\x0f\x00\x01\x01\x01\x00"
+        b"\x18\xdd\x8d\xb1"
+        b"\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    return SimpleUploadedFile(name, data, content_type="image/png")
 
 
 # ===========================================================================
@@ -662,6 +678,53 @@ class TestExtendAssignmentContent:
             for question in delete_resp.json()["questions"]
         )
         assert Answer.objects.filter(submission=submission).count() == 0
+
+    def test_teacher_question_delete_cleans_up_orphaned_image_asset(
+        self, api_client, teacher_user, admin_user, settings, tmp_path
+    ):
+        """Deleting a teacher-authored question removes its orphaned image blob and asset."""
+        settings.MEDIA_ROOT = str(tmp_path)
+        settings.IMAGE_ROOT = tmp_path / "images"
+
+        assignment_template = _make_assignment_template(admin_user)
+        course = _make_course(teacher_user)
+        assignment = _make_assignment(assignment_template, course, teacher_user)
+
+        api_client.force_authenticate(user=teacher_user)
+        create_resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/questions",
+            {
+                "type": "SHORT_ANSWER",
+                "prompt": "Teacher image prompt",
+                "maxPoints": 4,
+            },
+            format="json",
+        )
+        question_id = next(
+            question["id"]
+            for question in create_resp.json()["questions"]
+            if question["origin"] == "TEACHER_ADDITION"
+        )
+
+        upload_resp = api_client.post(
+            f"/api/v1/assignments/{assignment.id}/questions/{question_id}/image",
+            {"file": _make_png_upload()},
+        )
+        assert upload_resp.status_code == 201
+        asset_id = upload_resp.json()["id"]
+        asset = ImageAsset.objects.get(id=asset_id)
+        blob_path = Path(settings.IMAGE_ROOT) / asset.storage_key
+        assert blob_path.exists()
+
+        delete_resp = api_client.delete(
+            f"/api/v1/assignments/{assignment.id}/questions/{question_id}"
+        )
+        assert delete_resp.status_code == 200
+
+        asset.refresh_from_db()
+        assert asset.status == "DELETED"
+        assert asset.deleted_at is not None
+        assert not blob_path.exists()
 
     def test_inherited_assignment_question_cannot_be_updated_or_deleted(
         self, api_client, teacher_user, admin_user

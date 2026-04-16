@@ -523,6 +523,54 @@ class TestARCH_UC_06:
         assert [criterion["title"] for criterion in teacher_criteria] == ["Teacher commentary"]
         assert teacher_criteria[0]["levels"][0]["label"] == "Added level"
 
+    def test_ARCH_UC_06_archive_bundle_uses_frozen_template_snapshot(
+        self,
+        teacher_client,
+        teacher_assignment,
+        settings,
+        tmp_path,
+    ):
+        """Archived bundles keep the template metadata captured when the assignment was created."""
+        settings.ARTIFACT_ROOT = tmp_path / "artifacts"
+        Path(settings.ARTIFACT_ROOT).mkdir(parents=True, exist_ok=True)
+
+        original_title = teacher_assignment.assignment_template.title
+        teacher_assignment.assignment_template.category = "Original category"
+        teacher_assignment.assignment_template.save(update_fields=["category"])
+
+        teacher_assignment.assignment_template.title = "Mutated researcher title"
+        teacher_assignment.assignment_template.category = "Mutated category"
+        teacher_assignment.assignment_template.save(update_fields=["title", "category"])
+
+        teacher_assignment.status = AssignmentStatus.ARCHIVED
+        teacher_assignment.archived_at = timezone.now()
+        teacher_assignment.save(update_fields=["status", "archived_at"])
+
+        generate = teacher_client.post(
+            f"/api/v1/assignments/{teacher_assignment.id}/archive-bundle"
+        )
+        assert generate.status_code == status.HTTP_201_CREATED
+
+        download = teacher_client.get(
+            f"/api/v1/assignments/{teacher_assignment.id}/archive-bundle/download"
+        )
+        assert download.status_code == status.HTTP_200_OK
+
+        archive = ZipFile(io.BytesIO(b"".join(download.streaming_content)))
+        template_name = next(
+            name for name in archive.namelist() if name.endswith("template/template.json")
+        )
+        content_name = next(
+            name for name in archive.namelist() if name.endswith("assignment/content.json")
+        )
+        template_payload = json.loads(archive.read(template_name).decode("utf-8"))
+        content_payload = json.loads(archive.read(content_name).decode("utf-8"))
+
+        assert template_payload["title"] == original_title
+        assert template_payload["category"] == "Original category"
+        assert content_payload["assignmentTemplateTitle"] == original_title
+        assert content_payload["category"] == "Original category"
+
     def test_ARCH_UC_06_purging_assignment_removes_archive_bundle(
         self,
         admin_client,

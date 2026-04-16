@@ -45,6 +45,43 @@ from ..models import (
 )
 
 
+def _build_template_snapshot(assignment_template: AssignmentTemplate) -> dict[str, Any]:
+    """Capture the researcher-owned template metadata used to seed an assignment."""
+    from assignment_templates.services import assignment_template_to_dto
+    from rubrics.services import rubric_to_dto
+
+    snapshot: dict[str, Any] = {
+        "template": assignment_template_to_dto(assignment_template).model_dump(mode="json"),
+        "rubrics": {},
+    }
+    if assignment_template.rubric_id and assignment_template.rubric:
+        snapshot["rubrics"]["template"] = rubric_to_dto(
+            assignment_template.rubric
+        ).model_dump(mode="json")
+    for question_group in assignment_template.question_groups.all():
+        if question_group.rubric_id and question_group.rubric:
+            snapshot["rubrics"][f"question-group-{question_group.id}"] = rubric_to_dto(
+                question_group.rubric
+            ).model_dump(mode="json")
+    for question in assignment_template.questions.all():
+        if question.rubric_id and question.rubric:
+            snapshot["rubrics"][f"question-{question.id}"] = rubric_to_dto(
+                question.rubric
+            ).model_dump(mode="json")
+    return snapshot
+
+
+def _get_template_snapshot(assignment: Assignment) -> dict[str, Any]:
+    """Return the frozen template snapshot for an assignment, falling back if needed."""
+    snapshot = assignment.template_snapshot if isinstance(assignment.template_snapshot, dict) else {}
+    if snapshot.get("template"):
+        return snapshot
+    assignment_template = assignment.assignment_template
+    if assignment_template is None:
+        return {"template": {}, "rubrics": {}}
+    return _build_template_snapshot(assignment_template)
+
+
 def _content_queryset():
     """Return the eager-loading queryset used for assignment content reads."""
     return Assignment.objects.select_related("assignment_template").prefetch_related(
@@ -101,7 +138,7 @@ def _create_answer_shell(submission: Submission, question: AssignmentQuestion) -
 def provision_submission_answers(submission: Submission) -> None:
     """Ensure a submission has placeholder answers for every assignment-owned question."""
     assignment = submission.assignment
-    if not assignment.questions.exists():
+    if not assignment.questions.exists() or not assignment.template_snapshot:
         snapshot_assignment_content(
             assignment,
             assignment.assignment_template,
@@ -127,7 +164,7 @@ def get_assignment_with_content(assignment_id: int) -> Assignment | None:
     assignment = Assignment.objects.select_related("assignment_template").filter(id=assignment_id).first()
     if not assignment:
         return None
-    if not AssignmentQuestion.objects.filter(assignment=assignment).exists():
+    if not AssignmentQuestion.objects.filter(assignment=assignment).exists() or not assignment.template_snapshot:
         snapshot_assignment_content(
             assignment,
             assignment.assignment_template,
@@ -187,7 +224,8 @@ def assignment_question_to_dto(question: AssignmentQuestion) -> QuestionDTO:
 
 def assignment_content_to_dto(assignment: Assignment) -> AssignmentContentDTO:
     """Build the effective assignment-content DTO from assignment-owned snapshots."""
-    assignment_template = assignment.assignment_template
+    template_snapshot = _get_template_snapshot(assignment)
+    template_meta = template_snapshot.get("template") or {}
     groups = [
         QuestionGroupDTO(
             id=group.id,
@@ -219,15 +257,15 @@ def assignment_content_to_dto(assignment: Assignment) -> AssignmentContentDTO:
     ]
     return AssignmentContentDTO(
         id=assignment.assignment_template_id,
-        title=assignment_template.title,
+        title=template_meta.get("title") or assignment.title or "",
         assignmentId=assignment.id,
         assignmentTemplateId=assignment.assignment_template_id,
-        assignmentTemplateTitle=assignment_template.title,
-        category=assignment_template.category,
-        gradingMode=assignment_template.grading_mode,
-        scoringPolicy=assignment_template.scoring_policy,
-        submissionMode=assignment_template.submission_mode,
-        rubricId=assignment_template.rubric_id,
+        assignmentTemplateTitle=template_meta.get("title") or "",
+        category=template_meta.get("category"),
+        gradingMode=template_meta.get("gradingMode") or "AUTO",
+        scoringPolicy=template_meta.get("scoringPolicy") or "STANDARD",
+        submissionMode=template_meta.get("submissionMode") or "DIGITAL",
+        rubricId=template_meta.get("rubricId"),
         questions=[assignment_question_to_dto(question) for question in assignment.questions.all()],
         questionGroups=groups,
         teacherCriteria=teacher_criteria,
@@ -242,6 +280,13 @@ def snapshot_assignment_content(
     creator_user_id: int | None = None,
 ) -> None:
     """Copy the current template question/group graph into assignment-owned snapshots."""
+    if assignment.questions.exists() and assignment.template_snapshot:
+        return
+
+    snapshot = _build_template_snapshot(assignment_template)
+    if assignment.template_snapshot != snapshot:
+        assignment.template_snapshot = snapshot
+        assignment.save(update_fields=["template_snapshot"])
     if assignment.questions.exists():
         return
 
@@ -433,8 +478,12 @@ def delete_assignment_question(
     caller_user,
 ) -> None:
     """Delete a teacher-authored assignment-local question and its answer shells."""
+    from assignments.image_services import remove_assignment_question_image
+
     _assert_can_compose(assignment, caller_user)
     question = _get_teacher_question(assignment, question_id)
+    if question.image_asset_id:
+        remove_assignment_question_image(question)
     question.delete()
 
 

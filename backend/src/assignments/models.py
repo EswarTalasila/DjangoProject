@@ -98,6 +98,9 @@ class Assignment(models.Model):
     # Editable assignment title shown to end users; defaults to the template title at creation.
     title = models.CharField(max_length=255, null=True, blank=True)
 
+    # Frozen researcher-owned template metadata captured when the assignment is created.
+    template_snapshot = models.JSONField(default=dict, blank=True)
+
     # Who the assignment is for (COURSE = students, TEACHER = self-assessment)
     audience_type = models.CharField(max_length=255, choices=AudienceType.choices)
 
