@@ -127,7 +127,7 @@ describe("AssignmentCreateView", () => {
     });
   });
 
-  it("pre-fills title from first assignment_template", async () => {
+  it("starts with an empty title even after loading assignment templates", async () => {
     mockSuccessfulLoad();
     const AssignmentCreateView = await loadComponent();
     render(<AssignmentCreateView />);
@@ -136,7 +136,7 @@ describe("AssignmentCreateView", () => {
       const titleInput = screen.getByLabelText(
         "Assignment Title"
       ) as HTMLInputElement;
-      expect(titleInput.value).toBe("Self AssignmentTemplate");
+      expect(titleInput.value).toBe("");
     });
   });
 
@@ -201,6 +201,7 @@ describe("AssignmentCreateView", () => {
     });
 
     const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Assignment Title"), "Week 1 Intro Check-in");
     const submitBtn = screen.getAllByText("Create Assignment").find(
       (el) => el.tagName === "BUTTON" || el.closest("button")
     )!;
@@ -209,7 +210,7 @@ describe("AssignmentCreateView", () => {
     await waitFor(() => {
       expect(mockCreateAssignment).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: "Self AssignmentTemplate",
+          title: "Week 1 Intro Check-in",
           assignmentTemplateId: 10,
           audienceType: "COURSE",
           courseId: 1,
@@ -229,16 +230,17 @@ describe("AssignmentCreateView", () => {
       expect(screen.getByLabelText("Assignment Title")).toBeInTheDocument();
     });
 
-    // Clear the title to make canSubmit false
-    const user = userEvent.setup();
-    const titleInput = screen.getByLabelText("Assignment Title") as HTMLInputElement;
-    await user.clear(titleInput);
-
     // Submit the form directly
+    const titleInput = screen.getByLabelText("Assignment Title") as HTMLInputElement;
     const form = titleInput.closest("form")!;
     fireEvent.submit(form);
 
-    // handleSubmit returns early because canSubmit is false
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith(
+        "Please name the assignment before creating it."
+      );
+    });
+    expect(screen.getByText("Assignment title is required.")).toBeInTheDocument();
     expect(mockCreateAssignment).not.toHaveBeenCalled();
   });
 
@@ -251,6 +253,8 @@ describe("AssignmentCreateView", () => {
       expect(screen.getByLabelText("Open At")).toBeInTheDocument();
     });
 
+    const titleInput = screen.getByLabelText("Assignment Title");
+    fireEvent.change(titleInput, { target: { value: "Week 1 Intro Check-in" } });
     const openAtInput = screen.getByLabelText("Open At") as HTMLInputElement;
     const dueAtInput = screen.getByLabelText("Due At") as HTMLInputElement;
     // Set openAt to a future date and dueAt to earlier
@@ -283,6 +287,7 @@ describe("AssignmentCreateView", () => {
     });
 
     const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Assignment Title"), "Week 1 Intro Check-in");
     const submitBtn = screen.getAllByText("Create Assignment").find(
       (el) => el.tagName === "BUTTON" || el.closest("button")
     )!;
@@ -308,6 +313,7 @@ describe("AssignmentCreateView", () => {
     });
 
     const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Assignment Title"), "Week 1 Intro Check-in");
     const submitBtn = screen.getAllByText("Create Assignment").find(
       (el) => el.tagName === "BUTTON" || el.closest("button")
     )!;
@@ -332,7 +338,7 @@ describe("AssignmentCreateView", () => {
     expect(mockListCourses).toHaveBeenCalled();
   });
 
-  it("updates title when assignment_template selection changes", async () => {
+  it("keeps the title untouched when assignment_template selection changes", async () => {
     const multiAssignmentTemplates = [
       {
         id: 10,
@@ -366,6 +372,9 @@ describe("AssignmentCreateView", () => {
       expect(screen.getByLabelText("Assignment Title")).toBeInTheDocument();
     });
 
+    const titleInput = screen.getByLabelText("Assignment Title") as HTMLInputElement;
+    fireEvent.change(titleInput, { target: { value: "Custom teacher title" } });
+
     // The capturedSelectProps should have the assignment_template select's onValueChange
     // The assignment_template select has value="10" (the first assignment_template id)
     const onAssignmentTemplateChange = capturedSelectProps["10"] as (v: string) => void;
@@ -377,8 +386,7 @@ describe("AssignmentCreateView", () => {
     });
 
     await waitFor(() => {
-      const titleInput = screen.getByLabelText("Assignment Title") as HTMLInputElement;
-      expect(titleInput.value).toBe("Peer Review");
+      expect(titleInput.value).toBe("Custom teacher title");
     });
   });
 
@@ -420,6 +428,7 @@ describe("AssignmentCreateView", () => {
     });
 
     const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Assignment Title"), "Week 1 Intro Check-in");
     const submitBtn = screen.getAllByText("Create Assignment").find(
       (el) => el.tagName === "BUTTON" || el.closest("button")
     )!;

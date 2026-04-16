@@ -92,7 +92,7 @@ export type AssignmentContent = {
 };
 
 export type AssignmentCreateInput = {
-  title?: string;
+  title: string;
   assignmentTemplateId: number;
   audienceType: 'COURSE';
   courseId: number;

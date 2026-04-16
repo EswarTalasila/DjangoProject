@@ -362,6 +362,7 @@ class TestATMPL_UC_05:
         create_resp = api_client.post(
             "/api/v1/assignments/",
             {
+                "title": "Week 1 Intro Check-in",
                 "assignmentTemplateId": template.id,
                 "audienceType": "COURSE",
                 "courseId": course.id,

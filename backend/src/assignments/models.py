@@ -95,7 +95,7 @@ class Assignment(models.Model):
         related_name="assignments",
     )
 
-    # Editable assignment title shown to end users; defaults to the template title at creation.
+    # Editable assignment title shown to end users; teachers must provide it explicitly.
     title = models.CharField(max_length=255, null=True, blank=True)
 
     # Frozen researcher-owned template metadata captured when the assignment is created.

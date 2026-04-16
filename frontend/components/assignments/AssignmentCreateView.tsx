@@ -49,6 +49,7 @@ export default function AssignmentCreateView() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [titleTouched, setTitleTouched] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -66,7 +67,6 @@ export default function AssignmentCreateView() {
         setCourses(courseData);
         const firstAssignmentTemplate = assignmentTemplateData[0];
         setAssignmentTemplateId(String(firstAssignmentTemplate?.id ?? ''));
-        setTitle(firstAssignmentTemplate?.title ?? '');
         const preferredCourseId = searchParams.get('courseId');
         const hasPreferred =
           preferredCourseId != null &&
@@ -96,18 +96,19 @@ export default function AssignmentCreateView() {
     return Boolean(title.trim() && assignmentTemplateId && courseId && openAt);
   }, [title, assignmentTemplateId, courseId, openAt]);
 
+  const titleError = titleTouched && !title.trim() ? 'Assignment title is required.' : null;
+
   function handleAssignmentTemplateChange(nextAssignmentTemplateId: string) {
     setAssignmentTemplateId(nextAssignmentTemplateId);
-    const selected = assignmentTemplates.find(
-      (assignmentTemplate) => String(assignmentTemplate.id) === nextAssignmentTemplateId,
-    );
-    if (selected) {
-      setTitle(selected.title);
-    }
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setTitleTouched(true);
+    if (!title.trim()) {
+      toast.error('Please name the assignment before creating it.');
+      return;
+    }
     if (!canSubmit) return;
 
     const openIso = toIsoOrNull(openAt);
@@ -170,9 +171,12 @@ export default function AssignmentCreateView() {
             id="assignment-title"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
+            onBlur={() => setTitleTouched(true)}
             onKeyDown={(event) => event.stopPropagation()}
+            aria-invalid={titleError ? 'true' : 'false'}
             placeholder="e.g. Week 3 Check-In"
           />
+          {titleError ? <p className="text-sm text-destructive">{titleError}</p> : null}
         </div>
 
         <div className="space-y-2">

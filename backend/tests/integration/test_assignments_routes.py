@@ -127,11 +127,28 @@ class TestCreateAssignment:
         assert subs.count() == 1
         assert Answer.objects.filter(submission=subs.first()).count() == 1
 
+    def test_ASGN_UC_01_E1_missing_title(self, api_client, teacher_user, admin_user):
+        """Missing assignment title returns 400 and does not fall back to template title."""
+        assignment_template = _make_assignment_template(admin_user)
+        course = _make_course(teacher_user)
+
+        api_client.force_authenticate(user=teacher_user)
+        payload = {
+            "assignmentTemplateId": assignment_template.id,
+            "audienceType": "COURSE",
+            "courseId": course.id,
+            "openAt": timezone.now().isoformat(),
+        }
+        resp = api_client.post("/api/v1/assignments/", payload, format="json")
+        assert resp.status_code == 400
+        assert "title" in resp.json()
+
     def test_ASGN_UC_01_E2_not_teacher(self, api_client, student_user, admin_user):
         """Non-teacher cannot create assignments (403)."""
         assignment_template = _make_assignment_template(admin_user)
         api_client.force_authenticate(user=student_user)
         payload = {
+            "title": "Week 1 Intro Check-in",
             "assignmentTemplateId": assignment_template.id,
             "audienceType": "COURSE",
             "courseId": 999,
@@ -148,6 +165,7 @@ class TestCreateAssignment:
 
         api_client.force_authenticate(user=teacher_user)
         payload = {
+            "title": "Week 1 Intro Check-in",
             "assignmentTemplateId": assignment_template.id,
             "audienceType": "COURSE",
             "courseId": course.id,
@@ -163,6 +181,7 @@ class TestCreateAssignment:
 
         api_client.force_authenticate(user=teacher_user)
         payload = {
+            "title": "Week 1 Intro Check-in",
             "assignmentTemplateId": assignment_template.id,
             "audienceType": "COURSE",
             "courseId": course.id,
@@ -179,6 +198,7 @@ class TestCreateAssignment:
 
         api_client.force_authenticate(user=teacher_user)
         payload = {
+            "title": "Week 1 Intro Check-in",
             "assignmentTemplateId": assignment_template.id,
             "audienceType": "COURSE",
             "courseId": course.id,
@@ -217,6 +237,7 @@ class TestCreateAssignment:
 
         api_client.force_authenticate(user=teacher_user)
         payload = {
+            "title": "Week 1 Intro Check-in",
             "assignmentTemplateId": assignment_template.id,
             "audienceType": "COURSE",
             "courseId": course.id,
@@ -255,6 +276,7 @@ class TestCreateAssignment:
 
         api_client.force_authenticate(user=teacher_user)
         payload = {
+            "title": "Week 1 Intro Check-in",
             "assignmentTemplateId": assignment_template.id,
             "audienceType": "COURSE",
             "courseId": course.id,
@@ -276,6 +298,7 @@ class TestCreateAssignment:
         assignment_template = _make_assignment_template(admin_user)
         api_client.force_authenticate(user=teacher_user)
         payload = {
+            "title": "Week 1 Intro Check-in",
             "assignmentTemplateId": assignment_template.id,
             "audienceType": "TEACHER",
             "targetTeacherId": teacher_user.id,

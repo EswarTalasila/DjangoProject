@@ -696,6 +696,7 @@ class TestARCH_CN_03:
         resp = teacher_client.post(
             "/api/v1/assignments/",
             {
+                "title": "Blocked archived template assignment",
                 "assignmentTemplateId": assignment_template.id,
                 "audienceType": "COURSE",
                 "courseId": teacher_course.id,
@@ -724,6 +725,7 @@ class TestARCH_CN_05:
         resp = teacher_client.post(
             "/api/v1/assignments/",
             {
+                "title": "Blocked archived course assignment",
                 "assignmentTemplateId": assignment_template.id,
                 "audienceType": "COURSE",
                 "courseId": teacher_course.id,

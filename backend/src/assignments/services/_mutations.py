@@ -29,9 +29,12 @@ class ForbiddenError(Exception):
 @transaction.atomic
 def create_assignment(creator_user, payload: dict) -> Assignment:
     """Create an assignment from an assignment template."""
+    title = (payload.get("title") or "").strip()
     assignment_template_id = payload.get("assignmentTemplateId")
     audience = payload.get("audienceType")
     open_at = payload.get("openAt")
+    if not title:
+        raise ValueError("title is required")
     if assignment_template_id is None:
         raise ValueError("assignmentTemplateId is required")
     if not audience:
@@ -74,7 +77,7 @@ def create_assignment(creator_user, payload: dict) -> Assignment:
     assignment = Assignment.objects.create(
         created_by=creator_user,
         assignment_template_id=assignment_template_id,
-        title=(payload.get("title") or assignment_template.title),
+        title=title,
         audience_type=audience,
         course_id=payload.get("courseId"),
         teacher_id=payload.get("targetTeacherId"),

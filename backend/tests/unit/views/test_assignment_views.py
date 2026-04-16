@@ -71,6 +71,7 @@ class TestCreateView:
             "post",
             "/api/v1/assignments",
             data={
+                "title": "Week 1 Intro Check-in",
                 "assignmentTemplateId": 10,
                 "audienceType": "COURSE",
                 "courseId": 20,
@@ -98,6 +99,7 @@ class TestCreateView:
             "post",
             "/api/v1/assignments",
             data={
+                "title": "Week 1 Intro Check-in",
                 "assignmentTemplateId": 10,
                 "audienceType": "COURSE",
                 "openAt": "2025-06-01T00:00:00Z",

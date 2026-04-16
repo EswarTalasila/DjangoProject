@@ -234,6 +234,20 @@ class TestListForUser:
 class TestCreateAssignment(_NoopAtomicMixin):
     """Tests for create_assignment mutation."""
 
+    def test_raises_when_no_title(self):
+        """Raises ValueError when title is missing or blank."""
+        from assignments.services._mutations import create_assignment
+
+        with pytest.raises(ValueError, match="title is required"):
+            create_assignment(
+                SimpleNamespace(id=1),
+                {
+                    "assignmentTemplateId": 1,
+                    "audienceType": "COURSE",
+                    "openAt": "now",
+                },
+            )
+
     def test_raises_when_no_assignment_template_id(self):
         """Raises ValueError when assignmentTemplateId is missing."""
         from assignments.services._mutations import create_assignment
@@ -241,7 +255,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
         with pytest.raises(ValueError, match="assignmentTemplateId is required"):
             create_assignment(
                 SimpleNamespace(id=1),
-                {"audienceType": "COURSE", "openAt": "now"},
+                {"title": "Week 1", "audienceType": "COURSE", "openAt": "now"},
             )
 
     def test_raises_when_no_audience_type(self):
@@ -251,7 +265,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
         with pytest.raises(ValueError, match="audienceType is required"):
             create_assignment(
                 SimpleNamespace(id=1),
-                {"assignmentTemplateId": 1, "openAt": "now"},
+                {"title": "Week 1", "assignmentTemplateId": 1, "openAt": "now"},
             )
 
     def test_raises_when_no_open_at(self):
@@ -261,7 +275,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
         with pytest.raises(ValueError, match="openAt is required"):
             create_assignment(
                 SimpleNamespace(id=1),
-                {"assignmentTemplateId": 1, "audienceType": "COURSE"},
+                {"title": "Week 1", "assignmentTemplateId": 1, "audienceType": "COURSE"},
             )
 
     def test_raises_when_course_type_missing_course_id(self):
@@ -272,6 +286,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
             create_assignment(
                 SimpleNamespace(id=1),
                 {
+                    "title": "Week 1",
                     "assignmentTemplateId": 1,
                     "audienceType": AudienceType.COURSE,
                     "openAt": "2025-01-01",
@@ -286,6 +301,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
             create_assignment(
                 SimpleNamespace(id=1),
                 {
+                    "title": "Week 1",
                     "assignmentTemplateId": 1,
                     "audienceType": AudienceType.TEACHER,
                     "openAt": "2025-01-01",
@@ -323,6 +339,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
 
         user = SimpleNamespace(id=1)
         payload = {
+            "title": "Week 1 Intro Check-in",
             "assignmentTemplateId": 5,
             "audienceType": AudienceType.COURSE,
             "courseId": 10,
@@ -333,6 +350,17 @@ class TestCreateAssignment(_NoopAtomicMixin):
         result = create_assignment(user, payload)
 
         assert result is fake_assignment
+        mock_assignment_model.objects.create.assert_called_once_with(
+            created_by=user,
+            assignment_template_id=5,
+            title="Week 1 Intro Check-in",
+            audience_type=AudienceType.COURSE,
+            course_id=10,
+            teacher_id=None,
+            open_at="2025-01-01",
+            due_at=None,
+            status="ACTIVE",
+        )
         mock_snapshot.assert_called_once_with(
             fake_assignment,
             fake_assignment_template,
@@ -381,6 +409,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
 
         user = SimpleNamespace(id=1)
         payload = {
+            "title": "Week 1 Intro Check-in",
             "assignmentTemplateId": 5,
             "audienceType": AudienceType.COURSE,
             "courseId": 10,
@@ -428,6 +457,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
 
         user = SimpleNamespace(id=1)
         payload = {
+            "title": "Week 1 Intro Check-in",
             "assignmentTemplateId": 5,
             "audienceType": AudienceType.COURSE,
             "courseId": 10,
@@ -450,6 +480,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
             create_assignment(
                 SimpleNamespace(id=1),
                 {
+                    "title": "Week 1",
                     "assignmentTemplateId": 1,
                     "audienceType": AudienceType.COURSE,
                     "courseId": 10,
@@ -469,6 +500,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
             create_assignment(
                 SimpleNamespace(id=1),
                 {
+                    "title": "Week 1",
                     "assignmentTemplateId": 999,
                     "audienceType": AudienceType.COURSE,
                     "courseId": 10,
@@ -490,6 +522,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
             create_assignment(
                 SimpleNamespace(id=1),
                 {
+                    "title": "Week 1",
                     "assignmentTemplateId": 1,
                     "audienceType": AudienceType.COURSE,
                     "courseId": 10,
@@ -521,6 +554,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
             create_assignment(
                 SimpleNamespace(id=1),
                 {
+                    "title": "Week 1",
                     "assignmentTemplateId": 1,
                     "audienceType": AudienceType.COURSE,
                     "courseId": 10,
@@ -544,6 +578,7 @@ class TestCreateAssignment(_NoopAtomicMixin):
             create_assignment(
                 SimpleNamespace(id=1),
                 {
+                    "title": "Week 1",
                     "assignmentTemplateId": 1,
                     "audienceType": AudienceType.COURSE,
                     "courseId": 999,

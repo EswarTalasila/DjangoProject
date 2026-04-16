@@ -11,7 +11,7 @@ class AssignmentSerializer(serializers.Serializer):
     """Validates assignment creation payloads."""
 
     id = serializers.IntegerField(required=False)
-    title = serializers.CharField(required=False, allow_blank=False, max_length=255)
+    title = serializers.CharField(allow_blank=False, max_length=255)
     assignmentTemplateId = serializers.IntegerField()
     audienceType = serializers.ChoiceField(choices=["COURSE", "TEACHER"])
     courseId = serializers.IntegerField(required=False, allow_null=True)

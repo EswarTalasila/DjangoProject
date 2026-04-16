@@ -288,6 +288,7 @@ class TestExtendedWorkflows:
 
         step("Teacher creates assignment for Course A")
         assignment_payload = {
+            "title": "Submission Workflow Assignment",
             "assignmentTemplateId": assignment_template_id,
             "audienceType": "COURSE",
             "courseId": course_id,

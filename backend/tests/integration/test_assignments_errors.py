@@ -22,6 +22,7 @@ class TestAssignmentErrors:
         )
         api_client.force_authenticate(user=teacher_user)
         payload = {
+            "title": "Week 1 Intro Check-in",
             "assignmentTemplateId": assignment_template.id,
             "audienceType": "COURSE",
             "openAt": timezone.now().isoformat(),

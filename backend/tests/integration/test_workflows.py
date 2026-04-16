@@ -104,6 +104,7 @@ class TestWorkflows:
         student_username = student_response.json()["username"]
 
         assignment_payload = {
+            "title": "Workflow Course Assignment",
             "assignmentTemplateId": assignment_template_id,
             "audienceType": "COURSE",
             "courseId": course_id,
