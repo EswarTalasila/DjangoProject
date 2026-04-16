@@ -178,7 +178,7 @@
 - **Profiles:** `up:dev`, `up:test`, `up:prod`, `down:dev`, `down:test`, `down:prod`
 - **Runtime:** `status:*`, `logs:*`, `restart:*`, `rebuild:*`
 - **Testing:** `test`, `test:backend`, `test:frontend`
-- **Dangerous:** `CONFIRM_DESTROY_EELAB=EELAB task destroy:all`
+- **Dangerous:** `task destroy:all` with interactive confirmation
 
 **Postconditions:**
 - Requested task executed; output visible to developer.

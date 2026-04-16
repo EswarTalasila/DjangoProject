@@ -78,10 +78,11 @@ Rules:
 
 | Command | Intent |
 |---|---|
-| `CONFIRM_DESTROY_EELAB=EELAB task destroy:all` | Wipe all EElab containers, volumes, and proxy state |
+| `task destroy:all` | Wipe all EElab containers, volumes, and proxy state after interactive confirmation |
 
 Rules:
-- The exact confirmation token is required.
+- The command first requires explicit `y/N` confirmation.
+- The command then requires the exact typed phrase `EELab`.
 - No hidden destructive cleanup is allowed in normal startup/shutdown tasks.
 
 ---

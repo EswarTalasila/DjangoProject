@@ -10,8 +10,24 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ "${CONFIRM_DESTROY_EELAB:-}" != "EELAB" ]; then
-  fail "refusing destroy:all without CONFIRM_DESTROY_EELAB=EELAB"
+warn "destroy:all will remove all EElab containers, volumes, and proxy state"
+printf "Are you sure? [y/N]: "
+read -r confirmation
+
+case "${confirmation}" in
+  y|Y|yes|YES)
+    ;;
+  *)
+    fail "destroy:all cancelled at y/N confirmation"
+    exit 1
+    ;;
+esac
+
+printf "Type EELab to continue: "
+read -r final_confirmation
+
+if [ "${final_confirmation}" != "EELab" ]; then
+  fail "destroy:all cancelled; confirmation phrase did not match EELab"
   exit 1
 fi
 

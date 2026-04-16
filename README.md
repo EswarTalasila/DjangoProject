@@ -60,7 +60,7 @@ Run `task help` for the grouped command guide. The public command surface is int
 - `task test`
 - `task test:backend`
 - `task test:frontend`
-- `CONFIRM_DESTROY_EELAB=EELAB task destroy:all`
+- `task destroy:all`
 
 ## Compose Layout
 
