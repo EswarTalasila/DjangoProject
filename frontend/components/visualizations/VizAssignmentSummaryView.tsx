@@ -26,7 +26,7 @@ const BAR_COLORS = [
 
 function StatItem({ label, value }: { label: string; value: string }) {
   return (
-    <div className="text-center">
+    <div className="flex min-h-24 flex-col items-center justify-center px-4 py-5 text-center">
       <p className="text-2xl font-bold">{value}</p>
       <p className="text-xs text-muted-foreground">{label}</p>
     </div>
@@ -66,7 +66,7 @@ export default function VizAssignmentSummaryView({
     v != null ? `${Math.round(v * 100)}%` : 'N/A';
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="mx-auto w-full max-w-5xl space-y-6">
       <div className="flex items-center gap-3">
         <Link
           href="/dashboard/visualizations"
@@ -95,11 +95,21 @@ export default function VizAssignmentSummaryView({
         <>
           {/* Stats row */}
           <Card>
-            <CardContent className="flex items-center justify-around py-5 divide-x divide-border">
-              <StatItem label="Total Students" value={String(data.totalStudents)} />
-              <StatItem label="Submitted" value={String(data.submittedCount)} />
-              <StatItem label="Graded" value={String(data.gradedCount)} />
-              <StatItem label="Completion" value={pct(data.completionPct)} />
+            <CardContent className="p-0">
+              <div className="grid grid-cols-2 overflow-hidden rounded-xl bg-border sm:grid-cols-4">
+                <div className="bg-card">
+                  <StatItem label="Total Students" value={String(data.totalStudents)} />
+                </div>
+                <div className="bg-card sm:border-l sm:border-border">
+                  <StatItem label="Submitted" value={String(data.submittedCount)} />
+                </div>
+                <div className="bg-card border-t border-border sm:border-l sm:border-t-0 sm:border-border">
+                  <StatItem label="Graded" value={String(data.gradedCount)} />
+                </div>
+                <div className="bg-card border-l border-t border-border sm:border-t-0">
+                  <StatItem label="Completion" value={pct(data.completionPct)} />
+                </div>
+              </div>
             </CardContent>
           </Card>
 

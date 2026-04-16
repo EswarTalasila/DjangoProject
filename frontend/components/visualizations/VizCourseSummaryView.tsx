@@ -49,7 +49,7 @@ export default function VizCourseSummaryView({
     v != null ? `${Math.round(v * 100)}%` : 'N/A';
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="mx-auto w-full max-w-5xl space-y-6">
       <div className="flex items-center gap-3">
         <Link
           href="/dashboard/visualizations"

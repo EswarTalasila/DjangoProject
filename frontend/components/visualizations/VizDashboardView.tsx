@@ -97,7 +97,7 @@ export default function VizDashboardView({ role }: { role: string }) {
   const totalPending = data?.courses.reduce((s, c) => s + c.pendingGrades, 0) ?? 0;
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="mx-auto w-full max-w-5xl space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Analytics Dashboard</h1>
         <p className="text-muted-foreground mt-1">
