@@ -21,7 +21,7 @@
         "POSTGRES_PASSWORD": "change-me"
       },
       "app_defaults": {
-        "DJANGO_SECRET_KEY": "dev-only-secret-change-me",
+        "DJANGO_SECRET_KEY": "dev-only-do-not-use-in-production-change-me",
         "ADMIN_USERNAME": "Admin",
         "ADMIN_EMAIL": "admin@example.com",
         "ADMIN_PASSWORD": "change-me"
@@ -38,7 +38,7 @@
         "POSTGRES_PASSWORD": "change-me"
       },
       "app_defaults": {
-        "DJANGO_SECRET_KEY": "test-only-secret-change-me",
+        "DJANGO_SECRET_KEY": "test-only-do-not-use-in-production-change-me",
         "ADMIN_USERNAME": "Admin",
         "ADMIN_EMAIL": "admin@example.com",
         "ADMIN_PASSWORD": "change-me"
