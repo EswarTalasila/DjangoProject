@@ -1597,7 +1597,7 @@ export default function AssignmentComposerPanel({
       : teacherQuestions.findIndex((question) => question.id === activeTeacherQuestion.id);
 
   return (
-    <section className="flex h-[calc(100vh-64px)] flex-col overflow-hidden rounded-2xl border border-border bg-background">
+    <section className="flex min-h-[560px] flex-col overflow-hidden rounded-2xl border border-border bg-background lg:h-[calc(100vh-64px)]">
       <div className="flex border-b border-border bg-muted/30 lg:hidden">
         {(
           [

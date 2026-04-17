@@ -531,7 +531,7 @@ export default function AssignmentDetailView({
         />
       ) : null}
 
-      <div className={cn(mode === 'edit' ? 'px-6 pb-6 pt-4' : 'rounded-sm border border-border bg-card p-6 space-y-4 min-h-[760px]')}>
+      <div className={cn(mode === 'edit' ? 'px-4 pb-6 pt-4 lg:px-6' : 'rounded-sm border border-border bg-card p-4 space-y-4 lg:p-6 lg:min-h-[760px]')}>
         {mode !== 'edit' ? (
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-foreground">

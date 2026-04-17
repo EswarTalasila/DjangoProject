@@ -401,7 +401,7 @@ export default function StudentSubmissionForm({
         </div>
       </div>
 
-      <div className="grid min-h-[620px] lg:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="grid lg:min-h-[620px] lg:grid-cols-[minmax(0,1fr)_280px]">
         <section className="min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-border">
           {/* Upload panel for UPLOAD_ONLY and DIGITAL_WITH_UPLOAD modes */}
           {showUploadPanel && studentFlowStage !== 'submitted' && (
