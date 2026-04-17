@@ -133,7 +133,7 @@ export default function ForgotPasswordPage() {
             )}
 
             {step === "VALIDATE" && (
-              <form onSubmit={validateForm.handleSubmit(onValidate)}>
+              <form method="post" onSubmit={validateForm.handleSubmit(onValidate)}>
                 <div className="grid gap-4">
                   <div className="grid gap-2">
                     <Label htmlFor="identifier">Identifier</Label>
@@ -174,7 +174,7 @@ export default function ForgotPasswordPage() {
             )}
 
             {step === "RESET" && (
-              <form onSubmit={resetForm.handleSubmit(onReset)}>
+              <form method="post" onSubmit={resetForm.handleSubmit(onReset)}>
                 <div className="grid gap-4">
                   <div className="rounded-md bg-blue-50 p-3 text-sm text-blue-900 flex items-start">
                     <CheckCircle2 className="mr-2 h-5 w-5 text-blue-600 shrink-0" />

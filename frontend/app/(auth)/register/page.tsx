@@ -442,7 +442,7 @@ function RegisterPageContent() {
                         )}
 
                         {isStudent ? (
-                            <form onSubmit={studentForm.handleSubmit(handleStudentRegistration)}>
+                            <form method="post" onSubmit={studentForm.handleSubmit(handleStudentRegistration)}>
                                 <div className="grid gap-4">
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="grid gap-2">
@@ -536,7 +536,7 @@ function RegisterPageContent() {
                                 </div>
                             </form>
                         ) : registrationMethod === "LOCAL" ? (
-                            <form onSubmit={nonStudentForm.handleSubmit(handleNonStudentLocalRegistration)}>
+                            <form method="post" onSubmit={nonStudentForm.handleSubmit(handleNonStudentLocalRegistration)}>
                                 <div className="grid gap-4">
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="grid gap-2">
@@ -651,7 +651,7 @@ function RegisterPageContent() {
                                 </div>
                             </form>
                         ) : showOauthForm ? (
-                            <form onSubmit={oauthForm.handleSubmit(handleOAuthRegistration)}>
+                            <form method="post" onSubmit={oauthForm.handleSubmit(handleOAuthRegistration)}>
                                 <div className="grid gap-4">
                                     <div className="rounded-md bg-blue-50 p-3 text-sm text-blue-900 flex items-start">
                                         <Mail className="mr-2 h-5 w-5 text-blue-600 shrink-0" />

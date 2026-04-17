@@ -167,7 +167,12 @@ function LoginPageContent() {
           </Alert>
         )}
 
-        <form onSubmit={form.handleSubmit(onSubmit)}>
+        {/* method="post" is a belt-and-suspenders guard: if client JS hasn't
+            hydrated yet (slow network, hydration error), browser-native form
+            submission uses POST instead of leaking credentials into the URL
+            query string via GET. The onSubmit handler below intercepts when
+            JS is live. */}
+        <form method="post" onSubmit={form.handleSubmit(onSubmit)}>
           <div className="grid gap-4">
             {/* Identifier */}
             <div className="grid gap-2">
