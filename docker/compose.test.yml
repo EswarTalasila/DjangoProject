@@ -49,6 +49,7 @@ services:
       - ../backend/pyproject.toml:/app/pyproject.toml:cached
       - ../scripts:/app/scripts:cached
       - ../Docs:/app/Docs:cached
+      - ../Deployment:/app/Deployment:cached
       - media-data:${MEDIA_ROOT}
       - artifact-data:${MEDIA_ROOT}/artifacts
     expose:
