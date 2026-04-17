@@ -55,6 +55,7 @@ describe("assignment api", () => {
 
       const { createAssignment } = await loadAssignmentApi();
       const result = await createAssignment({
+        title: "Unit Test Assignment",
         assignmentTemplateId: 10,
         audienceType: "COURSE",
         courseId: 5,

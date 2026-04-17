@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { LevelInput } from "@/lib/rubric-api";
 
 function setupModuleMocks() {
   vi.doMock("@/lib/rubric-api", () => ({}));
@@ -15,13 +16,13 @@ async function loadComponent() {
 
 describe("LevelRow", () => {
   const baseLevel = { label: "Good", points: 3, description: "Solid work" };
-  let onChange: ReturnType<typeof vi.fn>;
-  let onRemove: ReturnType<typeof vi.fn>;
+  let onChange: ReturnType<typeof vi.fn<(updated: LevelInput) => void>>;
+  let onRemove: ReturnType<typeof vi.fn<() => void>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    onChange = vi.fn();
-    onRemove = vi.fn();
+    onChange = vi.fn<(updated: LevelInput) => void>();
+    onRemove = vi.fn<() => void>();
   });
 
   it("renders label, points, and description inputs", async () => {

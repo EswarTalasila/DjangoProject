@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { CriterionInput } from "@/lib/rubric-api";
 
 function setupModuleMocks() {
   vi.doMock("@/lib/rubric-api", () => ({}));
@@ -24,17 +25,17 @@ describe("CriterionBlock", () => {
     ],
   };
 
-  let onChange: ReturnType<typeof vi.fn>;
-  let onRemove: ReturnType<typeof vi.fn>;
-  let onMoveUp: ReturnType<typeof vi.fn>;
-  let onMoveDown: ReturnType<typeof vi.fn>;
+  let onChange: ReturnType<typeof vi.fn<(updated: CriterionInput) => void>>;
+  let onRemove: ReturnType<typeof vi.fn<() => void>>;
+  let onMoveUp: ReturnType<typeof vi.fn<() => void>>;
+  let onMoveDown: ReturnType<typeof vi.fn<() => void>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    onChange = vi.fn();
-    onRemove = vi.fn();
-    onMoveUp = vi.fn();
-    onMoveDown = vi.fn();
+    onChange = vi.fn<(updated: CriterionInput) => void>();
+    onRemove = vi.fn<() => void>();
+    onMoveUp = vi.fn<() => void>();
+    onMoveDown = vi.fn<() => void>();
   });
 
   it("renders criterion header with correct index", async () => {
@@ -154,7 +155,7 @@ describe("CriterionBlock", () => {
     expect(onChange).toHaveBeenCalled();
     const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0];
     expect(lastCall.levels).toHaveLength(3);
-    expect(lastCall.levels[2]).toEqual({ label: "", points: 0, description: "" });
+    expect(lastCall.levels![2]).toEqual({ label: "", points: 0, description: "" });
   });
 
   it("handles criterion with no levels", async () => {
@@ -198,7 +199,7 @@ describe("CriterionBlock", () => {
     fireEvent.change(labelInput, { target: { value: "Outstanding" } });
     expect(onChange).toHaveBeenCalled();
     const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0];
-    expect(lastCall.levels[0].label).toBe("Outstanding");
+    expect(lastCall.levels![0].label).toBe("Outstanding");
   });
 
   it("defaults weight to 1 when non-numeric value entered", async () => {
