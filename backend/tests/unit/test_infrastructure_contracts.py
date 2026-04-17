@@ -251,8 +251,11 @@ class TestProxyRouting:
         text = _read_text("proxy/templates/prod.conf.template")
         assert "eelab-prod-backend:8000" in text
         assert "eelab-prod-frontend:3000" in text
-        assert "listen 80;" in text
-        assert "listen 443 ssl;" in text
+        # Both listeners must be marked default_server so the stock
+        # default.conf shipped in the nginx:alpine image doesn't shadow us
+        # for unmatched Host headers (internal docker-network traffic).
+        assert "listen 80 default_server;" in text
+        assert "listen 443 ssl default_server;" in text
 
 
 class TestTaskScripts:
