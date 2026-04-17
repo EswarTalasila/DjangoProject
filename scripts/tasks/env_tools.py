@@ -27,6 +27,7 @@ RUNTIME_KEY_ORDER = [
     "ENV_TARGET",
     "PUBLIC_HOST",
     "PUBLIC_SCHEME",
+    "FORCE_SCRIPT_NAME",
     "DJANGO_SECRET_KEY",
     "DJANGO_ALLOWED_HOSTS",
     "DJANGO_CORS_ALLOWED_ORIGINS",
@@ -42,6 +43,7 @@ RUNTIME_KEY_ORDER = [
     "GOOGLE_CLIENT_SECRET",
     "NEXT_PUBLIC_GOOGLE_CLIENT_ID",
     "NEXT_PUBLIC_API_URL",
+    "NEXT_BASE_PATH",
     "SERVER_PROXY_ORIGIN",
     "ADMIN_USERNAME",
     "ADMIN_EMAIL",
@@ -151,16 +153,30 @@ def build_runtime(profile: str, root_values: dict[str, str], policy: dict) -> di
     public_scheme = root_values.get("PUBLIC_SCHEME", target_cfg["public_scheme"])
 
     is_local_host = public_host == "localhost"
-    http_origin = f"http://{public_host}:{profile_cfg['http_port']}"
-    https_origin = f"https://{public_host}:{profile_cfg['https_port']}"
+
+    # URL path prefix for multi-profile routing behind a single proxy.
+    # Prod serves at root; dev/test are namespaced so all three can share
+    # the public :443 listener. Same mapping for local and server so URLs
+    # are consistent across environments.
+    base_path = {"prod": "", "dev": "/_dev", "test": "/_test"}[profile]
+
+    # Same-origin under path routing — every profile shares the public host.
+    primary_origin = f"{public_scheme}://{public_host}"
+    origins: list[str] = [primary_origin]
+    if is_local_host and public_scheme == "https":
+        origins.append(f"http://{public_host}")
 
     runtime = {
         "ENVIRONMENT": profile_cfg["environment"],
         "ENV_TARGET": root_values.get("ENV_TARGET", "local"),
         "PUBLIC_HOST": public_host,
         "PUBLIC_SCHEME": public_scheme,
-        "NEXT_PUBLIC_API_URL": "/api/v1",
-        "SERVER_PROXY_ORIGIN": f"http://proxy:{profile_cfg['http_port']}",
+        "NEXT_PUBLIC_API_URL": f"{base_path}/api/v1",
+        "NEXT_BASE_PATH": base_path,
+        "FORCE_SCRIPT_NAME": base_path,
+        # SSR traverses the same nginx proxy as browser traffic so the
+        # /_dev/ and /_test/ locations route SSR calls to the right backend.
+        "SERVER_PROXY_ORIGIN": "http://proxy",
         "MEDIA_ROOT": profile_cfg["media_root"],
     }
 
@@ -181,15 +197,15 @@ def build_runtime(profile: str, root_values: dict[str, str], policy: dict) -> di
                 "ADMIN_EMAIL": root_values.get("ADMIN_EMAIL", ""),
                 "ADMIN_PASSWORD": root_values.get("ADMIN_PASSWORD", ""),
                 "DJANGO_ALLOWED_HOSTS": public_host,
-                "DJANGO_CORS_ALLOWED_ORIGINS": f"{public_scheme}://{public_host}",
-                "DJANGO_CSRF_TRUSTED_ORIGINS": f"{public_scheme}://{public_host}",
+                "DJANGO_CORS_ALLOWED_ORIGINS": ",".join(origins),
+                "DJANGO_CSRF_TRUSTED_ORIGINS": ",".join(origins),
                 "DJANGO_SECURE_SSL_REDIRECT": "true" if public_scheme == "https" else "false",
                 "DJANGO_SESSION_COOKIE_SECURE": "true" if public_scheme == "https" else "false",
                 "DJANGO_CSRF_COOKIE_SECURE": "true" if public_scheme == "https" else "false",
             }
         )
     else:
-        secure_cookies = "true" if profile == "test" else "false"
+        secure_cookies = "true" if public_scheme == "https" else "false"
         runtime.update(profile_cfg["db_defaults"])
         runtime.update(profile_cfg["app_defaults"])
         runtime.update(
@@ -203,8 +219,8 @@ def build_runtime(profile: str, root_values: dict[str, str], policy: dict) -> di
                 "DJANGO_ALLOWED_HOSTS": "localhost,127.0.0.1"
                 if is_local_host
                 else public_host,
-                "DJANGO_CORS_ALLOWED_ORIGINS": ",".join([http_origin, https_origin]),
-                "DJANGO_CSRF_TRUSTED_ORIGINS": ",".join([http_origin, https_origin]),
+                "DJANGO_CORS_ALLOWED_ORIGINS": ",".join(origins),
+                "DJANGO_CSRF_TRUSTED_ORIGINS": ",".join(origins),
                 "DJANGO_SECURE_SSL_REDIRECT": "false",
                 "DJANGO_SESSION_COOKIE_SECURE": secure_cookies,
                 "DJANGO_CSRF_COOKIE_SECURE": secure_cookies,

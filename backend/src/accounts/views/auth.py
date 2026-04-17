@@ -32,6 +32,11 @@ def _cookie_secure() -> bool:
     return settings.ENVIRONMENT == "production"
 
 
+def _cookie_path() -> str:
+    """Scope auth cookies to the active profile path to avoid cross-profile collisions."""
+    return getattr(settings, "FORCE_SCRIPT_NAME", "") or "/"
+
+
 def _set_auth_cookies(
     response: Response, *, access_token: str | None = None, refresh_token: str | None = None
 ) -> Response:
@@ -46,7 +51,7 @@ def _set_auth_cookies(
             httponly=True,
             secure=_cookie_secure(),
             samesite=AUTH_COOKIE_SAMESITE,
-            path="/",
+            path=_cookie_path(),
         )
     if refresh_token is not None:
         refresh_lifetime = cast("Any", settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"])
@@ -58,15 +63,16 @@ def _set_auth_cookies(
             httponly=True,
             secure=_cookie_secure(),
             samesite=AUTH_COOKIE_SAMESITE,
-            path="/",
+            path=_cookie_path(),
         )
     return response
 
 
 def _clear_auth_cookies(response: Response) -> Response:
     """Expire auth cookies from the client."""
-    response.delete_cookie(ACCESS_COOKIE_NAME, path="/", samesite=AUTH_COOKIE_SAMESITE)
-    response.delete_cookie(REFRESH_COOKIE_NAME, path="/", samesite=AUTH_COOKIE_SAMESITE)
+    cookie_path = _cookie_path()
+    response.delete_cookie(ACCESS_COOKIE_NAME, path=cookie_path, samesite=AUTH_COOKIE_SAMESITE)
+    response.delete_cookie(REFRESH_COOKIE_NAME, path=cookie_path, samesite=AUTH_COOKIE_SAMESITE)
     return response
 
 

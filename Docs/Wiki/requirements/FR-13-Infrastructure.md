@@ -338,7 +338,7 @@ INFRA has no user-facing REST API endpoints. All behavior is Docker Compose orch
 
 | Service | Image | Ports | Profile | Purpose |
 |---------|-------|-------|---------|---------|
-| `proxy` | `nginx:1.27-alpine` | `80`, `443`, `8080`, `8443`, `9080`, `9443` | proxy | Shared ingress and routing for dev/test/prod |
+| `proxy` | `nginx:1.27-alpine` | `80`, `443` | proxy | Shared ingress and path-based routing for dev/test/prod |
 | `db` | `postgres:17-alpine` | (internal) | dev/test/prod | PostgreSQL database with healthcheck |
 | `backend` | Built from `backend/Dockerfile` | `8000` | dev/test/prod | Django REST API |
 | `frontend` | Built from `frontend/Dockerfile*` | `3000` | dev/test/prod | Next.js frontend |

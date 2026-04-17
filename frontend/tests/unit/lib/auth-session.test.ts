@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { server } from "../mocks/server";
 
-const API_BASE = "http://localhost:8080/api/v1";
+const API_BASE = "http://localhost/_test/api/v1";
 
 let mockCookieGet: ReturnType<typeof vi.fn>;
 
@@ -290,7 +290,7 @@ describe("auth-session", () => {
   describe("resolveApiBaseUrl (via SERVER_PROXY_ORIGIN)", () => {
     it("uses SERVER_PROXY_ORIGIN when localhost is configured", async () => {
       server.use(
-        http.get("http://proxy:8080/api/v1/auth/me", () =>
+        http.get("http://proxy/_test/api/v1/auth/me", () =>
           HttpResponse.json({
             id: "1",
             name: "Test",
@@ -304,7 +304,7 @@ describe("auth-session", () => {
 
       vi.resetModules();
       process.env.NEXT_PUBLIC_API_URL = API_BASE;
-      process.env.SERVER_PROXY_ORIGIN = "http://proxy:8080";
+      process.env.SERVER_PROXY_ORIGIN = "http://proxy";
 
       mockCookieGet = vi.fn();
       vi.doMock("next/headers", () => ({

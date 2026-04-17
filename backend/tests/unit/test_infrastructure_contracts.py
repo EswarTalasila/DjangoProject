@@ -215,47 +215,39 @@ class TestProxyRouting:
     """The shared proxy must own the public ports and route each profile explicitly."""
 
     def test_proxy_ports_cover_prod_dev_test(self):
-        """Proxy exposes ports 80/443, 8080/8443, 9080/9443."""
+        """Proxy exposes only shared public ports 80/443."""
         proxy = _services("docker/compose.proxy.yml")["proxy"]
         assert proxy["ports"] == [
             "80:80",
             "443:443",
-            "8080:8080",
-            "8443:8443",
-            "9080:9080",
-            "9443:9443",
         ]
 
     def test_proxy_templates_exist(self):
-        """Nginx config and per-profile server-block templates exist."""
+        """Nginx config and the unified multi-profile server-block template exist."""
         for relpath in [
             "proxy/nginx.conf",
-            "proxy/templates/dev.conf.template",
-            "proxy/templates/test.conf.template",
             "proxy/templates/prod.conf.template",
         ]:
             assert (PROJECT_ROOT / relpath).exists()
 
     def test_dev_proxy_template_routes_expected_aliases(self):
-        """Dev proxy routes to eelab-dev-backend/frontend on 8080/8443."""
-        text = _read_text("proxy/templates/dev.conf.template")
+        """Dev proxy routes to eelab-dev-backend/frontend under /_dev/."""
+        text = _read_text("proxy/templates/prod.conf.template")
         assert "eelab-dev-backend:8000" in text
         assert "eelab-dev-frontend:3000" in text
-        assert "listen 8080;" in text
-        assert "listen 8443 ssl;" in text
-        for path in ["/api/v1/", "/admin/", "/static/", "/"]:
+        for path in ["/_dev/api/v1/", "/_dev/admin/", "/_dev/static/", "/_dev/"]:
             assert path in text
 
     def test_test_proxy_template_routes_expected_aliases(self):
-        """Test proxy routes to eelab-test-backend/frontend on 9080/9443."""
-        text = _read_text("proxy/templates/test.conf.template")
+        """Test proxy routes to eelab-test-backend/frontend under /_test/."""
+        text = _read_text("proxy/templates/prod.conf.template")
         assert "eelab-test-backend:8000" in text
         assert "eelab-test-frontend:3000" in text
-        assert "listen 9080;" in text
-        assert "listen 9443 ssl;" in text
+        for path in ["/_test/api/v1/", "/_test/admin/", "/_test/static/", "/_test/"]:
+            assert path in text
 
     def test_prod_proxy_template_routes_expected_aliases(self):
-        """Prod proxy routes to eelab-prod-backend/frontend on 80/443."""
+        """Prod proxy routes to eelab-prod-backend/frontend at root on 80/443."""
         text = _read_text("proxy/templates/prod.conf.template")
         assert "eelab-prod-backend:8000" in text
         assert "eelab-prod-frontend:3000" in text

@@ -12,8 +12,8 @@
   "profiles": {
     "dev": {
       "environment": "development",
-      "http_port": 8080,
-      "https_port": 8443,
+      "http_port": 80,
+      "https_port": 443,
       "media_root": "/srv/eelab-dev/media",
       "db_defaults": {
         "POSTGRES_DB": "eelab_dev",
@@ -29,8 +29,8 @@
     },
     "test": {
       "environment": "testing",
-      "http_port": 9080,
-      "https_port": 9443,
+      "http_port": 80,
+      "https_port": 443,
       "media_root": "/srv/eelab-test/media",
       "db_defaults": {
         "POSTGRES_DB": "eelab_test",

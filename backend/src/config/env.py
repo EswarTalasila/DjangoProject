@@ -112,6 +112,16 @@ class EnvSettings(BaseSettings):
         description="Filesystem path for media storage. Defaults to BASE_DIR/media.",
     )
 
+    # URL path prefix (for multi-profile routing behind a single proxy).
+    # Empty string for prod ("" → app at /), "/_dev" for dev, "/_test" for test.
+    # Django uses it via FORCE_SCRIPT_NAME so generated URLs (admin, redirects,
+    # reverse()) include the prefix when served under it.
+    force_script_name: str = Field(
+        default="",
+        validation_alias="FORCE_SCRIPT_NAME",
+        description="URL path prefix the Django app is served under (e.g. /_dev).",
+    )
+
     @property
     def is_development(self) -> bool:
         return self.environment == "development"

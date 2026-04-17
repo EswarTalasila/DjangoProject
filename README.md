@@ -20,12 +20,10 @@ task up:dev
 ```
 
 5. Open the application through proxy:
-- Dev HTTP: `http://localhost:8080`
-- Dev HTTPS: `https://localhost:8443`
+- Dev: `https://localhost/_dev/login`
 
 Testing and production use the same proxy model:
-- Test HTTP: `http://localhost:9080`
-- Test HTTPS: `https://localhost:9443`
+- Test: `https://localhost/_test/login`
 - Prod HTTP/HTTPS: `http://<host>` / `https://<host>`
 
 ## Environment Model
