@@ -116,6 +116,7 @@ class EnrollmentFactory(factory.django.DjangoModelFactory):
 class AssignmentFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Assignment
+        skip_postgeneration_save = True
 
     assignment_template = factory.SubFactory(AssignmentTemplateFactory)
     audience_type = AudienceType.COURSE

@@ -166,7 +166,11 @@ for directory in (
     try:
         directory.mkdir(parents=True, exist_ok=True)
     except PermissionError:
-        logging.warning("Could not create directory at %s — ensure it exists and is writable", directory)
+        # Media dirs may not be writable at settings-import time in Docker if the
+        # volume hasn't been chowned yet. FileField will create/chown on first
+        # upload as the django user, or task ensure:admin:<profile> does it
+        # explicitly. Log at debug so fresh-deploy logs stay clean.
+        logging.debug("Could not create directory at %s; skipping (FileField will handle on first write)", directory)
 
 # Image upload constants (FR-15)
 IMG_ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
