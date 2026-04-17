@@ -68,6 +68,11 @@ tasks:
         print_cmd "task seed:account -- <role> [--profile dev|test]" "ensure backend services and provision deterministic account(s)"
         print_cmd "task seed:data -- [--profile dev|test]" "ensure backend services and seed deterministic demo data"
 
+        print_section "Init"
+        print_cmd "task ensure:admin:dev" "migrate + collectstatic + ensure admin in the dev backend"
+        print_cmd "task ensure:admin:test" "migrate + collectstatic + ensure admin in the test backend"
+        print_cmd "task ensure:admin:prod" "migrate + collectstatic + ensure admin in the prod backend"
+
         print_section "Dangerous"
         printf '  %s%-28s%s %s%s%s\n' "$RED" "task destroy:all" "$RESET" "$DIM" "wipe all EElab containers, volumes, and proxy state" "$RESET"
         printf '  %s%-28s%s %s%s%s\n' "" "" "" "$YELLOW" "requires y/N confirmation and exact phrase EELab" "$RESET"
@@ -118,6 +123,25 @@ tasks:
       - task: _check:env:test
       - task: _ensure:proxy
       - ./scripts/tasks/up.sh test
+      - ./scripts/tasks/ensure-admin.sh test
+
+  _ensure:admin:dev:
+    internal: true
+    desc: Migrate, collect static, and ensure admin exists in the dev stack
+    cmds:
+      - ./scripts/tasks/ensure-admin.sh dev
+
+  _ensure:admin:test:
+    internal: true
+    desc: Migrate, collect static, and ensure admin exists in the test stack
+    cmds:
+      - ./scripts/tasks/ensure-admin.sh test
+
+  _ensure:admin:prod:
+    internal: true
+    desc: Migrate, collect static, and ensure admin exists in the prod stack
+    cmds:
+      - ./scripts/tasks/ensure-admin.sh prod
 
   env:local:
     desc: Set root env topology for localhost development
@@ -135,27 +159,44 @@ tasks:
       - ./scripts/tasks/prepare-env.sh all
 
   up:dev:
-    desc: Validate env, ensure proxy, and start the development stack
+    desc: Validate env, ensure proxy, start the development stack, and initialize backend
     cmds:
       - task: _check:docker
       - ./scripts/tasks/prepare-env.sh dev
       - task: _check:env:dev
       - task: _ensure:proxy
       - ./scripts/tasks/up.sh dev
+      - task: _ensure:admin:dev
 
   up:test:
-    desc: Validate env, ensure proxy, and start the testing stack
+    desc: Validate env, ensure proxy, start the testing stack, and initialize backend
     cmds:
       - task: _ensure:test-stack
 
   up:prod:
-    desc: Validate env, ensure proxy, and start the production stack
+    desc: Validate env, ensure proxy, start the production stack, and initialize backend
     cmds:
       - task: _check:docker
       - ./scripts/tasks/prepare-env.sh prod
       - task: _check:env:prod
       - task: _ensure:proxy
       - ./scripts/tasks/up.sh prod
+      - task: _ensure:admin:prod
+
+  ensure:admin:dev:
+    desc: Run migrations, collectstatic, and ensure admin in dev (stack must be up)
+    cmds:
+      - task: _ensure:admin:dev
+
+  ensure:admin:test:
+    desc: Run migrations, collectstatic, and ensure admin in test (stack must be up)
+    cmds:
+      - task: _ensure:admin:test
+
+  ensure:admin:prod:
+    desc: Run migrations, collectstatic, and ensure admin in prod (stack must be up)
+    cmds:
+      - task: _ensure:admin:prod
 
   down:dev:
     desc: Stop the development stack without removing volumes
