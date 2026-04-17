@@ -16,7 +16,7 @@ import {
   type QuestionKind,
   type QuestionGroupInput,
   getAssignmentTemplate,
-  createDraft,
+  createDraftAssignmentTemplate,
   listAssignmentTemplates,
   updateAssignmentTemplate,
   deleteAssignmentTemplate,

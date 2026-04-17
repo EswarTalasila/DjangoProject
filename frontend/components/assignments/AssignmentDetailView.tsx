@@ -534,15 +534,9 @@ export default function AssignmentDetailView({
       <div className={cn(mode === 'edit' ? 'px-4 pb-6 pt-4 lg:px-6' : 'rounded-sm border border-border bg-card p-4 space-y-4 lg:p-6 lg:min-h-[760px]')}>
         {mode !== 'edit' ? (
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">
-            {mode === 'edit' ? 'Edit Assignment' : 'Assignment Content'}
-          </h2>
+          <h2 className="text-lg font-semibold text-foreground">Assignment Content</h2>
           <span className="text-xs uppercase tracking-wide text-muted-foreground">
-            {mode === 'edit'
-              ? 'Teacher editor'
-              : previewMode === 'teacher'
-                ? 'Teacher view'
-                : 'Student preview'}
+            {previewMode === 'teacher' ? 'Teacher view' : 'Student preview'}
           </span>
         </div>
         ) : null}
