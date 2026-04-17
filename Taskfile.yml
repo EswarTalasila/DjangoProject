@@ -24,7 +24,7 @@ tasks:
         }
 
         print_cmd() {
-          printf '  %s%-28s%s %s%s%s\n' "$CYAN" "$1" "$RESET" "$DIM" "$2" "$RESET"
+          printf '  %s%-36s%s %s%s%s\n' "$CYAN" "$1" "$RESET" "$DIM" "$2" "$RESET"
         }
 
         printf '%sTask Interface%s\n' "$BOLD" "$RESET"
@@ -36,46 +36,30 @@ tasks:
         print_cmd "task env:init" "sync root .env and rewrite runtime env files"
 
         print_section "Up"
-        print_cmd "task up:dev" "validate env, ensure proxy, start dev stack"
-        print_cmd "task up:test" "validate env, ensure proxy, start test stack"
-        print_cmd "task up:prod" "validate env, ensure proxy, start prod stack"
+        print_cmd "task up:<dev|test|prod>" "validate env, ensure proxy, start the stack"
 
         print_section "Down"
-        print_cmd "task down:dev" "stop dev stack without removing volumes"
-        print_cmd "task down:test" "stop test stack without removing volumes"
-        print_cmd "task down:prod" "stop prod stack without removing volumes"
+        print_cmd "task down:<dev|test|prod>" "stop the stack without removing volumes"
 
         print_section "Runtime"
-        print_cmd "task status:dev" "show dev stack state"
-        print_cmd "task status:test" "show test stack state"
-        print_cmd "task status:prod" "show prod stack state"
-        print_cmd "task logs:dev" "follow dev stack logs"
-        print_cmd "task logs:test" "follow test stack logs"
-        print_cmd "task logs:prod" "follow prod stack logs"
-        print_cmd "task restart:dev" "restart dev stack containers"
-        print_cmd "task restart:test" "restart test stack containers"
-        print_cmd "task restart:prod" "restart prod stack containers"
-        print_cmd "task rebuild:dev" "rebuild and recreate dev app containers"
-        print_cmd "task rebuild:test" "rebuild and recreate test app containers"
-        print_cmd "task rebuild:prod" "rebuild and recreate prod app containers"
+        print_cmd "task status:<dev|test|prod>" "show stack state"
+        print_cmd "task logs:<dev|test|prod>" "follow stack logs"
+        print_cmd "task restart:<dev|test|prod>" "restart stack containers"
+        print_cmd "task rebuild:<dev|test|prod>" "rebuild and recreate app containers"
 
         print_section "Test"
-        print_cmd "task test" "ensure testing stack and run all tests"
-        print_cmd "task test:backend" "ensure testing stack and run backend tests"
-        print_cmd "task test:frontend" "ensure testing stack and run frontend tests"
+        print_cmd "task test[:backend|:frontend]" "ensure testing stack and run tests"
 
         print_section "Seed"
-        print_cmd "task seed:account -- <role> [--profile dev|test]" "ensure backend services and provision deterministic account(s)"
-        print_cmd "task seed:data -- [--profile dev|test]" "ensure backend services and seed deterministic demo data"
+        print_cmd "task seed:account -- <role> [--profile dev|test]" "provision deterministic account(s)"
+        print_cmd "task seed:data -- [--profile dev|test]" "seed deterministic demo data"
 
         print_section "Init"
-        print_cmd "task ensure:admin:dev" "migrate + collectstatic + ensure admin in the dev backend"
-        print_cmd "task ensure:admin:test" "migrate + collectstatic + ensure admin in the test backend"
-        print_cmd "task ensure:admin:prod" "migrate + collectstatic + ensure admin in the prod backend"
+        print_cmd "task ensure:admin:<dev|test|prod>" "migrate + collectstatic + ensure admin"
 
         print_section "Dangerous"
-        printf '  %s%-28s%s %s%s%s\n' "$RED" "task destroy:all" "$RESET" "$DIM" "wipe all EElab containers, volumes, and proxy state" "$RESET"
-        printf '  %s%-28s%s %s%s%s\n' "" "" "" "$YELLOW" "requires y/N confirmation and exact phrase EELab" "$RESET"
+        printf '  %s%-36s%s %s%s%s\n' "$RED" "task destroy:all" "$RESET" "$DIM" "wipe all EElab containers, volumes, and proxy state" "$RESET"
+        printf '  %s%-36s%s %s%s%s\n' "" "" "" "$YELLOW" "requires y/N confirmation and exact phrase EELab" "$RESET"
 
   _check:docker:
     internal: true
