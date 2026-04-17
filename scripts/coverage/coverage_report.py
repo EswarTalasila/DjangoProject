@@ -45,6 +45,8 @@ FR_SPECS: tuple[FrSpec, ...] = (
     FrSpec("FR-10", "EXP", "Docs/Wiki/requirements/FR-10-Export.md"),
     FrSpec("FR-12", "ENV", "Docs/Wiki/requirements/FR-12-Environment.md"),
     FrSpec("FR-13", "INFRA", "Docs/Wiki/requirements/FR-13-Infrastructure.md"),
+    FrSpec("FR-14", "ARCH", "Docs/Wiki/requirements/FR-14-Lifecycle-Archival.md"),
+    FrSpec("FR-15", "IMG", "Docs/Wiki/requirements/FR-15-Image-Upload.md"),
 )
 
 
