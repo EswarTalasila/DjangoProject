@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../mocks/server';
 
-const API_BASE = 'http://localhost:8000/api/v1';
+const API_BASE = 'http://localhost:8080/api/v1';
 const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
 
 async function loadApi() {
@@ -69,9 +69,8 @@ describe('registration code lifecycle API', () => {
         const url = new URL(request.url);
         const status = url.searchParams.get('status');
         const codeType = url.searchParams.get('codeType');
-        const includeArchived = url.searchParams.get('includeArchived');
 
-        if (status !== 'ACTIVE' || codeType !== 'STUDENT' || includeArchived !== 'true') {
+        if (status !== 'ACTIVE' || codeType !== 'STUDENT') {
           return HttpResponse.json({ detail: 'bad params' }, { status: 400 });
         }
         return HttpResponse.json({
@@ -87,7 +86,6 @@ describe('registration code lifecycle API', () => {
     const response = await listRegistrationCodes({
       status: 'ACTIVE',
       codeType: 'STUDENT',
-      includeArchived: true,
     });
 
     expect(response.count).toBe(1);
@@ -124,27 +122,13 @@ describe('registration code lifecycle API', () => {
     expect(updated.isActive).toBe(false);
   });
 
-  it('updateRegistrationCodeStatus ARCHIVED returns updated code', async () => {
+  it('deleteRegistrationCode issues DELETE request', async () => {
     server.use(
-      http.patch(`${API_BASE}/codes/1`, async ({ request }) => {
-        const body = (await request.json()) as { status?: string };
-        if (body.status !== 'ARCHIVED') {
-          return HttpResponse.json({ detail: 'bad status' }, { status: 400 });
-        }
-        return HttpResponse.json({
-          ...SAMPLE_CODE,
-          status: 'ARCHIVED',
-          isActive: false,
-          archivedAt: '2026-03-15T00:00:00Z',
-        });
-      }),
+      http.delete(`${API_BASE}/codes/1`, () => new HttpResponse(null, { status: 204 })),
     );
 
-    const { updateRegistrationCodeStatus } = await loadApi();
-    const updated = await updateRegistrationCodeStatus(1, 'ARCHIVED');
-
-    expect(updated.status).toBe('ARCHIVED');
-    expect(updated.archivedAt).toBe('2026-03-15T00:00:00Z');
+    const { deleteRegistrationCode } = await loadApi();
+    await expect(deleteRegistrationCode(1)).resolves.toBeUndefined();
   });
 
   it('propagates 409 error for invalid status transition', async () => {

@@ -6,23 +6,22 @@
 | **Date** | 2026-02-28 |
 | **Domain** | INFRA |
 | **Applies To** | ADMIN (deployment configuration), ALL (development tooling) |
-| **Related Issues** | #30 (environment profile system), #32 (OTel instrumentation and collector infrastructure) |
-| **Dependencies** | FR-12 ENV (profile-driven service behavior, `ENVIRONMENT` passthrough), FR-11 OBS (OTel Collector and Jaeger service specs) |
+| **Related Issues** | #30 (environment profile system) |
+| **Dependencies** | FR-12 ENV (profile-driven service behavior, `ENVIRONMENT` passthrough) |
 
 ---
 
 ## 1) Scope
 
 ### In Scope
-- Docker Compose orchestration for local development stack (database, backend, frontend, pgadmin)
-- Compose profile-based optional services (E2E testing, Nginx reverse proxy)
+- Docker Compose orchestration for the shared proxy plus profile-specific app stacks
+- Split Compose files for proxy, dev, test, and prod
 - Backend multi-stage Dockerfile (development hot reload, production Gunicorn)
 - Frontend development Dockerfile with hot reload
-- Taskfile task runner providing standardized development workflows (~60 tasks)
+- Taskfile task runner providing standardized development workflows
 - Pre-commit hooks for code quality enforcement (Ruff lint/format, file hygiene, branch guard)
-- Environment variable passthrough from `.env` to Docker services
+- Environment materialization from root `.env` into generated runtime env files
 - Service dependency ordering and health checks
-- OTel Collector and Jaeger services for observability infrastructure (FR-11 OBS)
 - Deployment templates for production/staging environments
 
 ### Out of Scope
@@ -40,7 +39,7 @@
 
 | Role | Type | INFRA domain notes |
 |------|------|-------------------|
-| Developer | Human operator | Runs `task up`, `task test`, `task lint`; uses Docker Compose and Taskfile for local development workflows. |
+| Developer | Human operator | Runs `task up:*`, `task down:*`, `task test*`, and runtime tasks; uses Docker Compose and Taskfile for local development workflows. |
 | CI Pipeline | Automated agent | Executes lint, format, type check, and test tasks. Currently manual via Taskfile; GitHub Actions planned (INFRA-UC-02). |
 | ADMIN | System role | Owns deployment configuration decisions; manages production Docker Compose and `.env` setup. |
 
@@ -58,8 +57,6 @@
 | INFRA-US-02 | CI Pipeline | As a CI pipeline I can run automated tests, linting, and type checking so that code quality is enforced before merging. |
 | INFRA-US-03 | Developer | As a developer I can use Taskfile tasks for standardized workflows so that common operations have consistent, documented entry points. |
 | INFRA-US-04 | Developer | As a developer I can rely on pre-commit hooks to catch quality issues before commit so that CI failures and review cycles are reduced. |
-| INFRA-US-05 | Developer | As a developer I can start observability infrastructure alongside the stack so that I can view distributed traces in Jaeger UI. |
-
 ---
 
 ## 4) Use Cases
@@ -67,7 +64,7 @@
 ### INFRA-UC-01 — Orchestrate Local Development Stack
 
 **Roles:** Developer
-**Trigger:** Developer runs `task up` (or `task up:dev`, `task up:test`, `task up:prod`).
+**Trigger:** Developer runs `task up:dev`, `task up:test`, or `task up:prod`.
 
 **Preconditions:**
 - Docker Desktop or Docker daemon is running.
@@ -75,19 +72,16 @@
 
 **Main Flow:**
 1. Taskfile verifies preconditions (Docker running, `.env` present).
-2. Taskfile sets `ENVIRONMENT` variable to the selected profile (`development`, `testing`, or `production`).
-3. Docker Compose reads `docker-compose.yml` and `.env`.
+2. Taskfile prepares and validates the generated profile env file.
+3. Docker Compose reads the profile-specific compose file and generated env.
 4. Database service starts; healthcheck polls `pg_isready` until ready.
-5. Backend service waits for database healthcheck to pass (`depends_on` with `condition: service_healthy`).
-6. Backend runs startup command sequence: `migrate` → `collectstatic` (production only) → `ensure_admin` → `seed_e2e` (testing only) → `runserver`.
-7. Frontend service starts: checks for required binaries, runs `npm ci` if missing, then `npm run dev`.
-8. pgAdmin starts and auto-registers database server via `servers.json` and `pgpass`.
-9. Taskfile runs `profile_guard.py` to verify backend started with expected profile.
-10. All services running; developer can access frontend (port 3000) and backend API (port 8000).
+5. Backend and frontend wait for dependency healthchecks and become routable through the shared proxy.
+6. Proxy remains the only public entrypoint for browser and SSR traffic.
+7. All services running; developer can access the selected profile through the proxy ports.
 
 **Postconditions:**
 - All core services running and accessible.
-- Database migrated; admin user exists; test fixtures seeded (testing profile only).
+- Database volume preserved; backend and frontend reachable through the proxy.
 
 **Role Coverage:**
 > **INFRA-UC-01-ALL**
@@ -98,22 +92,22 @@
 - Trigger: Docker daemon unavailable
 - Behavior: Taskfile precondition fails with "Docker is not running" message
 
-**INFRA-UC-01-E2** — Missing `.env` file
-- Trigger: `.env` file not found in project root
-- Behavior: Taskfile precondition fails with "Copy .env.template to .env" message
+**INFRA-UC-01-E2** — Missing or uninitialized `.env` file
+- Trigger: `.env` file not found in project root or not yet initialized from `.env.template`
+- Behavior: `task env:local` / `task env:server` creates `.env`; `task env:init` then materializes runtime env files
 
 **INFRA-UC-01-E3** — Port conflict
 - Trigger: Ports 5432, 8000, 3000, or 5050 already in use
 - Behavior: Docker Compose service fails to bind; error in `docker compose logs`
 
-**INFRA-UC-01-E4** — Profile guard mismatch
-- Trigger: Backend started with unexpected `ENVIRONMENT` value
-- Behavior: `profile_guard.py` exits with error listing expected vs. actual profile
+**INFRA-UC-01-E4** — Environment policy validation failure
+- Trigger: Generated runtime env fails policy checks for the selected profile
+- Behavior: `_check:env:<profile>` fails before startup and lists the invalid keys or topology mismatch
 
 **Tests:**
 **Backend Unit:**
 - test_INFRA_UC_01_startup_sequence (startup command sequence executes in correct order)
-- test_INFRA_UC_01_E4_hint_for_admin_email (profile guard detects mismatched profile)
+- test_INFRA_UC_01_E4_env_policy_failure (env validation detects insecure or malformed runtime values)
 
 **Backend Integration:**
 - test_INFRA_UC_01_stack_boot (database, backend, frontend accessible after startup)
@@ -135,7 +129,7 @@
 - Database service available (postgres:17).
 
 **Main Flow:**
-1. CI sets `ENVIRONMENT=testing` and `OTEL_ENABLED=false`.
+1. CI sets `ENVIRONMENT=testing`.
 2. CI installs backend dependencies (`pip install -e ".[dev]"`).
 3. CI runs `ruff check src tests` (linting).
 4. CI runs `ruff format src tests --check` (format verification).
@@ -174,20 +168,18 @@
 - Required services running (task-specific; checked by internal precondition tasks).
 
 **Main Flow:**
-1. Developer runs `task <name>` (e.g., `task test:unit:backend`, `task lint`, `task migrate`).
+1. Developer runs `task <name>` (e.g., `task up:dev`, `task test:backend`, `task status:test`).
 2. Taskfile evaluates preconditions (Docker running, backend container up, correct profile, etc.).
 3. Taskfile executes command inside appropriate container via `docker compose exec`.
 4. Output displayed to developer.
 
 **Task Categories:**
-- **Profiles:** `up`, `up:dev`, `up:test`, `up:prod`, `down`
-- **Overlays:** `otel`, `otel:off`, `proxy`, `proxy:off`, `debug`
-- **Testing:** `test`, `test:unit:backend`, `test:unit:frontend`, `test:integration:backend`, `test:integration:role`, `test:security`, `test:coverage`, `test:coverage:fr`, `test:e2e`
-- **Quality:** `check`, `lint`, `lint:fix`, `format`, `format:check`, `typecheck`, `check:env`
-- **Docker:** `docker:logs`, `docker:shell`, `docker:db-shell`, `docker:rebuild`, `docker:clean`
-- **Django:** `migrate`, `makemigrations`, `django:shell`, `seed:account`
-- **Docs:** `docs`, `docs:schema`, `diagrams:generate`
-- **Local:** `local:venv`, `local:sync`
+- **Env:** `env:local`, `env:server`, `env:init`
+- **Profiles:** `up:dev`, `up:test`, `up:prod`, `down:dev`, `down:test`, `down:prod`
+- **Runtime:** `status:*`, `logs:*`, `restart:*`, `rebuild:*`
+- **Testing:** `test`, `test:backend`, `test:frontend`
+- **Seeding:** `seed:account -- <role> [--profile dev|test]`, `seed:data -- [--profile dev|test]`
+- **Dangerous:** `task destroy:all` with interactive confirmation
 
 **Postconditions:**
 - Requested task executed; output visible to developer.
@@ -252,45 +244,12 @@
 
 ---
 
-### INFRA-UC-05 — Provision Observability Infrastructure
+### INFRA-UC-05 — Deferred Optional Tooling
 
 **Roles:** Developer
-**Trigger:** Developer runs `task otel` to enable tracing on a running stack.
+**Trigger:** Team chooses to reintroduce additional runtime tooling in the future.
 
-**Preconditions:**
-- Stack running (`task up:dev` or `task up:test`).
-- Backend container accessible.
-
-**Main Flow:**
-1. Taskfile resolves current profile from running backend container.
-2. Taskfile creates trace output directory (`Docs/diagrams/otel/`).
-3. Taskfile restarts backend with `OTEL_ENABLED=true`, preserving current profile.
-4. Backend `configure_tracing()` activates OTel instrumentation (FR-11 OBS-UC-01).
-5. OTel Collector receives spans from backend via OTLP/HTTP.
-6. Collector forwards traces to Jaeger.
-7. `profile_guard.py` verifies backend restarted with expected profile.
-8. Traces visible in Jaeger UI at `http://localhost:16686`.
-
-**Postconditions:**
-- Backend exporting spans to collector and/or JSONL trace file.
-- Jaeger UI available for trace visualization.
-
-**Role Coverage:**
-> **INFRA-UC-05-ALL**
-> - Developer tooling; identical for all roles.
-
-**Errors:**
-**INFRA-UC-05-E1** — Collector service not running
-- Trigger: OTel Collector container not started or unhealthy
-- Behavior: Backend starts but OTLP export fails silently; file export continues (FR-11 OBS-CN-03)
-
-**Tests:**
-**Backend Integration:**
-- test_INFRA_UC_05_otel_toggle (tracing activates/deactivates via `task otel`/`task otel:off`)
-
-**System Tests (Black Box):**
-- ST-INFRA-UC-05 (traces appear in Jaeger after `task otel` and API requests)
-- ST-INFRA-UC-05-E1 (backend starts gracefully without collector)
+**Current State:** OTEL, Jaeger, and browser E2E containers were removed from the active runtime model. They remain deferred until rebuilt intentionally against the new task and compose contract.
 
 ---
 
@@ -306,8 +265,7 @@
 
 ### INFRA-CN-02 — Postgres Version Consistency
 - All Docker Compose files and deployment templates must use the same Postgres major version.
-- Current: `docker-compose.yml` uses `postgres:17-alpine`; deployment templates use `postgres:15`.
-- Target: sync all to `postgres:17-alpine`.
+- Current target: `postgres:17-alpine`.
 - **Applies to:** INFRA-UC-01, INFRA-UC-02
 - **Implements:** NFR-OPS-06 (Infrastructure Version Consistency)
 
@@ -336,7 +294,7 @@
 
 ### INFRA-CN-06 — CI Required Checks
 - CI pipeline must run: `ruff check` (lint), `ruff format --check` (format), `pytest --cov` (tests with coverage).
-- CI must set `ENVIRONMENT=testing` and `OTEL_ENABLED=false`.
+- CI must set `ENVIRONMENT=testing`.
 - CI must use `postgres:17` for database service.
 - All checks must pass before PR merge is allowed.
 - Coverage threshold: warning at <80%.
@@ -344,34 +302,28 @@
 - **Implements:** NFR-MAINT-02 (Automated Quality Gates)
 
 ### INFRA-CN-07 — Docker Image Pinning
-- Core services must pin explicit image tags; `:latest` is prohibited for database and E2E images.
-- Current pins: `postgres:17-alpine`, `mcr.microsoft.com/playwright:v1.57.0-jammy`, `python:3.12-slim`.
-- pgAdmin uses `dpage/pgadmin4:latest` (acceptable for development-only tooling).
-- Nginx uses `nginx:latest` (acceptable for development proxy; production must pin).
-- OTel Collector and Jaeger images must be pinned to specific versions (FR-11 OBS-CN-09 specifies `otel/opentelemetry-collector-contrib:0.120.0` and `jaegertracing/all-in-one:1.65`).
+- Core services must pin explicit image tags; `:latest` is prohibited for core runtime images.
+- Current pins: `postgres:17-alpine`, `nginx:1.27-alpine`, and the repo Dockerfiles for backend/frontend.
 - **Applies to:** INFRA-UC-01, INFRA-UC-05
 - **Implements:** NFR-OPS-07 (Reproducible Builds)
 
 ### INFRA-CN-08 — Multi-stage Build
-- Backend Dockerfile uses multi-stage build: builder stage installs all dependencies; production stage copies only runtime artifacts.
-- Production image runs as non-root user (`django:django`).
-- Production uses Gunicorn WSGI server; development overrides to Django `runserver` via docker-compose.yml command.
-- Static files collected only in production (`collectstatic --noinput`).
+- Backend Dockerfile uses a production-ready image with explicit dev/test overrides in compose.
+- Production image runs with production settings; development overrides to Django `runserver` via `compose.dev.yml`.
+- Static files are served behind the shared proxy and routed explicitly.
 - **Applies to:** INFRA-UC-01
 - **Implements:** NFR-SEC-07 (Container Security)
 
-### INFRA-CN-09 — Compose Profile-based Service Activation
-- Optional services use Docker Compose profiles to avoid starting by default.
-- `e2e` profile: `frontend-e2e` (Playwright) container for E2E testing.
-- `proxy` profile: Nginx reverse proxy for production-like routing.
-- Core services (database, backend, frontend, pgadmin) start without profile flags.
+### INFRA-CN-09 — Separate Compose Stacks By Profile
+- Runtime stacks use separate compose files for `proxy`, `dev`, `test`, and `prod`.
+- Optional tooling is not started by default and must be reintroduced intentionally in future work.
+- Core services for app profiles are `db`, `backend`, and `frontend`; the shared `proxy` stack owns public ingress.
 - **Applies to:** INFRA-UC-01
 
 ### INFRA-CN-10 — Taskfile Precondition Checks
 - All Taskfile tasks that require Docker must verify Docker daemon is running (`_check:docker`).
-- Tasks requiring running services must verify container status (`_check:backend-running`, `_check:frontend-running`).
-- Integration and E2E tests must verify `ENVIRONMENT=testing` (`_check:testing-profile`).
-- OTel overlay tasks must verify profile is resolvable from running backend (`_check:profile-resolvable`).
+- Env-sensitive tasks must prepare and validate generated runtime env files before startup.
+- Test tasks must ensure the testing stack is up and healthy before execution.
 - Precondition failures must produce clear, actionable error messages.
 - **Applies to:** INFRA-UC-03
 - **Implements:** NFR-MAINT-03 (Developer Experience)
@@ -386,46 +338,35 @@ INFRA has no user-facing REST API endpoints. All behavior is Docker Compose orch
 
 | Service | Image | Ports | Profile | Purpose |
 |---------|-------|-------|---------|---------|
-| `database` | `postgres:17-alpine` | (internal) | default | PostgreSQL database with healthcheck |
-| `backend` | Built from `backend/Dockerfile` | `8000` | default | Django REST API with hot reload |
-| `frontend` | Built from `frontend/Dockerfile.dev` | `3000` | default | Next.js dev server with hot reload |
-| `pgadmin` | `dpage/pgadmin4:latest` | `5050` | default | Database management UI |
-| `frontend-e2e` | `mcr.microsoft.com/playwright:v1.57.0-jammy` | (none) | `e2e` | Playwright E2E test runner |
-| `nginx` | `nginx:latest` | `80` | `proxy` | Reverse proxy |
-| `otel-collector` | `otel/opentelemetry-collector-contrib:0.120.0` | `4317`, `4318` | default | OTel span receiver (to be added) |
-| `jaeger` | `jaegertracing/all-in-one:1.65` | `16686` | default | Trace visualization UI (to be added) |
+| `proxy` | `nginx:1.27-alpine` | `80`, `443`, `8080`, `8443`, `9080`, `9443` | proxy | Shared ingress and routing for dev/test/prod |
+| `db` | `postgres:17-alpine` | (internal) | dev/test/prod | PostgreSQL database with healthcheck |
+| `backend` | Built from `backend/Dockerfile` | `8000` | dev/test/prod | Django REST API |
+| `frontend` | Built from `frontend/Dockerfile*` | `3000` | dev/test/prod | Next.js frontend |
 
 ### Docker Volumes
 
 | Volume | Purpose |
 |--------|---------|
-| `postgres_data` | Persistent database storage |
+| `eelab-*-db-data` | Persistent profile-scoped database storage |
+| `eelab-*-media-data` | Persistent profile-scoped media storage |
+| `eelab-*-artifact-data` | Persistent profile-scoped artifact storage |
 | `frontend_node_modules` | Persistent node_modules across container restarts |
 | `frontend_npm_cache` | Persistent npm cache to reduce download time |
-| `playwright_node_modules` | Persistent node_modules for E2E container |
 
 ### Network
 
-Single bridge network: `eel-network`. All services communicate via service names as DNS hostnames.
-
-### Backend Startup Command Sequence
-
-```
-migrate → collectstatic (production only) → ensure_admin → seed_e2e (testing only) → runserver
-```
+Shared proxy network: `eelab-proxy`. Each profile stack also owns a private app network (`eelab-dev-app`, `eelab-test-app`, `eelab-prod-app`) so services remain isolated while still being routable through the shared proxy.
 
 ### Taskfile Task Summary
 
 | Category | Count | Key Tasks |
 |----------|-------|-----------|
-| Profiles | 5 | `up`, `up:dev`, `up:test`, `up:prod`, `down` |
-| Overlays | 5 | `otel`, `otel:off`, `proxy`, `proxy:off`, `debug` |
-| Testing | ~18 | `test`, `test:unit:*`, `test:integration:*`, `test:security`, `test:coverage:*`, `test:e2e` |
-| Quality | 7 | `check`, `lint`, `lint:fix`, `format`, `format:check`, `typecheck`, `check:env` |
-| Docker | ~10 | `docker:logs`, `docker:shell`, `docker:rebuild`, `docker:clean` |
-| Django | ~7 | `migrate`, `makemigrations`, `django:shell`, `seed:account` |
-| Docs | 4 | `docs`, `docs:schema`, `diagrams:generate`, `diagrams:index` |
-| Local | 2 | `local:venv`, `local:sync` |
+| Profiles | 6 | `up:*`, `down:*` |
+| Runtime | 12 | `status:*`, `logs:*`, `restart:*`, `rebuild:*` |
+| Testing | 3 | `test`, `test:backend`, `test:frontend` |
+| Env | 3 | `env:local`, `env:server`, `env:init` |
+| Docs | 0 | Documentation is maintained directly in the repo; no public docs tasks are part of the retained task surface |
+| Safety | 1 | `destroy:all` |
 
 ---
 
@@ -436,15 +377,13 @@ INFRA errors are operational. They manifest as Docker Compose failures, Taskfile
 | Scenario | Behavior | Source |
 |----------|----------|--------|
 | Docker daemon not running | Taskfile precondition fails with "Docker is not running" | INFRA-UC-01-E1 |
-| `.env` file missing | Taskfile precondition fails with "Copy .env.template" | INFRA-UC-01-E2 |
+| `.env` file missing | `task env:local` / `task env:server` creates `.env`, then `task env:init` materializes runtime envs | INFRA-UC-01-E2 |
 | Port already in use | Docker Compose service fails to bind; visible in logs | INFRA-UC-01-E3 |
-| Profile guard mismatch | `profile_guard.py` exits with expected vs. actual profile | INFRA-UC-01-E4 |
+| Environment policy mismatch | `_check:env:<profile>` fails before startup and lists invalid values | INFRA-UC-01-E4 |
 | CI check failure | CI exits non-zero; PR merge blocked | INFRA-UC-02-E1 |
 | Taskfile precondition failure | Clear error message (service not running, wrong profile) | INFRA-UC-03-E1 |
 | Pre-commit hook modifies files | Commit aborted; developer re-stages and commits | INFRA-UC-04-E1 |
 | Direct commit to master/main | Commit rejected by branch guard | INFRA-UC-04-E2 |
-| OTel Collector not running | Backend starts; OTLP export fails silently; file export continues | INFRA-UC-05-E1 |
-
 ---
 
 ## 8) Test Strategy by Layer
@@ -459,16 +398,14 @@ INFRA errors are operational. They manifest as Docker Compose failures, Taskfile
 
 ### Backend Unit
 
-- Startup command sequence: `migrate`, `ensure_admin`, `seed_e2e` execute in correct order with correct profile guards.
-- Profile guard: detects mismatched `ENVIRONMENT` between Taskfile expectation and running backend.
+- Startup command sequence remains non-destructive and profile-scoped.
 - Precondition checks: internal Taskfile validation tasks detect missing services and wrong profiles.
 - Constraint coverage: INFRA-CN-01 (dependency ordering), INFRA-CN-03 (env passthrough), INFRA-CN-10 (precondition checks).
 
 ### Backend Integration
 
 - Stack boot: full `task up:dev` produces accessible database, backend, and frontend.
-- OTel toggle: `task otel` activates tracing; `task otel:off` deactivates; profile preserved across toggle.
-- Profile-aware startup: `task up:test` seeds E2E fixtures; `task up:dev` does not.
+- Profile-aware startup: `task up:test` and `task up:dev` remain isolated but non-destructive.
 - Hot reload: backend code changes reflected without container restart.
 
 ### System Tests (Black Box)
@@ -479,7 +416,6 @@ INFRA errors are operational. They manifest as Docker Compose failures, Taskfile
 - ST-INFRA-UC-03 (task commands execute against running stack)
 - ST-INFRA-UC-04 (pre-commit hooks catch lint errors on commit)
 - ST-INFRA-UC-04-E2 (branch guard blocks commit to master)
-- ST-INFRA-UC-05 (traces visible in Jaeger after `task otel`)
 
 ---
 
@@ -511,9 +447,7 @@ INFRA errors are operational. They manifest as Docker Compose failures, Taskfile
 | FR | Reference | Notes |
 |----|-----------|-------|
 | FR-01 AUTH | OAuth env vars passed to backend and frontend | Docker Compose passes `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID` to backend and frontend services. |
-| FR-04 USER | `seed_e2e` creates test users | Backend startup command runs `seed_e2e` in testing profile to create deterministic test users (ENV-UC-04). |
-| FR-11 OBS | OTel Collector and Jaeger services | FR-11 defines service specs (`otel-collector:0.120.0`, `jaeger:1.65`) and collector config. FR-13 hosts them in `docker-compose.yml`. `task otel` overlay enables tracing on running backend. |
-| FR-12 ENV | `ENVIRONMENT` passthrough and profile tasks | FR-12 defines the profile system; FR-13 passes `ENVIRONMENT` via Docker Compose and Taskfile. Profile tasks (`up:dev/test/prod`) and `profile_guard.py` enforce explicit profile selection (ENV-CN-12). |
+| FR-12 ENV | `ENVIRONMENT` passthrough and profile tasks | FR-12 defines the profile system; FR-13 passes `ENVIRONMENT` via generated runtime env files and Taskfile. Profile tasks (`up:dev/test/prod`) and `_check:env:<profile>` enforce explicit profile selection and policy validation. |
 
 ---
 
@@ -521,12 +455,10 @@ INFRA errors are operational. They manifest as Docker Compose failures, Taskfile
 
 All FR-13 infrastructure contracts are implemented. Status by area:
 
-1. **Docker Compose — DONE.** `docker-compose.yml` defines 8 services: database, backend, frontend, pgadmin, otel-collector, jaeger, frontend-e2e (e2e profile), nginx (proxy profile). Named volumes for `node_modules` and persistent data. Backend multi-stage Dockerfile with non-root production user. `ENVIRONMENT` passthrough wired (`ENVIRONMENT=${ENVIRONMENT:-development}`). Infrastructure config files mounted read-only into backend for contract tests.
-2. **OTel services — DONE.** `otel-collector` (`otel/opentelemetry-collector-contrib:0.120.0`, ports 4317/4318) and `jaeger` (`jaegertracing/all-in-one:1.65`, port 16686) added as default-profile services. `otel-collector-config.yaml` defines OTLP receiver → batch processor → Jaeger OTLP exporter pipeline. Backend OTLP endpoint defaults to `http://otel-collector:4318/v1/traces` in Docker context. `task otel` enables backend tracing; collector/Jaeger are always available.
-3. **Taskfile — DONE.** `Taskfile.yml` (~921 lines) provides ~60 tasks across 8 categories. All profile, overlay, testing, quality, Docker, Django, docs, and local tasks operational.
-4. **Pre-commit hooks — DONE.** `.pre-commit-config.yaml` configures Ruff lint/format (scoped to `^backend/`), file hygiene (large file guard, trailing whitespace, EOF newline, YAML/TOML check), and branch guard (`master`/`main`). mypy disabled pending DTO work (issues #3, #4).
-5. **Postgres version consistency — DONE.** All compose files and deployment templates use `postgres:17-alpine` (INFRA-CN-02).
-6. **GitHub Actions CI — DEFERRED.** `.github/workflows/` does not exist. CI is manual via Taskfile. GitHub Actions is documented as future work per INFRA-UC-02 scope note. No blocker for current development workflow.
-7. **E2E infrastructure — DONE.** `frontend-e2e` service uses Playwright `v1.57.0-jammy` image under `e2e` compose profile.
-8. **Deployment templates — DONE.** `Deployment/templates/` compose templates updated: `postgres:17-alpine`, `ENVIRONMENT` passthrough added to backend service environment in both production and dev templates.
-9. **Infrastructure contract tests — DONE.** 48 FR-traceable tests in `backend/tests/unit/test_infrastructure_contracts.py` covering INFRA-UC-01, INFRA-UC-01-E4, INFRA-UC-05, INFRA-CN-01 through CN-10.
+1. **Docker Compose — DONE.** Runtime is split into `docker/compose.proxy.yml`, `docker/compose.dev.yml`, `docker/compose.test.yml`, and `docker/compose.prod.yml`. Named volumes and networks are explicit and profile-scoped.
+2. **Taskfile — DONE.** Public tasks are limited to env bootstrap, profile up/down, runtime inspection, testing, and one destructive reset command.
+3. **Pre-commit hooks — DONE.** `.pre-commit-config.yaml` configures Ruff lint/format (scoped to `^backend/`), file hygiene (large file guard, trailing whitespace, EOF newline, YAML/TOML check), and branch guard (`master`/`main`). mypy disabled pending DTO work (issues #3, #4).
+4. **Postgres version consistency — DONE.** All compose files and deployment templates use `postgres:17-alpine` (INFRA-CN-02).
+5. **GitHub Actions CI — DEFERRED.** `.github/workflows/` does not exist. CI is manual via Taskfile. GitHub Actions is documented as future work per INFRA-UC-02 scope note. No blocker for current development workflow.
+6. **Deployment templates — DONE.** `Deployment/templates/` mirror the shared proxy plus split dev/test/prod compose model. Traefik-era templates were removed.
+7. **Infrastructure contract tests — DONE.** FR-traceable tests in `backend/tests/unit/test_infrastructure_contracts.py` validate the rebuilt task and compose surface.

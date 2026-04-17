@@ -6,8 +6,20 @@ export type SubmissionStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'SUBMITTED' | 'GR
 
 export type AnswerPayload = {
   questionId: number;
-  type: 'MULTIPLE_CHOICE' | 'SHORT_ANSWER' | 'NUMBER_SCALE';
-  data: { selected?: number[]; text?: string; val?: number | null };
+  type: 'MULTIPLE_CHOICE' | 'SHORT_ANSWER' | 'NUMBER_SCALE' | 'MOOD_METER' | 'FILE_UPLOAD';
+  data: {
+    selected?: number[];
+    text?: string;
+    val?: number | null;
+    quadrant?: string;
+    moodName?: string;
+    row?: number;
+    col?: number;
+    storageKey?: string;
+    originalFilename?: string;
+    mimeType?: string;
+    sizeBytes?: number;
+  };
   score?: number | null;
 };
 
@@ -25,6 +37,9 @@ export type SubmissionDTO = {
 export type SubmissionCompactDTO = {
   id: number;
   assignmentId: number;
+  studentName: string | null;
+  courseName: string | null;
+  assignmentTitle: string | null;
   submittedAt: string | null;
   score: number | null;
   status: SubmissionStatus;
@@ -90,28 +105,34 @@ export async function getSubmission(submissionId: number): Promise<SubmissionDTO
 /** GET /submissions/me — List the current user's own submissions (compact, no answers). */
 export async function listMySubmissions(
   status?: SubmissionStatus,
-): Promise<Paginated<SubmissionCompactDTO> | SubmissionCompactDTO[]> {
+): Promise<SubmissionCompactDTO[]> {
   const params = new URLSearchParams();
   if (status) params.set('status', status);
   const qs = params.toString();
-  const { data } = await api.get(`/submissions/me${qs ? `?${qs}` : ''}`);
-  return data;
+  const { data } = await api.get<Paginated<SubmissionCompactDTO> | SubmissionCompactDTO[]>(
+    `/submissions/me${qs ? `?${qs}` : ''}`,
+  );
+  return Array.isArray(data) ? data : data.results;
 }
 
 /** GET /assignments/:aid/submissions — List all submissions for an assignment (compact). */
 export async function listAssignmentSubmissions(
   assignmentId: number,
-): Promise<Paginated<SubmissionCompactDTO> | SubmissionCompactDTO[]> {
-  const { data } = await api.get(`/assignments/${assignmentId}/submissions`);
-  return data;
+): Promise<SubmissionCompactDTO[]> {
+  const { data } = await api.get<Paginated<SubmissionCompactDTO> | SubmissionCompactDTO[]>(
+    `/assignments/${assignmentId}/submissions`,
+  );
+  return Array.isArray(data) ? data : data.results;
 }
 
 /** GET /students/:sid/submissions/ — List all submissions by a specific student (compact). */
 export async function listStudentSubmissions(
   studentId: number,
-): Promise<Paginated<SubmissionCompactDTO> | SubmissionCompactDTO[]> {
-  const { data } = await api.get(`/students/${studentId}/submissions/`);
-  return data;
+): Promise<SubmissionCompactDTO[]> {
+  const { data } = await api.get<Paginated<SubmissionCompactDTO> | SubmissionCompactDTO[]>(
+    `/students/${studentId}/submissions/`,
+  );
+  return Array.isArray(data) ? data : data.results;
 }
 
 /** PATCH /submissions/:id/override-score — Teacher override of per-question scores. */
@@ -121,4 +142,49 @@ export async function overrideSubmissionScore(
 ): Promise<SubmissionDTO> {
   const { data } = await api.patch(`/submissions/${submissionId}/override-score`, scores);
   return data;
+}
+
+// -- Submission Image APIs --
+
+export type SubmissionImageDTO = {
+  id: string;
+  originalFilename: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedByUserId: number | null;
+  status: string;
+  createdAt: string;
+};
+
+/** POST /submissions/:id/images — Upload an image to a submission. */
+export async function uploadSubmissionImage(
+  submissionId: number,
+  file: File,
+): Promise<SubmissionImageDTO> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const { data } = await api.post<SubmissionImageDTO>(
+    `/submissions/${submissionId}/images`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return data;
+}
+
+/** GET /submissions/:id/images — List all READY images for a submission. */
+export async function listSubmissionImages(
+  submissionId: number,
+): Promise<SubmissionImageDTO[]> {
+  const { data } = await api.get<SubmissionImageDTO[]>(
+    `/submissions/${submissionId}/images`,
+  );
+  return data;
+}
+
+/** DELETE /submissions/:id/images/:imageId — Soft-delete a submission image. */
+export async function deleteSubmissionImage(
+  submissionId: number,
+  imageId: string,
+): Promise<void> {
+  await api.delete(`/submissions/${submissionId}/images/${imageId}`);
 }

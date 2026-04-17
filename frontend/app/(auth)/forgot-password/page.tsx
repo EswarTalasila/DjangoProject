@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PasswordStrengthChecklist } from "@/components/ui/password-strength-checklist";
+import { toErrorMessage } from "@/lib/utils";
 
 const validateSchema = z.object({
   identifier: z.string().trim().min(1, "Identifier is required"),
@@ -38,7 +39,6 @@ const resetSchema = z
 
 type ValidateForm = z.infer<typeof validateSchema>;
 type ResetForm = z.infer<typeof resetSchema>;
-type ApiError = { response?: { data?: { detail?: string } } };
 
 export default function ForgotPasswordPage() {
   const [step, setStep] = useState<"VALIDATE" | "RESET">("VALIDATE");
@@ -67,8 +67,7 @@ export default function ForgotPasswordPage() {
       setValidatedResetCode(data.resetCode);
       setStep("RESET");
     } catch (error: unknown) {
-      const detail = (error as ApiError).response?.data?.detail;
-      setGeneralError(detail || "Invalid or expired reset code.");
+      setGeneralError(toErrorMessage(error, "Invalid or expired reset code."));
     } finally {
       setIsLoading(false);
     }
@@ -94,8 +93,7 @@ export default function ForgotPasswordPage() {
       setIsSuccess(true);
       toast.success("Password reset successful.");
     } catch (error: unknown) {
-      const detail = (error as ApiError).response?.data?.detail;
-      setGeneralError(detail || "Password reset failed.");
+      setGeneralError(toErrorMessage(error, "Password reset failed."));
     } finally {
       setIsLoading(false);
     }

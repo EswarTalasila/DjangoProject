@@ -43,8 +43,9 @@ const summaryData = {
   generatedAt: "2026-03-01T10:00:00Z",
   filters: { startDate: null, endDate: null },
   assignmentId: 10,
-  assessmentTitle: "Midterm Exam",
-  assessmentCategory: "EXAM",
+  assignmentTitle: "Period 2 Midterm",
+  assignmentTemplateTitle: "Midterm Exam",
+  assignmentTemplateCategory: "EXAM",
   totalStudents: 30,
   submittedCount: 25,
   gradedCount: 20,
@@ -67,23 +68,23 @@ describe("VizAssignmentSummaryView (assignment-summary-view)", () => {
     vi.clearAllMocks();
   });
 
-  it("renders assessment title as heading", async () => {
+  it("renders assignment title as heading", async () => {
     mockFetchAssignmentSummary.mockResolvedValueOnce(summaryData);
     const Component = await loadComponent();
     render(<Component assignmentId={10} role="TEACHER" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Midterm Exam")).toBeInTheDocument();
+      expect(screen.getByText("Period 2 Midterm")).toBeInTheDocument();
     });
   });
 
-  it("renders category as subtitle", async () => {
+  it("renders template title and category as subtitle", async () => {
     mockFetchAssignmentSummary.mockResolvedValueOnce(summaryData);
     const Component = await loadComponent();
     render(<Component assignmentId={10} role="TEACHER" />);
 
     await waitFor(() => {
-      expect(screen.getByText("EXAM")).toBeInTheDocument();
+      expect(screen.getByText("Midterm Exam · EXAM")).toBeInTheDocument();
     });
   });
 
@@ -109,10 +110,10 @@ describe("VizAssignmentSummaryView (assignment-summary-view)", () => {
     });
   });
 
-  it("shows fallback heading when assessmentTitle is missing", async () => {
+  it("shows fallback heading when assignmentTitle is missing", async () => {
     mockFetchAssignmentSummary.mockResolvedValueOnce({
       ...summaryData,
-      assessmentTitle: undefined,
+      assignmentTitle: undefined,
     });
     const Component = await loadComponent();
     render(<Component assignmentId={10} role="TEACHER" />);

@@ -59,7 +59,7 @@ class TestCreateView:
         fake_assignment = SimpleNamespace(id=1)
         mock_create.return_value = fake_assignment
         dto = AssignmentDTO(
-            id=1, title="Test Assignment", assessmentId=10,
+            id=1, title="Test Assignment", assignmentTemplateId=10,
             audienceType=AudienceType.COURSE,
             courseId=20, targetTeacherId=None, openAt=now, dueAt=None,
             status="ACTIVE",
@@ -71,7 +71,8 @@ class TestCreateView:
             "post",
             "/api/v1/assignments",
             data={
-                "assessmentId": 10,
+                "title": "Week 1 Intro Check-in",
+                "assignmentTemplateId": 10,
                 "audienceType": "COURSE",
                 "courseId": 20,
                 "openAt": "2025-06-01T00:00:00Z",
@@ -82,7 +83,7 @@ class TestCreateView:
         response = create(request)
 
         assert response.status_code == status.HTTP_201_CREATED
-        assert response.data["assessmentId"] == 10
+        assert response.data["assignmentTemplateId"] == 10
 
     @patch(
         "assignments.views.create_assignment",
@@ -98,7 +99,8 @@ class TestCreateView:
             "post",
             "/api/v1/assignments",
             data={
-                "assessmentId": 10,
+                "title": "Week 1 Intro Check-in",
+                "assignmentTemplateId": 10,
                 "audienceType": "COURSE",
                 "openAt": "2025-06-01T00:00:00Z",
             },
@@ -159,13 +161,13 @@ class TestDetailView:
         now = datetime(2025, 6, 1, tzinfo=UTC)
         fake_course = SimpleNamespace(id=20)
         fake_assignment = SimpleNamespace(
-            id=1, assessment_id=10, audience_type="COURSE",
+            id=1, assignment_template_id=10, audience_type="COURSE",
             course_id=20, course=fake_course, teacher_id=None,
             open_at=now, due_at=None,
         )
         mock_get.return_value = fake_assignment
         dto = AssignmentDTO(
-            id=1, title="Test", assessmentId=10, audienceType="COURSE",
+            id=1, title="Test", assignmentTemplateId=10, audienceType="COURSE",
             courseId=20, targetTeacherId=None, openAt=now, dueAt=None,
             status="ACTIVE",
         )
@@ -224,18 +226,40 @@ class TestDetailView:
     def test_delete_without_purge_returns_409(
         self, mock_perm, mock_get
     ):
-        """DELETE without ?purge=true returns 409 (use archive instead)."""
+        """DELETE without ?purge=true returns 409 and points callers to archive/purge flow."""
         from assignments.views import detail
 
-        fake_assignment = SimpleNamespace(id=1, status="ACTIVE")
+        fake_assignment = SimpleNamespace(id=1, status="ACTIVE", created_by_id=99)
         mock_get.return_value = fake_assignment
 
         user = MagicMock(is_authenticated=True, is_staff=False)
+        user.id = 99
         request = _authed_request("delete", "/api/v1/assignments/1", user=user)
 
         response = detail(request, assignment_id=1)
 
         assert response.status_code == status.HTTP_409_CONFLICT
+        assert "archive" in response.data["detail"].lower()
+
+    @patch("assignments.views.get_assignment")
+    @patch("assignments.views.IsAuthenticated.has_permission", return_value=True)
+    def test_delete_archived_without_purge_returns_409_with_purge_guidance(
+        self, mock_perm, mock_get
+    ):
+        """Archived DELETE without purge stays blocked and points callers to purge."""
+        from assignments.views import detail
+
+        fake_assignment = SimpleNamespace(id=1, status="ARCHIVED", created_by_id=99)
+        mock_get.return_value = fake_assignment
+
+        user = MagicMock(is_authenticated=True, is_staff=False)
+        user.id = 99
+        request = _authed_request("delete", "/api/v1/assignments/1", user=user)
+
+        response = detail(request, assignment_id=1)
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert "purge=true" in response.data["detail"].lower()
 
 
 # ---------------------------------------------------------------------------

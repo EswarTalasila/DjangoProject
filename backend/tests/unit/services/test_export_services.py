@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, PropertyMock
 
 import pytest
+from django.core.exceptions import ObjectDoesNotExist
 
 pytestmark = pytest.mark.unit
 
@@ -72,10 +73,10 @@ def _submission(student_id=10, student_name="Alice", student_username="alice",
 
     sub.assignment_id = assignment_id
     sub.assignment = MagicMock()
-    sub.assignment.assessment = MagicMock()
-    sub.assignment.assessment.title = assessment_title
-    sub.assignment.assessment.category = assessment_category
-    sub.assignment.assessment.grading_mode = grading_mode
+    sub.assignment.assignment_template = MagicMock()
+    sub.assignment.assignment_template.title = assessment_title
+    sub.assignment.assignment_template.category = assessment_category
+    sub.assignment.assignment_template.grading_mode = grading_mode
     sub.status = status
     sub.score = score
     sub.submitted_at = submitted_at
@@ -231,18 +232,22 @@ class TestAnswerValue:
     def test_multiple_choice(self):
         """Extracts selected indices from a multiple choice answer."""
         from exports.services import _answer_value
+        from types import SimpleNamespace
         answer = MagicMock()
         answer.answer_type = "MULTIPLE_CHOICE"
-        answer.multiple_choice.selected.values_list.return_value = [0, 2]
+        answer.multiple_choice.selected.all.return_value = [
+            SimpleNamespace(choice_index=0), SimpleNamespace(choice_index=2),
+        ]
         result = _answer_value(answer)
         assert result == {"selected": [0, 2]}
 
     def test_multiple_choice_exception(self):
-        """Returns empty dict when multiple choice extraction raises an exception."""
+        """Returns empty dict when multiple choice sub-record is missing."""
         from exports.services import _answer_value
         answer = MagicMock()
         answer.answer_type = "MULTIPLE_CHOICE"
-        answer.multiple_choice.selected.values_list.side_effect = Exception("err")
+        answer.id = 99
+        answer.multiple_choice.selected.all.side_effect = ObjectDoesNotExist("err")
         result = _answer_value(answer)
         assert result == {}
 
@@ -256,11 +261,12 @@ class TestAnswerValue:
         assert result == {"text": "My answer"}
 
     def test_short_answer_exception(self):
-        """Returns empty dict when short answer extraction raises an exception."""
+        """Returns empty dict when short answer sub-record is missing."""
         from exports.services import _answer_value
         answer = MagicMock()
         answer.answer_type = "SHORT_ANSWER"
-        type(answer).short_answer = PropertyMock(side_effect=Exception("err"))
+        answer.id = 99
+        type(answer).short_answer = PropertyMock(side_effect=ObjectDoesNotExist("err"))
         result = _answer_value(answer)
         assert result == {}
 
@@ -274,11 +280,12 @@ class TestAnswerValue:
         assert result == {"val": 7}
 
     def test_number_scale_exception(self):
-        """Returns empty dict when number scale extraction raises an exception."""
+        """Returns empty dict when number scale sub-record is missing."""
         from exports.services import _answer_value
         answer = MagicMock()
         answer.answer_type = "NUMBER_SCALE"
-        type(answer).number_scale = PropertyMock(side_effect=Exception("err"))
+        answer.id = 99
+        type(answer).number_scale = PropertyMock(side_effect=ObjectDoesNotExist("err"))
         result = _answer_value(answer)
         assert result == {}
 
@@ -482,7 +489,7 @@ class TestExportCourseSubmissions:
             start_date="2025-01-01",
             end_date="2025-12-31",
             category="FORMATIVE",
-            assessment_id=5,
+            assignment_template_id=5,
             assignment_id=10,
             status_filter="SUBMITTED",
             identifiable=True,
@@ -558,8 +565,8 @@ class TestExportCourseSubmissions:
         mock_qs.filter.return_value = mock_qs
 
         sub = _submission()
-        # Make student_profile raise an exception
-        type(sub.student).student_profile = PropertyMock(side_effect=Exception("no profile"))
+        # Make student_profile raise ObjectDoesNotExist (simulates RelatedObjectDoesNotExist)
+        type(sub.student).student_profile = PropertyMock(side_effect=ObjectDoesNotExist("no profile"))
         mock_qs.iterator.return_value = [sub]
 
         user = _user()

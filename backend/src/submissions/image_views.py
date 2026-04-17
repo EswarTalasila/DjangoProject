@@ -11,6 +11,7 @@ from rest_framework.response import Response
 
 from accounts.models import Role
 from core.audit import complete_audit, get_client_ip, log_audit
+from core.media.storage import get_storage_backend
 from core.models import AuditAction, AuditOutcome
 from core.permissions import primary_role
 
@@ -180,7 +181,7 @@ def retrieve_or_delete_image(request, submission_id: int, image_id):
 
 
 def _handle_retrieve(request, submission_id: int, image_id):
-    """IMG-UC-03: Serve image via X-Accel-Redirect (or direct in test)."""
+    """IMG-UC-03: Stream a protected submission image from backend storage."""
     submission = _get_submission_with_assignment(submission_id)
     if not submission:
         return Response(
@@ -201,9 +202,16 @@ def _handle_retrieve(request, submission_id: int, image_id):
             {"detail": "Image not found"}, status=status.HTTP_404_NOT_FOUND
         )
 
-    # Build response with X-Accel-Redirect for Nginx (IMG-CN-11)
-    response = HttpResponse(status=200, content_type=image.mime_type)
-    response["X-Accel-Redirect"] = f"/internal/media/{image.storage_key}"
+    backend = get_storage_backend()
+    try:
+        data = backend.retrieve(image.storage_key)
+    except Exception:
+        logger.exception("Failed to retrieve submission image from storage")
+        return Response(
+            {"detail": "Image not found"}, status=status.HTTP_404_NOT_FOUND
+        )
+
+    response = HttpResponse(data, status=200, content_type=image.mime_type)
     response["ETag"] = f'"{image.sha256_hash}"'
     response["Last-Modified"] = image.created_at.strftime("%a, %d %b %Y %H:%M:%S GMT")
     response["Cache-Control"] = "private"

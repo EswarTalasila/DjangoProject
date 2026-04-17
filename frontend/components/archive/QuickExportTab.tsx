@@ -2,12 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Building,
-  CalendarDays,
-  ClipboardList,
   Download,
   FileText,
-  TableProperties,
   Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -119,6 +115,7 @@ export default function QuickExportTab({ role, canExportIdentifiable }: QuickExp
     () => courses.map((c) => ({ value: String(c.id), label: c.name })),
     [courses],
   );
+  const hasCourses = courseOptions.length > 0;
 
   /* ---- helper: resolve sentinel to undefined ---- */
   function val(v: string): string | undefined {
@@ -173,6 +170,13 @@ export default function QuickExportTab({ role, canExportIdentifiable }: QuickExp
   /* ---- render ---- */
   return (
     <div className="space-y-4">
+      {!loadingCourses && !hasCourses && (
+        <div className="rounded-lg border border-dashed border-border bg-muted/30 px-4 py-5 text-sm text-muted-foreground">
+          No active courses are available for live export yet. Create or restore a
+          course first, then return here to download roster and submission data.
+        </div>
+      )}
+
       {/* ── Card 1: Course Roster ── */}
       <ExportCard
         icon={<Users className="size-5" />}
@@ -182,14 +186,14 @@ export default function QuickExportTab({ role, canExportIdentifiable }: QuickExp
         defaultOpen
       >
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-3">
             {/* Course selector */}
             <div className="space-y-1">
               <Label>Course <HelpTip text="Select which course to export data from." /></Label>
               <Select
                 value={rosterCourseId}
                 onValueChange={setRosterCourseId}
-                disabled={loadingCourses}
+                disabled={loadingCourses || !hasCourses}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select course" />
@@ -254,14 +258,14 @@ export default function QuickExportTab({ role, canExportIdentifiable }: QuickExp
         helpText="Export submission data for a specific course as a CSV file."
       >
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-3">
             {/* Course selector */}
             <div className="space-y-1">
               <Label>Course <HelpTip text="Select which course to export data from." /></Label>
               <Select
                 value={subsCourseId}
                 onValueChange={setSubsCourseId}
-                disabled={loadingCourses}
+                disabled={loadingCourses || !hasCourses}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select course" />
@@ -359,51 +363,6 @@ export default function QuickExportTab({ role, canExportIdentifiable }: QuickExp
             {downloadingSubs ? 'Downloading...' : 'Download Submissions'}
           </Button>
         </div>
-      </ExportCard>
-
-      {/* ── Placeholder Cards (future export types) ── */}
-      <ExportCard
-        icon={<ClipboardList className="size-5" />}
-        title="Assessment Templates"
-        description="Export assessment definitions and question banks."
-        helpText="Download assessment templates as structured data for backup or transfer."
-      >
-        <p className="text-sm text-muted-foreground">
-          Coming soon. This export type requires a backend endpoint that has not yet been implemented.
-        </p>
-      </ExportCard>
-
-      <ExportCard
-        icon={<CalendarDays className="size-5" />}
-        title="Assignment Configurations"
-        description="Export assignment settings, schedules, and scoring rules."
-        helpText="Download assignment configurations including due dates and grading policies."
-      >
-        <p className="text-sm text-muted-foreground">
-          Coming soon. This export type requires a backend endpoint that has not yet been implemented.
-        </p>
-      </ExportCard>
-
-      <ExportCard
-        icon={<TableProperties className="size-5" />}
-        title="Rubric Definitions"
-        description="Export rubric criteria and scoring scales."
-        helpText="Download rubric definitions for archival or reuse in other courses."
-      >
-        <p className="text-sm text-muted-foreground">
-          Coming soon. This export type requires a backend endpoint that has not yet been implemented.
-        </p>
-      </ExportCard>
-
-      <ExportCard
-        icon={<Building className="size-5" />}
-        title="Course Metadata"
-        description="Export course settings, enrollment rules, and configuration."
-        helpText="Download course-level metadata for institutional records."
-      >
-        <p className="text-sm text-muted-foreground">
-          Coming soon. This export type requires a backend endpoint that has not yet been implemented.
-        </p>
       </ExportCard>
 
       {/* ── Permission notice for researchers without identifiable access ── */}

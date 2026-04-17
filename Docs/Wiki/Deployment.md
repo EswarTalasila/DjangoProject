@@ -3,53 +3,55 @@
 | Field | Value |
 |-------|-------|
 | **Status** | Active |
-| **Scope** | Production profile container startup and env contract |
+| **Scope** | Production stack startup and env contract |
 
 ---
 
 ## 1) Production Profile Contract
 
-`task up:prod` runs only runtime services:
+`task up:prod` runs:
 
-- `database`
-- `backend-prod`
-- `frontend-prod`
-- `nginx-prod`
+- shared `proxy`
+- `db`
+- `backend`
+- `frontend`
 
-No pgAdmin, Jaeger, OTel collector, or E2E containers.
+The production app stack does not own ingress directly. Browser and SSR traffic still go through the shared proxy.
 
-## 2) Production Env File
+## 2) Production Env Workflow
 
-Production startup uses:
+Production uses:
 
-- `env/.env.production`
+- root `.env` as canonical source
+- generated `env/.env.production` as runtime artifact
 
-Create it with:
+Prepare it with:
 
 ```bash
+task env:server
 task env:init
 ```
 
-Then update required values:
+Then set serious root `.env` values, rerun `task env:init`, and validate with `task up:prod`.
+
+Required production values include:
 
 - `DJANGO_SECRET_KEY`
-- `POSTGRES_*` + `DATABASE_URL`
+- `POSTGRES_*`
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
-- `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
-- `DJANGO_ALLOWED_HOSTS`
-- `DJANGO_CORS_ALLOWED_ORIGINS`
+- `ADMIN_EMAIL`
+- `ADMIN_PASSWORD`
 
 ## 3) Startup Behavior
 
-`backend-prod` startup runs:
+`task up:prod` is non-destructive:
 
-1. `migrate`
-2. `collectstatic`
-3. `ensure_admin`
-4. `gunicorn`
-
-No test seeding runs in production.
+- it prepares and validates env first
+- it ensures the shared proxy exists
+- it runs `docker compose ... up -d` for the prod stack
+- it refuses startup when production placeholders or weak values remain
+- it preserves DB, media, and artifact volumes
 
 ## 4) Commands
 
@@ -58,12 +60,18 @@ task up:prod
 task down:prod
 ```
 
-## 5) Local Profile Switching Note
+## 5) Volume and Routing Isolation
 
-If you switch between `testing` and `production` using the same Docker Postgres volume
-while changing DB credentials between env files, backend startup can fail with DB auth
-errors. Keep credentials aligned across profile env files, or run:
+Production data is isolated by:
 
-```bash
-task docker:volume-clean
-```
+- compose project `eelab-prod`
+- network `eelab-prod-app`
+- volumes:
+  - `eelab-prod-db-data`
+  - `eelab-prod-media-data`
+  - `eelab-prod-artifact-data`
+
+The shared proxy owns public ports and routes `80/443` to:
+
+- `eelab-prod-backend`
+- `eelab-prod-frontend`

@@ -19,15 +19,12 @@ def _mock_env(**overrides):
         "django_secret_key": "change-me-to-a-secure-random-string",
         "admin_email": "admin@example.com",
         "admin_password": "change-me",
-        "database_url": "postgres://datadash:change-me@database:5432/datadash",
+        "database_url": "postgres://eelab:change-me@database:5432/eelab",
         "google_client_id": "",
         "google_client_secret": "",
         "django_debug": True,
         "allowed_hosts_list": ["localhost", "127.0.0.1"],
         "cors_origins_list": ["http://localhost:3000", "*"],
-        "effective_otel_enabled": True,
-        "otel_exporter_otlp_endpoint": "",
-        "otel_trace_file": "Docs/diagrams/otel/traces.jsonl",
     }
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -48,8 +45,6 @@ def test_collect_findings_for_production_includes_strict_errors(monkeypatch):
     assert by_code["ENV-O001"].level == "ERROR"
     assert by_code["ENV-N001"].level == "ERROR"
     assert by_code["ENV-N002"].level == "ERROR"
-    assert by_code["ENV-T001"].level == "ERROR"
-    assert by_code["ENV-T002"].level == "ERROR"
 
 
 def test_collect_findings_for_testing_emits_expected_warnings(monkeypatch):
@@ -72,10 +67,10 @@ def test_handle_strict_raises_when_error_findings_exist(monkeypatch):
         "_collect_findings",
         lambda profile: [
             env_report.Finding(
-                code="ENV-T001",
+                code="ENV-N001",
                 level="ERROR",
-                message="OTEL endpoint missing",
-                hint="Set endpoint",
+                message="Allowed hosts still include localhost",
+                hint="Set public hosts",
             )
         ],
     )

@@ -5,7 +5,7 @@
 - StudentProfile
 - Course
 - Enrollment
-- Assessment
+- AssignmentTemplate
 - Question
 - Assignment
 - Submission
@@ -14,8 +14,8 @@
 ## Relationships (target)
 - Course has many Enrollments.
 - Enrollment links StudentProfile to Course.
-- Assessment has many Questions.
-- Assignment links Assessment to Course and has date window.
+- AssignmentTemplate has many Questions.
+- Assignment links AssignmentTemplate to Course and has date window.
 - Submission links Assignment to StudentProfile and stores Answers.
 
 ## Required constraints

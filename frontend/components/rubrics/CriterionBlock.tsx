@@ -85,7 +85,7 @@ export default function CriterionBlock({
 
         <div className="space-y-2">
           <div className="flex items-center gap-1.5">
-            <Label>Weight</Label>
+            <Label>Weight (%)</Label>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button type="button" className="text-xs text-muted-foreground hover:text-foreground">
@@ -93,19 +93,27 @@ export default function CriterionBlock({
                 </button>
               </TooltipTrigger>
               <TooltipContent sideOffset={6} className="max-w-xs">
-                Criterion weight scales its contribution to the rubric total.
-                Example: if max level points are 4 and weight is 1.5, this
-                criterion contributes up to 6 weighted points.
+                How much this criterion counts toward the total rubric score.
+                Example: a criterion weighted 40% means it accounts for 40% of the final grade.
+                Weights across all criteria should add up to 100%.
               </TooltipContent>
             </Tooltip>
           </div>
-          <Input
-            type="number"
-            min={0.01}
-            step="0.1"
-            value={criterion.weight ?? 1}
-            onChange={(e) => onChange({ ...criterion, weight: Number(e.target.value) || 1 })}
-          />
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              min={1}
+              max={100}
+              step={1}
+              value={Math.round((criterion.weight ?? 1) * 100)}
+              onChange={(e) => {
+                const pct = Math.max(1, Math.min(100, Math.round(Number(e.target.value) || 1)));
+                onChange({ ...criterion, weight: pct / 100 });
+              }}
+              className="w-20"
+            />
+            <span className="text-sm text-muted-foreground">%</span>
+          </div>
         </div>
       </div>
 

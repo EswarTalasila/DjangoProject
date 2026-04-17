@@ -13,20 +13,20 @@ export default function ResearcherView() {
           Researcher Dashboard
         </h1>
         <p className="text-muted-foreground mt-1">
-          Build assessment templates, manage teacher-facing setup, and review anonymized analytics.
+          Build assignment templates, manage teacher-facing setup, and review anonymized analytics.
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-sm border border-border bg-card p-6">
-          <h2 className="text-lg font-semibold text-foreground">Assessments & Rubrics</h2>
+          <h2 className="text-lg font-semibold text-foreground">Assignment Templates & Rubrics</h2>
           <p className="text-sm text-muted-foreground mt-1">
             Create and maintain templates teachers use when building assignments.
           </p>
           <div className="mt-4 flex gap-2 flex-wrap">
             <Button asChild>
-              <Link href="/dashboard/assessments">
-                Open Assessments
+              <Link href="/dashboard/assignment-templates">
+                Open Assignment Templates
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
@@ -54,7 +54,7 @@ export default function ResearcherView() {
         <div className="rounded-sm border border-border bg-card p-6 md:col-span-2">
           <h2 className="text-lg font-semibold text-foreground">Analytics & Archive</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            View anonymized visualizations, download exports, and build archive package layouts.
+            Review visualizations, export live datasets, and manage template and assignment archives.
           </p>
           <div className="mt-4 flex gap-2 flex-wrap">
             <Button asChild variant="outline">

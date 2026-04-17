@@ -5,14 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockOnChange = vi.fn();
 
 function setupModuleMocks() {
-  vi.doMock("@/lib/assessment-api", () => ({}));
+  vi.doMock("@/lib/assignment-template-api", () => ({}));
 }
 
 async function loadComponent() {
   vi.resetModules();
   setupModuleMocks();
   const imported = await import(
-    "@/components/assessments/ShortAnswerFields"
+    "@/components/assignment-templates/ShortAnswerFields"
   );
   return imported.default;
 }

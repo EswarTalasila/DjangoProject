@@ -10,9 +10,6 @@ function setupModuleMocks() {
   vi.doMock("@/components/archive/QuickExportTab", () => ({
     default: () => <div>QuickExportTab</div>,
   }));
-  vi.doMock("@/components/archive/PackageBuilderTab", () => ({
-    default: () => <div>PackageBuilderTab</div>,
-  }));
   vi.doMock("@/components/archive/DataArchivesTab", () => ({
     default: () => <div>DataArchivesTab</div>,
   }));
@@ -34,29 +31,29 @@ describe("ArchiveManagerHub", () => {
     expect(screen.getByText("Archive Manager")).toBeInTheDocument();
   });
 
-  it("renders Quick Export and Package Builder tabs", async () => {
+  it("renders Live Exports and Archive Records for admin", async () => {
     const ArchiveManagerHub = await loadComponent();
     render(<ArchiveManagerHub role="ADMIN" canExportIdentifiable={true} />);
-    expect(screen.getByText("Quick Export")).toBeInTheDocument();
-    expect(screen.getByText("Package Builder")).toBeInTheDocument();
+    expect(screen.getByText("Live Exports")).toBeInTheDocument();
+    expect(screen.getByText("Archive Records")).toBeInTheDocument();
   });
 
-  it("renders Data Archives tab for ADMIN role", async () => {
+  it("renders Archive Records tab for ADMIN role", async () => {
     const ArchiveManagerHub = await loadComponent();
     render(<ArchiveManagerHub role="ADMIN" canExportIdentifiable={true} />);
-    expect(screen.getByText("Data Archives")).toBeInTheDocument();
+    expect(screen.getByText("Archive Records")).toBeInTheDocument();
   });
 
-  it("renders Data Archives tab for RESEARCHER role", async () => {
+  it("renders Archive Records tab for RESEARCHER role", async () => {
     const ArchiveManagerHub = await loadComponent();
     render(<ArchiveManagerHub role="RESEARCHER" canExportIdentifiable={false} />);
-    expect(screen.getByText("Data Archives")).toBeInTheDocument();
+    expect(screen.getByText("Archive Records")).toBeInTheDocument();
   });
 
-  it("does NOT render Data Archives tab for TEACHER role", async () => {
+  it("renders Archive Records tab for TEACHER role", async () => {
     const ArchiveManagerHub = await loadComponent();
     render(<ArchiveManagerHub role="TEACHER" canExportIdentifiable={false} />);
-    expect(screen.queryByText("Data Archives")).not.toBeInTheDocument();
+    expect(screen.getByText("Archive Records")).toBeInTheDocument();
   });
 
   it("renders QuickExportTab content by default", async () => {

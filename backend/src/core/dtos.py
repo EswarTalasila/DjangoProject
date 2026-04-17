@@ -6,7 +6,7 @@ Each DTO corresponds to a service function's return type and ensures
 type safety, IDE autocomplete, and runtime validation.
 
 Usage:
-    from core.dtos import CourseDTO, AssessmentDTO
+    from core.dtos import CourseDTO, AssignmentTemplateDTO
 
     def course_to_dto(course: Course) -> CourseDTO:
         return CourseDTO(id=course.id, name=course.name, ...)
@@ -49,10 +49,11 @@ class CourseDTO(BaseModel):
     teacherId: int | None
     teacherName: str | None
     createdAt: datetime | None
+    status: str = "ACTIVE"
 
 
 # =============================================================================
-# Assessment DTOs
+# AssignmentTemplate DTOs
 # =============================================================================
 
 
@@ -61,6 +62,17 @@ class ChoiceDTO(BaseModel):
 
     prompt: str
     score: int
+
+
+class QuestionImageDTO(BaseModel):
+    """Image attached to a question (supporting figure)."""
+
+    id: str
+    storageKey: str
+    url: str
+    originalFilename: str
+    mimeType: str
+    sizeBytes: int
 
 
 class QuestionDTO(BaseModel):
@@ -75,6 +87,7 @@ class QuestionDTO(BaseModel):
     maxPoints: float
     autoGradable: bool
     graded: bool
+    image: QuestionImageDTO | None = None
     data: dict[str, Any] | None = None
     selectAll: bool | None = None
     min: int | None = None
@@ -82,6 +95,10 @@ class QuestionDTO(BaseModel):
     groupId: int | None = None
     rubricId: int | None = None
     gradingStrategy: str = "AUTO"
+    orderIndex: int = 0
+    origin: str | None = None
+    lockedFromSource: bool = False
+    sourceQuestionId: int | None = None
 
 
 class QuestionGroupDTO(BaseModel):
@@ -93,7 +110,7 @@ class QuestionGroupDTO(BaseModel):
     orderIndex: int = 0
 
 
-class AssessmentDTO(BaseModel):
+class AssignmentTemplateDTO(BaseModel):
     """Full assessment with all questions."""
 
     model_config = ConfigDict(from_attributes=True)
@@ -103,8 +120,56 @@ class AssessmentDTO(BaseModel):
     category: str | None
     gradingMode: str
     scoringPolicy: str = "STANDARD"
+    submissionMode: str = "DIGITAL"
+    status: str = "ACTIVE"
+    rubricId: int | None = None
     questions: list[QuestionDTO]
     questionGroups: list[QuestionGroupDTO] = []
+
+
+class TeacherCriterionLevelDTO(BaseModel):
+    """Teacher-authored rubric level nested under an assignment-local criterion."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    label: str
+    points: float
+    description: str
+    orderIndex: int
+
+
+class TeacherCriterionDTO(BaseModel):
+    """Teacher-authored assignment-local criterion layered onto a template rubric."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    description: str
+    weight: float
+    orderIndex: int
+    levels: list[TeacherCriterionLevelDTO] = []
+
+
+class AssignmentContentDTO(BaseModel):
+    """Effective assignment content shown to teachers and students."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    assignmentId: int
+    assignmentTemplateId: int
+    assignmentTemplateTitle: str
+    category: str | None
+    gradingMode: str
+    scoringPolicy: str = "STANDARD"
+    submissionMode: str = "DIGITAL"
+    rubricId: int | None = None
+    questions: list[QuestionDTO]
+    questionGroups: list[QuestionGroupDTO] = []
+    teacherCriteria: list[TeacherCriterionDTO] = []
 
 
 # =============================================================================
@@ -152,14 +217,14 @@ class RubricDTO(BaseModel):
 
 
 class AssignmentDTO(BaseModel):
-    """Assignment linking assessment to audience."""
+    """Assignment linking an assignment template to an audience."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     title: str
-    assessmentId: int
-    assessmentTitle: str | None = None
+    assignmentTemplateId: int
+    assignmentTemplateTitle: str | None = None
     audienceType: str
     courseId: int | None
     targetTeacherId: int | None
@@ -206,6 +271,9 @@ class SubmissionCompactDTO(BaseModel):
 
     id: int
     assignmentId: int
+    studentName: str | None = None
+    courseName: str | None = None
+    assignmentTitle: str | None = None
     submittedAt: datetime | None
     score: float | None
     status: str
@@ -223,5 +291,3 @@ class SubmissionImageDTO(BaseModel):
     uploadedByUserId: int | None
     status: str
     createdAt: datetime
-
-

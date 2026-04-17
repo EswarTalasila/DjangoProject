@@ -16,7 +16,7 @@ from ..models import Role, User
 LOGIN_RATE_LIMIT_ATTEMPTS = 5
 LOGIN_RATE_LIMIT_WINDOW_SECONDS = 15 * 60
 DEFAULT_RESET_CODE_WINDOW = timedelta(minutes=30)
-REGISTRATION_CODE_TOKEN_BYTES = 12
+REGISTRATION_CODE_DIGITS = 6
 
 REGISTRATION_CODE_STATUS_ACTIVE = "ACTIVE"
 REGISTRATION_CODE_STATUS_EXHAUSTED = "EXHAUSTED"
@@ -95,6 +95,21 @@ def _hash_secret_token(value: str) -> str:
 def _generate_secret_token(prefix: str, nbytes: int = 12) -> str:
     """Generate a prefixed token string for reset/invite flows."""
     return f"{prefix}-{secrets.token_hex(nbytes).upper()}"
+
+
+# Code type → short prefix for human-readable registration codes
+_CODE_TYPE_PREFIXES: dict[str, str] = {
+    "STUDENT": "STU",
+    "TEACHER": "TEA",
+    "RESEARCHER": "RES",
+}
+
+
+def generate_registration_code(code_type: str) -> str:
+    """Generate a short, human-friendly registration code like STU-482917."""
+    prefix = _CODE_TYPE_PREFIXES.get(code_type, "REG")
+    digits = "".join(secrets.choice("0123456789") for _ in range(REGISTRATION_CODE_DIGITS))
+    return f"{prefix}-{digits}"
 
 
 def identifier_allowed_for_user(identifier: str, user: User) -> bool:

@@ -362,11 +362,14 @@ class TestHandleRetrieve:
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
+    @patch("submissions.image_views.get_storage_backend")
     @patch("submissions.image_views.SubmissionImage")
     @patch("submissions.image_views._can_access_submission", return_value=True)
     @patch("submissions.image_views._get_submission_with_assignment")
-    def test_returns_image_with_headers(self, mock_get, mock_access, mock_img):
-        """Returns 200 with X-Accel-Redirect and cache headers for the image."""
+    def test_returns_image_with_headers(
+        self, mock_get, mock_access, mock_img, mock_storage_backend
+    ):
+        """Returns 200 with streamed bytes and cache headers for the image."""
         from submissions.image_views import _handle_retrieve
 
         mock_get.return_value = MagicMock()
@@ -376,13 +379,38 @@ class TestHandleRetrieve:
         image.sha256_hash = "abc123"
         image.created_at.strftime.return_value = "Mon, 01 Jan 2025 00:00:00 GMT"
         mock_img.objects.filter.return_value.first.return_value = image
+        mock_storage_backend.return_value.retrieve.return_value = b"image-bytes"
 
         request = _mock_request(method="GET")
         response = _handle_retrieve(request, 1, "img-id")
 
         assert response.status_code == 200
-        assert response["X-Accel-Redirect"] == "/internal/media/submissions/1/uuid.jpg"
+        assert response.content == b"image-bytes"
         assert response["Cache-Control"] == "private"
+
+    @patch("submissions.image_views.get_storage_backend")
+    @patch("submissions.image_views.SubmissionImage")
+    @patch("submissions.image_views._can_access_submission", return_value=True)
+    @patch("submissions.image_views._get_submission_with_assignment")
+    def test_returns_404_when_blob_missing(
+        self, mock_get, mock_access, mock_img, mock_storage_backend
+    ):
+        """Returns 404 when the backing file is missing from storage."""
+        from submissions.image_views import _handle_retrieve
+
+        mock_get.return_value = MagicMock()
+        image = MagicMock()
+        image.mime_type = "image/jpeg"
+        image.storage_key = "submissions/1/missing.jpg"
+        image.sha256_hash = "abc123"
+        image.created_at.strftime.return_value = "Mon, 01 Jan 2025 00:00:00 GMT"
+        mock_img.objects.filter.return_value.first.return_value = image
+        mock_storage_backend.return_value.retrieve.side_effect = FileNotFoundError
+
+        request = _mock_request(method="GET")
+        response = _handle_retrieve(request, 1, "img-id")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 # ---------------------------------------------------------------------------

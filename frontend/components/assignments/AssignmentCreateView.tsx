@@ -16,14 +16,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { createAssignment } from '@/lib/assignment-api';
-import { listAssessments, type Assessment } from '@/lib/assessment-api';
+import {
+  listAssignmentTemplates,
+  type AssignmentTemplate,
+} from '@/lib/assignment-template-api';
 import { listCourses, type CourseSummary } from '@/lib/course-api';
-
-type ApiError = { response?: { data?: { detail?: string }; status?: number } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
+import { toErrorMessage } from '@/lib/utils';
 
 function toDateTimeLocal(value: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -41,16 +39,17 @@ export default function AssignmentCreateView() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [assessments, setAssessments] = useState<Assessment[]>([]);
+  const [assignmentTemplates, setAssignmentTemplates] = useState<AssignmentTemplate[]>([]);
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [title, setTitle] = useState('');
-  const [assessmentId, setAssessmentId] = useState('');
+  const [assignmentTemplateId, setAssignmentTemplateId] = useState('');
   const [courseId, setCourseId] = useState('');
   const [openAt, setOpenAt] = useState('');
   const [dueAt, setDueAt] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [titleTouched, setTitleTouched] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,14 +57,16 @@ export default function AssignmentCreateView() {
     async function load() {
       setLoadError(null);
       try {
-        const [assessmentData, courseData] = await Promise.all([listAssessments(), listCourses()]);
+        const [assignmentTemplateData, courseData] = await Promise.all([
+          listAssignmentTemplates(),
+          listCourses(),
+        ]);
         if (cancelled) return;
 
-        setAssessments(assessmentData);
+        setAssignmentTemplates(assignmentTemplateData);
         setCourses(courseData);
-        const firstAssessment = assessmentData[0];
-        setAssessmentId(String(firstAssessment?.id ?? ''));
-        setTitle(firstAssessment?.title ?? '');
+        const firstAssignmentTemplate = assignmentTemplateData[0];
+        setAssignmentTemplateId(String(firstAssignmentTemplate?.id ?? ''));
         const preferredCourseId = searchParams.get('courseId');
         const hasPreferred =
           preferredCourseId != null &&
@@ -92,19 +93,22 @@ export default function AssignmentCreateView() {
   }, [searchParams]);
 
   const canSubmit = useMemo(() => {
-    return Boolean(title.trim() && assessmentId && courseId && openAt);
-  }, [title, assessmentId, courseId, openAt]);
+    return Boolean(title.trim() && assignmentTemplateId && courseId && openAt);
+  }, [title, assignmentTemplateId, courseId, openAt]);
 
-  function handleAssessmentChange(nextAssessmentId: string) {
-    setAssessmentId(nextAssessmentId);
-    const selected = assessments.find((assessment) => String(assessment.id) === nextAssessmentId);
-    if (selected) {
-      setTitle(selected.title);
-    }
+  const titleError = titleTouched && !title.trim() ? 'Assignment title is required.' : null;
+
+  function handleAssignmentTemplateChange(nextAssignmentTemplateId: string) {
+    setAssignmentTemplateId(nextAssignmentTemplateId);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setTitleTouched(true);
+    if (!title.trim()) {
+      toast.error('Please name the assignment before creating it.');
+      return;
+    }
     if (!canSubmit) return;
 
     const openIso = toIsoOrNull(openAt);
@@ -122,7 +126,7 @@ export default function AssignmentCreateView() {
     try {
       const created = await createAssignment({
         title: title.trim(),
-        assessmentId: Number(assessmentId),
+        assignmentTemplateId: Number(assignmentTemplateId),
         audienceType: 'COURSE',
         courseId: Number(courseId),
         openAt: openIso,
@@ -131,10 +135,10 @@ export default function AssignmentCreateView() {
       toast.success('Assignment created.');
       router.push(`/dashboard/assignments/${created.id}`);
     } catch (error: unknown) {
-      if ((error as ApiError).response?.status === 409) {
-        toast.error('Cannot create assignment from archived assessment.');
+      if ((error as { response?: { status?: number } }).response?.status === 409) {
+        toast.error('Cannot create assignment from archived assignment template.');
       } else {
-        toast.error(extractDetail(error, 'Failed to create assignment.'));
+        toast.error(toErrorMessage(error, 'Failed to create assignment.'));
       }
     } finally {
       setIsSubmitting(false);
@@ -154,7 +158,7 @@ export default function AssignmentCreateView() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">Create Assignment</h1>
         <p className="text-muted-foreground mt-1">
-          Link an assessment template to one of your courses.
+          Link an assignment template to one of your courses.
         </p>
       </div>
 
@@ -167,20 +171,24 @@ export default function AssignmentCreateView() {
             id="assignment-title"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
+            onBlur={() => setTitleTouched(true)}
+            onKeyDown={(event) => event.stopPropagation()}
+            aria-invalid={titleError ? 'true' : 'false'}
             placeholder="e.g. Week 3 Check-In"
           />
+          {titleError ? <p className="text-sm text-destructive">{titleError}</p> : null}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="assessment-id">Assessment</Label>
-          <Select value={assessmentId} onValueChange={handleAssessmentChange}>
-            <SelectTrigger id="assessment-id">
-              <SelectValue placeholder="Select assessment" />
+          <Label htmlFor="assignment-template-id">Assignment Template</Label>
+          <Select value={assignmentTemplateId} onValueChange={handleAssignmentTemplateChange}>
+            <SelectTrigger id="assignment-template-id">
+              <SelectValue placeholder="Select assignment template" />
             </SelectTrigger>
             <SelectContent>
-              {assessments.map((assessment) => (
-                <SelectItem key={assessment.id} value={String(assessment.id)}>
-                  {assessment.title}
+              {assignmentTemplates.map((assignmentTemplate) => (
+                <SelectItem key={assignmentTemplate.id} value={String(assignmentTemplate.id)}>
+                  {assignmentTemplate.title}
                 </SelectItem>
               ))}
             </SelectContent>

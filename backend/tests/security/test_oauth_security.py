@@ -74,8 +74,8 @@ class TestOAuthErrorSanitization:
         body_str = json.dumps(body)
         assert "JSONDecodeError" not in body_str
 
-    def test_oauth_login_generic_exception_returns_generic_message(self, api_client):
-        """Generic exception secrets must not leak through OAuth login error response."""
+    def test_oauth_login_generic_exception_returns_server_error(self, api_client):
+        """Unexpected OAuth login failures should surface as sanitized 500 responses."""
         with patch(
             "accounts.views._google_userinfo",
             side_effect=Exception("Internal secret details: api_key=xyz123"),
@@ -86,16 +86,17 @@ class TestOAuthErrorSanitization:
                 format="json",
             )
 
-        assert response.status_code == 401
+        assert response.status_code == 500
         body = response.json()
+        assert body == {"detail": "Internal server error"}
         body_str = json.dumps(body)
         assert "api_key" not in body_str
         assert "xyz123" not in body_str
 
-    def test_oauth_registration_google_failure_returns_generic_message(
+    def test_oauth_registration_generic_exception_returns_server_error(
         self, api_client, admin_user
     ):
-        """SSL exception details must not appear in OAuth registration error response."""
+        """Unexpected OAuth registration failures should surface as sanitized 500 responses."""
         with patch(
             "accounts.views._google_userinfo",
             side_effect=Exception("SSL certificate verify failed"),
@@ -112,9 +113,9 @@ class TestOAuthErrorSanitization:
                 format="json",
             )
 
-        assert response.status_code == 401
+        assert response.status_code == 500
         body = response.json()
-        assert body.get("detail") == "Invalid Google access token."
+        assert body == {"detail": "Internal server error"}
         body_str = json.dumps(body)
         assert "SSL" not in body_str
         assert "certificate" not in body_str

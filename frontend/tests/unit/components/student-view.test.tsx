@@ -27,7 +27,7 @@ describe("StudentView", () => {
 
   it("renders dashboard heading and stats bar", async () => {
     mockListCourses.mockResolvedValueOnce([]);
-    mockListMySubmissions.mockResolvedValueOnce({ results: [] });
+    mockListMySubmissions.mockResolvedValueOnce([]);
 
     const StudentView = await loadStudentView();
     render(<StudentView />);
@@ -43,7 +43,7 @@ describe("StudentView", () => {
 
   it("shows empty state when no courses enrolled", async () => {
     mockListCourses.mockResolvedValueOnce([]);
-    mockListMySubmissions.mockResolvedValueOnce({ results: [] });
+    mockListMySubmissions.mockResolvedValueOnce([]);
 
     const StudentView = await loadStudentView();
     render(<StudentView />);
@@ -60,7 +60,7 @@ describe("StudentView", () => {
       { id: 1, name: "Biology 101", studentCount: 20, assignmentIds: [] },
       { id: 2, name: "Physics 301", studentCount: 15, assignmentIds: [] },
     ]);
-    mockListMySubmissions.mockResolvedValueOnce({ results: [] });
+    mockListMySubmissions.mockResolvedValueOnce([]);
 
     const StudentView = await loadStudentView();
     render(<StudentView />);
@@ -74,14 +74,12 @@ describe("StudentView", () => {
 
   it("shows submission stats breakdown", async () => {
     mockListCourses.mockResolvedValueOnce([]);
-    mockListMySubmissions.mockResolvedValueOnce({
-      results: [
-        { id: 1, assignmentId: 1, submittedAt: null, score: null, status: "IN_PROGRESS" },
-        { id: 2, assignmentId: 2, submittedAt: "2026-03-01", score: null, status: "SUBMITTED" },
-        { id: 3, assignmentId: 3, submittedAt: "2026-03-01", score: 85, status: "GRADED" },
-        { id: 4, assignmentId: 4, submittedAt: null, score: null, status: "NOT_STARTED" },
-      ],
-    });
+    mockListMySubmissions.mockResolvedValueOnce([
+      { id: 1, assignmentId: 1, submittedAt: null, score: null, status: "IN_PROGRESS" },
+      { id: 2, assignmentId: 2, submittedAt: "2026-03-01", score: null, status: "SUBMITTED" },
+      { id: 3, assignmentId: 3, submittedAt: "2026-03-01", score: 85, status: "GRADED" },
+      { id: 4, assignmentId: 4, submittedAt: null, score: null, status: "NOT_STARTED" },
+    ]);
 
     const StudentView = await loadStudentView();
     render(<StudentView />);
@@ -95,7 +93,7 @@ describe("StudentView", () => {
 
   it("shows empty submission state", async () => {
     mockListCourses.mockResolvedValueOnce([]);
-    mockListMySubmissions.mockResolvedValueOnce({ results: [] });
+    mockListMySubmissions.mockResolvedValueOnce([]);
 
     const StudentView = await loadStudentView();
     render(<StudentView />);
@@ -109,7 +107,7 @@ describe("StudentView", () => {
 
   it("renders navigation links to courses and submissions", async () => {
     mockListCourses.mockResolvedValueOnce([]);
-    mockListMySubmissions.mockResolvedValueOnce({ results: [] });
+    mockListMySubmissions.mockResolvedValueOnce([]);
 
     const StudentView = await loadStudentView();
     render(<StudentView />);
@@ -120,7 +118,7 @@ describe("StudentView", () => {
     });
   });
 
-  it("handles array response from listMySubmissions", async () => {
+  it("shows single in-progress submission stats", async () => {
     mockListCourses.mockResolvedValueOnce([]);
     mockListMySubmissions.mockResolvedValueOnce([
       { id: 1, assignmentId: 1, submittedAt: null, score: null, status: "IN_PROGRESS" },

@@ -996,7 +996,7 @@ class TestCodesCollectionView:
 
 @pytest.mark.unit
 class TestCodeDetailView:
-    """Tests for code_detail GET/PATCH view."""
+    """Tests for code_detail GET/PATCH/DELETE view."""
 
     @patch("accounts.views.registration_code_scope_queryset")
     def test_get_not_found_returns_404(self, mock_qs):
@@ -1037,6 +1037,28 @@ class TestCodeDetailView:
         )
         response = code_detail(request, code_id=999)
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    @patch("accounts.views.remove_registration_code")
+    def test_delete_not_found_returns_404(self, mock_remove):
+        """DELETE ValueError with missing code returns 404."""
+        from accounts.views import code_detail
+
+        mock_remove.side_effect = ValueError("Registration code not found.")
+        user = _user()
+        request = _auth_request("delete", "/api/v1/codes/999", user=user)
+        response = code_detail(request, code_id=999)
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @patch("accounts.views.remove_registration_code")
+    def test_delete_returns_204(self, mock_remove):
+        """DELETE removes the code and returns 204."""
+        from accounts.views import code_detail
+
+        user = _user()
+        request = _auth_request("delete", "/api/v1/codes/1", user=user)
+        response = code_detail(request, code_id=1)
+        mock_remove.assert_called_once()
+        assert response.status_code == status.HTTP_204_NO_CONTENT
 
 
 # ---------------------------------------------------------------------------

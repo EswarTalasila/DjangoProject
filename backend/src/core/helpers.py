@@ -1,6 +1,6 @@
 """Shared helpers used across multiple domain modules."""
 
-from assessments.models import QuestionKind
+from assignment_templates.models import QuestionKind
 from submissions.models import AnswerType
 
 
@@ -12,4 +12,8 @@ def answer_type_from_question(question) -> str:
         return AnswerType.SHORT_ANSWER
     if question.kind == QuestionKind.NUMBER_SCALE:
         return AnswerType.NUMBER_SCALE
+    if question.kind == QuestionKind.MOOD_METER:
+        return AnswerType.MOOD_METER
+    if question.kind == QuestionKind.FILE_UPLOAD:
+        return AnswerType.FILE_UPLOAD
     return AnswerType.SHORT_ANSWER

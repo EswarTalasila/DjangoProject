@@ -3,19 +3,23 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockListCourses = vi.fn();
-const mockListAssessments = vi.fn();
+const mockListAssignmentTemplates = vi.fn();
 const mockListAssignmentsByCourse = vi.fn();
+const mockGetAssignmentArchiveBundle = vi.fn();
+const mockGenerateAssignmentArchiveBundle = vi.fn();
+const mockDownloadAssignmentArchiveBundle = vi.fn();
 const mockArchiveCourse = vi.fn();
 const mockRestoreCourse = vi.fn();
 const mockPurgeCourse = vi.fn();
-const mockArchiveAssessment = vi.fn();
-const mockRestoreAssessment = vi.fn();
-const mockPurgeAssessment = vi.fn();
+const mockArchiveAssignmentTemplate = vi.fn();
+const mockRestoreAssignmentTemplate = vi.fn();
+const mockPurgeAssignmentTemplate = vi.fn();
 const mockArchiveAssignment = vi.fn();
 const mockRestoreAssignment = vi.fn();
 const mockPurgeAssignment = vi.fn();
 const mockToastSuccess = vi.fn();
 const mockToastError = vi.fn();
+const mockTriggerBrowserDownload = vi.fn();
 
 function setupModuleMocks() {
   vi.doMock("next/navigation", () => ({
@@ -29,19 +33,22 @@ function setupModuleMocks() {
   vi.doMock("@/lib/course-api", () => ({
     listCourses: mockListCourses,
   }));
-  vi.doMock("@/lib/assessment-api", () => ({
-    listAssessments: mockListAssessments,
+  vi.doMock("@/lib/assignment-template-api", () => ({
+    listAssignmentTemplates: mockListAssignmentTemplates,
   }));
   vi.doMock("@/lib/assignment-api", () => ({
     listAssignmentsByCourse: mockListAssignmentsByCourse,
+    getAssignmentArchiveBundle: mockGetAssignmentArchiveBundle,
+    generateAssignmentArchiveBundle: mockGenerateAssignmentArchiveBundle,
+    downloadAssignmentArchiveBundle: mockDownloadAssignmentArchiveBundle,
   }));
   vi.doMock("@/lib/lifecycle-api", () => ({
     archiveCourse: mockArchiveCourse,
     restoreCourse: mockRestoreCourse,
     purgeCourse: mockPurgeCourse,
-    archiveAssessment: mockArchiveAssessment,
-    restoreAssessment: mockRestoreAssessment,
-    purgeAssessment: mockPurgeAssessment,
+    archiveAssignmentTemplate: mockArchiveAssignmentTemplate,
+    restoreAssignmentTemplate: mockRestoreAssignmentTemplate,
+    purgeAssignmentTemplate: mockPurgeAssignmentTemplate,
     archiveAssignment: mockArchiveAssignment,
     restoreAssignment: mockRestoreAssignment,
     purgeAssignment: mockPurgeAssignment,
@@ -50,6 +57,7 @@ function setupModuleMocks() {
     toErrorMessage: (e: unknown) =>
       e instanceof Error ? e.message : "Unknown error",
     cn: (...args: unknown[]) => args.filter(Boolean).join(" "),
+    triggerBrowserDownload: mockTriggerBrowserDownload,
   }));
 }
 
@@ -60,9 +68,9 @@ async function loadComponent() {
   return imported.default;
 }
 
-async function renderDataArchivesAndWait() {
+async function renderDataArchivesAndWait(role: "TEACHER" | "RESEARCHER" | "ADMIN" = "ADMIN") {
   const DataArchivesTab = await loadComponent();
-  render(<DataArchivesTab role="ADMIN" />);
+  render(<DataArchivesTab role={role} />);
   await waitFor(() => {
     expect(
       screen.queryByText("Loading courses...")
@@ -93,7 +101,7 @@ const mockCourses = [
   },
 ];
 
-const mockAssessmentsList = [
+const mockAssignmentTemplatesList = [
   {
     id: 1,
     title: "Midterm Exam",
@@ -103,7 +111,7 @@ const mockAssessmentsList = [
     questions: [],
     questionGroups: [],
     rubricId: null,
-    rubricAssessmentIds: [],
+    rubricAssignmentTemplateIds: [],
     status: "ACTIVE",
   },
   {
@@ -115,7 +123,7 @@ const mockAssessmentsList = [
     questions: [],
     questionGroups: [],
     rubricId: null,
-    rubricAssessmentIds: [],
+    rubricAssignmentTemplateIds: [],
     status: "ARCHIVED",
   },
 ];
@@ -124,8 +132,8 @@ const mockAssignments = [
   {
     id: 1,
     title: "HW 1",
-    assessmentId: 1,
-    assessmentTitle: "Midterm Exam",
+    assignmentTemplateId: 1,
+    assignmentTemplateTitle: "Midterm Exam",
     audienceType: "COURSE",
     courseId: 1,
     targetTeacherId: null,
@@ -140,25 +148,26 @@ describe("DataArchivesTab", () => {
     vi.clearAllMocks();
     // Default: courses load returns mockCourses, assignments returns mockAssignments
     mockListCourses.mockResolvedValue(mockCourses);
-    mockListAssessments.mockResolvedValue(mockAssessmentsList);
+    mockListAssignmentTemplates.mockResolvedValue(mockAssignmentTemplatesList);
     mockListAssignmentsByCourse.mockResolvedValue(mockAssignments);
+    mockGetAssignmentArchiveBundle.mockRejectedValue(new Error("missing"));
   });
 
-  it("renders Data Archives heading", async () => {
+  it("renders Archive Records heading", async () => {
     await renderDataArchivesAndWait();
-    expect(screen.getByText("Data Archives")).toBeInTheDocument();
+    expect(screen.getByText("Archive Records")).toBeInTheDocument();
   });
 
-  it("renders Courses, Assessments, and Assignments tab triggers", async () => {
+  it("renders Courses, Assignment Templates, and Assignments tab triggers", async () => {
     await renderDataArchivesAndWait();
     expect(screen.getByText("Courses")).toBeInTheDocument();
-    expect(screen.getByText("Assessments")).toBeInTheDocument();
+    expect(screen.getByText("Assignment Templates")).toBeInTheDocument();
     expect(screen.getByText("Assignments")).toBeInTheDocument();
   });
 
   it("shows loading state for courses initially", async () => {
     mockListCourses.mockReturnValue(new Promise(() => {}));
-    mockListAssessments.mockReturnValue(new Promise(() => {}));
+    mockListAssignmentTemplates.mockReturnValue(new Promise(() => {}));
     mockListAssignmentsByCourse.mockReturnValue(new Promise(() => {}));
     const DataArchivesTab = await loadComponent();
     const { unmount } = render(<DataArchivesTab role="ADMIN" />);
@@ -170,8 +179,8 @@ describe("DataArchivesTab", () => {
     const DataArchivesTab = await loadComponent();
     render(<DataArchivesTab role="ADMIN" />);
     await waitFor(() => {
-      expect(screen.getByText("Intro to CS")).toBeInTheDocument();
-      expect(screen.getByText("Data Science")).toBeInTheDocument();
+      expect(screen.getAllByText("Intro to CS").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Data Science").length).toBeGreaterThan(0);
     });
   });
 
@@ -179,8 +188,8 @@ describe("DataArchivesTab", () => {
     const DataArchivesTab = await loadComponent();
     render(<DataArchivesTab role="ADMIN" />);
     await waitFor(() => {
-      expect(screen.getByText("Prof Smith")).toBeInTheDocument();
-      expect(screen.getByText("Prof Jones")).toBeInTheDocument();
+      expect(screen.getAllByText("Prof Smith").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Prof Jones").length).toBeGreaterThan(0);
     });
   });
 
@@ -197,7 +206,7 @@ describe("DataArchivesTab", () => {
     const DataArchivesTab = await loadComponent();
     render(<DataArchivesTab role="ADMIN" />);
     await waitFor(() => {
-      expect(screen.getByText("Archive")).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "Archive" }).length).toBeGreaterThan(0);
     });
   });
 
@@ -205,17 +214,16 @@ describe("DataArchivesTab", () => {
     const DataArchivesTab = await loadComponent();
     render(<DataArchivesTab role="ADMIN" />);
     await waitFor(() => {
-      expect(screen.getByText("Restore")).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "Restore" }).length).toBeGreaterThan(0);
     });
   });
 
-  it("shows Delete button for archived courses", async () => {
+  it("shows Purge button for archived courses", async () => {
     const DataArchivesTab = await loadComponent();
     render(<DataArchivesTab role="ADMIN" />);
     await waitFor(() => {
-      // Delete appears for archived courses
-      const deleteButtons = screen.getAllByText("Delete");
-      expect(deleteButtons.length).toBeGreaterThan(0);
+      const purgeButtons = screen.getAllByText("Purge");
+      expect(purgeButtons.length).toBeGreaterThan(0);
     });
   });
 
@@ -244,34 +252,32 @@ describe("DataArchivesTab", () => {
     const DataArchivesTab = await loadComponent();
     render(<DataArchivesTab role="ADMIN" />);
     await waitFor(() => {
-      expect(
-        screen.getByText(/No archived courses/)
-      ).toBeInTheDocument();
+      expect(screen.getByText(/No archived courses/)).toBeInTheDocument();
     });
   });
 
-  it("shows assessments tab content when clicked", async () => {
+  it("shows assignment templates tab content when clicked", async () => {
     const DataArchivesTab = await loadComponent();
     render(<DataArchivesTab role="ADMIN" />);
     const user = userEvent.setup();
     await waitFor(() => {
       expect(screen.getByText("Courses")).toBeInTheDocument();
     });
-    await user.click(screen.getByText("Assessments"));
+    await user.click(screen.getByText("Assignment Templates"));
     await waitFor(() => {
       // When showing only active, "Final Exam" (ARCHIVED) should not appear
-      expect(screen.getByText("Midterm Exam")).toBeInTheDocument();
+      expect(screen.getAllByText("Midterm Exam").length).toBeGreaterThan(0);
     });
   });
 
-  it("shows assessments table headers", async () => {
+  it("shows assignment templates table headers", async () => {
     const DataArchivesTab = await loadComponent();
     render(<DataArchivesTab role="ADMIN" />);
     const user = userEvent.setup();
     await waitFor(() => {
-      expect(screen.getByText("Assessments")).toBeInTheDocument();
+      expect(screen.getByText("Assignment Templates")).toBeInTheDocument();
     });
-    await user.click(screen.getByText("Assessments"));
+    await user.click(screen.getByText("Assignment Templates"));
     await waitFor(() => {
       expect(screen.getByText("Title")).toBeInTheDocument();
       expect(screen.getByText("Category")).toBeInTheDocument();
@@ -300,6 +306,23 @@ describe("DataArchivesTab", () => {
     });
   });
 
+  it("shows Generate Bundle for archived assignments without an artifact", async () => {
+    mockListAssignmentsByCourse.mockResolvedValueOnce([
+      { ...mockAssignments[0], status: "ARCHIVED" },
+    ]);
+    const DataArchivesTab = await loadComponent();
+    render(<DataArchivesTab role="ADMIN" />);
+    const user = userEvent.setup();
+    await waitFor(() => {
+      expect(screen.getByText("Assignments")).toBeInTheDocument();
+    });
+    await user.click(screen.getByText("Assignments"));
+    await user.click(screen.getAllByRole("checkbox").at(-1)!);
+    await waitFor(() => {
+      expect(screen.getAllByText("Generate Bundle").length).toBeGreaterThan(0);
+    });
+  });
+
   it("shows error toast when courses fail to load", async () => {
     mockListCourses.mockRejectedValue(new Error("Network error"));
     const DataArchivesTab = await loadComponent();
@@ -309,13 +332,13 @@ describe("DataArchivesTab", () => {
     });
   });
 
-  it("shows error toast when assessments fail to load", async () => {
-    mockListAssessments.mockRejectedValueOnce(new Error("Network error"));
+  it("shows error toast when assignment templates fail to load", async () => {
+    mockListAssignmentTemplates.mockRejectedValueOnce(new Error("Network error"));
     const DataArchivesTab = await loadComponent();
     render(<DataArchivesTab role="ADMIN" />);
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith(
-        "Failed to load assessments."
+        "Failed to load assignment templates."
       );
     });
   });
@@ -326,10 +349,10 @@ describe("DataArchivesTab", () => {
     render(<DataArchivesTab role="ADMIN" />);
     const user = userEvent.setup();
     await waitFor(() => {
-      expect(screen.getByText("Archive")).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "Archive" }).length).toBeGreaterThan(0);
     });
     // Click Archive to open dialog
-    await user.click(screen.getByText("Archive"));
+    await user.click(screen.getAllByRole("button", { name: "Archive" })[0]);
     await waitFor(() => {
       expect(screen.getByText("Archive course")).toBeInTheDocument();
     });
@@ -348,11 +371,34 @@ describe("DataArchivesTab", () => {
     render(<DataArchivesTab role="ADMIN" />);
     const user = userEvent.setup();
     await waitFor(() => {
-      expect(screen.getByText("Restore")).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "Restore" }).length).toBeGreaterThan(0);
     });
-    await user.click(screen.getByText("Restore"));
+    await user.click(screen.getAllByRole("button", { name: "Restore" })[0]);
     await waitFor(() => {
       expect(mockRestoreCourse).toHaveBeenCalledWith(2);
+    });
+  });
+
+  it("calls purgeCourse when Purge course action confirmed", async () => {
+    mockPurgeCourse.mockResolvedValueOnce({});
+    const DataArchivesTab = await loadComponent();
+    render(<DataArchivesTab role="ADMIN" />);
+    const user = userEvent.setup();
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: "Purge" }).length).toBeGreaterThan(0);
+    });
+
+    await user.click(screen.getAllByRole("button", { name: "Purge" })[0]);
+    await waitFor(() => {
+      expect(screen.getByText("Purge course")).toBeInTheDocument();
+    });
+
+    const confirmButtons = screen.getAllByText("Purge");
+    const confirmBtn = confirmButtons[confirmButtons.length - 1];
+    await user.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(mockPurgeCourse).toHaveBeenCalledWith(2);
     });
   });
 
@@ -366,7 +412,61 @@ describe("DataArchivesTab", () => {
     // Click Name header to sort
     await user.click(screen.getByText("Name"));
     // Names should still be in DOM
-    expect(screen.getByText("Intro to CS")).toBeInTheDocument();
-    expect(screen.getByText("Data Science")).toBeInTheDocument();
+    expect(screen.getAllByText("Intro to CS").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Data Science").length).toBeGreaterThan(0);
+  });
+
+  it("loads assignment rows with includeArchived=true so restored courses can surface archived assignments", async () => {
+    await renderDataArchivesAndWait();
+    await waitFor(() => {
+      expect(mockListAssignmentsByCourse).toHaveBeenCalledWith(1, {
+        includeArchived: true,
+      });
+    });
+  });
+
+  it("shows teacher only course and assignment tabs", async () => {
+    const DataArchivesTab = await loadComponent();
+    render(<DataArchivesTab role="TEACHER" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Courses")).toBeInTheDocument();
+      expect(screen.getByText("Assignments")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("Assignment Templates")).toBeNull();
+  });
+
+  it("shows researcher only assignment template tab", async () => {
+    const DataArchivesTab = await loadComponent();
+    render(<DataArchivesTab role="RESEARCHER" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Assignment Templates")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("Courses")).toBeNull();
+    expect(screen.queryByText("Assignments")).toBeNull();
+  });
+
+  it("hides purge actions from teachers", async () => {
+    await renderDataArchivesAndWait("TEACHER");
+
+    await waitFor(() => {
+      expect(screen.getByText("Courses")).toBeInTheDocument();
+      expect(screen.getByText("Assignments")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("Purge")).toBeNull();
+  });
+
+  it("hides purge actions from researchers", async () => {
+    await renderDataArchivesAndWait("RESEARCHER");
+
+    await waitFor(() => {
+      expect(screen.getByText("Assignment Templates")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("Purge")).toBeNull();
   });
 });

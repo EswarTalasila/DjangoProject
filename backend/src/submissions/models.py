@@ -1,7 +1,7 @@
 """
 Submission and answer models for student work.
 
-This module defines the models that store student responses to assessments.
+This module defines the models that store student responses to assignment templates.
 When an assignment is created, empty submissions are generated for each
 enrolled student. Students then fill in answers and submit their work.
 
@@ -32,15 +32,15 @@ import uuid
 from django.db import models
 
 from accounts.models import User
-from assessments.models import Question
-from assignments.models import Assignment
+from assignment_templates.models import Question
+from assignments.models import Assignment, AssignmentQuestion
 
 
 class SubmissionStatus(models.TextChoices):
     """
     Enumeration of submission lifecycle states.
 
-    Tracks the progress of a student's work through the assessment process.
+    Tracks the progress of a student's work through the assignment process.
 
     Values:
         NOT_STARTED: Submission created but student hasn't begun
@@ -59,7 +59,7 @@ class Submission(models.Model):
     """
     A student's work for a specific assignment.
 
-    Submissions are pre-created when a teacher assigns an assessment to a course.
+    Submissions are pre-created when a teacher assigns an assignment template to a course.
     Each enrolled student gets one submission per assignment. Students update
     their submission by adding answers and eventually submitting for grading.
 
@@ -117,6 +117,16 @@ class Submission(models.Model):
         """Database table configuration for Submission."""
 
         db_table = "submissions"
+        constraints = [
+            # Exactly one of student or teacher must be set (XOR).
+            models.CheckConstraint(
+                condition=(
+                    models.Q(student_id__isnull=False, teacher_id__isnull=True)
+                    | models.Q(student_id__isnull=True, teacher_id__isnull=False)
+                ),
+                name="ck_submission_owner_xor",
+            ),
+        ]
 
     def __str__(self):
         """Return a readable string representation."""
@@ -139,13 +149,15 @@ class AnswerType(models.TextChoices):
     MULTIPLE_CHOICE = "MULTIPLE_CHOICE", "Multiple Choice"
     SHORT_ANSWER = "SHORT_ANSWER", "Short Answer"
     NUMBER_SCALE = "NUMBER_SCALE", "Number Scale"
+    MOOD_METER = "MOOD_METER", "Mood Meter"
+    FILE_UPLOAD = "FILE_UPLOAD", "File Upload"
 
 
 class Answer(models.Model):
     """
     Base answer model for student responses to questions.
 
-    Each answer corresponds to one question in the assessment. The answer_type
+    Each answer corresponds to one question in the assignment template. The answer_type
     determines which extension model contains the actual response data.
 
     Attributes:
@@ -166,7 +178,10 @@ class Answer(models.Model):
 
     # The question being answered
     question = models.ForeignKey(
-        Question, on_delete=models.CASCADE, db_column="question_id", related_name="answers"
+        AssignmentQuestion,
+        on_delete=models.CASCADE,
+        db_column="question_id",
+        related_name="answers",
     )
 
     # Parent submission containing this answer
@@ -329,6 +344,76 @@ class NumberScaleAnswer(models.Model):
         return f"NumberScaleAnswer({self.answer_id})"
 
 
+class MoodMeterAnswer(models.Model):
+    """
+    Extension model for MOOD_METER responses.
+
+    Stores the selected mood as a quadrant + mood name from the Yale RULER
+    mood meter grid. Quadrants represent energy (high/low) × pleasantness (high/low).
+
+    Attributes:
+        answer: One-to-one link to base Answer (also primary key)
+        quadrant: Which quadrant the selected mood belongs to
+        mood_name: The specific mood label selected (e.g., "Excited", "Calm")
+        row: Grid row position (0-9)
+        col: Grid column position (0-9)
+    """
+
+    answer = models.OneToOneField(
+        Answer,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        db_column="id",
+        related_name="mood_meter",
+    )
+
+    quadrant = models.CharField(max_length=64, blank=True, default="")
+    mood_name = models.CharField(max_length=64, blank=True, default="")
+    row = models.IntegerField(null=True, blank=True)
+    col = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        db_table = "mood_meter_answer"
+
+    def __str__(self):
+        return f"MoodMeterAnswer({self.answer_id}: {self.mood_name})"
+
+
+class FileUploadAnswer(models.Model):
+    """
+    Extension model for FILE_UPLOAD responses.
+
+    Stores metadata about an uploaded file (PDF, image, etc.) submitted
+    as the student's answer. The actual file is stored via the media system.
+
+    Attributes:
+        answer: One-to-one link to base Answer (also primary key)
+        storage_key: Path to the file in the media storage backend
+        original_filename: The name of the file as uploaded
+        mime_type: MIME type of the uploaded file
+        size_bytes: File size in bytes
+    """
+
+    answer = models.OneToOneField(
+        Answer,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        db_column="id",
+        related_name="file_upload",
+    )
+
+    storage_key = models.CharField(max_length=512, blank=True, default="")
+    original_filename = models.CharField(max_length=255, blank=True, default="")
+    mime_type = models.CharField(max_length=64, blank=True, default="")
+    size_bytes = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "file_upload_answer"
+
+    def __str__(self):
+        return f"FileUploadAnswer({self.answer_id}: {self.original_filename})"
+
+
 class ImageStatus(models.TextChoices):
     """Status lifecycle for submission images (FR-15 IMG)."""
 
@@ -362,6 +447,16 @@ class SubmissionImage(models.Model):
         db_column="submission_owner_user_id",
         related_name="owned_submission_images",
     )
+    # Link to the shared ImageAsset (nullable during migration transition)
+    asset = models.ForeignKey(
+        "core.ImageAsset",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column="asset_id",
+        related_name="submission_images",
+    )
+    # Blob metadata kept on SubmissionImage for backward compatibility
     storage_key = models.CharField(max_length=512, unique=True)
     original_filename = models.CharField(max_length=255)
     mime_type = models.CharField(max_length=64)

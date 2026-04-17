@@ -11,9 +11,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from accounts.models import Role
-from assessments.models import GradingMode
+from assignment_templates.models import GradingMode
 from assignments.models import Assignment
-from core.permissions import IsTeacherOrAbove, has_role
+from core.permissions import IsTeacherOrAbove, has_role, teacher_owns_course
 from courses.models import Course
 
 from .serializers import AssignmentSummaryParamsSerializer, CourseSummaryParamsSerializer
@@ -29,14 +29,6 @@ logger = logging.getLogger(__name__)
 
 def _is_teacher(user) -> bool:
     return not user.is_staff and not has_role(user, Role.RESEARCHER) and has_role(user, Role.TEACHER)
-
-
-def _teacher_owns_course(user, course: Course) -> bool:
-    """Return True if TEACHER user owns the course."""
-    try:
-        return course.teacher_profile_id == user.teacher_profile.id
-    except AttributeError:
-        return False
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +58,7 @@ def viz_course_summary(request, course_id):
     except Course.DoesNotExist:
         return Response({"detail": "Course not found."}, status=status.HTTP_404_NOT_FOUND)
 
-    if _is_teacher(request.user) and not _teacher_owns_course(request.user, course):
+    if _is_teacher(request.user) and not teacher_owns_course(request.user, course):
         return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
 
     ser = CourseSummaryParamsSerializer(data=request.query_params)
@@ -80,7 +72,7 @@ def viz_course_summary(request, course_id):
         start_date=params.get("startDate"),
         end_date=params.get("endDate"),
         category=params.get("category"),
-        assessment_id=params.get("assessmentId"),
+        assignment_template_id=params.get("assignmentTemplateId"),
     )
     return Response(data, status=status.HTTP_200_OK)
 
@@ -95,14 +87,17 @@ def viz_course_summary(request, course_id):
 def viz_assignment_summary(request, assignment_id):
     """GET /api/v1/visualizations/assignments/{assignmentId}/summary"""
     try:
-        assignment = Assignment.objects.select_related("course__teacher_profile", "assessment").get(
+        assignment = Assignment.objects.select_related(
+            "course__teacher_profile",
+            "assignment_template",
+        ).get(
             pk=assignment_id
         )
     except Assignment.DoesNotExist:
         return Response({"detail": "Assignment not found."}, status=status.HTTP_404_NOT_FOUND)
 
     if _is_teacher(request.user):
-        if not assignment.course or not _teacher_owns_course(request.user, assignment.course):
+        if not assignment.course or not teacher_owns_course(request.user, assignment.course):
             return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
 
     ser = AssignmentSummaryParamsSerializer(data=request.query_params)
@@ -129,21 +124,24 @@ def viz_assignment_summary(request, assignment_id):
 def viz_mood_meter(request, assignment_id):
     """GET /api/v1/visualizations/assignments/{assignmentId}/mood-meter"""
     try:
-        assignment = Assignment.objects.select_related("course__teacher_profile", "assessment").get(
+        assignment = Assignment.objects.select_related(
+            "course__teacher_profile",
+            "assignment_template",
+        ).get(
             pk=assignment_id
         )
     except Assignment.DoesNotExist:
         return Response({"detail": "Assignment not found."}, status=status.HTTP_404_NOT_FOUND)
 
     # VIZ-CN-04: mood meter type gate
-    if assignment.assessment.grading_mode != GradingMode.MOOD_METER:
+    if assignment.assignment_template.grading_mode != GradingMode.MOOD_METER:
         return Response(
-            {"detail": "Incompatible assessment type."},
+            {"detail": "Incompatible assignment template type."},
             status=status.HTTP_409_CONFLICT,
         )
 
     if _is_teacher(request.user):
-        if not assignment.course or not _teacher_owns_course(request.user, assignment.course):
+        if not assignment.course or not teacher_owns_course(request.user, assignment.course):
             return Response({"detail": "Forbidden."}, status=status.HTTP_403_FORBIDDEN)
 
     data = mood_meter_summary(request.user, assignment)

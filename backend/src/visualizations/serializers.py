@@ -14,7 +14,7 @@ class CourseSummaryParamsSerializer(serializers.Serializer):
     startDate = serializers.DateField(required=False, allow_null=True, default=None)
     endDate = serializers.DateField(required=False, allow_null=True, default=None)
     category = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
-    assessmentId = serializers.IntegerField(required=False, allow_null=True, default=None)
+    assignmentTemplateId = serializers.IntegerField(required=False, allow_null=True, default=None)
 
 
 class AssignmentSummaryParamsSerializer(serializers.Serializer):

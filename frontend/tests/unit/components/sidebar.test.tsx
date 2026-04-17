@@ -33,10 +33,10 @@ const mockGroups: NavGroup[] = [
     ],
   },
   {
-    label: "Assessments",
-    iconName: "Assessments",
+    label: "Assignment Templates",
+    iconName: "Assignment Templates",
     links: [
-      { label: "My Assessments", href: "/dashboard/assessments" },
+      { label: "My Assignment Templates", href: "/dashboard/assignment-templates" },
       { label: "My Rubrics", href: "/dashboard/rubrics" },
     ],
   },
@@ -62,7 +62,7 @@ describe("Sidebar", () => {
 
     expect(screen.getByLabelText("Overview")).toBeInTheDocument();
     expect(screen.getByLabelText("Courses")).toBeInTheDocument();
-    expect(screen.getByLabelText("Assessments")).toBeInTheDocument();
+    expect(screen.getByLabelText("Assignment Templates")).toBeInTheDocument();
   });
 
   it("renders links inside flyout panels", async () => {
@@ -73,7 +73,7 @@ describe("Sidebar", () => {
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(screen.getByText("My Courses")).toBeInTheDocument();
     expect(screen.getByText("Registration Codes")).toBeInTheDocument();
-    expect(screen.getByText("My Assessments")).toBeInTheDocument();
+    expect(screen.getByText("My Assignment Templates")).toBeInTheDocument();
     expect(screen.getByText("My Rubrics")).toBeInTheDocument();
   });
 

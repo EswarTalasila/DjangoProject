@@ -4,9 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetSubmission = vi.fn();
 const mockOverrideSubmissionScore = vi.fn();
+const mockListSubmissionImages = vi.fn();
 const mockGetAssignment = vi.fn();
-const mockGetAssignmentTemplate = vi.fn();
-const mockToast = { success: vi.fn(), error: vi.fn() };
+const mockGetAssignmentContent = vi.fn();
+const mockListRubrics = vi.fn();
+const mockToast = { success: vi.fn(), error: vi.fn(), message: vi.fn() };
 
 function setupModuleMocks() {
   vi.doMock("next/navigation", () => ({
@@ -21,10 +23,14 @@ function setupModuleMocks() {
   vi.doMock("@/lib/submission-api", () => ({
     getSubmission: mockGetSubmission,
     overrideSubmissionScore: mockOverrideSubmissionScore,
+    listSubmissionImages: mockListSubmissionImages,
   }));
   vi.doMock("@/lib/assignment-api", () => ({
     getAssignment: mockGetAssignment,
-    getAssignmentTemplate: mockGetAssignmentTemplate,
+    getAssignmentContent: mockGetAssignmentContent,
+  }));
+  vi.doMock("@/lib/rubric-api", () => ({
+    listRubrics: mockListRubrics,
   }));
 }
 
@@ -63,9 +69,9 @@ const baseSubmission = {
 
 const baseAssignment = {
   id: 10,
-  title: "Midterm Assessment",
-  assessmentId: 20,
-  assessmentTitle: "Midterm",
+  title: "Midterm AssignmentTemplate",
+  assignmentTemplateId: 20,
+  assignmentTemplateTitle: "Midterm",
   audienceType: "COURSE",
   courseId: 1,
   targetTeacherId: null,
@@ -126,6 +132,8 @@ const baseTemplate = {
 describe("SubmissionDetailView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockListSubmissionImages.mockResolvedValue([]);
+    mockListRubrics.mockResolvedValue([]);
   });
 
   it("shows loading spinner initially", async () => {
@@ -168,16 +176,16 @@ describe("SubmissionDetailView", () => {
   it("renders submission detail after loading", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Submission #1")).toBeInTheDocument();
+      expect(screen.getByText("Grade Submission")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Midterm Assessment")).toBeInTheDocument();
-    expect(screen.getByText("GRADED")).toBeInTheDocument();
+    expect(screen.getByText("Midterm AssignmentTemplate")).toBeInTheDocument();
+    expect(screen.getByText("Graded")).toBeInTheDocument();
     expect(screen.getByText("#42")).toBeInTheDocument();
     expect(screen.getByText("MANUAL")).toBeInTheDocument();
   });
@@ -185,7 +193,7 @@ describe("SubmissionDetailView", () => {
   it("renders score and total points", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -198,12 +206,12 @@ describe("SubmissionDetailView", () => {
   it("renders answers section with questions", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Answers")).toBeInTheDocument();
+      expect(screen.getByText("Question Review")).toBeInTheDocument();
     });
 
     expect(
@@ -217,7 +225,7 @@ describe("SubmissionDetailView", () => {
   it("renders Multiple Choice answer with label", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -230,7 +238,7 @@ describe("SubmissionDetailView", () => {
   it("renders Short Answer text", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -242,7 +250,7 @@ describe("SubmissionDetailView", () => {
   it("shows question type labels", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -255,65 +263,65 @@ describe("SubmissionDetailView", () => {
   it("shows Save Scores button for TEACHER", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: /Save Scores/ })
+        screen.getByRole("button", { name: /Save Grades/ })
       ).toBeInTheDocument();
     });
   });
 
-  it("shows Save Scores button for ADMIN", async () => {
+  it("shows Save Grades button for ADMIN", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="ADMIN" />);
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: /Save Scores/ })
+        screen.getByRole("button", { name: /Save Grades/ })
       ).toBeInTheDocument();
     });
   });
 
-  it("does not show Save Scores for STUDENT", async () => {
+  it("does not show Save Grades for STUDENT", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="STUDENT" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Submission #1")).toBeInTheDocument();
+      expect(screen.getByText("Grade Submission")).toBeInTheDocument();
     });
     expect(
-      screen.queryByRole("button", { name: /Save Scores/ })
+      screen.queryByRole("button", { name: /Save Grades/ })
     ).not.toBeInTheDocument();
   });
 
-  it("does not show Save Scores for RESEARCHER", async () => {
+  it("does not show Save Grades for RESEARCHER", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="RESEARCHER" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Submission #1")).toBeInTheDocument();
+      expect(screen.getByText("Grade Submission")).toBeInTheDocument();
     });
     expect(
-      screen.queryByRole("button", { name: /Save Scores/ })
+      screen.queryByRole("button", { name: /Save Grades/ })
     ).not.toBeInTheDocument();
   });
 
-  it("calls overrideSubmissionScore on Save Scores click", async () => {
+  it("calls overrideSubmissionScore on Save Grades click", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
 
     const updatedSubmission = {
       ...baseSubmission,
@@ -329,16 +337,20 @@ describe("SubmissionDetailView", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: /Save Scores/ })
+        screen.getByRole("button", { name: /Save Grades/ })
       ).toBeInTheDocument();
     });
 
+    const inputs = screen.getAllByRole("textbox");
+    await userEvent.clear(inputs[0]);
+    await userEvent.type(inputs[0], "4");
+
     await userEvent.click(
-      screen.getByRole("button", { name: /Save Scores/ })
+      screen.getByRole("button", { name: /Save Grades/ })
     );
 
     await waitFor(() => {
-      expect(mockOverrideSubmissionScore).toHaveBeenCalledWith(1, [5, 3]);
+      expect(mockOverrideSubmissionScore).toHaveBeenCalledWith(1, [4, 3]);
     });
     expect(mockToast.success).toHaveBeenCalledWith("Scores updated.");
   });
@@ -346,7 +358,7 @@ describe("SubmissionDetailView", () => {
   it("shows toast error when score override fails", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     mockOverrideSubmissionScore.mockRejectedValueOnce({
       response: { data: { detail: "Score exceeds max" } },
     });
@@ -356,12 +368,16 @@ describe("SubmissionDetailView", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: /Save Scores/ })
+        screen.getByRole("button", { name: /Save Grades/ })
       ).toBeInTheDocument();
     });
 
+    const inputs = screen.getAllByRole("textbox");
+    await userEvent.clear(inputs[0]);
+    await userEvent.type(inputs[0], "4");
+
     await userEvent.click(
-      screen.getByRole("button", { name: /Save Scores/ })
+      screen.getByRole("button", { name: /Save Grades/ })
     );
 
     await waitFor(() => {
@@ -373,7 +389,7 @@ describe("SubmissionDetailView", () => {
     const emptySubmission = { ...baseSubmission, answers: [] };
     mockGetSubmission.mockResolvedValueOnce(emptySubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
@@ -411,7 +427,7 @@ describe("SubmissionDetailView", () => {
     };
     mockGetSubmission.mockResolvedValueOnce(sub);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(tmpl);
+    mockGetAssignmentContent.mockResolvedValueOnce(tmpl);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="STUDENT" />);
 
@@ -437,7 +453,7 @@ describe("SubmissionDetailView", () => {
     };
     mockGetSubmission.mockResolvedValueOnce(sub);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="STUDENT" />);
 
@@ -460,7 +476,7 @@ describe("SubmissionDetailView", () => {
     };
     mockGetSubmission.mockResolvedValueOnce(sub);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="STUDENT" />);
 
@@ -483,7 +499,7 @@ describe("SubmissionDetailView", () => {
     };
     mockGetSubmission.mockResolvedValueOnce(sub);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce({
+    mockGetAssignmentContent.mockResolvedValueOnce({
       ...baseTemplate,
       questions: [],
     });
@@ -499,30 +515,29 @@ describe("SubmissionDetailView", () => {
     const hybridTemplate = { ...baseTemplate, gradingMode: "HYBRID" as const };
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(hybridTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(hybridTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
     await waitFor(() => {
       expect(
-        screen.getByText(
-          "Hybrid mode: only short-answer question scores are editable."
-        )
+        screen.getByText("Auto-scored in hybrid mode")
       ).toBeInTheDocument();
+      expect(screen.getByText("Manual review required")).toBeInTheDocument();
     });
   });
 
   it("shows override message for non-HYBRID mode", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
     await waitFor(() => {
       expect(
         screen.getByText(
-          "Override scores and save to mark this submission graded."
+          "Manual-review questions need teacher scores. Auto-scored questions are shown as reference and may only be overridden where the grading mode allows it."
         )
       ).toBeInTheDocument();
     });
@@ -531,7 +546,7 @@ describe("SubmissionDetailView", () => {
   it("shows Back to Submissions link", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="STUDENT" />);
 
@@ -543,7 +558,7 @@ describe("SubmissionDetailView", () => {
   it("shows assignment fallback title when assignment is null", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce({ ...baseAssignment, title: "" });
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="STUDENT" />);
 
@@ -555,12 +570,12 @@ describe("SubmissionDetailView", () => {
   it("shows toast error for NaN score input on save", async () => {
     mockGetSubmission.mockResolvedValueOnce(baseSubmission);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(baseTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(baseTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Submission #1")).toBeInTheDocument();
+      expect(screen.getByText("Grade Submission")).toBeInTheDocument();
     });
 
     // Find score inputs and type invalid value
@@ -569,7 +584,7 @@ describe("SubmissionDetailView", () => {
     await userEvent.type(inputs[0], "abc");
 
     await userEvent.click(
-      screen.getByRole("button", { name: /Save Scores/ })
+      screen.getByRole("button", { name: /Save Grades/ })
     );
 
     await waitFor(() => {
@@ -594,21 +609,21 @@ describe("SubmissionDetailView", () => {
     const hybridTemplate = { ...baseTemplate, gradingMode: "HYBRID" as const };
     mockGetSubmission.mockResolvedValueOnce(sub);
     mockGetAssignment.mockResolvedValueOnce(baseAssignment);
-    mockGetAssignmentTemplate.mockResolvedValueOnce(hybridTemplate);
+    mockGetAssignmentContent.mockResolvedValueOnce(hybridTemplate);
     const Component = await loadComponent();
     render(<Component submissionId={1} viewerRole="TEACHER" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Submission #1")).toBeInTheDocument();
+      expect(screen.getByText("Grade Submission")).toBeInTheDocument();
     });
 
     await userEvent.click(
-      screen.getByRole("button", { name: /Save Scores/ })
+      screen.getByRole("button", { name: /Save Grades/ })
     );
 
     await waitFor(() => {
       expect(mockToast.error).toHaveBeenCalledWith(
-        "No gradable answers found for score override."
+        "No questions require score changes."
       );
     });
   });

@@ -8,6 +8,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Cookies from "js-cookie";
 import api from "@/lib/api";
+import type { ApiError } from "@/lib/api-error";
+import { isApiErrorRecord } from "@/lib/api-error";
+import { toErrorMessage } from "@/lib/utils";
 
 // OAuth Imports
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
@@ -25,12 +28,10 @@ const loginSchema = z.object({
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
-type ApiError = { response?: { data?: unknown } };
 type LoginSuccessPayload = {
   role?: string;
   name?: string;
 };
-type DetailError = { detail?: unknown };
 const loginFieldNames = new Set<keyof LoginForm>(["identifier", "password"]);
 const adminConsoleHref = "/admin/";
 
@@ -63,13 +64,9 @@ function LoginPageContent() {
     const errorData = error.response?.data;
 
     // 1. Handle DRF Field Errors (e.g. { identifier: ["Invalid identifier"] })
-    if (
-      typeof errorData === "object" &&
-      errorData !== null &&
-      !Array.isArray(errorData)
-    ) {
+    if (isApiErrorRecord(errorData)) {
       let hasFieldError = false;
-      Object.entries(errorData as Record<string, unknown>).forEach(
+      Object.entries(errorData).forEach(
         ([field, messages]) => {
           if (loginFieldNames.has(field as keyof LoginForm)) {
             const message = Array.isArray(messages)
@@ -87,16 +84,10 @@ function LoginPageContent() {
     }
 
     // 2. Handle Generic/Detail Errors
-    const detail =
-      typeof errorData === "object" && errorData !== null
-        ? (errorData as DetailError).detail
-        : undefined;
-    const errorMessage =
-      typeof errorData === "string"
-        ? errorData
-        : typeof detail === "string"
-          ? detail
-          : "Authentication failed. Please check your credentials.";
+    const errorMessage = toErrorMessage(
+      error,
+      "Authentication failed. Please check your credentials.",
+    );
 
     if (errorMessage === "Admin accounts must use Django admin.") {
       setAdminBlocked(true);
@@ -130,10 +121,7 @@ function LoginPageContent() {
         });
         handleLoginSuccess(res.data);
       } catch (error: unknown) {
-        const detail = (
-          (error as ApiError).response?.data as { detail?: string } | undefined
-        )?.detail;
-        setGeneralError(detail || "Google login failed.");
+        setGeneralError(toErrorMessage(error, "Google login failed."));
       } finally {
         setIsLoading(false);
       }

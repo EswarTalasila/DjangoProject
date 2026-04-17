@@ -24,6 +24,8 @@ from collections.abc import Mapping
 
 from rest_framework import serializers
 
+from core.permissions import primary_role
+
 from .models import RegistrationCodeType, Role, User, UserRole
 
 
@@ -120,13 +122,13 @@ class UserOutputSerializer(serializers.ModelSerializer):
 
     def get_role(self, obj):
         """
-        Return the user's primary role as a plain string.
+        Return the user's primary (highest-privilege) role.
 
-        Falls back to STUDENT if no role is assigned.
-        Uses .all() instead of .values_list() to leverage prefetch_related cache.
+        Delegates to core.permissions.primary_role() so the serialized
+        role always matches the authorization system's priority order:
+        ADMIN (is_staff) > RESEARCHER > TEACHER > STUDENT (fallback).
         """
-        roles = list(obj.roles.all())
-        return roles[0].role if roles else Role.STUDENT
+        return primary_role(obj)
 
 
 class StudentListSerializer(serializers.Serializer):
@@ -212,7 +214,7 @@ class RegistrationCodeCreateSerializer(serializers.Serializer):
 class RegistrationCodeUpdateSerializer(serializers.Serializer):
     """Payload for code lifecycle state transitions."""
 
-    status = serializers.ChoiceField(choices=["REVOKED", "ARCHIVED"])
+    status = serializers.ChoiceField(choices=["REVOKED"])
     reason = serializers.CharField(required=False, allow_blank=False, max_length=255)
 
 

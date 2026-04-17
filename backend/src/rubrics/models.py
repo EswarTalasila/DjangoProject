@@ -1,6 +1,6 @@
 """Rubric models for defining grading criteria.
 
-Rubrics are first-class entities separate from assessments. They define
+Rubrics are first-class entities separate from assignment templates. They define
 structured grading criteria with weighted criteria and scored levels.
 
 Model Hierarchy:

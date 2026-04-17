@@ -3,7 +3,7 @@
 import pytest
 from django.utils import timezone
 
-from assessments.models import Assessment, GradingMode
+from assignment_templates.models import AssignmentTemplate, GradingMode
 
 pytestmark = pytest.mark.integration
 
@@ -15,14 +15,15 @@ class TestAssignmentErrors:
         self, api_client, teacher_user, admin_user
     ):
         """Test that create assignment requires course id for course audience."""
-        assessment = Assessment.objects.create(
-            title="Test Assessment",
+        assignment_template = AssignmentTemplate.objects.create(
+            title="Test AssignmentTemplate",
             grading_mode=GradingMode.AUTO,
             created_by_admin=admin_user,
         )
         api_client.force_authenticate(user=teacher_user)
         payload = {
-            "assessmentId": assessment.id,
+            "title": "Week 1 Intro Check-in",
+            "assignmentTemplateId": assignment_template.id,
             "audienceType": "COURSE",
             "openAt": timezone.now().isoformat(),
         }

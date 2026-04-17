@@ -21,19 +21,19 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  getSubmission,
   listAssignmentSubmissions,
   listMySubmissions,
-  type Paginated,
   type SubmissionCompactDTO,
   type SubmissionStatus,
 } from '@/lib/submission-api';
+import { StatusBadge } from '@/components/ui/status-badge';
 import {
   listAssignmentsByCourse,
   listAssignmentsForUser,
   type Assignment,
 } from '@/lib/assignment-api';
 import { listCourses, type CourseSummary } from '@/lib/course-api';
+import { toErrorMessage, formatDate, formatScore } from '@/lib/utils';
 
 type Role = 'ADMIN' | 'TEACHER' | 'RESEARCHER' | 'STUDENT';
 
@@ -42,40 +42,26 @@ type SubmissionsHubViewProps = {
   userId: number;
 };
 
-type SubmissionRow = SubmissionCompactDTO & {
-  studentId: number | null;
-};
-
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
-
-function formatDate(value: string | null): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString();
-}
-
-function formatScore(value: number | null): string {
-  if (value == null) return '-';
-  if (Number.isInteger(value)) return String(value);
-  return value.toFixed(2).replace(/\.?0+$/, '');
-}
-
-function extractResults<T>(payload: Paginated<T> | T[]): T[] {
-  return Array.isArray(payload) ? payload : payload.results;
-}
-
 const STATUS_OPTIONS: Array<{ value: 'ALL' | SubmissionStatus; label: string }> = [
   { value: 'ALL', label: 'All statuses' },
   { value: 'NOT_STARTED', label: 'Not Started' },
-  { value: 'IN_PROGRESS', label: 'In Progress' },
+  { value: 'IN_PROGRESS', label: 'Draft' },
   { value: 'SUBMITTED', label: 'Submitted' },
   { value: 'GRADED', label: 'Graded' },
 ];
+
+function displayStatus(s: string): string {
+  if (s === 'IN_PROGRESS' || s === 'NOT_STARTED') return 'Not Submitted';
+  if (s === 'SUBMITTED') return 'Submitted';
+  if (s === 'GRADED') return 'Graded';
+  return s;
+}
+
+function statusVariant(s: string): string {
+  if (s === 'GRADED') return 'ACTIVE';
+  if (s === 'SUBMITTED') return 'SUBMITTED';
+  return 'NOT_STARTED';
+}
 
 export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewProps) {
   const router = useRouter();
@@ -92,7 +78,7 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>('');
-  const [submissionRows, setSubmissionRows] = useState<SubmissionRow[]>([]);
+  const [submissionRows, setSubmissionRows] = useState<SubmissionCompactDTO[]>([]);
 
   const isStudent = role === 'STUDENT';
   const isTeacher = role === 'TEACHER';
@@ -109,9 +95,9 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
         assignmentMap[assignment.id] = assignment.title || `Assignment #${assignment.id}`;
       }
       setMyAssignments(assignmentMap);
-      setMySubmissions(extractResults(submissions));
+      setMySubmissions(submissions);
     } catch (error: unknown) {
-      setLoadError(extractDetail(error, 'Failed to load your submissions.'));
+      setLoadError(toErrorMessage(error, 'Failed to load your submissions.'));
     }
   }, [studentStatusFilter, userId]);
 
@@ -119,31 +105,10 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
     setLoadError(null);
     setIsRefreshingRows(true);
     try {
-      const compact = extractResults(await listAssignmentSubmissions(assignmentId));
-      if (compact.length === 0) {
-        setSubmissionRows([]);
-        return;
-      }
-      const detailResults = await Promise.allSettled(
-        compact.map(async (submission) => {
-          const detail = await getSubmission(submission.id);
-          return { id: submission.id, studentId: detail.studentId };
-        }),
-      );
-      const studentBySubmission = new Map<number, number | null>();
-      for (const result of detailResults) {
-        if (result.status === 'fulfilled') {
-          studentBySubmission.set(result.value.id, result.value.studentId);
-        }
-      }
-      setSubmissionRows(
-        compact.map((submission) => ({
-          ...submission,
-          studentId: studentBySubmission.get(submission.id) ?? null,
-        })),
-      );
+      const rows = await listAssignmentSubmissions(assignmentId);
+      setSubmissionRows(rows);
     } catch (error: unknown) {
-      setLoadError(extractDetail(error, 'Failed to load submissions for this assignment.'));
+      setLoadError(toErrorMessage(error, 'Failed to load submissions for this assignment.'));
       setSubmissionRows([]);
     } finally {
       setIsRefreshingRows(false);
@@ -163,7 +128,7 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
         setSubmissionRows([]);
       }
     } catch (error: unknown) {
-      setLoadError(extractDetail(error, 'Failed to load your assignments.'));
+      setLoadError(toErrorMessage(error, 'Failed to load your assignments.'));
     }
   }, [loadRowsForAssignment, userId]);
 
@@ -192,7 +157,7 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
         setSubmissionRows([]);
       }
     } catch (error: unknown) {
-      setLoadError(extractDetail(error, 'Failed to load submissions scope.'));
+      setLoadError(toErrorMessage(error, 'Failed to load submissions scope.'));
     }
   }, [loadRowsForAssignment]);
 
@@ -236,7 +201,7 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
         await loadRowsForAssignment(Number(nextAssignmentId));
       }
     } catch (error: unknown) {
-      setLoadError(extractDetail(error, 'Failed to load assignments for this course.'));
+      setLoadError(toErrorMessage(error, 'Failed to load assignments for this course.'));
     } finally {
       setIsRefreshingRows(false);
     }
@@ -255,7 +220,7 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
   }, [assignments, selectedAssignmentId]);
 
   return (
-    <div className="space-y-6 p-6 w-full">
+    <div className="space-y-6 p-6 w-full max-w-6xl mx-auto">
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
           {isStudent ? 'My Submissions' : 'Submissions'}
@@ -335,7 +300,13 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
                       <TableCell className="font-medium text-sm text-foreground">
                         {myAssignments[submission.assignmentId] ?? `Assignment #${submission.assignmentId}`}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{submission.status}</TableCell>
+                      <TableCell>
+                        <StatusBadge
+                          status={submission.status}
+                          label={displayStatus(submission.status)}
+                          className="text-[10px]"
+                        />
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{formatScore(submission.score)}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDate(submission.submittedAt)}
@@ -440,10 +411,13 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
                 <TableHeader>
                   <TableRow className="bg-muted border-b border-border">
                     <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Submission
+                      Student
                     </TableHead>
                     <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Student
+                      Course
+                    </TableHead>
+                    <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Assignment
                     </TableHead>
                     <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Status
@@ -462,12 +436,25 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
                 <TableBody>
                   {submissionRows.map((submission) => (
                     <TableRow key={submission.id} className="even:bg-muted/50 hover:bg-accent transition-colors">
-                      <TableCell className="font-medium text-sm text-foreground">#{submission.id}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {submission.studentId != null ? `#${submission.studentId}` : '-'}
+                      <TableCell className="font-medium text-sm text-foreground">
+                        {submission.studentName ?? 'Unknown'}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{submission.status}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{formatScore(submission.score)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {submission.courseName ?? '-'}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {submission.assignmentTitle ?? `Assignment #${submission.assignmentId}`}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge
+                          status={statusVariant(submission.status)}
+                          label={displayStatus(submission.status)}
+                          className="text-[10px]"
+                        />
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {submission.status === 'GRADED' ? formatScore(submission.score) : '-'}
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDate(submission.submittedAt)}
                       </TableCell>
@@ -477,7 +464,7 @@ export default function SubmissionsHubView({ role, userId }: SubmissionsHubViewP
                           size="sm"
                           onClick={() => router.push(`/dashboard/submissions/${submission.id}`)}
                         >
-                          Open
+                          {submission.status === 'SUBMITTED' ? 'Grade' : 'View'}
                         </Button>
                       </TableCell>
                     </TableRow>

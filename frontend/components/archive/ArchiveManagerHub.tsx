@@ -1,10 +1,9 @@
 'use client';
 
-import { Archive, Package, Upload } from 'lucide-react';
+import { Archive, Upload } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { HelpTip } from '@/components/ui/help-tip';
 import QuickExportTab from '@/components/archive/QuickExportTab';
-import PackageBuilderTab from '@/components/archive/PackageBuilderTab';
 import DataArchivesTab from '@/components/archive/DataArchivesTab';
 
 type ArchiveManagerHubProps = {
@@ -18,52 +17,37 @@ export default function ArchiveManagerHub({
 }: ArchiveManagerHubProps) {
   return (
     <div className="space-y-6 p-6">
-      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
           Archive Manager
         </h1>
-        <p className="text-muted-foreground mt-1">
-          Export data, build organized packages, and manage archived records.
-          <HelpTip text="Use Quick Export for one-off downloads, Package Builder to organize multi-file exports, and Data Archives to manage the lifecycle of courses, assessments, and assignments." />
+        <p className="mt-1 max-w-3xl text-muted-foreground">
+          Use live exports for current reporting and archive records for restore,
+          purge, and assignment bundle downloads.
+          <HelpTip text="Live Exports pulls current CSV data without changing lifecycle state. Archive Records is where courses, assignment templates, and assignments move through archive, restore, purge, and assignment-bundle flows." />
         </p>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="quick-export">
-        <TabsList>
-          <TabsTrigger value="quick-export" className="gap-2">
+      <Tabs defaultValue="live-exports">
+        <TabsList className="grid w-full grid-cols-2 md:inline-flex md:w-auto">
+          <TabsTrigger value="live-exports" className="gap-2">
             <Upload className="size-4" />
-            Quick Export
+            Live Exports
           </TabsTrigger>
-          <TabsTrigger value="package-builder" className="gap-2">
-            <Package className="size-4" />
-            Package Builder
+          <TabsTrigger value="archive-records" className="gap-2">
+            <Archive className="size-4" />
+            Archive Records
           </TabsTrigger>
-          {role !== 'TEACHER' && (
-            <TabsTrigger value="data-archives" className="gap-2">
-              <Archive className="size-4" />
-              Data Archives
-            </TabsTrigger>
-          )}
         </TabsList>
-        <TabsContent value="quick-export">
+        <TabsContent value="live-exports">
           <QuickExportTab
             role={role}
             canExportIdentifiable={canExportIdentifiable}
           />
         </TabsContent>
-        <TabsContent value="package-builder">
-          <PackageBuilderTab
-            role={role}
-            canExportIdentifiable={canExportIdentifiable}
-          />
+        <TabsContent value="archive-records">
+          <DataArchivesTab role={role} />
         </TabsContent>
-        {role !== 'TEACHER' && (
-          <TabsContent value="data-archives">
-            <DataArchivesTab role={role as 'RESEARCHER' | 'ADMIN'} />
-          </TabsContent>
-        )}
       </Tabs>
     </div>
   );

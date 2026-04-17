@@ -8,7 +8,7 @@ import pytest
 from django.utils import timezone
 
 from accounts.models import SudoGrant, SudoPermission
-from assessments.models import GradingMode
+from assignment_templates.models import GradingMode
 from courses.models import EnrollmentStatus
 from exports.models import ExportAuditLog
 from submissions.models import (
@@ -18,7 +18,7 @@ from submissions.models import (
 )
 from tests.factories import (
     AnswerFactory,
-    AssessmentFactory,
+    AssignmentTemplateFactory,
     AssignmentFactory,
     CourseFactory,
     EnrollmentFactory,
@@ -57,20 +57,20 @@ def _seed_course(teacher_user, *, n_students=3, admin_user=None, consent=False):
 
 
 def _seed_submissions(teacher_user, course, students, *, admin_user=None, category="General"):
-    """Create assessment → assignment → submissions for a course."""
-    assessment = AssessmentFactory(
+    """Create assignment_template → assignment → submissions for a course."""
+    assignment_template = AssignmentTemplateFactory(
         grading_mode=GradingMode.AUTO,
         created_by_admin=admin_user or teacher_user,
         category=category,
     )
     question = QuestionFactory(
-        assessment=assessment,
+        assignment_template=assignment_template,
         kind="SHORT_ANSWER",
         question_type="SHORT_ANSWER",
         prompt="What is your answer?",
     )
     assignment = AssignmentFactory(
-        assessment=assessment,
+        assignment_template=assignment_template,
         course=course,
         created_by=teacher_user,
     )
@@ -91,7 +91,7 @@ def _seed_submissions(teacher_user, course, students, *, admin_user=None, catego
         )
         ShortAnswerAnswer.objects.create(answer=ans, text="My answer text")
         subs.append(sub)
-    return assessment, assignment, question, subs
+    return assignment_template, assignment, question, subs
 
 
 # ===========================================================================
@@ -296,7 +296,7 @@ class TestCourseSubmissionExport:
         rows = _parse_csv(resp)
         assert len(rows) == 3
         assert "studentId" in rows[0]
-        assert "assessmentTitle" in rows[0]
+        assert "assignmentTemplateTitle" in rows[0]
         assert resp["X-Export-Anonymized"] == "false"
 
     def test_EXP_UC_02_TEACHER(self, api_client, teacher_user, admin_user):
@@ -329,7 +329,7 @@ class TestCourseSubmissionExport:
         resp = api_client.get(COURSE_SUBS_URL.format(course.id))
         rows = _parse_csv(resp)
         assert set(rows[0].keys()) == {
-            "consent", "assessmentCategory", "gradingMode", "status", "score", "submittedAt"
+            "consent", "assignmentTemplateCategory", "gradingMode", "status", "score", "submittedAt"
         }
 
     def test_EXP_UC_02_RESEARCHER_identifiable(self, api_client, researcher_user, teacher_user, admin_user):
@@ -355,7 +355,7 @@ class TestCourseSubmissionExport:
         api_client.force_authenticate(user=teacher_user)
         resp = api_client.get(COURSE_SUBS_URL.format(course.id) + "?category=math")
         rows = _parse_csv(resp)
-        assert all(r["assessmentCategory"] == "math" for r in rows)
+        assert all(r["assignmentTemplateCategory"] == "math" for r in rows)
 
     def test_EXP_UC_02_TEACHER_filter_by_date_range(self, api_client, teacher_user, admin_user):
         """Date range filter works."""

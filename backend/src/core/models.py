@@ -3,6 +3,9 @@
 from django.conf import settings
 from django.db import models
 
+# Re-export ImageAsset so Django discovers it under the 'core' app label.
+from core.media.models import ImageAsset  # noqa: F401
+
 
 class AuditAction(models.TextChoices):
     SUDO_GRANT = "SUDO_GRANT"
@@ -17,8 +20,6 @@ class AuditAction(models.TextChoices):
     IMAGE_UPLOAD = "IMAGE_UPLOAD"
     IMAGE_PROXY_UPLOAD = "IMAGE_PROXY_UPLOAD"
     IMAGE_DELETE = "IMAGE_DELETE"
-    PKG_BUILD = "PKG_BUILD"
-    PKG_DOWNLOAD = "PKG_DOWNLOAD"
 
 
 class AuditOutcome(models.TextChoices):

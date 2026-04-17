@@ -16,10 +16,10 @@
 - Enforce role-based access control across endpoints.
 - Implement Google OAuth verification for registered users.
 
-## Phase 3: Course and assessment workflows
-- Implement courses, enrollments, assessments, assignments, submissions.
+## Phase 3: Course and assignment template workflows
+- Implement courses, enrollments, assignment templates, assignments, submissions.
 - Preserve question types and grading modes.
-- Enforce assessment versioning or lock after submissions.
+- Enforce assignment template versioning or lock after submissions.
 
 ## Phase 4: Visualization and export
 - Implement dashboard aggregations with pagination and caching.
@@ -70,7 +70,7 @@ An audit was conducted comparing the 28 known issues from the original Spring Bo
 | nginx missing security headers | #22 | MEDIUM | CSP, HSTS, etc. missing |
 | Image upload not implemented | #23 | MEDIUM | TextField exists, no storage |
 | No soft delete/archival | #24 | HIGH | Hard deletes throughout |
-| Assessment not locked after submissions | #25 | MEDIUM | Can corrupt historical data |
+| AssignmentTemplate not locked after submissions | #25 | MEDIUM | Can corrupt historical data |
 | No reflection trend visualization | #26 | LOW | Only raw data returned |
 | PDF/CSV export not implemented | #27 | LOW | Returns 501 |
 

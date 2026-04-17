@@ -893,71 +893,6 @@ class TestTransitionRegistrationCodeStatus:
 
     @patch("accounts.services._registration.registration_code_status")
     @patch("accounts.services._registration.registration_code_scope_queryset")
-    def test_archive_exhausted_code_sets_archived_at(self, mock_scope, mock_status):
-        """Archiving an EXHAUSTED code sets archived_at and saves."""
-        code = Mock()
-        mock_qs = MagicMock()
-        mock_qs.select_for_update.return_value.filter.return_value.first.return_value = code
-        mock_scope.return_value = mock_qs
-        mock_status.return_value = "EXHAUSTED"
-
-        result = transition_registration_code_status(
-            actor=Mock(), registration_code_id=1, next_status="ARCHIVED"
-        )
-
-        assert code.archived_at is not None
-        code.save.assert_called_once_with(update_fields=["archived_at"])
-        assert result is code
-
-    @patch("accounts.services._registration.registration_code_status")
-    @patch("accounts.services._registration.registration_code_scope_queryset")
-    def test_archive_expired_code_succeeds(self, mock_scope, mock_status):
-        """Archiving an EXPIRED code succeeds."""
-        code = Mock()
-        mock_qs = MagicMock()
-        mock_qs.select_for_update.return_value.filter.return_value.first.return_value = code
-        mock_scope.return_value = mock_qs
-        mock_status.return_value = "EXPIRED"
-
-        result = transition_registration_code_status(
-            actor=Mock(), registration_code_id=1, next_status="ARCHIVED"
-        )
-
-        assert result is code
-
-    @patch("accounts.services._registration.registration_code_status")
-    @patch("accounts.services._registration.registration_code_scope_queryset")
-    def test_archive_revoked_code_succeeds(self, mock_scope, mock_status):
-        """Archiving a REVOKED code succeeds."""
-        code = Mock()
-        mock_qs = MagicMock()
-        mock_qs.select_for_update.return_value.filter.return_value.first.return_value = code
-        mock_scope.return_value = mock_qs
-        mock_status.return_value = "REVOKED"
-
-        result = transition_registration_code_status(
-            actor=Mock(), registration_code_id=1, next_status="ARCHIVED"
-        )
-
-        assert result is code
-
-    @patch("accounts.services._registration.registration_code_status")
-    @patch("accounts.services._registration.registration_code_scope_queryset")
-    def test_archive_active_code_raises_value_error(self, mock_scope, mock_status):
-        """Archiving an ACTIVE code raises ValueError (line 461)."""
-        code = Mock()
-        mock_qs = MagicMock()
-        mock_qs.select_for_update.return_value.filter.return_value.first.return_value = code
-        mock_scope.return_value = mock_qs
-        mock_status.return_value = "ACTIVE"
-
-        with pytest.raises(ValueError, match="EXHAUSTED, EXPIRED, or REVOKED"):
-            transition_registration_code_status(
-                actor=Mock(), registration_code_id=1, next_status="ARCHIVED"
-            )
-
-    @patch("accounts.services._registration.registration_code_status")
-    @patch("accounts.services._registration.registration_code_scope_queryset")
     def test_unsupported_status_raises_value_error(self, mock_scope, mock_status):
         """Unsupported next_status raises ValueError (line 466)."""
         code = Mock()
@@ -970,6 +905,53 @@ class TestTransitionRegistrationCodeStatus:
             transition_registration_code_status(
                 actor=Mock(), registration_code_id=1, next_status="DELETED"
             )
+
+    @patch("accounts.services._registration.registration_code_status")
+    @patch("accounts.services._registration.registration_code_scope_queryset")
+    def test_remove_active_code_revokes_then_deletes(self, mock_scope, mock_status):
+        """Removing an ACTIVE code revokes then deletes the record."""
+        from accounts.services._registration import remove_registration_code
+
+        code = Mock()
+        mock_qs = MagicMock()
+        mock_qs.select_for_update.return_value.filter.return_value.first.return_value = code
+        mock_scope.return_value = mock_qs
+        mock_status.return_value = "ACTIVE"
+
+        remove_registration_code(actor=Mock(), registration_code_id=1)
+
+        assert code.is_active is False
+        code.save.assert_called_once_with(update_fields=["is_active"])
+        code.delete.assert_called_once_with()
+
+    @patch("accounts.services._registration.registration_code_status")
+    @patch("accounts.services._registration.registration_code_scope_queryset")
+    def test_remove_terminal_code_deletes_without_revocation(self, mock_scope, mock_status):
+        """Removing terminal codes deletes them directly."""
+        from accounts.services._registration import remove_registration_code
+
+        code = Mock()
+        mock_qs = MagicMock()
+        mock_qs.select_for_update.return_value.filter.return_value.first.return_value = code
+        mock_scope.return_value = mock_qs
+        mock_status.return_value = "EXPIRED"
+
+        remove_registration_code(actor=Mock(), registration_code_id=1)
+
+        code.save.assert_not_called()
+        code.delete.assert_called_once_with()
+
+    @patch("accounts.services._registration.registration_code_scope_queryset")
+    def test_remove_missing_code_raises_value_error(self, mock_scope):
+        """Removing a missing code raises ValueError."""
+        from accounts.services._registration import remove_registration_code
+
+        mock_qs = MagicMock()
+        mock_qs.select_for_update.return_value.filter.return_value.first.return_value = None
+        mock_scope.return_value = mock_qs
+
+        with pytest.raises(ValueError, match="Registration code not found."):
+            remove_registration_code(actor=Mock(), registration_code_id=999)
 
 
 # ---------------------------------------------------------------------------

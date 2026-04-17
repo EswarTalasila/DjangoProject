@@ -9,10 +9,14 @@
 export type LifecycleStatus = 'ACTIVE' | 'ARCHIVED';
 
 // -- Course lifecycle --
-export { archiveCourse, restoreCourse, deleteCourse as purgeCourse } from '@/lib/course-api';
+export { archiveCourse, restoreCourse, purgeCourse } from '@/lib/course-api';
 
-// -- Assessment lifecycle --
-export { archiveAssessment, restoreAssessment, deleteAssessment as purgeAssessment } from '@/lib/assessment-api';
+// -- Assignment template lifecycle --
+export {
+  archiveAssignmentTemplate,
+  restoreAssignmentTemplate,
+  purgeAssignmentTemplate,
+} from '@/lib/assignment-template-api';
 
 // -- Assignment lifecycle --
-export { archiveAssignment, restoreAssignment, deleteAssignment as purgeAssignment } from '@/lib/assignment-api';
+export { archiveAssignment, restoreAssignment, purgeAssignment } from '@/lib/assignment-api';

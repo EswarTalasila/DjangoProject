@@ -13,7 +13,7 @@ from django.db.models.functions import Coalesce, Round
 from django.utils import timezone
 
 from accounts.models import Role, SudoPermission
-from assessments.models import QuestionKind
+from assignment_templates.models import QuestionKind
 from assignments.models import Assignment
 from core.permissions import has_role, has_sudo_permission
 from courses.models import Course, Enrollment, EnrollmentStatus
@@ -59,14 +59,14 @@ def dashboard_overview(user) -> dict:
     active_enrollments_sq = (
         Enrollment.objects.filter(course=OuterRef("pk"), status=EnrollmentStatus.ACTIVE)
         .values("course")
-        .annotate(c=Count("id"))
-        .values("c")[:1]
+        .annotate(enrollment_count=Count("id"))
+        .values("enrollment_count")[:1]
     )
     assignment_count_sq = (
         Assignment.objects.filter(course=OuterRef("pk"))
         .values("course")
-        .annotate(c=Count("id"))
-        .values("c")[:1]
+        .annotate(assignment_count=Count("id"))
+        .values("assignment_count")[:1]
     )
     submitted_count_sq = (
         Submission.objects.filter(
@@ -74,8 +74,8 @@ def dashboard_overview(user) -> dict:
             status__in=[SubmissionStatus.SUBMITTED, SubmissionStatus.GRADED],
         )
         .values("assignment__course")
-        .annotate(c=Count("id"))
-        .values("c")[:1]
+        .annotate(submitted_count=Count("id"))
+        .values("submitted_count")[:1]
     )
     pending_count_sq = (
         Submission.objects.filter(
@@ -83,8 +83,8 @@ def dashboard_overview(user) -> dict:
             status=SubmissionStatus.SUBMITTED,
         )
         .values("assignment__course")
-        .annotate(c=Count("id"))
-        .values("c")[:1]
+        .annotate(pending_count=Count("id"))
+        .values("pending_count")[:1]
     )
     graded_avg_sq = (
         Submission.objects.filter(
@@ -92,8 +92,8 @@ def dashboard_overview(user) -> dict:
             status=SubmissionStatus.GRADED,
         )
         .values("assignment__course")
-        .annotate(v=Avg("score"))
-        .values("v")[:1]
+        .annotate(avg_score=Avg("score"))
+        .values("avg_score")[:1]
     )
 
     courses = courses.annotate(
@@ -160,7 +160,7 @@ def course_summary(
     start_date: date | None = None,
     end_date: date | None = None,
     category: str | None = None,
-    assessment_id: int | None = None,
+    assignment_template_id: int | None = None,
 ) -> dict:
     """Per-assignment completion and grade stats for a course."""
     anonymize = _is_researcher_without_viz(user)
@@ -169,19 +169,19 @@ def course_summary(
         status=EnrollmentStatus.ACTIVE,
     ).count()
 
-    assignments = course.assignments.select_related("assessment")
+    assignments = course.assignments.select_related("assignment_template")
 
     if start_date or end_date:
-        s, e = _date_to_datetime_range(start_date, end_date)
-        if s:
-            assignments = assignments.filter(open_at__gte=s)
-        if e:
-            assignments = assignments.filter(open_at__lte=e)
+        start_dt, end_dt = _date_to_datetime_range(start_date, end_date)
+        if start_dt:
+            assignments = assignments.filter(open_at__gte=start_dt)
+        if end_dt:
+            assignments = assignments.filter(open_at__lte=end_dt)
 
     if category:
-        assignments = assignments.filter(assessment__category=category)
-    if assessment_id is not None:
-        assignments = assignments.filter(assessment_id=assessment_id)
+        assignments = assignments.filter(assignment_template__category=category)
+    if assignment_template_id is not None:
+        assignments = assignments.filter(assignment_template_id=assignment_template_id)
 
     submitted_count_sq = (
         Submission.objects.filter(
@@ -189,8 +189,8 @@ def course_summary(
             status__in=[SubmissionStatus.SUBMITTED, SubmissionStatus.GRADED],
         )
         .values("assignment")
-        .annotate(c=Count("id"))
-        .values("c")[:1]
+        .annotate(submitted_count=Count("id"))
+        .values("submitted_count")[:1]
     )
     graded_count_sq = (
         Submission.objects.filter(
@@ -198,8 +198,8 @@ def course_summary(
             status=SubmissionStatus.GRADED,
         )
         .values("assignment")
-        .annotate(c=Count("id"))
-        .values("c")[:1]
+        .annotate(graded_count=Count("id"))
+        .values("graded_count")[:1]
     )
     pending_count_sq = (
         Submission.objects.filter(
@@ -207,8 +207,8 @@ def course_summary(
             status=SubmissionStatus.SUBMITTED,
         )
         .values("assignment")
-        .annotate(c=Count("id"))
-        .values("c")[:1]
+        .annotate(pending_count=Count("id"))
+        .values("pending_count")[:1]
     )
     avg_score_sq = (
         Submission.objects.filter(
@@ -216,8 +216,8 @@ def course_summary(
             status=SubmissionStatus.GRADED,
         )
         .values("assignment")
-        .annotate(v=Avg("score"))
-        .values("v")[:1]
+        .annotate(avg_score=Avg("score"))
+        .values("avg_score")[:1]
     )
 
     assignments = assignments.annotate(
@@ -228,16 +228,16 @@ def course_summary(
     )
 
     items = []
-    for asgn in assignments:
-        submitted_count = asgn.submitted_count
-        graded_count = asgn.graded_count
+    for assignment in assignments:
+        submitted_count = assignment.submitted_count
+        graded_count = assignment.graded_count
         completion_pct = round(submitted_count / enrolled_count, 4) if enrolled_count > 0 else None
 
-        avg_score = round(asgn.avg_score, 2) if asgn.avg_score is not None else None
-        pending = asgn.pending_count
+        avg_score = round(assignment.avg_score, 2) if assignment.avg_score is not None else None
+        pending = assignment.pending_count
 
         entry = {
-            "assessmentCategory": asgn.assessment.category,
+            "assignmentTemplateCategory": assignment.assignment_template.category,
             "submittedCount": submitted_count,
             "totalStudents": enrolled_count,
             "completionPct": completion_pct,
@@ -246,8 +246,9 @@ def course_summary(
             "pendingGrades": pending,
         }
         if not anonymize:
-            entry["assignmentId"] = asgn.id
-            entry["assessmentTitle"] = asgn.assessment.title
+            entry["assignmentId"] = assignment.id
+            entry["assignmentTitle"] = assignment.title
+            entry["assignmentTemplateTitle"] = assignment.assignment_template.title
 
         items.append(entry)
 
@@ -257,7 +258,7 @@ def course_summary(
             "startDate": start_date.isoformat() if start_date else None,
             "endDate": end_date.isoformat() if end_date else None,
             "category": category,
-            "assessmentId": assessment_id,
+            "assignmentTemplateId": assignment_template_id,
         },
         "enrolledCount": enrolled_count,
         "assignments": items,
@@ -331,11 +332,11 @@ def assignment_grade_summary(
     subs = Submission.objects.filter(assignment=assignment)
 
     if start_date or end_date:
-        s, e = _date_to_datetime_range(start_date, end_date)
-        if s:
-            subs = subs.filter(submitted_at__gte=s)
-        if e:
-            subs = subs.filter(submitted_at__lte=e)
+        start_dt, end_dt = _date_to_datetime_range(start_date, end_date)
+        if start_dt:
+            subs = subs.filter(submitted_at__gte=start_dt)
+        if end_dt:
+            subs = subs.filter(submitted_at__lte=end_dt)
 
     submitted_q = Q(status=SubmissionStatus.SUBMITTED) | Q(status=SubmissionStatus.GRADED)
     submitted_count = subs.filter(submitted_q).count()
@@ -343,11 +344,11 @@ def assignment_grade_summary(
 
     graded_qs = subs.filter(status=SubmissionStatus.GRADED)
     graded_count = graded_qs.count()
-    agg = graded_qs.aggregate(avg=Avg("score"), high=Max("score"), low=Min("score"))
+    agg = graded_qs.aggregate(average=Avg("score"), highest=Max("score"), lowest=Min("score"))
 
-    avg_score = round(agg["avg"], 2) if agg["avg"] is not None else None
-    high_score = agg["high"]
-    low_score = agg["low"]
+    avg_score = round(agg["average"], 2) if agg["average"] is not None else None
+    high_score = agg["highest"]
+    low_score = agg["lowest"]
 
     # Median computed from score list (DB doesn't have native median)
     scores = list(graded_qs.values_list("score", flat=True))
@@ -361,7 +362,7 @@ def assignment_grade_summary(
             "startDate": start_date.isoformat() if start_date else None,
             "endDate": end_date.isoformat() if end_date else None,
         },
-        "assessmentCategory": assignment.assessment.category,
+        "assignmentTemplateCategory": assignment.assignment_template.category,
         "totalStudents": total_students,
         "submittedCount": submitted_count,
         "gradedCount": graded_count,
@@ -374,7 +375,8 @@ def assignment_grade_summary(
     }
     if not anonymize:
         result["assignmentId"] = assignment.id
-        result["assessmentTitle"] = assignment.assessment.title
+        result["assignmentTitle"] = assignment.title
+        result["assignmentTemplateTitle"] = assignment.assignment_template.title
 
     return result
 
@@ -393,14 +395,14 @@ def mood_meter_summary(user, assignment: Assignment) -> dict:
     )
 
     ns_question_cfg = list(
-        assignment.assessment.questions.filter(kind=QuestionKind.NUMBER_SCALE)
-        .select_related("number_scale")
-        .order_by("id")[:2]
+        assignment.questions.filter(kind=QuestionKind.NUMBER_SCALE).order_by("order_index", "id")[:2]
     )
     if len(ns_question_cfg) == 2:
         row_cfg, col_cfg = ns_question_cfg
-        mid_r = (row_cfg.number_scale.min + row_cfg.number_scale.max) / 2
-        mid_c = (col_cfg.number_scale.min + col_cfg.number_scale.max) / 2
+        row_data = row_cfg.data if isinstance(row_cfg.data, dict) else {}
+        col_data = col_cfg.data if isinstance(col_cfg.data, dict) else {}
+        mid_r = ((row_data.get("min", 1)) + (row_data.get("max", 5))) / 2
+        mid_c = ((col_data.get("min", 1)) + (col_data.get("max", 5))) / 2
     else:
         # Backward-safe fallback for legacy mood-meter templates.
         mid_r, mid_c = 3, 3

@@ -160,20 +160,4 @@ class Command(BaseCommand):
                 hint="Set explicit trusted production origins only.",
                 strict_in_production=True,
             )
-            add_finding(
-                condition=env.effective_otel_enabled
-                and not env.otel_exporter_otlp_endpoint.strip(),
-                code="ENV-T001",
-                message="OTEL is enabled without OTLP endpoint in production.",
-                hint="Set OTEL_EXPORTER_OTLP_ENDPOINT or disable OTEL for production.",
-                strict_in_production=True,
-            )
-            add_finding(
-                condition=env.effective_otel_enabled and bool(env.otel_trace_file.strip()),
-                code="ENV-T002",
-                message="OTEL_TRACE_FILE is set in production.",
-                hint="Clear OTEL_TRACE_FILE in production; use OTLP exporter only.",
-                strict_in_production=True,
-            )
-
         return findings

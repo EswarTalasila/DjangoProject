@@ -35,9 +35,8 @@ from ._utils import (
     REGISTRATION_CODE_STATUS_EXHAUSTED,
     REGISTRATION_CODE_STATUS_EXPIRED,
     REGISTRATION_CODE_STATUS_REVOKED,
-    REGISTRATION_CODE_TOKEN_BYTES,
-    _generate_secret_token,
     _registration_code_hashes_for_lookup,
+    generate_registration_code,
     generate_managed_username,
     identifier_in_use,
     normalize_username_identifier,
@@ -402,10 +401,10 @@ def create_registration_codes(
 
     created: list[RegistrationCode] = []
     for _ in range(count):
-        candidate = _generate_secret_token("REG", nbytes=REGISTRATION_CODE_TOKEN_BYTES)
+        candidate = generate_registration_code(code_type)
         candidate_hashes = _registration_code_hashes_for_lookup(candidate)
         while RegistrationCode.objects.filter(code_hash__in=candidate_hashes).exists():
-            candidate = _generate_secret_token("REG", nbytes=REGISTRATION_CODE_TOKEN_BYTES)
+            candidate = generate_registration_code(code_type)
             candidate_hashes = _registration_code_hashes_for_lookup(candidate)
         persisted_hash = registration_code_hash(candidate)
         created.append(
@@ -483,3 +482,23 @@ def transition_registration_code_status(
         return registration_code
 
     raise ValueError("Unsupported status transition.")
+
+
+@transaction.atomic
+def remove_registration_code(*, actor: User, registration_code_id: int) -> None:
+    """Delete a scoped registration code, revoking active codes first."""
+    registration_code: RegistrationCode | None = (
+        registration_code_scope_queryset(actor, include_related=False)
+        .select_for_update()
+        .filter(id=registration_code_id)
+        .first()
+    )
+    if not registration_code:
+        raise ValueError("Registration code not found.")
+
+    current_status = registration_code_status(registration_code)
+    if current_status == REGISTRATION_CODE_STATUS_ACTIVE:
+        registration_code.is_active = False
+        registration_code.save(update_fields=["is_active"])
+
+    registration_code.delete()

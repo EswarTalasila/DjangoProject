@@ -30,21 +30,7 @@ import {
   type CourseStudent,
 } from '@/lib/course-api';
 import { issuePasswordResetCode } from '@/lib/password-reset-api';
-
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '-';
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
+import { toErrorMessage, formatShortDate } from '@/lib/utils';
 
 type CourseRosterTabProps = {
   courseId: number;
@@ -88,7 +74,7 @@ export default function CourseRosterTab({ courseId, canManage }: CourseRosterTab
       toast.success(`Student "${studentName}" removed.`);
       await loadStudents();
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to remove student.'));
+      toast.error(toErrorMessage(error, 'Failed to remove student.'));
     } finally {
       setRemovingStudentId(null);
     }
@@ -103,7 +89,7 @@ export default function CourseRosterTab({ courseId, canManage }: CourseRosterTab
       setResetExpiresAt(result.expiresAt);
       setResetDialogOpen(true);
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to issue reset code.'));
+      toast.error(toErrorMessage(error, 'Failed to issue reset code.'));
     } finally {
       setIsResetting(false);
     }
@@ -159,7 +145,7 @@ export default function CourseRosterTab({ courseId, canManage }: CourseRosterTab
                     {student.username}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(student.enrolledAt)}
+                    {formatShortDate(student.enrolledAt)}
                   </TableCell>
                   {canManage && (
                     <TableCell className="space-x-2 text-right">

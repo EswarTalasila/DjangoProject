@@ -1,7 +1,7 @@
 """FR-14 Lifecycle and Archival integration tests.
 
 Tests verify archive/restore/purge behaviour across all ARCH-managed
-entities (Assessment, Assignment, Course) through the REST API.
+entities (AssignmentTemplate, Assignment, Course) through the REST API.
 
 Naming convention per FR-14 Section 8:
   - test_ARCH_UC_##      : use-case coverage
@@ -11,19 +11,24 @@ Naming convention per FR-14 Section 8:
 
 from __future__ import annotations
 
+import io
+import json
+from pathlib import Path
+from zipfile import ZipFile
+
 import pytest
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from accounts.models import Role, TeacherProfile, UserRole
-from assessments.models import AssessmentStatus
-from assignments.models import AssignmentStatus
+from assignment_templates.models import AssignmentTemplateStatus
+from assignments.models import AssignmentArchiveArtifact, AssignmentStatus
 from core.models import AuditAction, AuditLog, AuditOutcome
 from courses.models import CourseStatus, Enrollment, EnrollmentStatus
 from submissions.models import SubmissionStatus
 from tests.factories import (
-    AssessmentFactory,
+    AssignmentTemplateFactory,
     AssignmentFactory,
     CourseFactory,
     SubmissionFactory,
@@ -69,56 +74,56 @@ def teacher_course(teacher_user):
 
 
 @pytest.fixture
-def assessment():
-    return AssessmentFactory()
+def assignment_template():
+    return AssignmentTemplateFactory()
 
 
 @pytest.fixture
-def teacher_assignment(teacher_user, teacher_course, assessment):
+def teacher_assignment(teacher_user, teacher_course, assignment_template):
     return AssignmentFactory(
         created_by=teacher_user,
         course=teacher_course,
-        assessment=assessment,
+        assignment_template=assignment_template,
     )
 
 
 # ---------------------------------------------------------------------------
-# ARCH-UC-01 — Archive Assessment Template
+# ARCH-UC-01 — Archive AssignmentTemplate Template
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 class TestARCH_UC_01:
-    """Archive assessment template."""
+    """Archive assignment_template template."""
 
-    def test_ARCH_UC_01_ADMIN(self, admin_client, assessment):
-        """Admin can archive an assessment."""
-        resp = admin_client.post(f"/api/v1/assessments/{assessment.id}/archive")
+    def test_ARCH_UC_01_ADMIN(self, admin_client, assignment_template):
+        """Admin can archive an assignment_template."""
+        resp = admin_client.post(f"/api/v1/assignment-templates/{assignment_template.id}/archive")
         assert resp.status_code == status.HTTP_200_OK
-        assessment.refresh_from_db()
-        assert assessment.status == AssessmentStatus.ARCHIVED
-        assert assessment.archived_at is not None
+        assignment_template.refresh_from_db()
+        assert assignment_template.status == AssignmentTemplateStatus.ARCHIVED
+        assert assignment_template.archived_at is not None
 
-    def test_ARCH_UC_01_RESEARCHER(self, researcher_client, assessment):
-        """Researcher can archive an assessment."""
-        resp = researcher_client.post(f"/api/v1/assessments/{assessment.id}/archive")
+    def test_ARCH_UC_01_RESEARCHER(self, researcher_client, assignment_template):
+        """Researcher can archive an assignment_template."""
+        resp = researcher_client.post(f"/api/v1/assignment-templates/{assignment_template.id}/archive")
         assert resp.status_code == status.HTTP_200_OK
 
     def test_ARCH_UC_01_E1_not_found(self, admin_client):
-        """404 for non-existent assessment."""
-        resp = admin_client.post("/api/v1/assessments/99999/archive")
+        """404 for non-existent assignment_template."""
+        resp = admin_client.post("/api/v1/assignment-templates/99999/archive")
         assert resp.status_code == status.HTTP_404_NOT_FOUND
 
-    def test_ARCH_UC_01_E2_teacher_forbidden(self, teacher_client, assessment):
-        """Teacher cannot archive assessments."""
-        resp = teacher_client.post(f"/api/v1/assessments/{assessment.id}/archive")
+    def test_ARCH_UC_01_E2_teacher_forbidden(self, teacher_client, assignment_template):
+        """Teacher cannot archive assignment_templates."""
+        resp = teacher_client.post(f"/api/v1/assignment-templates/{assignment_template.id}/archive")
         assert resp.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_ARCH_UC_01_E3_already_archived(self, admin_client, assessment):
-        """409 when assessment already archived."""
-        assessment.status = AssessmentStatus.ARCHIVED
-        assessment.save()
-        resp = admin_client.post(f"/api/v1/assessments/{assessment.id}/archive")
+    def test_ARCH_UC_01_E3_already_archived(self, admin_client, assignment_template):
+        """409 when assignment_template already archived."""
+        assignment_template.status = AssignmentTemplateStatus.ARCHIVED
+        assignment_template.save()
+        resp = admin_client.post(f"/api/v1/assignment-templates/{assignment_template.id}/archive")
         assert resp.status_code == status.HTTP_409_CONFLICT
 
 
@@ -225,16 +230,16 @@ class TestARCH_UC_04:
         teacher_course.refresh_from_db()
         assert teacher_course.status == CourseStatus.ACTIVE
 
-    def test_ARCH_UC_04_restore_assessment(self, admin_client, admin_user, assessment):
-        """Restore an archived assessment."""
-        assessment.status = AssessmentStatus.ARCHIVED
-        assessment.archived_at = timezone.now()
-        assessment.archived_by = admin_user
-        assessment.save()
-        resp = admin_client.post(f"/api/v1/assessments/{assessment.id}/restore")
+    def test_ARCH_UC_04_restore_assignment_template(self, admin_client, admin_user, assignment_template):
+        """Restore an archived assignment_template."""
+        assignment_template.status = AssignmentTemplateStatus.ARCHIVED
+        assignment_template.archived_at = timezone.now()
+        assignment_template.archived_by = admin_user
+        assignment_template.save()
+        resp = admin_client.post(f"/api/v1/assignment-templates/{assignment_template.id}/restore")
         assert resp.status_code == status.HTTP_200_OK
-        assessment.refresh_from_db()
-        assert assessment.status == AssessmentStatus.ACTIVE
+        assignment_template.refresh_from_db()
+        assert assignment_template.status == AssignmentTemplateStatus.ACTIVE
 
     def test_ARCH_UC_04_restore_assignment(
         self, teacher_client, teacher_user, teacher_assignment
@@ -268,19 +273,19 @@ class TestARCH_UC_04:
         assert resp.status_code == status.HTTP_409_CONFLICT
         assert "course" in resp.json()["detail"].lower()
 
-    def test_ARCH_UC_04_E4_restore_assignment_blocked_by_assessment(
+    def test_ARCH_UC_04_E4_restore_assignment_blocked_by_assignment_template(
         self, teacher_client, teacher_user, teacher_assignment
     ):
-        """409 when restoring assignment whose assessment is archived (ARCH-CN-14)."""
-        teacher_assignment.assessment.status = AssessmentStatus.ARCHIVED
-        teacher_assignment.assessment.save()
+        """409 when restoring assignment whose assignment_template is archived (ARCH-CN-14)."""
+        teacher_assignment.assignment_template.status = AssignmentTemplateStatus.ARCHIVED
+        teacher_assignment.assignment_template.save()
         teacher_assignment.status = AssignmentStatus.ARCHIVED
         teacher_assignment.archived_at = timezone.now()
         teacher_assignment.archived_by = teacher_user
         teacher_assignment.save()
         resp = teacher_client.post(f"/api/v1/assignments/{teacher_assignment.id}/restore")
         assert resp.status_code == status.HTTP_409_CONFLICT
-        assert "assessment" in resp.json()["detail"].lower()
+        assert "assignment template" in resp.json()["detail"].lower()
 
 
 # ---------------------------------------------------------------------------
@@ -312,23 +317,23 @@ class TestARCH_UC_05:
         ids = [c["id"] for c in resp.json()["results"]]
         assert teacher_course.id in ids
 
-    def test_ARCH_UC_05_assessments_default_excludes_archived(
-        self, admin_client, assessment
+    def test_ARCH_UC_05_assignment_templates_default_excludes_archived(
+        self, admin_client, assignment_template
     ):
-        """Default assessment list excludes archived."""
-        assessment.status = AssessmentStatus.ARCHIVED
-        assessment.save()
-        resp = admin_client.get("/api/v1/assessments/")
+        """Default assignment_template list excludes archived."""
+        assignment_template.status = AssignmentTemplateStatus.ARCHIVED
+        assignment_template.save()
+        resp = admin_client.get("/api/v1/assignment-templates/")
         ids = [a["id"] for a in resp.json()["results"]]
-        assert assessment.id not in ids
+        assert assignment_template.id not in ids
 
-    def test_ARCH_UC_05_assessments_include_archived(self, admin_client, assessment):
-        """includeArchived=true includes archived assessments."""
-        assessment.status = AssessmentStatus.ARCHIVED
-        assessment.save()
-        resp = admin_client.get("/api/v1/assessments/?includeArchived=true")
+    def test_ARCH_UC_05_assignment_templates_include_archived(self, admin_client, assignment_template):
+        """includeArchived=true includes archived assignment_templates."""
+        assignment_template.status = AssignmentTemplateStatus.ARCHIVED
+        assignment_template.save()
+        resp = admin_client.get("/api/v1/assignment-templates/?includeArchived=true")
         ids = [a["id"] for a in resp.json()["results"]]
-        assert assessment.id in ids
+        assert assignment_template.id in ids
 
     def test_ARCH_UC_05_assignments_default_excludes_archived(
         self, admin_client, teacher_assignment
@@ -361,11 +366,11 @@ class TestARCH_UC_05:
         resp = admin_client.get("/api/v1/courses/?includeArchived=foo")
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_ARCH_UC_05_E2_invalid_include_archived_assessments(
-        self, admin_client, assessment
+    def test_ARCH_UC_05_E2_invalid_include_archived_assignment_templates(
+        self, admin_client, assignment_template
     ):
-        """Invalid includeArchived value returns 400 for assessments."""
-        resp = admin_client.get("/api/v1/assessments/?includeArchived=foo")
+        """Invalid includeArchived value returns 400 for assignment_templates."""
+        resp = admin_client.get("/api/v1/assignment-templates/?includeArchived=foo")
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_ARCH_UC_05_E2_invalid_include_archived_assignments(
@@ -393,11 +398,11 @@ class TestARCH_UC_06:
         resp = admin_client.delete(f"/api/v1/courses/{teacher_course.id}?purge=true")
         assert resp.status_code == status.HTTP_204_NO_CONTENT
 
-    def test_ARCH_UC_06_admin_purge_assessment(self, admin_client, assessment):
-        """Admin can purge an archived assessment with no assignments."""
-        assessment.status = AssessmentStatus.ARCHIVED
-        assessment.save()
-        resp = admin_client.delete(f"/api/v1/assessments/{assessment.id}?purge=true")
+    def test_ARCH_UC_06_admin_purge_assignment_template(self, admin_client, assignment_template):
+        """Admin can purge an archived assignment_template when lifecycle eligibility checks pass."""
+        assignment_template.status = AssignmentTemplateStatus.ARCHIVED
+        assignment_template.save()
+        resp = admin_client.delete(f"/api/v1/assignment-templates/{assignment_template.id}?purge=true")
         assert resp.status_code == status.HTTP_204_NO_CONTENT
 
     def test_ARCH_UC_06_admin_purge_assignment(self, admin_client, teacher_assignment):
@@ -408,6 +413,191 @@ class TestARCH_UC_06:
             f"/api/v1/assignments/{teacher_assignment.id}?purge=true"
         )
         assert resp.status_code == status.HTTP_204_NO_CONTENT
+
+    def test_ARCH_UC_06_assignment_archive_bundle_generation_and_download(
+        self,
+        teacher_client,
+        teacher_assignment,
+        settings,
+        tmp_path,
+    ):
+        """Archived assignments can generate and download a human-readable archive bundle."""
+        settings.ARTIFACT_ROOT = tmp_path / "artifacts"
+        Path(settings.ARTIFACT_ROOT).mkdir(parents=True, exist_ok=True)
+
+        teacher_assignment.status = AssignmentStatus.ARCHIVED
+        teacher_assignment.archived_at = timezone.now()
+        teacher_assignment.save(update_fields=["status", "archived_at"])
+
+        generate = teacher_client.post(
+            f"/api/v1/assignments/{teacher_assignment.id}/archive-bundle"
+        )
+        assert generate.status_code == status.HTTP_201_CREATED
+        payload = generate.json()
+        assert payload["assignmentId"] == teacher_assignment.id
+        assert payload["identifiable"] is True
+        assert payload["filename"].endswith(".zip")
+
+        artifact = AssignmentArchiveArtifact.objects.get(assignment=teacher_assignment)
+        assert Path(artifact.file_path).exists()
+
+        download = teacher_client.get(
+            f"/api/v1/assignments/{teacher_assignment.id}/archive-bundle/download"
+        )
+        assert download.status_code == status.HTTP_200_OK
+        archive = ZipFile(io.BytesIO(b"".join(download.streaming_content)))
+        names = set(archive.namelist())
+        assert any(name.endswith("manifest.json") for name in names)
+        assert any(name.endswith("template/template.json") for name in names)
+        assert any(name.endswith("assignment/assignment.json") for name in names)
+        assert any(name.endswith("assignment/submissions.csv") for name in names)
+
+    def test_ARCH_UC_06_archive_bundle_preserves_teacher_added_content(
+        self,
+        teacher_client,
+        teacher_assignment,
+        settings,
+        tmp_path,
+    ):
+        """Archived assignment bundles include teacher-added questions and rubric extensions."""
+        settings.ARTIFACT_ROOT = tmp_path / "artifacts"
+        Path(settings.ARTIFACT_ROOT).mkdir(parents=True, exist_ok=True)
+
+        question_resp = teacher_client.post(
+            f"/api/v1/assignments/{teacher_assignment.id}/questions",
+            {
+                "type": "SHORT_ANSWER",
+                "prompt": "Explain the teacher extension.",
+                "maxPoints": 5,
+            },
+            format="json",
+        )
+        assert question_resp.status_code == status.HTTP_201_CREATED
+
+        criterion_resp = teacher_client.post(
+            f"/api/v1/assignments/{teacher_assignment.id}/teacher-criteria",
+            {
+                "title": "Teacher commentary",
+                "description": "Extension criterion",
+                "weight": 0.25,
+            },
+            format="json",
+        )
+        assert criterion_resp.status_code == status.HTTP_201_CREATED
+        criterion_id = criterion_resp.json()["teacherCriteria"][0]["id"]
+
+        level_resp = teacher_client.post(
+            f"/api/v1/assignments/{teacher_assignment.id}/teacher-criteria/{criterion_id}/levels",
+            {
+                "label": "Added level",
+                "description": "Teacher-owned rubric level",
+                "points": 2,
+            },
+            format="json",
+        )
+        assert level_resp.status_code == status.HTTP_201_CREATED
+
+        teacher_assignment.status = AssignmentStatus.ARCHIVED
+        teacher_assignment.archived_at = timezone.now()
+        teacher_assignment.save(update_fields=["status", "archived_at"])
+
+        generate = teacher_client.post(
+            f"/api/v1/assignments/{teacher_assignment.id}/archive-bundle"
+        )
+        assert generate.status_code == status.HTTP_201_CREATED
+
+        download = teacher_client.get(
+            f"/api/v1/assignments/{teacher_assignment.id}/archive-bundle/download"
+        )
+        assert download.status_code == status.HTTP_200_OK
+
+        archive = ZipFile(io.BytesIO(b"".join(download.streaming_content)))
+        content_name = next(
+            name for name in archive.namelist() if name.endswith("assignment/content.json")
+        )
+        content = json.loads(archive.read(content_name).decode("utf-8"))
+
+        prompts = [question["prompt"] for question in content["questions"]]
+        assert "Explain the teacher extension." in prompts
+        teacher_criteria = content["teacherCriteria"]
+        assert [criterion["title"] for criterion in teacher_criteria] == ["Teacher commentary"]
+        assert teacher_criteria[0]["levels"][0]["label"] == "Added level"
+
+    def test_ARCH_UC_06_archive_bundle_uses_frozen_template_snapshot(
+        self,
+        teacher_client,
+        teacher_assignment,
+        settings,
+        tmp_path,
+    ):
+        """Archived bundles keep the template metadata captured when the assignment was created."""
+        settings.ARTIFACT_ROOT = tmp_path / "artifacts"
+        Path(settings.ARTIFACT_ROOT).mkdir(parents=True, exist_ok=True)
+
+        original_title = teacher_assignment.assignment_template.title
+        original_category = teacher_assignment.assignment_template.category
+
+        teacher_assignment.assignment_template.title = "Mutated researcher title"
+        teacher_assignment.assignment_template.category = "Mutated category"
+        teacher_assignment.assignment_template.save(update_fields=["title", "category"])
+
+        teacher_assignment.status = AssignmentStatus.ARCHIVED
+        teacher_assignment.archived_at = timezone.now()
+        teacher_assignment.save(update_fields=["status", "archived_at"])
+
+        generate = teacher_client.post(
+            f"/api/v1/assignments/{teacher_assignment.id}/archive-bundle"
+        )
+        assert generate.status_code == status.HTTP_201_CREATED
+
+        download = teacher_client.get(
+            f"/api/v1/assignments/{teacher_assignment.id}/archive-bundle/download"
+        )
+        assert download.status_code == status.HTTP_200_OK
+
+        archive = ZipFile(io.BytesIO(b"".join(download.streaming_content)))
+        template_name = next(
+            name for name in archive.namelist() if name.endswith("template/template.json")
+        )
+        content_name = next(
+            name for name in archive.namelist() if name.endswith("assignment/content.json")
+        )
+        template_payload = json.loads(archive.read(template_name).decode("utf-8"))
+        content_payload = json.loads(archive.read(content_name).decode("utf-8"))
+
+        assert template_payload["title"] == original_title
+        assert template_payload["category"] == original_category
+        assert content_payload["assignmentTemplateTitle"] == original_title
+        assert content_payload["category"] == original_category
+
+    def test_ARCH_UC_06_purging_assignment_removes_archive_bundle(
+        self,
+        admin_client,
+        teacher_assignment,
+        settings,
+        tmp_path,
+    ):
+        """Purging an archived assignment also deletes its generated archive bundle."""
+        settings.ARTIFACT_ROOT = tmp_path / "artifacts"
+        Path(settings.ARTIFACT_ROOT).mkdir(parents=True, exist_ok=True)
+
+        teacher_assignment.status = AssignmentStatus.ARCHIVED
+        teacher_assignment.archived_at = timezone.now()
+        teacher_assignment.save(update_fields=["status", "archived_at"])
+
+        artifact = admin_client.post(
+            f"/api/v1/assignments/{teacher_assignment.id}/archive-bundle"
+        )
+        assert artifact.status_code == status.HTTP_201_CREATED
+        file_path = Path(AssignmentArchiveArtifact.objects.get(assignment=teacher_assignment).file_path)
+        assert file_path.exists()
+
+        purge = admin_client.delete(f"/api/v1/assignments/{teacher_assignment.id}?purge=true")
+        assert purge.status_code == status.HTTP_204_NO_CONTENT
+        assert not AssignmentArchiveArtifact.objects.filter(
+            assignment_id=teacher_assignment.id
+        ).exists()
+        assert not file_path.exists()
 
     def test_ARCH_UC_06_E1_non_admin_forbidden(self, teacher_client, teacher_course):
         """Non-admin purge returns 403."""
@@ -431,82 +621,83 @@ class TestARCH_UC_06:
 class TestARCH_UC_07:
     """Audit records emitted for lifecycle mutations."""
 
-    def test_ARCH_UC_07_archive_emits_audit(self, admin_client, assessment):
+    def test_ARCH_UC_07_archive_emits_audit(self, admin_client, assignment_template):
         """Archive creates an audit log entry."""
-        admin_client.post(f"/api/v1/assessments/{assessment.id}/archive")
+        admin_client.post(f"/api/v1/assignment-templates/{assignment_template.id}/archive")
         assert AuditLog.objects.filter(
             action=AuditAction.ARCHIVE,
-            target_resource_type="Assessment",
-            target_resource_id=assessment.id,
+            target_resource_type="AssignmentTemplate",
+            target_resource_id=assignment_template.id,
         ).exists()
 
-    def test_ARCH_UC_07_restore_emits_audit(self, admin_client, admin_user, assessment):
+    def test_ARCH_UC_07_restore_emits_audit(self, admin_client, admin_user, assignment_template):
         """Restore creates an audit log entry."""
-        assessment.status = AssessmentStatus.ARCHIVED
-        assessment.archived_at = timezone.now()
-        assessment.archived_by = admin_user
-        assessment.save()
-        admin_client.post(f"/api/v1/assessments/{assessment.id}/restore")
+        assignment_template.status = AssignmentTemplateStatus.ARCHIVED
+        assignment_template.archived_at = timezone.now()
+        assignment_template.archived_by = admin_user
+        assignment_template.save()
+        admin_client.post(f"/api/v1/assignment-templates/{assignment_template.id}/restore")
         assert AuditLog.objects.filter(
             action=AuditAction.RESTORE,
-            target_resource_type="Assessment",
-            target_resource_id=assessment.id,
+            target_resource_type="AssignmentTemplate",
+            target_resource_id=assignment_template.id,
         ).exists()
 
-    def test_ARCH_UC_07_purge_emits_audit(self, admin_client, assessment):
+    def test_ARCH_UC_07_purge_emits_audit(self, admin_client, assignment_template):
         """Purge creates an audit log entry."""
-        assessment.status = AssessmentStatus.ARCHIVED
-        assessment.save()
-        admin_client.delete(f"/api/v1/assessments/{assessment.id}?purge=true")
+        assignment_template.status = AssignmentTemplateStatus.ARCHIVED
+        assignment_template.save()
+        admin_client.delete(f"/api/v1/assignment-templates/{assignment_template.id}?purge=true")
         assert AuditLog.objects.filter(
             action=AuditAction.PURGE,
-            target_resource_type="Assessment",
+            target_resource_type="AssignmentTemplate",
         ).exists()
 
-    def test_ARCH_CN_09_audit_has_status_transition(self, admin_client, assessment):
+    def test_ARCH_CN_09_audit_has_status_transition(self, admin_client, assignment_template):
         """Lifecycle audit payload includes old/new status values."""
-        admin_client.post(f"/api/v1/assessments/{assessment.id}/archive")
+        admin_client.post(f"/api/v1/assignment-templates/{assignment_template.id}/archive")
         row = AuditLog.objects.filter(
             action=AuditAction.ARCHIVE,
-            target_resource_type="Assessment",
-            target_resource_id=assessment.id,
+            target_resource_type="AssignmentTemplate",
+            target_resource_id=assignment_template.id,
         ).order_by("-id").first()
         assert row is not None
         assert row.old_value == {"status": "ACTIVE"}
         assert row.new_value == {"status": "ARCHIVED"}
 
-    def test_ARCH_CN_09_denied_archive_emits_audit(self, teacher_client, assessment):
+    def test_ARCH_CN_09_denied_archive_emits_audit(self, teacher_client, assignment_template):
         """Denied lifecycle attempts are audited with DENIED outcome."""
-        resp = teacher_client.post(f"/api/v1/assessments/{assessment.id}/archive")
+        resp = teacher_client.post(f"/api/v1/assignment-templates/{assignment_template.id}/archive")
         assert resp.status_code == status.HTTP_403_FORBIDDEN
         row = AuditLog.objects.filter(
             action=AuditAction.ARCHIVE,
-            target_resource_type="Assessment",
-            target_resource_id=assessment.id,
+            target_resource_type="AssignmentTemplate",
+            target_resource_id=assignment_template.id,
         ).order_by("-id").first()
         assert row is not None
         assert row.outcome == AuditOutcome.DENIED
 
 
 # ---------------------------------------------------------------------------
-# ARCH-CN-03 — Archived Assessment Blocks Assignment Creation
+# ARCH-CN-03 — Archived AssignmentTemplate Blocks Assignment Creation
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.django_db
 class TestARCH_CN_03:
-    """Archived assessment blocks new assignment creation."""
+    """Archived assignment_template blocks new assignment creation."""
 
     def test_ARCH_CN_03_assignment_create_blocked(
-        self, teacher_client, teacher_user, teacher_course, assessment
+        self, teacher_client, teacher_user, teacher_course, assignment_template
     ):
-        """409 when creating assignment from archived assessment."""
-        assessment.status = AssessmentStatus.ARCHIVED
-        assessment.save()
+        """409 when creating assignment from archived assignment_template."""
+        assignment_template.status = AssignmentTemplateStatus.ARCHIVED
+        assignment_template.save()
         resp = teacher_client.post(
             "/api/v1/assignments/",
             {
-                "assessmentId": assessment.id,
+                "title": "Blocked archived template assignment",
+                "assignmentTemplateId": assignment_template.id,
                 "audienceType": "COURSE",
                 "courseId": teacher_course.id,
                 "openAt": timezone.now().isoformat(),
@@ -526,7 +717,7 @@ class TestARCH_CN_05:
     """Archived course blocks enrollment and assignment mutations."""
 
     def test_ARCH_CN_05_create_assignment_blocked(
-        self, teacher_client, teacher_course, assessment
+        self, teacher_client, teacher_course, assignment_template
     ):
         """409 when creating assignment for archived course."""
         teacher_course.status = CourseStatus.ARCHIVED
@@ -534,7 +725,8 @@ class TestARCH_CN_05:
         resp = teacher_client.post(
             "/api/v1/assignments/",
             {
-                "assessmentId": assessment.id,
+                "title": "Blocked archived course assignment",
+                "assignmentTemplateId": assignment_template.id,
                 "audienceType": "COURSE",
                 "courseId": teacher_course.id,
                 "openAt": timezone.now().isoformat(),
@@ -582,14 +774,14 @@ class TestARCH_CN_05:
 class TestARCH_CN_07:
     """Purge blocked by dependency rules."""
 
-    def test_ARCH_CN_07_purge_assessment_with_assignments(
+    def test_ARCH_CN_07_purge_assignment_template_with_assignments(
         self, admin_client, teacher_assignment
     ):
-        """Cannot purge assessment that has assignments."""
-        asmt = teacher_assignment.assessment
-        asmt.status = AssessmentStatus.ARCHIVED
+        """Cannot purge assignment_template while live assignments still depend on it."""
+        asmt = teacher_assignment.assignment_template
+        asmt.status = AssignmentTemplateStatus.ARCHIVED
         asmt.save()
-        resp = admin_client.delete(f"/api/v1/assessments/{asmt.id}?purge=true")
+        resp = admin_client.delete(f"/api/v1/assignment-templates/{asmt.id}?purge=true")
         assert resp.status_code == status.HTTP_409_CONFLICT
 
     def test_ARCH_CN_07_purge_course_with_active_assignments(
@@ -628,14 +820,14 @@ class TestARCH_CN_13:
     """Course archive cascades to active assignments."""
 
     def test_ARCH_CN_13_cascade_archives_assignments(
-        self, teacher_client, teacher_user, teacher_course, assessment
+        self, teacher_client, teacher_user, teacher_course, assignment_template
     ):
         """Archiving a course cascade-archives its ACTIVE assignments."""
         a1 = AssignmentFactory(
-            created_by=teacher_user, course=teacher_course, assessment=assessment
+            created_by=teacher_user, course=teacher_course, assignment_template=assignment_template
         )
         a2 = AssignmentFactory(
-            created_by=teacher_user, course=teacher_course, assessment=assessment
+            created_by=teacher_user, course=teacher_course, assignment_template=assignment_template
         )
         resp = teacher_client.post(f"/api/v1/courses/{teacher_course.id}/archive")
         assert resp.status_code == status.HTTP_200_OK
@@ -657,11 +849,11 @@ class TestARCH_CN_14:
     """Restore preconditions and non-cascade behaviour."""
 
     def test_ARCH_CN_14_course_restore_does_not_restore_assignments(
-        self, teacher_client, teacher_user, teacher_course, assessment
+        self, teacher_client, teacher_user, teacher_course, assignment_template
     ):
         """Restoring a course does NOT cascade-restore its assignments."""
         asgn = AssignmentFactory(
-            created_by=teacher_user, course=teacher_course, assessment=assessment
+            created_by=teacher_user, course=teacher_course, assignment_template=assignment_template
         )
         # Archive course (cascades to assignments)
         teacher_client.post(f"/api/v1/courses/{teacher_course.id}/archive")

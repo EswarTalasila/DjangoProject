@@ -151,7 +151,7 @@ All NFR entries specify one of these five verification methods. Each method defi
 
 **Definition:** Verified by code review, configuration audit, or manual testing that requires human judgment.
 
-**When to use:** NFRs with subjective criteria (error message quality, naming conventions, security posture assessment) or infrequent manual verification needs.
+**When to use:** NFRs with subjective criteria (error message quality, naming conventions, security posture assignment template) or infrequent manual verification needs.
 
 **Examples:**
 - **NFR-SEC-03 (Enumeration Prevention):** Security audit verifies error messages do not reveal whether user accounts exist (identical messages for invalid username vs wrong password).
@@ -165,13 +165,13 @@ All NFR entries specify one of these five verification methods. Each method defi
 **When to use:** NFRs that require production runtime verification (distributed tracing pipeline health, log aggregation success, performance under real load).
 
 **Examples:**
-- **NFR-OPS-05 (Observability Instrumentation):** Monitoring verifies trace data reaches OTLP collector and spans appear in Jaeger/Tempo with correct W3C Trace Context headers.
-- **NFR-OPS-07 (Log-Trace Correlation):** Monitoring confirms log entries include otelTraceID and otelSpanID fields that match exported trace data.
+- **NFR-OPS-05 (Observability Instrumentation):** Monitoring remains deferred until observability is intentionally rebuilt against the current task and compose surface.
+- **NFR-OPS-07 (Runtime Observability):** Monitoring confirms logs and task diagnostics remain readable and actionable; distributed tracing is deferred until rebuilt intentionally.
 - (Note: Performance thresholds (NFR-PERF-01) use "Automated test" during baseline establishment, but may use "Monitoring" for production SLA verification in future.)
 
 ### Audit
 
-**Definition:** Verified by periodic compliance review -- regulatory audit, security assessment, or data governance check performed on a scheduled basis (quarterly, annually).
+**Definition:** Verified by periodic compliance review -- regulatory audit, security assignment template, or data governance check performed on a scheduled basis (quarterly, annually).
 
 **When to use:** NFRs with compliance requirements (FERPA audit trails, PII protection verification, access control reviews).
 

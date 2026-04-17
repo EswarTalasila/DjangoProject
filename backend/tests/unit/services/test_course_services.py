@@ -281,13 +281,14 @@ class TestCourseToDto:
         enrollment = SimpleNamespace(
             student_profile=student_profile, course_id=100, enrolled_at=None
         )
-        mock_enrollment_model.objects.filter.return_value = [enrollment]
+        mock_enrollment_model.objects.filter.return_value.select_related.return_value = [enrollment]
         mock_assignment_model.objects.filter.return_value.values_list.return_value = [5, 6]
 
         course = SimpleNamespace(
             id=100, name="Math 101", teacher_profile_id=42,
             teacher_profile=SimpleNamespace(user=teacher_user),
             created_at=None,
+            status="ARCHIVED",
         )
 
         dto = course_to_dto(course)
@@ -298,6 +299,38 @@ class TestCourseToDto:
         assert dto.assignmentIds == [5, 6]
         assert dto.teacherId == 42
         assert dto.teacherName == "Teacher Smith"
+        assert dto.status == "ARCHIVED"
+
+    def test_converts_course_to_dto_using_prefetched_relations(self):
+        """Prefetched enrollments and assignments avoid extra ORM lookups."""
+        from courses.services._queries import course_to_dto
+
+        teacher_user = SimpleNamespace(id=42, name="Teacher Smith")
+        user = SimpleNamespace(id=1, name="Student1", username="s1")
+        student_profile = SimpleNamespace(user=user, consent=True)
+        enrollment = SimpleNamespace(
+            student_profile=student_profile, course_id=100, enrolled_at=None
+        )
+        assignment = SimpleNamespace(id=5)
+
+        course = SimpleNamespace(
+            id=100,
+            name="Math 101",
+            teacher_profile_id=42,
+            teacher_profile=SimpleNamespace(user=teacher_user),
+            created_at=None,
+            status="ACTIVE",
+            _prefetched_objects_cache={
+                "enrollments": [enrollment],
+                "assignments": [assignment],
+            },
+        )
+
+        dto = course_to_dto(course)
+
+        assert dto.studentCount == 1
+        assert dto.assignmentIds == [5]
+        assert dto.status == "ACTIVE"
 
     @patch("courses.services._queries.Assignment")
     @patch("courses.services._queries.Enrollment")
@@ -305,13 +338,14 @@ class TestCourseToDto:
         """Course with no enrollments or assignments returns zero counts."""
         from courses.services._queries import course_to_dto
 
-        mock_enrollment_model.objects.filter.return_value = []
+        mock_enrollment_model.objects.filter.return_value.select_related.return_value = []
         mock_assignment_model.objects.filter.return_value.values_list.return_value = []
 
         course = SimpleNamespace(
             id=1, name="Empty", teacher_profile_id=None,
             teacher_profile=None,
             created_at=None,
+            status="ACTIVE",
         )
 
         dto = course_to_dto(course)
@@ -320,6 +354,7 @@ class TestCourseToDto:
         assert dto.students == []
         assert dto.assignmentIds == []
         assert dto.teacherId is None
+        assert dto.status == "ACTIVE"
 
 
 # ---------------------------------------------------------------------------
@@ -337,7 +372,7 @@ class TestListCoursesForUser:
 
         sentinel = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
         mock_qs = MagicMock()
-        mock_course_model.objects.all.return_value = mock_qs
+        mock_course_model.objects.select_related.return_value.prefetch_related.return_value = mock_qs
         mock_qs.filter.return_value = sentinel
 
         admin = SimpleNamespace(id=1, is_staff=True, is_authenticated=True)
@@ -354,7 +389,7 @@ class TestListCoursesForUser:
 
         sentinel = [SimpleNamespace(id=1)]
         mock_qs = MagicMock()
-        mock_course_model.objects.all.return_value = mock_qs
+        mock_course_model.objects.select_related.return_value.prefetch_related.return_value = mock_qs
         mock_qs.filter.return_value = sentinel
 
         researcher = SimpleNamespace(id=2, is_staff=False, is_authenticated=True)
@@ -372,7 +407,7 @@ class TestListCoursesForUser:
         sentinel = [SimpleNamespace(id=3)]
         mock_qs = MagicMock()
         mock_filtered_qs = MagicMock()
-        mock_course_model.objects.all.return_value = mock_qs
+        mock_course_model.objects.select_related.return_value.prefetch_related.return_value = mock_qs
         # First .filter(status=ACTIVE) returns a filtered queryset
         mock_qs.filter.return_value = mock_filtered_qs
         # Second .filter(teacher_profile__user=user) returns sentinel
@@ -403,7 +438,7 @@ class TestListStudentsInCourse:
         enrollment = SimpleNamespace(
             student_profile=student_profile, course_id=10, enrolled_at=None
         )
-        mock_enrollment_model.objects.filter.return_value = [enrollment]
+        mock_enrollment_model.objects.filter.return_value.select_related.return_value = [enrollment]
 
         course = SimpleNamespace(id=10)
 
@@ -418,7 +453,7 @@ class TestListStudentsInCourse:
         """Returns empty list when no enrollments exist."""
         from courses.services._queries import list_students_in_course
 
-        mock_enrollment_model.objects.filter.return_value = []
+        mock_enrollment_model.objects.filter.return_value.select_related.return_value = []
 
         result = list_students_in_course(SimpleNamespace(id=10))
 
@@ -641,54 +676,42 @@ class TestRemoveStudentFromCourse(_NoopAtomicMixin):
 class TestCreateSubmissionsForStudent:
     """Tests for _create_submissions_for_student internal helper."""
 
+    @patch("assignments.services._content.provision_submission_answers")
     @patch("courses.services._mutations.Assignment")
-    @patch("courses.services._mutations.Assessment")
-    def test_skips_when_assessment_not_found(self, mock_assessment_model, mock_assignment_model):
-        """Skips when assessment does not exist."""
-        from courses.services._mutations import _create_submissions_for_student
-
-        fake_assignment = SimpleNamespace(id=1, assessment_id=99)
-        mock_assignment_model.objects.filter.return_value = [fake_assignment]
-        mock_assessment_model.objects.filter.return_value.first.return_value = None
-
-        _create_submissions_for_student(SimpleNamespace(id=1), SimpleNamespace(id=1))
-
-    @patch("courses.services._mutations.NumberScaleAnswer")
-    @patch("courses.services._mutations.ShortAnswerAnswer")
-    @patch("courses.services._mutations.MultipleChoiceAnswer")
-    @patch("courses.services._mutations.Answer")
-    @patch("courses.services._mutations.Submission")
-    @patch("courses.services._mutations.Assessment")
-    @patch("courses.services._mutations.Assignment")
-    @patch("courses.services._mutations.answer_type_from_question")
-    def test_creates_submissions_with_answers(
-        self, mock_answer_type, mock_assignment_model, mock_assessment_model,
-        mock_submission_model, mock_answer_model, mock_mca, mock_saa, mock_nsa,
+    def test_skips_when_assignment_already_has_submission(
+        self, mock_assignment_model, mock_provision_answers
     ):
-        """Creates submission with correct answer types for each question kind."""
-        from assessments.models import QuestionKind
+        """Skips submission creation when the student already has one."""
         from courses.services._mutations import _create_submissions_for_student
 
-        fake_assignment = SimpleNamespace(id=1, assessment_id=10)
+        fake_assignment = SimpleNamespace(id=1, assignment_template_id=99)
         mock_assignment_model.objects.filter.return_value = [fake_assignment]
 
-        mc_q = SimpleNamespace(kind=QuestionKind.MULTIPLE_CHOICE)
-        sa_q = SimpleNamespace(kind=QuestionKind.SHORT_ANSWER)
-        ns_q = SimpleNamespace(kind=QuestionKind.NUMBER_SCALE)
+        with patch("courses.services._mutations.Submission") as mock_submission_model:
+            mock_submission_model.objects.filter.return_value.exists.return_value = True
+            _create_submissions_for_student(SimpleNamespace(id=1), SimpleNamespace(id=1))
 
-        fake_assessment = MagicMock()
-        fake_assessment.id = 10
-        fake_assessment.questions.all.return_value = [mc_q, sa_q, ns_q]
-        mock_assessment_model.objects.filter.return_value.first.return_value = fake_assessment
+        mock_provision_answers.assert_not_called()
+
+    @patch("courses.services._mutations.Submission")
+    @patch("assignments.services._content.provision_submission_answers")
+    @patch("courses.services._mutations.Assignment")
+    def test_creates_submissions_with_answers(
+        self,
+        mock_assignment_model,
+        mock_provision_answers,
+        mock_submission_model,
+    ):
+        """Creates placeholder submissions and delegates answer provisioning."""
+        from courses.services._mutations import _create_submissions_for_student
+
+        fake_assignment = SimpleNamespace(id=1, assignment_template_id=10)
+        mock_assignment_model.objects.filter.return_value = [fake_assignment]
         mock_submission_model.objects.filter.return_value.exists.return_value = False
-        mock_submission_model.objects.create.return_value = SimpleNamespace(id=100)
-        mock_answer_type.return_value = "MC"
-        mock_answer_model.objects.create.return_value = SimpleNamespace(id=200)
+        created_submission = SimpleNamespace(id=100)
+        mock_submission_model.objects.create.return_value = created_submission
 
         _create_submissions_for_student(SimpleNamespace(id=1), SimpleNamespace(id=5))
 
         mock_submission_model.objects.create.assert_called_once()
-        assert mock_answer_model.objects.create.call_count == 3
-        mock_mca.objects.create.assert_called_once()
-        mock_saa.objects.create.assert_called_once()
-        mock_nsa.objects.create.assert_called_once()
+        mock_provision_answers.assert_called_once_with(created_submission)

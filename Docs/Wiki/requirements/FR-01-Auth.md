@@ -235,7 +235,7 @@
 
 **Errors:** None defined.
 
-**Tests (representative):** test_AUTH_UC_08, test_AUTH_UC_08_e2e_logout
+**Tests (representative):** test_AUTH_UC_08
 
 ---
 
@@ -665,16 +665,6 @@ Applies to all roles. Reset requests are removed; issuance always starts from an
 - `frontend/tests/unit/app/register-page.test.tsx`
 - `frontend/tests/unit/app/forgot-password-page.test.tsx`
 - `frontend/tests/unit/lib/password-reset-api.test.ts`
-
-### E2E (Playwright)
-
-- `frontend/tests/e2e/auth.spec.ts::test_AUTH_UC_01_e2e_login`
-- `frontend/tests/e2e/auth.spec.ts::test_AUTH_UC_01a_e2e_admin_login`
-- `frontend/tests/e2e/auth.spec.ts::test_AUTH_UC_02_e2e_oauth_login`
-- `frontend/tests/e2e/auth.spec.ts::test_AUTH_UC_04_e2e_change_password`
-- `frontend/tests/e2e/auth.spec.ts::test_AUTH_UC_05_e2e_reset_complete`
-- `frontend/tests/e2e/auth.spec.ts::test_AUTH_UC_07_e2e_teacher_student_reset`
-- `frontend/tests/e2e/auth.spec.ts::test_AUTH_UC_08_e2e_logout`
 
 ### System Tests (Black Box)
 

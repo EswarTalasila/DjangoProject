@@ -39,7 +39,7 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path("api/v1/codes", account_views.codes_collection),
     path("api/v1/codes/", include("accounts.urls_codes")),
     path("api/v1/courses/", include("courses.urls")),
-    path("api/v1/assessments/", include("assessments.urls")),
+    path("api/v1/assignment-templates/", include("assignment_templates.urls")),
     path("api/v1/rubrics/", include("rubrics.urls")),
     path("api/v1/assignments/", include("assignments.urls")),
     path("api/v1/submissions/", include("submissions.urls")),
@@ -47,7 +47,6 @@ urlpatterns: list[URLPattern | URLResolver] = [
     path("api/v1/teachers/", include("accounts.urls_teachers")),
     path("api/v1/visualizations/", include("visualizations.urls")),
     path("api/v1/exports/", include("exports.urls")),
-    path("api/v1/packages/", include("packages.urls")),
 ]
 
 if settings.ENVIRONMENT != "production":  # ENV-UC-05, ENV-CN-07

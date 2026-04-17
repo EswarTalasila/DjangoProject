@@ -1,7 +1,4 @@
-"""FR-12 Environment Profiles — unit tests with FR traceability naming.
-
-Covers ENV-UC-01 through ENV-UC-06 and ENV-CN-01 through ENV-CN-12.
-"""
+"""FR-12 Environment Profiles — unit tests with FR traceability naming."""
 
 from __future__ import annotations
 
@@ -23,23 +20,24 @@ from config.env import EnvSettings
 
 
 @pytest.fixture(autouse=True)
-def _isolate_otel_enabled_env(monkeypatch):
-    """Prevent ambient OTEL_ENABLED env vars from changing unit-test defaults."""
-    monkeypatch.delenv("OTEL_ENABLED", raising=False)
+def _isolate_runtime_env(monkeypatch):
+    """Prevent ambient runtime env vars from changing unit-test defaults."""
+    monkeypatch.delenv("DJANGO_SECURE_SSL_REDIRECT", raising=False)
+    monkeypatch.delenv("DJANGO_SESSION_COOKIE_SECURE", raising=False)
+    monkeypatch.delenv("DJANGO_CSRF_COOKIE_SECURE", raising=False)
 
 # Minimal valid production config — all validators pass.
-# otel_trace_file="" explicitly overrides any container env var.
 _VALID_PROD = dict(
     environment="production",
     django_secret_key="prod-unique-secret-key-at-least-50-chars-long-random",
     database_url="postgres://produser:s3cureP@ss@db.prod.example.com:5432/proddb",
     django_allowed_hosts="app.example.com",
     django_cors_allowed_origins="https://app.example.com",
+    django_csrf_trusted_origins="https://app.example.com",
     google_client_id="123456.apps.googleusercontent.com",
     google_client_secret="GOCSPX-real-secret",
     admin_email="admin@mycompany.com",
     admin_password="SecureAdminP@ss123",
-    otel_trace_file="",
 )
 
 
@@ -140,7 +138,7 @@ class TestENV_UC_02:
     def test_ENV_UC_02_E1_unsafe_db_defaults(self):
         """Default/local DATABASE_URL blocked in production (ENV-UC-02-E1)."""
         err = _build_raises(
-            database_url="postgres://datadash:change-me@localhost:5432/datadash"
+            database_url="postgres://eelab:change-me@localhost:5432/eelab"
         )
         assert "DATABASE_URL" in str(err)
 
@@ -154,7 +152,7 @@ class TestENV_UC_02:
         err = _build_raises(
             django_secret_key="django-insecure-local-dev-only-change-in-production",
             django_debug=True,
-            database_url="postgres://datadash:change-me@localhost:5432/datadash",
+            database_url="postgres://eelab:change-me@localhost:5432/eelab",
             google_client_id="",
             google_client_secret="",
             admin_email="admin@example.com",
@@ -359,36 +357,6 @@ class TestENV_CN_05:
 
 
 # ===================================================================
-# ENV-UC-04 — Control Seed Data by Profile
-# ===================================================================
-
-
-@pytest.mark.django_db
-@pytest.mark.unit
-class TestENV_UC_04:
-    """ENV-UC-04: Seed command gated by profile."""
-
-    def test_ENV_UC_04_ADMIN_seed_runs_in_dev(self, monkeypatch):
-        """Seed runs without error in development profile."""
-        monkeypatch.setattr(
-            "accounts.management.commands.seed_e2e.env",
-            SimpleNamespace(is_production=False),
-        )
-        out = StringIO()
-        call_command("seed_e2e", stdout=out)
-        assert "E2E seed completed" in out.getvalue()
-
-    def test_ENV_UC_04_E1_production_seed_blocked(self, monkeypatch):
-        """Production profile blocks seed_e2e (ENV-UC-04-E1)."""
-        monkeypatch.setattr(
-            "accounts.management.commands.seed_e2e.env",
-            SimpleNamespace(is_production=True),
-        )
-        with pytest.raises(CommandError, match="blocked in production"):
-            call_command("seed_e2e")
-
-
-# ===================================================================
 # ENV-CN-06 — Production Secret Encryption
 # ===================================================================
 
@@ -446,73 +414,18 @@ class TestENV_UC_05:
 
 
 # ===================================================================
-# ENV-CN-07 — Deployment Guard by Profile
-# ===================================================================
-
-
-@pytest.mark.unit
-class TestENV_CN_07:
-    """ENV-CN-07: Seed and docs gated by profile."""
-
-    def test_ENV_CN_07_seed_testing_auto(self):
-        """Testing profile: seed_on_startup is True."""
-        settings = EnvSettings(environment="testing")
-        assert settings.seed_on_startup is True
-
-    def test_ENV_CN_07_seed_dev_manual_only(self):
-        """Development profile: manual seed allowed, no auto seed."""
-        settings = EnvSettings(environment="development")
-        assert settings.seed_on_startup is False
-        assert settings.manual_seed_allowed is True
-
-    def test_ENV_CN_07_seed_production_blocked(self):
-        """Production profile: seed blocked entirely."""
-        settings = _build(environment="production")
-        assert settings.seed_on_startup is False
-        assert settings.manual_seed_allowed is False
-
-
-# ===================================================================
-# ENV-UC-06 — Manage Secrets and Tracing by Profile
+# ENV-UC-06 — Manage Secrets and OAuth by Profile
 # ===================================================================
 
 
 @pytest.mark.unit
 class TestENV_UC_06:
-    """ENV-UC-06: Secret, OAuth, and tracing policy by profile."""
-
-    def test_ENV_UC_06_ADMIN_tracing_defaults_by_profile(self):
-        """Tracing defaults: dev=on, testing=on, production=off."""
-        dev = EnvSettings(environment="development")
-        assert dev.effective_otel_enabled is True
-
-        test = EnvSettings(environment="testing")
-        assert test.effective_otel_enabled is True
-
-        prod = _build(environment="production")
-        assert prod.effective_otel_enabled is False
+    """ENV-UC-06: Secret and OAuth policy by profile."""
 
     def test_ENV_UC_06_E1_missing_oauth_blocks_production(self):
         """Missing OAuth config blocks production (ENV-UC-06-E1)."""
         err = _build_raises(google_client_id="", google_client_secret="")
         assert "OAuth" in str(err) or "GOOGLE_CLIENT" in str(err)
-
-    def test_ENV_UC_06_E2_otel_trace_file_in_production(self):
-        """OTEL_TRACE_FILE rejected in production when OTEL enabled (ENV-UC-06-E2)."""
-        err = _build_raises(
-            otel_enabled=True,
-            otel_exporter_otlp_endpoint="https://otel.example.com",
-            otel_trace_file="/tmp/traces.jsonl",
-        )
-        assert "OTEL" in str(err) and "trace file" in str(err).lower()
-
-    def test_ENV_UC_06_E2_otel_enabled_without_endpoint(self):
-        """OTEL enabled without OTLP endpoint rejected in production."""
-        err = _build_raises(
-            otel_enabled=True,
-            otel_exporter_otlp_endpoint="",
-        )
-        assert "OTLP endpoint" in str(err)
 
 
 # ===================================================================
@@ -569,46 +482,6 @@ class TestENV_CN_09:
         """Admin password < 12 chars rejected in production."""
         err = _build_raises(admin_password="Short1!")
         assert "ADMIN_PASSWORD" in str(err)
-
-
-# ===================================================================
-# ENV-CN-11 — Profile-Aware Tracing Policy
-# ===================================================================
-
-
-@pytest.mark.unit
-class TestENV_CN_11:
-    """ENV-CN-11: Tracing enablement policy per profile."""
-
-    def test_ENV_CN_11_testing_tracing_default_on(self):
-        """Testing profile enables tracing by default."""
-        settings = EnvSettings(environment="testing")
-        assert settings.effective_otel_enabled is True
-
-    def test_ENV_CN_11_testing_tracing_can_be_disabled(self):
-        """Testing profile can opt out of tracing."""
-        settings = EnvSettings(environment="testing", otel_enabled=False)
-        assert settings.effective_otel_enabled is False
-
-    def test_ENV_CN_11_development_tracing_configurable(self):
-        """Development: default on, configurable off."""
-        default_on = EnvSettings(environment="development")
-        assert default_on.effective_otel_enabled is True
-
-        opt_out = EnvSettings(environment="development", otel_enabled=False)
-        assert opt_out.effective_otel_enabled is False
-
-    def test_ENV_CN_11_production_tracing_opt_in(self):
-        """Production: default off, opt-in only."""
-        default_off = _build(environment="production")
-        assert default_off.effective_otel_enabled is False
-
-        opt_in = _build(
-            environment="production",
-            otel_enabled=True,
-            otel_exporter_otlp_endpoint="https://otel.example.com",
-        )
-        assert opt_in.effective_otel_enabled is True
 
 
 # ===================================================================

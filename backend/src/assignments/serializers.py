@@ -11,8 +11,8 @@ class AssignmentSerializer(serializers.Serializer):
     """Validates assignment creation payloads."""
 
     id = serializers.IntegerField(required=False)
-    title = serializers.CharField(required=False, allow_blank=False, max_length=255)
-    assessmentId = serializers.IntegerField()
+    title = serializers.CharField(allow_blank=False, max_length=255)
+    assignmentTemplateId = serializers.IntegerField()
     audienceType = serializers.ChoiceField(choices=["COURSE", "TEACHER"])
     courseId = serializers.IntegerField(required=False, allow_null=True)
     targetTeacherId = serializers.IntegerField(required=False, allow_null=True)
@@ -38,3 +38,76 @@ class AssignmentUpdateSerializer(serializers.Serializer):
     title = serializers.CharField(required=False, allow_blank=False, max_length=255)
     openAt = serializers.DateTimeField(required=False)
     dueAt = serializers.DateTimeField(required=False, allow_null=True)
+
+
+class AssignmentQuestionCreateSerializer(serializers.Serializer):
+    """Validates teacher-authored assignment-local question payloads."""
+
+    type = serializers.ChoiceField(
+        choices=["MULTIPLE_CHOICE", "SHORT_ANSWER", "NUMBER_SCALE", "MOOD_METER"]
+    )
+    prompt = serializers.CharField(allow_blank=False)
+    maxPoints = serializers.FloatField(min_value=0)
+    data = serializers.DictField(required=False)  # type: ignore[assignment]
+    gradingStrategy = serializers.ChoiceField(
+        choices=["AUTO", "MANUAL"],
+        required=False,
+        default="AUTO",
+    )
+
+
+class AssignmentQuestionUpdateSerializer(serializers.Serializer):
+    """Validates updates to teacher-authored assignment-local questions."""
+
+    type = serializers.ChoiceField(
+        choices=["MULTIPLE_CHOICE", "SHORT_ANSWER", "NUMBER_SCALE", "MOOD_METER"],
+        required=False,
+    )
+    prompt = serializers.CharField(required=False, allow_blank=False)
+    maxPoints = serializers.FloatField(required=False, min_value=0)
+    data = serializers.DictField(required=False)  # type: ignore[assignment]
+    gradingStrategy = serializers.ChoiceField(
+        choices=["AUTO", "MANUAL"],
+        required=False,
+    )
+
+
+class AssignmentTeacherCriterionCreateSerializer(serializers.Serializer):
+    """Validates teacher-authored assignment-local criterion payloads."""
+
+    title = serializers.CharField(allow_blank=False, max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True)
+    weight = serializers.FloatField(min_value=0.01)
+
+
+class AssignmentTeacherCriterionUpdateSerializer(serializers.Serializer):
+    """Validates updates to teacher-authored assignment-local criteria."""
+
+    title = serializers.CharField(required=False, allow_blank=False, max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True)
+    weight = serializers.FloatField(required=False, min_value=0.01)
+
+
+class AssignmentOrderedIdsSerializer(serializers.Serializer):
+    """Validates reorder payloads that supply a full ordered ID list."""
+
+    orderedIds = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+    )
+
+
+class AssignmentTeacherCriterionLevelCreateSerializer(serializers.Serializer):
+    """Validates teacher-authored rubric levels layered onto a local criterion."""
+
+    label = serializers.CharField(allow_blank=False, max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True)
+    points = serializers.FloatField(min_value=0)
+
+
+class AssignmentTeacherCriterionLevelUpdateSerializer(serializers.Serializer):
+    """Validates updates to teacher-authored rubric levels."""
+
+    label = serializers.CharField(required=False, allow_blank=False, max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True)
+    points = serializers.FloatField(required=False, min_value=0)

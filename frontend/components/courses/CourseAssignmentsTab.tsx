@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus } from 'lucide-react';
+import { Archive, Plus, RotateCcw } from 'lucide-react';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Table,
   TableBody,
@@ -14,29 +16,19 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  archiveAssignment,
   listAssignmentsByCourse,
   listAssignmentsForUser,
+  restoreAssignment,
   type Assignment,
 } from '@/lib/assignment-api';
-
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
+import { toErrorMessage, formatDate } from '@/lib/utils';
 
 type CourseAssignmentsTabProps = {
   courseId: number;
   userRole: 'TEACHER' | 'RESEARCHER' | 'STUDENT';
   userId: number;
 };
-
-function formatDate(value: string | null): string {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString();
-}
 
 export default function CourseAssignmentsTab({
   courseId,
@@ -47,8 +39,11 @@ export default function CourseAssignmentsTab({
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [busyAssignmentId, setBusyAssignmentId] = useState<number | null>(null);
 
   const canCreate = userRole === 'TEACHER';
+  const canManageLifecycle = userRole === 'TEACHER';
 
   const loadAssignments = useCallback(async () => {
     setLoadError(null);
@@ -58,16 +53,19 @@ export default function CourseAssignmentsTab({
           ? await listAssignmentsForUser(userId).then((all) =>
               all.filter((assignment) => assignment.courseId === courseId),
             )
-          : await listAssignmentsByCourse(courseId);
+          : await listAssignmentsByCourse(
+              courseId,
+              showArchived ? { includeArchived: true } : undefined,
+            );
       setAssignments(items);
     } catch (error: unknown) {
       setLoadError(
-        extractDetail(error, 'Failed to load assignments for this course.'),
+        toErrorMessage(error, 'Failed to load assignments for this course.'),
       );
     } finally {
       setIsLoading(false);
     }
-  }, [courseId, userId, userRole]);
+  }, [courseId, showArchived, userId, userRole]);
 
   useEffect(() => {
     setIsLoading(true);
@@ -76,27 +74,80 @@ export default function CourseAssignmentsTab({
 
   const sortedAssignments = useMemo(() => {
     return [...assignments].sort((a, b) => {
+      const aArchived = a.status === 'ARCHIVED' ? 1 : 0;
+      const bArchived = b.status === 'ARCHIVED' ? 1 : 0;
+      if (aArchived !== bArchived) {
+        return aArchived - bArchived;
+      }
       const aOpen = a.openAt ? new Date(a.openAt).getTime() : 0;
       const bOpen = b.openAt ? new Date(b.openAt).getTime() : 0;
       return bOpen - aOpen;
     });
   }, [assignments]);
 
+  async function handleArchive(assignmentId: number) {
+    setBusyAssignmentId(assignmentId);
+    try {
+      await archiveAssignment(assignmentId);
+      toast.success('Assignment archived.');
+      await loadAssignments();
+    } catch (error: unknown) {
+      const message = toErrorMessage(error, 'Failed to archive assignment.');
+      setLoadError(message);
+      toast.error(message);
+    } finally {
+      setBusyAssignmentId(null);
+    }
+  }
+
+  async function handleRestore(assignmentId: number) {
+    setBusyAssignmentId(assignmentId);
+    try {
+      await restoreAssignment(assignmentId);
+      toast.success('Assignment restored.');
+      await loadAssignments();
+    } catch (error: unknown) {
+      const message = toErrorMessage(error, 'Failed to restore assignment.');
+      setLoadError(message);
+      toast.error(message);
+    } finally {
+      setBusyAssignmentId(null);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold text-foreground">Course Assignments</h2>
-        {canCreate && (
-          <Button
-            onClick={() =>
-              router.push(`/dashboard/assignments/new?courseId=${courseId}`)
-            }
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Create Assignment
-          </Button>
-        )}
+        <div className="flex items-center gap-3">
+          {userRole !== 'STUDENT' && (
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Checkbox
+                checked={showArchived}
+                onCheckedChange={(checked) => setShowArchived(checked === true)}
+              />
+              Show archived
+            </label>
+          )}
+          {canCreate && (
+            <Button
+              onClick={() =>
+                router.push(`/dashboard/assignments/new?courseId=${courseId}`)
+              }
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Create Assignment
+            </Button>
+          )}
+        </div>
       </div>
+
+      {canManageLifecycle && !showArchived && (
+        <p className="text-sm text-muted-foreground">
+          Restored courses keep previously archived assignments archived. Turn on Show archived to
+          review and restore those assignments when needed.
+        </p>
+      )}
 
       {loadError && <p className="text-sm text-destructive">{loadError}</p>}
 
@@ -108,7 +159,11 @@ export default function CourseAssignmentsTab({
 
       {!isLoading && !loadError && sortedAssignments.length === 0 && (
         <div className="rounded-sm border border-border bg-card p-8 text-center">
-          <p className="text-sm text-muted-foreground">No assignments for this course yet.</p>
+          <p className="text-sm text-muted-foreground">
+            {canManageLifecycle && !showArchived
+              ? 'No active assignments for this course. Turn on Show archived to review archived assignments or restore them after a course restore.'
+              : 'No assignments for this course yet.'}
+          </p>
         </div>
       )}
 
@@ -132,6 +187,11 @@ export default function CourseAssignmentsTab({
                 <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Due
                 </TableHead>
+                {canManageLifecycle && (
+                  <TableHead className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Actions
+                  </TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -147,7 +207,7 @@ export default function CourseAssignmentsTab({
                     {assignment.title}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {assignment.assessmentTitle ?? 'Template unavailable'}
+                    {assignment.assignmentTemplateTitle ?? 'Assignment template unavailable'}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {assignment.status}
@@ -158,6 +218,34 @@ export default function CourseAssignmentsTab({
                   <TableCell className="text-sm text-muted-foreground">
                     {formatDate(assignment.dueAt)}
                   </TableCell>
+                  {canManageLifecycle && (
+                    <TableCell
+                      className="text-sm text-muted-foreground"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {assignment.status === 'ARCHIVED' ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busyAssignmentId === assignment.id}
+                          onClick={() => void handleRestore(assignment.id)}
+                        >
+                          <RotateCcw className="mr-2 h-4 w-4" />
+                          Restore
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={busyAssignmentId === assignment.id}
+                          onClick={() => void handleArchive(assignment.id)}
+                        >
+                          <Archive className="mr-2 h-4 w-4" />
+                          Archive
+                        </Button>
+                      )}
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>

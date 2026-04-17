@@ -70,8 +70,8 @@ const mockAssignments = [
   {
     id: 1,
     title: "Week 1 Check-In",
-    assessmentId: 10,
-    assessmentTitle: "Self Assessment",
+    assignmentTemplateId: 10,
+    assignmentTemplateTitle: "Self AssignmentTemplate",
     audienceType: "COURSE" as const,
     courseId: 1,
     targetTeacherId: null,
@@ -173,7 +173,7 @@ describe("AssignmentListView", () => {
     });
 
     expect(screen.getByText("Week 1 Check-In")).toBeInTheDocument();
-    expect(screen.getByText("Self Assessment")).toBeInTheDocument();
+    expect(screen.getByText("Self AssignmentTemplate")).toBeInTheDocument();
     expect(screen.getByText("Biology 101")).toBeInTheDocument();
     expect(screen.getByText("ACTIVE")).toBeInTheDocument();
   });

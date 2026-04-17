@@ -406,7 +406,7 @@ describe("RubricListView", () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     mockListRubrics.mockResolvedValueOnce(mockRubrics);
     mockDeleteRubric.mockRejectedValueOnce({
-      response: { status: 409, data: { detail: "Referenced by assessments" } },
+      response: { status: 409, data: { detail: "Referenced by assignment templates" } },
     });
     const RubricListView = await loadComponent();
     render(<RubricListView canManage={true} />);
@@ -432,7 +432,7 @@ describe("RubricListView", () => {
 
     await waitFor(() => {
       expect(mockToastError).toHaveBeenCalledWith(
-        "Cannot delete — rubric is referenced by assessments."
+        "Cannot delete — rubric is referenced by assignment templates."
       );
     });
   });

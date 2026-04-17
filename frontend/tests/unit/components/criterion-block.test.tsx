@@ -51,7 +51,7 @@ describe("CriterionBlock", () => {
       <CriterionBlock index={0} criterion={baseCriterion} onChange={onChange} onRemove={onRemove} onMoveUp={null} onMoveDown={null} />
     );
     expect(screen.getByDisplayValue("Grammar")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("1.5")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("150")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Proper grammar usage")).toBeInTheDocument();
   });
 
@@ -87,9 +87,9 @@ describe("CriterionBlock", () => {
     render(
       <CriterionBlock index={0} criterion={baseCriterion} onChange={onChange} onRemove={onRemove} onMoveUp={null} onMoveDown={null} />
     );
-    const weightInput = screen.getByDisplayValue("1.5");
+    const weightInput = screen.getByDisplayValue("150");
     fireEvent.change(weightInput, { target: { value: "2" } });
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ weight: 2 }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ weight: 0.02 }));
   });
 
   it("calls onChange when description is changed", async () => {
@@ -206,8 +206,8 @@ describe("CriterionBlock", () => {
     render(
       <CriterionBlock index={0} criterion={baseCriterion} onChange={onChange} onRemove={onRemove} onMoveUp={null} onMoveDown={null} />
     );
-    const weightInput = screen.getByDisplayValue("1.5");
+    const weightInput = screen.getByDisplayValue("150");
     fireEvent.change(weightInput, { target: { value: "" } });
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ weight: 1 }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ weight: 0.01 }));
   });
 });

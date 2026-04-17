@@ -12,10 +12,35 @@ class RubricReferencedError(Exception):
     """Raised when a mutation is blocked because questions/groups reference the rubric."""
 
 
+def _rubric_with_related(rubric_id: int) -> Rubric | None:
+    """Fetch a rubric with criteria and levels prefetched for DTO conversion."""
+    from django.db.models import Prefetch
+
+    return (
+        Rubric.objects.filter(id=rubric_id)
+        .prefetch_related(
+            Prefetch(
+                "criteria",
+                queryset=RubricCriterion.objects.order_by("order_index"),
+            ),
+            Prefetch(
+                "criteria__levels",
+                queryset=RubricLevel.objects.order_by("order_index"),
+            ),
+        )
+        .first()
+    )
+
+
 def rubric_to_dto(rubric: Rubric) -> RubricDTO:
-    """Convert a Rubric model instance to a RubricDTO with nested criteria and levels."""
+    """Convert a Rubric model instance to a RubricDTO with nested criteria and levels.
+
+    For best performance, pass a rubric loaded via _rubric_with_related() or
+    from list_rubrics() so that criteria and levels are prefetched.
+    """
     criteria = []
-    for criterion in rubric.criteria.all().order_by("order_index"):
+    # When prefetched with ordered Prefetch objects, .all() preserves order.
+    for criterion in rubric.criteria.all():
         levels = [
             RubricLevelDTO(
                 id=level.id,
@@ -24,7 +49,7 @@ def rubric_to_dto(rubric: Rubric) -> RubricDTO:
                 description=level.description,
                 orderIndex=level.order_index,
             )
-            for level in criterion.levels.all().order_by("order_index")
+            for level in criterion.levels.all()
         ]
         criteria.append(
             RubricCriterionDTO(
@@ -49,8 +74,21 @@ def rubric_to_dto(rubric: Rubric) -> RubricDTO:
 
 
 def list_rubrics() -> list[Rubric]:
-    """Return all rubrics ordered by default queryset ordering."""
-    return list(Rubric.objects.all())
+    """Return all rubrics with criteria and levels prefetched."""
+    from django.db.models import Prefetch
+
+    return list(
+        Rubric.objects.prefetch_related(
+            Prefetch(
+                "criteria",
+                queryset=RubricCriterion.objects.order_by("order_index"),
+            ),
+            Prefetch(
+                "criteria__levels",
+                queryset=RubricLevel.objects.order_by("order_index"),
+            ),
+        ).all()
+    )
 
 
 @transaction.atomic
@@ -82,10 +120,10 @@ def update_rubric(rubric: Rubric, payload: dict) -> Rubric:
     """Update a rubric's title, description, and/or criteria.
 
     Raises:
-        RubricReferencedError: If the rubric is referenced by assessment questions.
+        RubricReferencedError: If the rubric is referenced by assignment template questions.
     """
     if _is_referenced(rubric):
-        raise RubricReferencedError("Cannot update rubric referenced by assessments")
+        raise RubricReferencedError("Cannot update rubric referenced by assignment templates")
 
     rubric.title = payload.get("title", rubric.title)
     rubric.description = payload.get("description", rubric.description)
@@ -97,9 +135,9 @@ def update_rubric(rubric: Rubric, payload: dict) -> Rubric:
 
 @transaction.atomic
 def delete_rubric(rubric: Rubric) -> None:
-    """Hard-delete a rubric. Blocked if referenced by assessment questions."""
+    """Hard-delete a rubric. Blocked if referenced by assignment template questions."""
     if _is_referenced(rubric):
-        raise RubricReferencedError("Cannot delete rubric referenced by assessments")
+        raise RubricReferencedError("Cannot delete rubric referenced by assignment templates")
     rubric.delete()
 
 
@@ -115,11 +153,11 @@ def archive_rubric(rubric: Rubric) -> Rubric:
 
 def _is_referenced(rubric: Rubric) -> bool:
     """Check if any questions or question groups reference this rubric."""
-    from assessments.models import AssessmentQuestionGroup, Question
+    from assignment_templates.models import AssignmentTemplateQuestionGroup, Question
 
     if Question.objects.filter(rubric=rubric).exists():
         return True
-    if AssessmentQuestionGroup.objects.filter(rubric=rubric).exists():
+    if AssignmentTemplateQuestionGroup.objects.filter(rubric=rubric).exists():
         return True
     return False
 

@@ -121,7 +121,7 @@ describe("RubricBuilderForm", () => {
 
     it("navigates to returnTo URL with rubric ID on create", async () => {
       mockCreateRubric.mockResolvedValueOnce({ id: 50 });
-      const RubricBuilderForm = await loadComponent("returnTo=/dashboard/assessments/new");
+      const RubricBuilderForm = await loadComponent("returnTo=/dashboard/assignment-templates/new");
       const user = userEvent.setup();
       render(<RubricBuilderForm mode="create" />);
 
@@ -130,13 +130,13 @@ describe("RubricBuilderForm", () => {
       submitForm();
 
       await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith("/dashboard/assessments/new?newRubricId=50");
+        expect(mockPush).toHaveBeenCalledWith("/dashboard/assignment-templates/new?newRubricId=50");
       });
     });
 
     it("appends newRubricId with & if returnTo already has query params", async () => {
       mockCreateRubric.mockResolvedValueOnce({ id: 50 });
-      const RubricBuilderForm = await loadComponent("returnTo=/dashboard/assessments/new?existing=1");
+      const RubricBuilderForm = await loadComponent("returnTo=/dashboard/assignment-templates/new?existing=1");
       const user = userEvent.setup();
       render(<RubricBuilderForm mode="create" />);
 
@@ -145,7 +145,7 @@ describe("RubricBuilderForm", () => {
       submitForm();
 
       await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith("/dashboard/assessments/new?existing=1&newRubricId=50");
+        expect(mockPush).toHaveBeenCalledWith("/dashboard/assignment-templates/new?existing=1&newRubricId=50");
       });
     });
 
@@ -188,14 +188,14 @@ describe("RubricBuilderForm", () => {
     });
 
     it("cancel navigates to returnTo if provided", async () => {
-      const RubricBuilderForm = await loadComponent("returnTo=/dashboard/assessments/5");
+      const RubricBuilderForm = await loadComponent("returnTo=/dashboard/assignment-templates/5");
       const user = userEvent.setup();
       render(<RubricBuilderForm mode="create" />);
       await user.click(screen.getByRole("button", { name: /cancel/i }));
-      expect(mockPush).toHaveBeenCalledWith("/dashboard/assessments/5");
+      expect(mockPush).toHaveBeenCalledWith("/dashboard/assignment-templates/5");
     });
 
-    it("ignores returnTo that does not start with /dashboard/assessments", async () => {
+    it("ignores returnTo that does not start with /dashboard/assignment-templates", async () => {
       const RubricBuilderForm = await loadComponent("returnTo=/evil/path");
       const user = userEvent.setup();
       render(<RubricBuilderForm mode="create" />);
@@ -343,7 +343,7 @@ describe("RubricBuilderForm", () => {
 
       await waitFor(() => {
         expect(mockToastError).toHaveBeenCalledWith(
-          "This rubric is referenced by assessments and cannot be modified"
+          "This rubric is referenced by assignment templates and cannot be modified"
         );
       });
     });
@@ -402,7 +402,7 @@ describe("RubricBuilderForm", () => {
         criteria: [{ id: 1, title: "C1", description: "", weight: 1, orderIndex: 0, levels: [] }],
       });
       mockUpdateRubric.mockResolvedValueOnce({ id: 1 });
-      const RubricBuilderForm = await loadComponent("returnTo=/dashboard/assessments/edit");
+      const RubricBuilderForm = await loadComponent("returnTo=/dashboard/assignment-templates/edit");
       render(<RubricBuilderForm mode="edit" rubricId={1} />);
 
       await waitFor(() => {
@@ -412,7 +412,7 @@ describe("RubricBuilderForm", () => {
       submitForm();
 
       await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith("/dashboard/assessments/edit?newRubricId=1");
+        expect(mockPush).toHaveBeenCalledWith("/dashboard/assignment-templates/edit?newRubricId=1");
       });
     });
   });

@@ -34,21 +34,7 @@ import {
   type CourseSummary,
 } from '@/lib/course-api';
 import { joinCourseByCode } from '@/lib/registration-code-api';
-
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '-';
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
+import { toErrorMessage, formatShortDate } from '@/lib/utils';
 
 type CoursesListViewProps = {
   userRole: 'TEACHER' | 'RESEARCHER' | 'STUDENT';
@@ -109,7 +95,7 @@ export default function CoursesListView({ userRole }: CoursesListViewProps) {
     } catch (error: unknown) {
       setJoinError('code', {
         type: 'manual',
-        message: extractDetail(error, 'Invalid or expired course code.'),
+        message: toErrorMessage(error, 'Invalid or expired course code.'),
       });
     }
   }
@@ -141,7 +127,7 @@ export default function CoursesListView({ userRole }: CoursesListViewProps) {
       setNewCourseName('');
       await loadCourses();
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to create course.'));
+      toast.error(toErrorMessage(error, 'Failed to create course.'));
     } finally {
       setIsCreating(false);
     }
@@ -322,7 +308,7 @@ export default function CoursesListView({ userRole }: CoursesListViewProps) {
                     </TableCell>
                   )}
                   <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(course.createdAt)}
+                    {formatShortDate(course.createdAt)}
                   </TableCell>
                 </TableRow>
               ))}

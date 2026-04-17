@@ -4,9 +4,9 @@
       "Name": "EEL Development Database",
       "Group": "Servers",
       "Port": 5432,
-      "Username": "datadash",
+      "Username": "eelab",
       "Host": "database",
-      "MaintenanceDB": "datadash",
+      "MaintenanceDB": "eelab",
       "PassFile": "/var/lib/pgadmin/pgpass",
       "SSLMode": "prefer"
     }

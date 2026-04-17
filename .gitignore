@@ -33,16 +33,13 @@ db.sqlite3-journal
 staticfiles/
 mediafiles/
 backend/src/media/
+backend/media/
 
 # Environment variables
 .env
-.env.local
-.env.prod
-.env.production
-.env.*.local
+.env.bak
 !.env.template
 env/.env.*
-!env/.env.*.template
 
 # IDE
 .idea/
@@ -93,8 +90,10 @@ Docs/diagrams/otel/*.jsonl
 # Secrets and credentials
 *.pem
 *.key
+*.crt
 secrets/
 credentials/
+proxy/ssl/
 
 # Database dumps
 *.sql

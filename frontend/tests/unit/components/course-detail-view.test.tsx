@@ -31,9 +31,6 @@ function setupModuleMocks() {
   vi.doMock("@/components/courses/CourseAssignmentsTab", () => ({
     default: () => <div data-testid="assignments-tab">Assignments Tab</div>,
   }));
-  vi.doMock("@/components/courses/CourseGradebookTab", () => ({
-    default: () => <div data-testid="gradebook-tab">Gradebook Tab</div>,
-  }));
 }
 
 async function loadComponent() {
@@ -107,7 +104,6 @@ describe("CourseDetailView", () => {
       expect(screen.getByText("Roster")).toBeInTheDocument();
       expect(screen.getByText("Registration")).toBeInTheDocument();
       expect(screen.getByText("Assignments")).toBeInTheDocument();
-      expect(screen.getByText("Gradebook")).toBeInTheDocument();
     });
   });
 
@@ -121,7 +117,6 @@ describe("CourseDetailView", () => {
     });
     expect(screen.queryByText("Roster")).not.toBeInTheDocument();
     expect(screen.queryByText("Registration")).not.toBeInTheDocument();
-    expect(screen.queryByText("Gradebook")).not.toBeInTheDocument();
   });
 
   it("shows only roster tab for RESEARCHER", async () => {
@@ -134,7 +129,6 @@ describe("CourseDetailView", () => {
     });
     expect(screen.queryByText("Registration")).not.toBeInTheDocument();
     expect(screen.queryByText("Assignments")).not.toBeInTheDocument();
-    expect(screen.queryByText("Gradebook")).not.toBeInTheDocument();
   });
 
   it("shows edit name button for TEACHER", async () => {

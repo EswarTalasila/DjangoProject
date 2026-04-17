@@ -7,7 +7,7 @@
 | **Domain** | ARCH |
 | **Applies To** | ADMIN, RESEARCHER, TEACHER |
 | **Related Issues** | TBD |
-| **Dependencies** | FR-05 CRS, FR-06 ASMT, FR-07 ASGN, FR-08 SUB, FR-10 EXP, FR-11 OBS |
+| **Dependencies** | FR-05 CRS, FR-06 ATMPL, FR-07 ASGN, FR-08 SUB, FR-10 EXP, FR-11 OBS |
 
 ---
 
@@ -17,7 +17,7 @@
 - Common lifecycle model for archive/restore/purge across core learning entities.
 - Status transitions for:
   - Course (CRS)
-  - Assessment template (ASMT)
+  - AssignmentTemplate template (ATMPL)
   - Assignment (ASGN)
 - Soft archive behavior (non-destructive, reversible).
 - Restore behavior and ownership/role gates.
@@ -31,7 +31,7 @@
 - Automatic legal retention policy by jurisdiction.
 - Backup/restore infrastructure (FR-13 INFRA).
 - Historical data anonymization job.
-- UI wireframes and Playwright flows.
+- UI wireframes and future browser smoke flows.
 
 ### Core intent
 - Replace unsafe hard-delete behavior with explicit lifecycle transitions.
@@ -45,8 +45,8 @@
 | Role | Type | ARCH domain permissions |
 |------|------|-------------------------|
 | ADMIN | System role (`is_staff=True`) | Can archive/restore/purge any ARCH-managed entity when policy allows |
-| RESEARCHER | User role | Read visibility for archived metadata where source FR grants read; assessment archive/restore rights follow FR-06 ASMT role gates; no default course/assignment archive or purge rights |
-| TEACHER | User role | Archive/restore own courses and own assignments; cannot archive assessment templates they do not own (ASMT-owned domain) |
+| RESEARCHER | User role | Read visibility for archived metadata where source FR grants read; assignment template archive/restore rights follow FR-06 ATMPL role gates; no default course/assignment archive or purge rights |
+| TEACHER | User role | Archive/restore own courses and own assignments; cannot archive assignment templates they do not own (ATMPL-owned domain) |
 
 **Actor ordering:** ADMIN > RESEARCHER > TEACHER
 
@@ -69,33 +69,33 @@
 
 ## 4) Use Cases
 
-### ARCH-UC-01 — Archive Assessment Template
+### ARCH-UC-01 — Archive AssignmentTemplate Template
 
-**Roles:** ADMIN, RESEARCHER (ASMT-authorized roles)  
-**Endpoint:** `POST /api/v1/assessments/{assessment_id}/archive`
+**Roles:** ADMIN, RESEARCHER (ATMPL-authorized roles)
+**Endpoint:** `POST /api/v1/assignment-templates/{assignment_template_id}/archive`
 
 **Main Flow:**
-1. Caller requests archive for an assessment template.
-2. System validates caller can mutate assessments (ASMT role gate).
-3. System verifies assessment exists and is `ACTIVE`.
+1. Caller requests archive for an assignment template.
+2. System validates caller can mutate assignment templates (ATMPL role gate).
+3. System verifies assignment template exists and is `ACTIVE`.
 4. System sets `status=ARCHIVED`, `archivedAt`, `archivedBy`.
-5. System returns updated assessment DTO.
-6. New assignments using this assessment are blocked (`409`) after archive.
+5. System returns updated assignment template DTO.
+6. New assignments using this assignment template are blocked (`409`) after archive.
 
 **Postconditions:**
-- Existing assignments referencing this assessment remain valid and readable.
-- Assessment no longer available for new assignment creation.
+- Existing assignments referencing this assignment template remain valid and readable.
+- AssignmentTemplate no longer available for new assignment creation.
 
 **Errors:**
-- `ARCH-UC-01-E1`: Assessment not found (`404`).
+- `ARCH-UC-01-E1`: AssignmentTemplate not found (`404`).
 - `ARCH-UC-01-E2`: Unauthorized role (`403`).
-- `ARCH-UC-01-E3`: Assessment already archived (`409`).
+- `ARCH-UC-01-E3`: AssignmentTemplate already archived (`409`).
 
 **Tests (representative):**
 - `test_ARCH_UC_01_ADMIN`
 - `test_ARCH_UC_01_RESEARCHER`
 - `test_ARCH_UC_01_E2`
-- `test_ARCH_CN_03_assignment_create_blocked_when_assessment_archived`
+- `test_ARCH_CN_03_assignment_create_blocked_when_assignment_template_archived`
 
 ---
 
@@ -166,10 +166,10 @@
 
 ### ARCH-UC-04 — Restore Archived Entity
 
-**Roles:** Course restore: TEACHER (owner) or ADMIN; Assessment restore: ADMIN/RESEARCHER (FR-06 ASMT gate); Assignment restore: TEACHER (owner) or ADMIN  
+**Roles:** Course restore: TEACHER (owner) or ADMIN; AssignmentTemplate restore: ADMIN/RESEARCHER (FR-06 ATMPL gate); Assignment restore: TEACHER (owner) or ADMIN
 **Endpoints:**
 - `POST /api/v1/courses/{course_id}/restore`
-- `POST /api/v1/assessments/{assessment_id}/restore`
+- `POST /api/v1/assignment-templates/{assignment_template_id}/restore`
 - `POST /api/v1/assignments/{assignment_id}/restore`
 
 **Main Flow:**
@@ -188,7 +188,7 @@
 
 **Tests (representative):**
 - `test_ARCH_UC_04_restore_course`
-- `test_ARCH_UC_04_restore_assessment`
+- `test_ARCH_UC_04_restore_assignment_template`
 - `test_ARCH_UC_04_restore_assignment`
 - `test_ARCH_UC_04_E4_restore_blocked_by_parent_archive`
 - `test_ARCH_CN_14_course_restore_does_not_restore_assignments`
@@ -201,7 +201,7 @@
 **Endpoints:** Existing list/detail endpoints with archive filters, e.g.:
 - `GET /api/v1/courses?includeArchived=true`
 - `GET /api/v1/assignments?includeArchived=true`
-- `GET /api/v1/assessments?includeArchived=true`
+- `GET /api/v1/assignment-templates?includeArchived=true`
 
 **Main Flow:**
 1. Caller requests list/detail.
@@ -274,12 +274,12 @@
 - Applies to: ARCH-UC-01..06.
 
 ### ARCH-CN-02 — Archive is Non-destructive
-- Archive mutation must not delete user accounts, submissions, enrollments, or assessment answers.
+- Archive mutation must not delete user accounts, submissions, enrollments, or assignment template answers.
 - Archive only changes lifecycle metadata and write availability.
 - Applies to: ARCH-UC-01..03.
 
-### ARCH-CN-03 — Archived Assessment Blocks Assignment Creation
-- Creating an assignment from an archived assessment returns `409`.
+### ARCH-CN-03 — Archived AssignmentTemplate Blocks Assignment Creation
+- Creating an assignment from an archived assignment template returns `409`.
 - Existing assignments are unaffected.
 - Applies to: ARCH-UC-01.
 
@@ -341,7 +341,7 @@
 ### ARCH-CN-14 — Restore Preconditions and Non-cascade Policy
 - Restore is blocked (`409`) when parent lifecycle state is incompatible:
   - Assignment cannot be restored while its course is archived.
-  - Assignment cannot be restored while its source assessment is archived.
+  - Assignment cannot be restored while its source assignment template is archived.
 - Course restore restores the course only; cascade-archived assignments remain `ARCHIVED` and must be restored individually.
 - Error response must include blocking dependency reason.
 - Applies to: ARCH-UC-04.
@@ -366,10 +366,10 @@ Each ARCH-managed entity includes:
 
 | Method | Endpoint | Auth + visibility gate | Use Case |
 |-------|----------|------------------------|----------|
-| POST | `/api/v1/assessments/{assessment_id}/archive` | ASMT mutation gate | ARCH-UC-01 |
+| POST | `/api/v1/assignment-templates/{assignment_template_id}/archive` | ATMPL mutation gate | ARCH-UC-01 |
 | POST | `/api/v1/assignments/{assignment_id}/archive` | Assignment ownership/admin override | ARCH-UC-02 |
 | POST | `/api/v1/courses/{course_id}/archive` | Course ownership/admin override | ARCH-UC-03 |
-| POST | `/api/v1/assessments/{assessment_id}/restore` | ASMT mutation gate | ARCH-UC-04 |
+| POST | `/api/v1/assignment-templates/{assignment_template_id}/restore` | ATMPL mutation gate | ARCH-UC-04 |
 | POST | `/api/v1/assignments/{assignment_id}/restore` | Assignment ownership/admin override | ARCH-UC-04 |
 | POST | `/api/v1/courses/{course_id}/restore` | Course ownership/admin override | ARCH-UC-04 |
 | GET | Existing list endpoints + `includeArchived=true` | Source-domain read gate | ARCH-UC-05 |
@@ -413,7 +413,7 @@ ARCH errors are lifecycle and permission conflicts, not infrastructure failures.
 | Restore active entity | Reject invalid transition | `409` |
 | Restore blocked by parent/archive dependency | Reject | `409` |
 | Student submits to archived assignment | Reject write | `409` |
-| Assignment creation on archived course/assessment | Reject write | `409` |
+| Assignment creation on archived course/assignment template | Reject write | `409` |
 | Purge non-archived entity | Reject | `409` |
 | Purge ineligible due to dependencies/retention | Reject + reason | `409` |
 | Invalid archive filter query (`includeArchived=foo`) | Reject malformed input | `400` |
@@ -436,14 +436,14 @@ ARCH errors are lifecycle and permission conflicts, not infrastructure failures.
 ### Backend Integration
 - API archive/restore/purge flows with role gating.
 - Cross-domain effects:
-  - archived assessment blocks assignment create,
+  - archived assignment template blocks assignment create,
   - archived assignment blocks submit/save,
   - archived course blocks enrollment mutations.
 - Default active-only list behavior and `includeArchived=true`.
 - Audit row creation for mutation attempts.
 
 ### System Tests (Black Box)
-- `ST-ARCH-UC-01` archive assessment then verify assignment create fails.
+- `ST-ARCH-UC-01` archive assignment template then verify assignment create fails.
 - `ST-ARCH-UC-02` archive assignment then verify student submit fails.
 - `ST-ARCH-UC-03` archive course then verify roster mutations blocked.
 - `ST-ARCH-UC-04` restore entity and verify reads/writes resume.
@@ -475,7 +475,7 @@ ARCH errors are lifecycle and permission conflicts, not infrastructure failures.
 | Domain | ARCH dependency | Integration note |
 |--------|------------------|------------------|
 | FR-05 CRS | Course status and enrollment mutation guards | Archived courses block roster mutations and new course-level writes. |
-| FR-06 ASMT | Assessment archive lifecycle | Archived assessments cannot be used for new assignments. |
+| FR-06 ATMPL | AssignmentTemplate archive lifecycle | Archived assignment templates cannot be used for new assignments. |
 | FR-07 ASGN | Assignment archive lifecycle | Archived assignments stop student submission writes. |
 | FR-08 SUB | Submission write/read behavior under archive | SUB endpoints must enforce assignment/course status gates on writes. |
 | FR-09 VIZ | Visibility of archived entities in dashboards | VIZ should default to active-only unless explicit archive filter is enabled. |
@@ -492,13 +492,13 @@ ARCH errors are lifecycle and permission conflicts, not infrastructure failures.
 
 1. **Shared lifecycle utilities implemented.** `core/lifecycle.py` provides `LifecycleStatus`, `ConflictError`, `archive_entity()`, and `restore_entity()` helpers. `AuditAction` enum extended with `ARCHIVE`, `RESTORE`, `PURGE`.
 2. **Course lifecycle fully implemented.** `CourseStatus` enum added to Course model with `status`, `archived_at/by`, `restored_at/by` fields. Migration `0002_course_lifecycle_fields` applied. Services: `archive_course`, `restore_course`, `purge_course`. Views at `POST /courses/{id}/archive`, `POST /courses/{id}/restore`, `DELETE /courses/{id}?purge=true`.
-3. **Assessment lifecycle fully implemented.** Archival metadata fields (`archived_at/by`, `restored_at/by`) added via migration `0007`. Services: `archive_assessment`, `restore_assessment`, `purge_assessment`. Views at `POST /assessments/{id}/archive`, `POST /assessments/{id}/restore`, `DELETE /assessments/{id}?purge=true`.
+3. **AssignmentTemplate lifecycle fully implemented.** Archival metadata fields (`archived_at/by`, `restored_at/by`) added via migration `0007`. Services: `archive_assignment_template`, `restore_assignment_template`, `purge_assignment_template`. Views at `POST /assignment-templates/{assignment_template_id}/archive`, `POST /assignment-templates/{assignment_template_id}/restore`, `DELETE /assignment-templates/{assignment_template_id}?purge=true`.
 4. **Assignment lifecycle fully implemented.** Archival metadata fields added via migration `0005`. Services: `restore_assignment`, `purge_assignment` added (archive already existed). Views at `POST /assignments/{id}/restore`, `DELETE /assignments/{id}?purge=true`.
 5. **ARCH-CN-13 cascade policy implemented.** Course archive atomically cascade-archives all ACTIVE assignments in the same transaction.
-6. **ARCH-CN-14 restore preconditions implemented.** Assignment restore blocked if parent course or assessment is archived.
-7. **ARCH-CN-06 default ACTIVE-only filtering implemented.** All three list endpoints (`courses`, `assessments`, `assignments/courses/{id}`) default to ACTIVE-only with `includeArchived=true` opt-in.
+6. **ARCH-CN-14 restore preconditions implemented.** Assignment restore blocked if parent course or assignment template is archived.
+7. **ARCH-CN-06 default ACTIVE-only filtering implemented.** All three list endpoints (`courses`, `assignment templates`, `assignments/courses/{id}`) default to ACTIVE-only with `includeArchived=true` opt-in.
 8. **ARCH-CN-05 cross-domain guards implemented.** Archived course blocks enrollment add (`create_student_in_course`) and assignment creation (`create_assignment`).
 9. **Audit integration complete.** All archive/restore/purge view handlers emit two-phase audit logs via `log_audit`/`complete_audit` with `AuditAction.ARCHIVE/RESTORE/PURGE`.
 10. **41 FR-traceable integration tests pass.** `tests/integration/test_lifecycle_archival.py` covers ARCH-UC-01 through UC-07, ARCH-CN-03/05/07/13/14.
 11. **ARCH-CN-04 verification is covered.** Submission save/submit endpoints reject archived assignments (`409`) and are covered in FR-08 submission integration tests (`SUB-UC-01-E5`, `SUB-UC-02-E4`).
-12. **Plain DELETE lifecycle policy is consistent.** Regular `DELETE` for courses, assessments, and assignments now returns `409` directing callers to archive first (or purge with `?purge=true` for admin).
+12. **Plain DELETE lifecycle policy is usage-aware.** Regular `DELETE` for courses and assignments remains archive-first. Assignment templates are draft-delete / never-used-delete / used-archive-first / archived-purge-aware, with `?purge=true` reserved for admin hard-delete of archived rows.

@@ -87,6 +87,20 @@ class TestCourseRoutes:
         assert response.status_code == 200
         assert len(response.json()["results"]) >= 1
 
+    def test_CRS_UC_02_include_archived_marks_archived_rows(self, api_client, teacher_user):
+        """includeArchived returns archived courses with ARCHIVED status in the DTO."""
+        course = Course.objects.create(
+            name="Archived Course",
+            teacher_profile=teacher_user.teacher_profile,
+            status="ARCHIVED",
+        )
+        api_client.force_authenticate(user=teacher_user)
+        response = api_client.get("/api/v1/courses/", {"includeArchived": "true"})
+        assert response.status_code == 200
+        results = response.json()["results"]
+        archived = next(row for row in results if row["id"] == course.id)
+        assert archived["status"] == "ARCHIVED"
+
     # ── CRS-UC-03: Get Course Detail ──
 
     def test_CRS_UC_03_TEACHER(self, api_client, teacher_user):

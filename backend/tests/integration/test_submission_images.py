@@ -13,7 +13,7 @@ import pytest
 from django.conf import settings
 from django.utils import timezone
 
-from assessments.models import Assessment, GradingMode, Question, QuestionKind, ScoringPolicy
+from assignment_templates.models import AssignmentTemplate, GradingMode, Question, QuestionKind, ScoringPolicy
 from assignments.models import Assignment, AssignmentStatus
 from core.models import AuditAction, AuditLog
 from courses.models import Course, Enrollment, EnrollmentStatus
@@ -26,15 +26,15 @@ from submissions.models import ImageStatus, Submission, SubmissionImage, Submiss
 
 
 def _setup_course_assignment(teacher_user, student_user, admin_user):
-    """Create a minimal course → assessment → assignment → enrollment → submission graph."""
-    assessment = Assessment.objects.create(
-        title="IMG Test Assessment",
+    """Create a minimal course → assignment_template → assignment → enrollment → submission graph."""
+    assignment_template = AssignmentTemplate.objects.create(
+        title="IMG Test AssignmentTemplate",
         grading_mode=GradingMode.MANUAL,
         scoring_policy=ScoringPolicy.STANDARD,
         created_by_admin=admin_user,
     )
     Question.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         question_type=QuestionKind.SHORT_ANSWER,
         kind=QuestionKind.SHORT_ANSWER,
         prompt="Q1",
@@ -52,7 +52,7 @@ def _setup_course_assignment(teacher_user, student_user, admin_user):
         status=EnrollmentStatus.ACTIVE,
     )
     assignment = Assignment.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         audience_type="COURSE",
         course=course,
         created_by=teacher_user,
@@ -383,14 +383,15 @@ class TestRetrieveImage:
     def test_IMG_UC_03_STUDENT_own_submission(
         self, api_client, teacher_user, student_user, admin_user, tmp_path
     ):
-        """Student retrieves own image — 200 with X-Accel-Redirect."""
+        """Student retrieves own image — 200 with backend-streamed bytes."""
         settings.MEDIA_ROOT = str(tmp_path)
         _, submission, _ = _setup_course_assignment(teacher_user, student_user, admin_user)
         image_id = self._upload_and_get_id(api_client, submission, student_user, tmp_path)
 
         r = api_client.get(f"/api/v1/submissions/{submission.id}/images/{image_id}")
         assert r.status_code == 200
-        assert "X-Accel-Redirect" in r
+        assert r.content
+        assert "X-Accel-Redirect" not in r
         assert r["Cache-Control"] == "private"
 
     def test_IMG_UC_03_TEACHER_visible_submission(
@@ -778,6 +779,8 @@ class TestConstraints:
     ):
         """Purge assignment removes images and blobs."""
         settings.MEDIA_ROOT = str(tmp_path)
+        settings.IMAGE_ROOT = tmp_path / "images"
+        settings.SUBMISSION_IMAGE_DIR = tmp_path / "images" / "submissions"
         assignment, submission, _ = _setup_course_assignment(teacher_user, student_user, admin_user)
 
         # Reset to NOT_STARTED so purge is allowed
@@ -795,7 +798,7 @@ class TestConstraints:
         # Get storage key for blob verification
         img = SubmissionImage.objects.get(id=image_id)
         storage_key = img.storage_key
-        blob_path = tmp_path / storage_key
+        blob_path = tmp_path / "images" / storage_key
         assert blob_path.exists()
 
         # Reset to NOT_STARTED and archive for purge

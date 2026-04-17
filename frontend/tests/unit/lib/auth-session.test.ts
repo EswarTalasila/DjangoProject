@@ -3,14 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { server } from "../mocks/server";
 
-const API_BASE = "http://localhost:8000/api/v1";
+const API_BASE = "http://localhost:8080/api/v1";
 
 let mockCookieGet: ReturnType<typeof vi.fn>;
 
 async function loadAuthSession() {
   vi.resetModules();
   process.env.NEXT_PUBLIC_API_URL = API_BASE;
-  delete process.env.PROXY_TARGET;
+  delete process.env.SERVER_PROXY_ORIGIN;
 
   mockCookieGet = vi.fn();
   vi.doMock("next/headers", () => ({
@@ -25,7 +25,7 @@ async function loadAuthSession() {
 
 describe("auth-session", () => {
   beforeEach(() => {
-    delete process.env.PROXY_TARGET;
+    delete process.env.SERVER_PROXY_ORIGIN;
   });
 
   describe("getSessionProfile", () => {
@@ -287,12 +287,10 @@ describe("auth-session", () => {
     });
   });
 
-  describe("resolveApiBaseUrl (via PROXY_TARGET)", () => {
-    it("uses PROXY_TARGET when localhost is configured", async () => {
-      process.env.PROXY_TARGET = "http://backend:8000";
-
+  describe("resolveApiBaseUrl (via SERVER_PROXY_ORIGIN)", () => {
+    it("uses SERVER_PROXY_ORIGIN when localhost is configured", async () => {
       server.use(
-        http.get("http://backend:8000/api/v1/auth/me", () =>
+        http.get("http://proxy:8080/api/v1/auth/me", () =>
           HttpResponse.json({
             id: "1",
             name: "Test",
@@ -304,12 +302,9 @@ describe("auth-session", () => {
         ),
       );
 
-      const { getSessionProfile } = await loadAuthSession();
-      // Re-set PROXY_TARGET since loadAuthSession deletes it
-      // Actually need to set it before import. Let me do a custom load.
       vi.resetModules();
       process.env.NEXT_PUBLIC_API_URL = API_BASE;
-      process.env.PROXY_TARGET = "http://backend:8000";
+      process.env.SERVER_PROXY_ORIGIN = "http://proxy:8080";
 
       mockCookieGet = vi.fn();
       vi.doMock("next/headers", () => ({

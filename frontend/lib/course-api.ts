@@ -65,9 +65,9 @@ export async function updateCourse(
   return response.data;
 }
 
-/** DELETE /courses/:id — Permanently delete a course. */
-export async function deleteCourse(courseId: number): Promise<void> {
-  await api.delete(`/courses/${courseId}`);
+/** DELETE /courses/:id?purge=true — Permanently purge an archived course. */
+export async function purgeCourse(courseId: number): Promise<void> {
+  await api.delete(`/courses/${courseId}?purge=true`);
 }
 
 /** GET /courses/:id/students — List all students enrolled in a course. */

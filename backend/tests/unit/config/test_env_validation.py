@@ -2,12 +2,12 @@
 
 Tests focus on:
 - Production-mode validation guards (validate_runtime_contract)
-- Profile-driven property defaults (debug, otel, cookies, etc.)
+- Profile-driven property defaults (debug, cookies, etc.)
 - Parsed list properties (allowed_hosts, cors_origins)
 
 These tests do NOT touch the database and do NOT rely on the .env file.
 
-Note: Fields with ``validation_alias`` (django_debug, otel_enabled) cannot be
+Note: Fields with ``validation_alias`` (django_debug) cannot be
 set via the constructor -- only via environment variables. Tests that need to
 override those fields use ``monkeypatch.setenv`` to set the env var before
 constructing the settings instance.
@@ -22,6 +22,17 @@ from config.env import EnvSettings
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture(autouse=True)
+def _isolate_runtime_security_env(monkeypatch):
+    """Keep unit defaults independent from container runtime security env vars."""
+    for key in (
+        "DJANGO_SECURE_SSL_REDIRECT",
+        "DJANGO_SESSION_COOKIE_SECURE",
+        "DJANGO_CSRF_COOKIE_SECURE",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
 
 # ---------------------------------------------------------------------------
 # Production Validator Helpers
@@ -29,46 +40,37 @@ pytestmark = pytest.mark.unit
 
 # Baseline kwargs forming a *valid* production configuration.
 # Individual tests override one field at a time to trigger specific errors.
-# Note: otel_enabled has a validation_alias so it is excluded here;
-# it must be set via OTEL_ENABLED env var.
 VALID_PROD_BASE = dict(  # noqa: C408
     environment="production",
     django_secret_key="a-very-long-production-secret-key-that-is-safe-1234",
     django_allowed_hosts="app.example.com",
     django_cors_allowed_origins="https://app.example.com",
+    django_csrf_trusted_origins="https://app.example.com",
     database_url="postgres://prod_user:strong_pw@db.example.com:5432/prod_db",
     google_client_id="real-client-id",
     google_client_secret="real-client-secret",
     admin_email="admin@real-domain.com",
     admin_password="super-secure-password-12",
-    otel_exporter_otlp_endpoint="",
-    otel_trace_file="",
 )
 
 
 def _make_prod(monkeypatch=None, **overrides):
     """Build an EnvSettings for production with targeted overrides.
 
-    If ``monkeypatch`` is provided, aliased fields (OTEL_ENABLED, DJANGO_DEBUG)
+    If ``monkeypatch`` is provided, aliased fields (DJANGO_DEBUG)
     are set as environment variables instead of passed to the constructor.
     """
     kwargs = {**VALID_PROD_BASE, **overrides}
 
     # Handle aliased fields through env vars
     if monkeypatch is not None:
-        otel_val = kwargs.pop("otel_enabled", None)
         debug_val = kwargs.pop("django_debug", None)
-        if otel_val is not None:
-            monkeypatch.setenv("OTEL_ENABLED", str(otel_val).lower())
-        else:
-            monkeypatch.delenv("OTEL_ENABLED", raising=False)
         if debug_val is not None:
             monkeypatch.setenv("DJANGO_DEBUG", str(debug_val).lower())
         else:
             monkeypatch.delenv("DJANGO_DEBUG", raising=False)
     else:
         # Without monkeypatch, remove aliased fields -- they only work via env vars
-        kwargs.pop("otel_enabled", None)
         kwargs.pop("django_debug", None)
 
     return EnvSettings(**kwargs)
@@ -150,17 +152,6 @@ class TestProfileProperties:
         s = EnvSettings(environment="testing")
         assert s.debug_toolbar_enabled is False
 
-    def test_seed_on_startup_only_in_testing(self):
-        """Auto-seed is enabled only in testing environment."""
-        assert EnvSettings(environment="testing").seed_on_startup is True
-        assert EnvSettings(environment="development").seed_on_startup is False
-
-    def test_manual_seed_blocked_in_production(self):
-        """Manual seeding is not allowed in production."""
-        s = _make_prod()
-        assert s.manual_seed_allowed is False
-        assert EnvSettings(environment="development").manual_seed_allowed is True
-
     def test_ssl_redirect_only_in_production(self):
         """SSL redirect is enabled only in production."""
         s = _make_prod()
@@ -180,55 +171,6 @@ class TestProfileProperties:
         s = _make_prod()
         assert s.csrf_cookie_secure is True
         assert EnvSettings(environment="development").csrf_cookie_secure is False
-
-
-# ============================================================================
-# OTel effective_otel_enabled
-# ============================================================================
-
-
-class TestEffectiveOtelEnabled:
-    """Tests for the computed effective_otel_enabled property."""
-
-    def test_development_defaults_true(self, monkeypatch):
-        """OTel defaults to enabled in development when env var is unset."""
-        monkeypatch.delenv("OTEL_ENABLED", raising=False)
-        s = EnvSettings(environment="development")
-        assert s.effective_otel_enabled is True
-
-    def test_development_respects_override(self, monkeypatch):
-        """OTel can be disabled in development via OTEL_ENABLED=false."""
-        monkeypatch.setenv("OTEL_ENABLED", "false")
-        s = EnvSettings(environment="development")
-        assert s.effective_otel_enabled is False
-
-    def test_testing_defaults_true(self, monkeypatch):
-        """OTel defaults to enabled in testing when env var is unset."""
-        monkeypatch.delenv("OTEL_ENABLED", raising=False)
-        s = EnvSettings(environment="testing")
-        assert s.effective_otel_enabled is True
-
-    def test_testing_respects_override(self, monkeypatch):
-        """OTel can be disabled in testing via OTEL_ENABLED=false."""
-        monkeypatch.setenv("OTEL_ENABLED", "false")
-        s = EnvSettings(environment="testing")
-        assert s.effective_otel_enabled is False
-
-    def test_production_defaults_false(self, monkeypatch):
-        """OTel defaults to disabled in production (opt-in only)."""
-        monkeypatch.delenv("OTEL_ENABLED", raising=False)
-        s = _make_prod()
-        assert s.effective_otel_enabled is False
-
-    def test_production_opt_in(self, monkeypatch):
-        """OTel can be enabled in production via OTEL_ENABLED=true."""
-        s = _make_prod(
-            monkeypatch=monkeypatch,
-            otel_enabled=True,
-            otel_exporter_otlp_endpoint="https://collector.example.com/v1/traces",
-            otel_trace_file="",
-        )
-        assert s.effective_otel_enabled is True
 
 
 # ============================================================================
@@ -433,7 +375,7 @@ class TestValidateDatabaseUrl:
     def test_default_url_rejected(self):
         """Default local database URL is rejected in production."""
         with pytest.raises(ValueError, match="DATABASE_URL"):
-            _make_prod(database_url="postgres://datadash:change-me@localhost:5432/datadash")
+            _make_prod(database_url="postgres://eelab:change-me@localhost:5432/eelab")
 
     def test_change_me_in_url_rejected(self):
         """URL containing 'change-me' is rejected."""
@@ -473,55 +415,6 @@ class TestValidateOAuth:
         """Valid OAuth credentials pass validation."""
         s = _make_prod(google_client_id="real-id", google_client_secret="real-secret")
         assert s.google_client_id == "real-id"
-
-
-# ============================================================================
-# Production validation: _validate_otel_export_policy (lines 257-264)
-# ============================================================================
-
-
-class TestValidateOtelExportPolicy:
-    """Tests for the OTel export policy validation in production."""
-
-    def test_otel_disabled_skips_validation(self, monkeypatch):
-        """When OTel is disabled, no endpoint or file checks run."""
-        monkeypatch.delenv("OTEL_ENABLED", raising=False)
-        s = _make_prod(
-            otel_exporter_otlp_endpoint="",
-            otel_trace_file="",
-        )
-        # effective_otel_enabled defaults to False in production
-        assert s.effective_otel_enabled is False
-
-    def test_otel_enabled_without_endpoint_rejected(self, monkeypatch):
-        """OTel enabled without OTLP endpoint is rejected in production."""
-        with pytest.raises(ValueError, match="OTLP endpoint"):
-            _make_prod(
-                monkeypatch=monkeypatch,
-                otel_enabled=True,
-                otel_exporter_otlp_endpoint="",
-                otel_trace_file="",
-            )
-
-    def test_otel_enabled_with_trace_file_rejected(self, monkeypatch):
-        """OTel enabled with local trace file is rejected in production."""
-        with pytest.raises(ValueError, match="local trace file"):
-            _make_prod(
-                monkeypatch=monkeypatch,
-                otel_enabled=True,
-                otel_exporter_otlp_endpoint="https://collector.example.com/v1/traces",
-                otel_trace_file="/tmp/traces.jsonl",  # noqa: S108
-            )
-
-    def test_otel_enabled_with_endpoint_no_file_accepted(self, monkeypatch):
-        """OTel enabled with endpoint and no trace file passes validation."""
-        s = _make_prod(
-            monkeypatch=monkeypatch,
-            otel_enabled=True,
-            otel_exporter_otlp_endpoint="https://collector.example.com/v1/traces",
-            otel_trace_file="",
-        )
-        assert s.effective_otel_enabled is True
 
 
 # ============================================================================

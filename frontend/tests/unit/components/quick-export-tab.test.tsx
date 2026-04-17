@@ -80,35 +80,17 @@ describe("QuickExportTab", () => {
     });
   });
 
-  it("renders placeholder cards for coming soon features", async () => {
+  it("does not render placeholder export cards", async () => {
     mockListCourses.mockResolvedValueOnce(mockCourses);
     const QuickExportTab = await loadComponent();
     render(
       <QuickExportTab role="RESEARCHER" canExportIdentifiable={true} />
     );
     await waitFor(() => {
-      expect(screen.getByText("Assessment Templates")).toBeInTheDocument();
-      expect(
-        screen.getByText("Assignment Configurations")
-      ).toBeInTheDocument();
-      expect(screen.getByText("Rubric Definitions")).toBeInTheDocument();
-      expect(screen.getByText("Course Metadata")).toBeInTheDocument();
-    });
-  });
-
-  it("renders placeholder card titles for coming soon features", async () => {
-    mockListCourses.mockResolvedValueOnce(mockCourses);
-    const QuickExportTab = await loadComponent();
-    render(
-      <QuickExportTab role="RESEARCHER" canExportIdentifiable={true} />
-    );
-    await waitFor(() => {
-      expect(
-        screen.getByText("Export assessment definitions and question banks.")
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText("Export assignment settings, schedules, and scoring rules.")
-      ).toBeInTheDocument();
+      expect(screen.queryByText("Assignment Templates")).not.toBeInTheDocument();
+      expect(screen.queryByText("Assignment Configurations")).not.toBeInTheDocument();
+      expect(screen.queryByText("Rubric Definitions")).not.toBeInTheDocument();
+      expect(screen.queryByText("Course Metadata")).not.toBeInTheDocument();
     });
   });
 
@@ -175,15 +157,16 @@ describe("QuickExportTab", () => {
     });
   });
 
-  it("renders roster download button as disabled when no course is selected", async () => {
+  it("shows an empty-state hint when no active courses are available", async () => {
     mockListCourses.mockResolvedValueOnce([]);
     const QuickExportTab = await loadComponent();
     render(
       <QuickExportTab role="RESEARCHER" canExportIdentifiable={true} />
     );
     await waitFor(() => {
-      const rosterBtn = screen.getByText("Download Roster");
-      expect(rosterBtn.closest("button")).toBeDisabled();
+      expect(
+        screen.getByText(/No active courses are available for live export yet/i)
+      ).toBeInTheDocument();
     });
   });
 

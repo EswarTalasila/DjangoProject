@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockPush = vi.fn();
 const mockListByCourse = vi.fn();
 const mockListForUser = vi.fn();
+const mockArchiveAssignment = vi.fn();
+const mockRestoreAssignment = vi.fn();
 
 function setupModuleMocks() {
   vi.doMock("next/navigation", () => ({
@@ -15,6 +17,8 @@ function setupModuleMocks() {
   vi.doMock("@/lib/assignment-api", () => ({
     listAssignmentsByCourse: mockListByCourse,
     listAssignmentsForUser: mockListForUser,
+    archiveAssignment: mockArchiveAssignment,
+    restoreAssignment: mockRestoreAssignment,
   }));
 }
 
@@ -31,8 +35,8 @@ const mockAssignments = [
   {
     id: 1,
     title: "Homework 1",
-    assessmentId: 10,
-    assessmentTitle: "SEL Check-in",
+    assignmentTemplateId: 10,
+    assignmentTemplateTitle: "SEL Check-in",
     audienceType: "COURSE" as const,
     courseId: 1,
     targetTeacherId: null,
@@ -43,8 +47,8 @@ const mockAssignments = [
   {
     id: 2,
     title: "Homework 2",
-    assessmentId: 11,
-    assessmentTitle: null,
+    assignmentTemplateId: 11,
+    assignmentTemplateTitle: null,
     audienceType: "COURSE" as const,
     courseId: 1,
     targetTeacherId: null,
@@ -67,15 +71,14 @@ describe("CourseAssignmentsTab", () => {
   });
 
   it("renders assignment table for TEACHER", async () => {
-    mockListByCourse.mockResolvedValue(mockAssignments);
+    mockListByCourse.mockResolvedValue([mockAssignments[0]]);
     const Component = await loadComponent();
     render(<Component courseId={1} userRole="TEACHER" userId={1} />);
     await waitFor(() => {
       expect(screen.getByText("Homework 1")).toBeInTheDocument();
     });
-    expect(screen.getByText("Homework 2")).toBeInTheDocument();
+    expect(screen.queryByText("Homework 2")).toBeNull();
     expect(screen.getByText("SEL Check-in")).toBeInTheDocument();
-    expect(screen.getByText("Template unavailable")).toBeInTheDocument();
   });
 
   it("shows Create Assignment button for TEACHER", async () => {
@@ -111,7 +114,23 @@ describe("CourseAssignmentsTab", () => {
     render(<Component courseId={1} userRole="TEACHER" userId={1} />);
     await waitFor(() => {
       expect(
-        screen.getByText("No assignments for this course yet."),
+        screen.getByText(
+          "No active assignments for this course. Turn on Show archived to review archived assignments or restore them after a course restore.",
+        ),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows archived restore guidance for teachers while archived rows are hidden", async () => {
+    mockListByCourse.mockResolvedValue([mockAssignments[0]]);
+    const Component = await loadComponent();
+    render(<Component courseId={1} userRole="TEACHER" userId={1} />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Restored courses keep previously archived assignments archived. Turn on Show archived to review and restore those assignments when needed.",
+        ),
       ).toBeInTheDocument();
     });
   });
@@ -140,7 +159,7 @@ describe("CourseAssignmentsTab", () => {
 
   it("navigates to assignment detail on row click", async () => {
     const user = userEvent.setup();
-    mockListByCourse.mockResolvedValue(mockAssignments);
+    mockListByCourse.mockResolvedValue([mockAssignments[0]]);
     const Component = await loadComponent();
     render(<Component courseId={1} userRole="TEACHER" userId={1} />);
     await waitFor(() => {
@@ -170,8 +189,8 @@ describe("CourseAssignmentsTab", () => {
       {
         id: 3,
         title: "Other course HW",
-        assessmentId: 12,
-        assessmentTitle: "Other",
+        assignmentTemplateId: 12,
+        assignmentTemplateTitle: "Other",
         audienceType: "COURSE" as const,
         courseId: 99,
         targetTeacherId: null,
@@ -194,10 +213,74 @@ describe("CourseAssignmentsTab", () => {
     const Component = await loadComponent();
     render(<Component courseId={1} userRole="TEACHER" userId={1} />);
     await waitFor(() => {
-      expect(screen.getByText("Homework 2")).toBeInTheDocument();
+      expect(mockListByCourse).toHaveBeenCalledWith(1, undefined);
     });
-    // Homework 2 has null dates, should show "-"
-    const dashes = screen.getAllByText("-");
-    expect(dashes.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("requests archived assignments when show archived is enabled", async () => {
+    mockListByCourse
+      .mockResolvedValueOnce([mockAssignments[0]])
+      .mockResolvedValueOnce(mockAssignments);
+    const Component = await loadComponent();
+    const user = userEvent.setup();
+    render(<Component courseId={1} userRole="TEACHER" userId={1} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Homework 1")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Homework 2")).toBeNull();
+
+    await user.click(screen.getByText("Show archived"));
+
+    await waitFor(() => {
+      expect(mockListByCourse).toHaveBeenLastCalledWith(1, { includeArchived: true });
+    });
+    expect(screen.getByText("Homework 2")).toBeInTheDocument();
+    expect(screen.getByText("Assignment template unavailable")).toBeInTheDocument();
+  });
+
+  it("archives an active assignment from the table", async () => {
+    mockListByCourse
+      .mockResolvedValueOnce([mockAssignments[0]])
+      .mockResolvedValueOnce([mockAssignments[0]]);
+    mockArchiveAssignment.mockResolvedValue(undefined);
+    const Component = await loadComponent();
+    const user = userEvent.setup();
+    render(<Component courseId={1} userRole="TEACHER" userId={1} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Archive" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+
+    await waitFor(() => {
+      expect(mockArchiveAssignment).toHaveBeenCalledWith(1);
+    });
+  });
+
+  it("restores an archived assignment when visible", async () => {
+    mockListByCourse
+      .mockResolvedValueOnce(mockAssignments)
+      .mockResolvedValueOnce(mockAssignments);
+    mockRestoreAssignment.mockResolvedValue(undefined);
+    const Component = await loadComponent();
+    const user = userEvent.setup();
+    render(<Component courseId={1} userRole="TEACHER" userId={1} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Show archived")).toBeInTheDocument();
+    });
+    await user.click(screen.getByText("Show archived"));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Restore" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Restore" }));
+
+    await waitFor(() => {
+      expect(mockRestoreAssignment).toHaveBeenCalledWith(2);
+    });
   });
 });

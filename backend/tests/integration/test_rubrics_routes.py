@@ -179,14 +179,14 @@ class TestRBR_UC_04:
 
     def test_RBR_UC_04_E3_referenced(self, api_client, admin_user):
         """Update blocked when questions reference rubric (409)."""
-        from assessments.models import Assessment, GradingMode, Question, QuestionKind
+        from assignment_templates.models import AssignmentTemplate, GradingMode, Question, QuestionKind
 
         r = _make_rubric(admin_user)
-        a = Assessment.objects.create(
+        a = AssignmentTemplate.objects.create(
             title="A", grading_mode=GradingMode.MANUAL, created_by_admin=admin_user
         )
         Question.objects.create(
-            assessment=a,
+            assignment_template=a,
             question_type=QuestionKind.SHORT_ANSWER,
             kind=QuestionKind.SHORT_ANSWER,
             prompt="Q",
@@ -225,14 +225,14 @@ class TestRBR_UC_05:
 
     def test_RBR_UC_05_E3_referenced(self, api_client, admin_user):
         """Delete blocked when questions reference rubric (409)."""
-        from assessments.models import Assessment, GradingMode, Question, QuestionKind
+        from assignment_templates.models import AssignmentTemplate, GradingMode, Question, QuestionKind
 
         r = _make_rubric(admin_user)
-        a = Assessment.objects.create(
+        a = AssignmentTemplate.objects.create(
             title="A", grading_mode=GradingMode.MANUAL, created_by_admin=admin_user
         )
         Question.objects.create(
-            assessment=a,
+            assignment_template=a,
             question_type=QuestionKind.SHORT_ANSWER,
             kind=QuestionKind.SHORT_ANSWER,
             prompt="Q",

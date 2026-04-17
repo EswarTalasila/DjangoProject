@@ -7,11 +7,16 @@ so the view layer can set response headers before streaming begins.
 
 import csv
 import json
+import logging
+
+from django.core.exceptions import ObjectDoesNotExist
 
 from accounts.models import Role, SudoPermission
 from core.permissions import has_role, has_sudo_permission
 from courses.models import Course, Enrollment
 from submissions.models import AnswerType, Submission
+
+logger = logging.getLogger(__name__)
 
 from .models import ExportAuditLog
 
@@ -38,11 +43,11 @@ ROSTER_COLS_ANONYMIZED = ["consent", "enrollmentStatus", "enrolledAt"]
 
 COURSE_SUB_COLS_IDENTIFIABLE = [
     "studentId", "studentName", "studentUsername", "consent",
-    "assignmentId", "assessmentTitle", "assessmentCategory",
+    "assignmentId", "assignmentTemplateTitle", "assignmentTemplateCategory",
     "gradingMode", "status", "score", "submittedAt",
 ]
 COURSE_SUB_COLS_ANONYMIZED = [
-    "consent", "assessmentCategory", "gradingMode", "status",
+    "consent", "assignmentTemplateCategory", "gradingMode", "status",
     "score", "submittedAt",
 ]
 
@@ -120,21 +125,23 @@ def _serialize_answers(submission, identifiable: bool) -> str:
 def _answer_value(answer) -> dict:
     if answer.answer_type == AnswerType.MULTIPLE_CHOICE:
         try:
-            selected = list(
-                answer.multiple_choice.selected.values_list("choice_index", flat=True)
-            )
+            # Use .all() to leverage prefetch cache instead of values_list().
+            selected = [sel.choice_index for sel in answer.multiple_choice.selected.all()]
             return {"selected": selected}
-        except Exception:
+        except (ObjectDoesNotExist, AttributeError):
+            logger.warning("Missing multiple_choice sub-record for answer %s", answer.id)
             return {}
     elif answer.answer_type == AnswerType.SHORT_ANSWER:
         try:
             return {"text": answer.short_answer.text}
-        except Exception:
+        except (ObjectDoesNotExist, AttributeError):
+            logger.warning("Missing short_answer sub-record for answer %s", answer.id)
             return {}
     elif answer.answer_type == AnswerType.NUMBER_SCALE:
         try:
             return {"val": answer.number_scale.val}
-        except Exception:
+        except (ObjectDoesNotExist, AttributeError):
+            logger.warning("Missing number_scale sub-record for answer %s", answer.id)
             return {}
     return {}
 
@@ -203,7 +210,7 @@ def export_roster(user, course: Course, *, status_filter=None, identifiable=True
                 "courseId": course.id,
                 "courseName": course.name,
             }
-            row_str = writer.writerow([_csv_val(data.get(c)) for c in cols])
+            row_str = writer.writerow([_csv_val(data.get(column)) for column in cols])
             yield row_str.encode("utf-8")
 
     return _generate(), row_count, not identifiable
@@ -216,7 +223,7 @@ def export_course_submissions(
     start_date=None,
     end_date=None,
     category=None,
-    assessment_id=None,
+    assignment_template_id=None,
     assignment_id=None,
     status_filter=None,
     include_answers=False,
@@ -230,7 +237,8 @@ def export_course_submissions(
     qs = Submission.objects.filter(
         assignment__course=course,
     ).select_related(
-        "assignment__assessment", "assignment__course", "student",
+        "assignment__assignment_template", "assignment__course",
+        "student__student_profile",
     )
 
     if start_date:
@@ -238,9 +246,9 @@ def export_course_submissions(
     if end_date:
         qs = qs.filter(submitted_at__lte=end_date)
     if category:
-        qs = qs.filter(assignment__assessment__category=category)
-    if assessment_id:
-        qs = qs.filter(assignment__assessment_id=assessment_id)
+        qs = qs.filter(assignment__assignment_template__category=category)
+    if assignment_template_id:
+        qs = qs.filter(assignment__assignment_template_id=assignment_template_id)
     if assignment_id:
         qs = qs.filter(assignment_id=assignment_id)
     if status_filter:
@@ -268,7 +276,7 @@ def export_course_submissions(
             "startDate": str(start_date) if start_date else None,
             "endDate": str(end_date) if end_date else None,
             "category": category,
-            "assessmentId": assessment_id,
+            "assignmentTemplateId": assignment_template_id,
             "assignmentId": assignment_id,
             "status": status_filter,
             "includeAnswers": include_answers,
@@ -280,15 +288,19 @@ def export_course_submissions(
     def _generate():
         buf, writer = _make_writer()
         yield UTF8_BOM + writer.writerow(cols).encode("utf-8")
-        for sub in qs.iterator(chunk_size=2000):
+        # Keep exports chunked; in Django 5.x, iterator(chunk_size=...) remains
+        # compatible with prefetch_related and avoids loading the full export
+        # result set into memory at once.
+        rows = qs.iterator(chunk_size=2000)
+        for sub in rows:
             student = sub.student
-            assessment = sub.assignment.assessment
+            assignment_template = sub.assignment.assignment_template
             # Resolve student profile for consent
             consent = ""
             if student:
                 try:
                     consent = student.student_profile.consent
-                except Exception:
+                except (ObjectDoesNotExist, AttributeError):
                     consent = ""
             data = {
                 "studentId": student.id if student else "",
@@ -296,17 +308,18 @@ def export_course_submissions(
                 "studentUsername": student.username if student else "",
                 "consent": consent,
                 "assignmentId": sub.assignment_id,
-                "assessmentTitle": assessment.title if assessment else "",
-                "assessmentCategory": assessment.category if assessment else "",
-                "gradingMode": assessment.grading_mode if assessment else "",
+                "assignmentTemplateTitle": assignment_template.title if assignment_template else "",
+                "assignmentTemplateCategory": (
+                    assignment_template.category if assignment_template else ""
+                ),
+                "gradingMode": assignment_template.grading_mode if assignment_template else "",
                 "status": sub.status,
                 "score": sub.score,
                 "submittedAt": sub.submitted_at.isoformat() if sub.submitted_at else "",
             }
             if include_answers:
                 data["answers"] = _serialize_answers(sub, identifiable)
-            row_str = writer.writerow([_csv_val(data.get(c)) for c in cols])
+            row_str = writer.writerow([_csv_val(data.get(column)) for column in cols])
             yield row_str.encode("utf-8")
 
     return _generate(), row_count, not identifiable
-

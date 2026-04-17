@@ -245,27 +245,27 @@ def test_create_submissions_for_student_with_assignments(teacher_user):
 
     from django.utils import timezone as tz
 
-    from assessments.models import Assessment, GradingMode, Question, QuestionKind
+    from assignment_templates.models import AssignmentTemplate, GradingMode, Question, QuestionKind
     from assignments.models import Assignment, AudienceType
     from submissions.models import Answer, Submission
 
     course = Course.objects.create(name="Sub Course", teacher_profile=teacher_user.teacher_profile)
 
-    assessment = Assessment.objects.create(
-        title="Test Assessment",
+    assignment_template = AssignmentTemplate.objects.create(
+        title="Test AssignmentTemplate",
         grading_mode=GradingMode.AUTO,
         created_by_admin=teacher_user,
         category="General",
     )
     assignment = Assignment.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         audience_type=AudienceType.COURSE,
         course=course,
         created_by=teacher_user,
         open_at=tz.now(),
     )
     Question.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         question_type=QuestionKind.MULTIPLE_CHOICE,
         kind=QuestionKind.MULTIPLE_CHOICE,
         prompt="MC Q",
@@ -274,7 +274,7 @@ def test_create_submissions_for_student_with_assignments(teacher_user):
         graded=False,
     )
     Question.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         question_type=QuestionKind.SHORT_ANSWER,
         kind=QuestionKind.SHORT_ANSWER,
         prompt="SA Q",
@@ -283,7 +283,7 @@ def test_create_submissions_for_student_with_assignments(teacher_user):
         graded=False,
     )
     Question.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         question_type=QuestionKind.NUMBER_SCALE,
         kind=QuestionKind.NUMBER_SCALE,
         prompt="NS Q",
@@ -316,7 +316,7 @@ def test_answer_type_from_question_mapping():
 
     from types import SimpleNamespace
 
-    from assessments.models import QuestionKind
+    from assignment_templates.models import QuestionKind
     from core.helpers import answer_type_from_question
     from submissions.models import AnswerType
 

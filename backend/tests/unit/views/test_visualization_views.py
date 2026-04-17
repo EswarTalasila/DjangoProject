@@ -208,12 +208,12 @@ class TestVizMoodMeter:
 
     @patch("visualizations.views.mood_meter_summary")
     @patch("visualizations.views.Assignment")
-    def test_returns_409_for_non_mood_meter_assessment(self, mock_asgn_model, mock_service):
-        """Returns 409 when assessment is not MOOD_METER type."""
+    def test_returns_409_for_non_mood_meter_assignment_template(self, mock_asgn_model, mock_service):
+        """Returns 409 when assignment_template is not MOOD_METER type."""
         from visualizations.views import viz_mood_meter
 
         mock_asgn = MagicMock()
-        mock_asgn.assessment.grading_mode = "AUTO"
+        mock_asgn.assignment_template.grading_mode = "AUTO"
         mock_asgn_model.objects.select_related.return_value.get.return_value = mock_asgn
 
         user = _user(is_staff=True)

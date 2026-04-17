@@ -59,10 +59,14 @@ class EnvSettings(BaseSettings):
         default="localhost,127.0.0.1",
         description="Comma-separated list of allowed hosts",
     )
+    django_csrf_trusted_origins: str = Field(
+        default="",
+        description="Comma-separated CSRF trusted origins (e.g. https://example.com)",
+    )
 
     # Database
     database_url: str = Field(
-        default="postgres://datadash:change-me@localhost:5432/datadash",
+        default="postgres://eelab:change-me@localhost:5432/eelab",
         description="PostgreSQL connection URL",
     )
 
@@ -94,21 +98,6 @@ class EnvSettings(BaseSettings):
     admin_password: str = Field(
         default="change-me",
         description="Bootstrap admin password",
-    )
-
-    # OTel settings
-    otel_enabled: bool | None = Field(
-        default=None,
-        validation_alias="OTEL_ENABLED",
-        description="Optional tracing toggle. Defaults vary by environment profile.",
-    )
-    otel_exporter_otlp_endpoint: str = Field(
-        default="",
-        description="OTLP collector endpoint URL",
-    )
-    otel_trace_file: str = Field(
-        default="",
-        description="Local trace file path (development/testing only)",
     )
 
     # Image upload settings (FR-15)
@@ -153,14 +142,6 @@ class EnvSettings(BaseSettings):
         return self.is_development and self.debug
 
     @property
-    def seed_on_startup(self) -> bool:
-        return self.is_testing
-
-    @property
-    def manual_seed_allowed(self) -> bool:
-        return not self.is_production
-
-    @property
     def ssl_redirect_enabled(self) -> bool:
         if self.django_secure_ssl_redirect is not None:
             return bool(self.django_secure_ssl_redirect)
@@ -178,17 +159,6 @@ class EnvSettings(BaseSettings):
             return bool(self.django_csrf_cookie_secure)
         return self.is_testing or self.is_production
 
-    @property
-    def effective_otel_enabled(self) -> bool:
-        # development: default true, configurable
-        if self.is_development:
-            return True if self.otel_enabled is None else self.otel_enabled
-        # testing: default true for deterministic tracing in integration/e2e
-        if self.is_testing:
-            return True if self.otel_enabled is None else self.otel_enabled
-        # production: opt-in only, default false
-        return bool(self.otel_enabled)
-
     # Computed properties for convenience
     @property
     def allowed_hosts_list(self) -> list[str]:
@@ -198,7 +168,16 @@ class EnvSettings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse DJANGO_CORS_ALLOWED_ORIGINS into a list."""
-        return [o.strip() for o in self.django_cors_allowed_origins.split(",") if o.strip()]
+        return [origin.strip() for origin in self.django_cors_allowed_origins.split(",") if origin.strip()]
+
+    @property
+    def csrf_trusted_origins_list(self) -> list[str]:
+        """Parse DJANGO_CSRF_TRUSTED_ORIGINS into a list."""
+        return [
+            origin.strip()
+            for origin in self.django_csrf_trusted_origins.split(",")
+            if origin.strip()
+        ]
 
     @model_validator(mode="after")
     def validate_runtime_contract(self) -> "EnvSettings":
@@ -216,9 +195,9 @@ class EnvSettings(BaseSettings):
             self._validate_admin_bootstrap,
             self._validate_allowed_hosts,
             self._validate_cors,
+            self._validate_csrf_trusted_origins,
             self._validate_database_url,
             self._validate_oauth,
-            self._validate_otel_export_policy,
         ]:
             try:
                 validator()
@@ -286,9 +265,22 @@ class EnvSettings(BaseSettings):
                     "wildcard/localhost origins are not allowed."
                 )
 
+    def _validate_csrf_trusted_origins(self) -> None:
+        origins = self.csrf_trusted_origins_list
+        if not origins:
+            raise ValueError(
+                "Invalid production DJANGO_CSRF_TRUSTED_ORIGINS: value cannot be empty."
+            )
+        for origin in origins:
+            if "localhost" in origin.lower() or "127.0.0.1" in origin:
+                raise ValueError(
+                    "Invalid production DJANGO_CSRF_TRUSTED_ORIGINS: "
+                    "localhost origins are not allowed."
+                )
+
     def _validate_database_url(self) -> None:
         raw = self.database_url.lower()
-        weak_tokens = ("datadash", "localdev", "change-me", "localhost")
+        weak_tokens = ("eelab", "datadash", "localdev", "change-me", "localhost")
         if any(token in raw for token in weak_tokens):
             raise ValueError(
                 "Invalid production DATABASE_URL: default/local credentials "
@@ -303,19 +295,6 @@ class EnvSettings(BaseSettings):
                 "Invalid production OAuth config: GOOGLE_CLIENT_ID and "
                 "GOOGLE_CLIENT_SECRET are required."
             )
-
-    def _validate_otel_export_policy(self) -> None:
-        if not self.effective_otel_enabled:
-            return
-        if not self.otel_exporter_otlp_endpoint.strip():
-            raise ValueError(
-                "Invalid production OTEL config: OTLP endpoint is required when OTEL is enabled."
-            )
-        if self.otel_trace_file.strip():
-            raise ValueError(
-                "Invalid production OTEL config: local trace file export is not allowed."
-            )
-
 
 @lru_cache
 def get_env_settings() -> EnvSettings:

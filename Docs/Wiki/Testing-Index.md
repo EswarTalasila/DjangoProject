@@ -18,7 +18,6 @@ Each domain (FR) should include the following testing layers within its detail d
 - **Backend Integration** — API flows with database
 - **Frontend Integration** — UI flows + mocked backend responses
 - **Security** — auth, role guards, abuse cases, rate limits
-- **E2E (Playwright)** — browser-based multi-role flows
 - **System Tests (Black Box)** — scripted walkthroughs tied to UC + error paths
 
 > Each FR doc should list all relevant tests under the UC it validates.
@@ -27,7 +26,7 @@ Each domain (FR) should include the following testing layers within its detail d
 
 ## 2) Naming Conventions
 
-### Unit / Integration / E2E / Security
+### Unit / Integration / Security
 
 ```
 # Backend unit
@@ -48,8 +47,8 @@ Each domain (FR) should include the following testing layers within its detail d
 # Security
  test_{DOMAIN}_UC_##_security
 
-# E2E
- test_{DOMAIN}_UC_##_e2e_flow
+# Browser/system
+ test_{DOMAIN}_UC_##_system_flow
 ```
 
 ### Pytest Verbose Output Policy
@@ -108,7 +107,6 @@ Traces to:
 | Backend Integration | pytest + DRF APIClient | 8.0+ | Django REST API flows |
 | Frontend Integration | React Testing Library + MSW | 16.x / 2.x | Mocked APIs (Client Components only; async Server Components use E2E) |
 | Security | pytest + @security marker | 8.0+ | Role guards, rate limits, abuse cases |
-| E2E | Playwright | 1.x | Browser workflows |
 | System Tests | Manual scripts | N/A | Human-run walkthroughs |
 | SAST | Bandit (Python) + ESLint security (JS/TS) | 1.9.x / latest | Pre-commit + CI enforcement |
 | DAST | OWASP ZAP baseline scan | stable (Docker) | CI on PR/merge to development/master (report-only mode) |
@@ -120,7 +118,7 @@ Traces to:
 - Every UC must have:
   - At least **1 Backend Unit** test
   - At least **1 Integration** test
-  - At least **1 E2E** or **System Test**
+  - At least **1 System Test**
 - Every UC error path must have:
   - At least **1 Backend Unit** test
   - At least **1 System Test**
@@ -134,8 +132,6 @@ See Section 8 for threshold enforcement policy and CI integration.
 - Use role-split tests even when UC is "ALL" (no ALL in test names).
 - System tests are black-box and should not rely on code knowledge.
 - Security tests should be domain-specific (e.g., AUTH rate limiting).
-- E2E seeding uses deterministic defaults by default; `.env.template` should not require E2E identity variables.
-- E2E identity env vars are override-only for targeted scenarios or CI specialization.
 - Runtime diagnostics code assertions (`ENV-*`, `ENV-P*`) are defined in `Diagnostics-Index.md` and should be used for startup/profile guard validation tests.
 
 ---
@@ -163,40 +159,10 @@ export default async function CoursesPage() {
 
 ### Two Testing Approaches
 
-#### Option 1 (Default): E2E Tests Only
+#### Option 1 (Default): Component/route tests only
 
-Test async Server Components via Playwright E2E tests that exercise the full rendering pipeline:
-
-```typescript
-// tests/e2e/courses.spec.ts
-test('displays courses list for authenticated teacher', async ({ page }) => {
-  // Playwright intercepts happen at network layer
-  await page.route('**/api/courses/', route => {
-    route.fulfill({
-      status: 200,
-      body: JSON.stringify([
-        { id: 1, name: 'Math 101', teacher: 'Smith' },
-        { id: 2, name: 'English 202', teacher: 'Jones' }
-      ])
-    });
-  });
-
-  await page.goto('/courses');
-
-  await expect(page.locator('text=Math 101')).toBeVisible();
-  await expect(page.locator('text=English 202')).toBeVisible();
-});
-```
-
-**Advantages:**
-- Tests full rendering pipeline (Server Component + Client Component integration)
-- No refactoring required
-- Catches routing, authentication, and layout issues
-
-**Disadvantages:**
-- Slower than unit tests (browser startup overhead)
-- Harder to test edge cases (must configure via Playwright route mocks)
-- Less granular failure messages
+Test async Server Components through the repo's unit and integration harnesses. Do not
+rely on a separate browser E2E layer until that system is intentionally rebuilt.
 
 #### Option 2 (When Needed): Extract Data-Fetching to Testable Functions
 
@@ -244,19 +210,17 @@ export default async function CoursesPage() {
 **Disadvantages:**
 - Requires refactoring Server Components
 - Extra abstraction layer
-- Still need E2E tests for rendering integration
 
 ### Project Decision
 
 **Phase 23-24 Default Approach:**
-- **E2E-only for async Server Components** — Accept Playwright tests as the primary testing method for Server Components that fetch data.
 - **Extract data-fetching only when necessary** — For complex flows with multiple API calls, conditional branching, or critical error handling, refactor to `lib/api/*` for unit testability.
 - **Client Components continue with Vitest + MSW** — The MSW limitation does not affect Client Components, which continue to use Vitest unit tests with MSW mocks.
+- **E2E testing is deferred** — Browser-based E2E (Playwright) has been removed. If reintroduced later, it will be rebuilt with an intentional clean interface.
 
 **Rationale:**
-- Most Server Components are thin wrappers around single API calls — E2E tests provide sufficient coverage without refactoring overhead.
 - Extracting data-fetching for all Server Components is premature abstraction — apply when complexity justifies it.
-- Unified testing strategy reduces cognitive load — team doesn't need to decide "unit vs E2E" for every component.
+- Unified testing strategy reduces cognitive load.
 
 ---
 

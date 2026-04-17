@@ -10,8 +10,8 @@ from datetime import timedelta
 import pytest
 from django.utils import timezone
 
-from assessments.models import (
-    Assessment,
+from assignment_templates.models import (
+    AssignmentTemplate,
     GradingMode,
     McqChoice,
     MultipleChoiceQuestion,
@@ -20,7 +20,9 @@ from assessments.models import (
     QuestionKind,
     ScoringPolicy,
 )
-from assignments.models import Assignment, AssignmentStatus
+from assignments.models import Assignment, AssignmentQuestion, AssignmentStatus
+from assignments.services import add_assignment_question
+from assignments.services._content import snapshot_assignment_content
 from courses.models import Course, Enrollment, EnrollmentStatus
 from submissions.models import (
     Answer,
@@ -52,15 +54,15 @@ def _make_course_assignment(
     open_at=None,
     due_at=None,
 ):
-    """Create a minimal course → assessment → assignment → enrollment graph."""
-    assessment = Assessment.objects.create(
-        title="Assessment",
+    """Create a minimal course → assignment_template → assignment → enrollment graph."""
+    assignment_template = AssignmentTemplate.objects.create(
+        title="AssignmentTemplate",
         grading_mode=grading_mode,
         scoring_policy=scoring_policy,
         created_by_admin=admin_user,
     )
     question = Question.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         question_type=question_kind,
         kind=question_kind,
         prompt="Q1",
@@ -78,7 +80,7 @@ def _make_course_assignment(
         status=EnrollmentStatus.ACTIVE,
     )
     assignment = Assignment.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         audience_type="COURSE",
         course=course,
         created_by=teacher_user,
@@ -86,19 +88,24 @@ def _make_course_assignment(
         due_at=due_at,
         status=assignment_status,
     )
-    return assignment, question, course
+    snapshot_assignment_content(assignment, assignment_template, creator_user_id=teacher_user.id)
+    assignment_question = AssignmentQuestion.objects.get(
+        assignment=assignment,
+        source_template_question=question,
+    )
+    return assignment, assignment_question, course
 
 
 def _make_mcq_assignment(teacher_user, student_user, admin_user, *, grading_mode=GradingMode.AUTO):
     """Create assignment with an MCQ question (auto-gradable)."""
-    assessment = Assessment.objects.create(
-        title="MCQ Assessment",
+    assignment_template = AssignmentTemplate.objects.create(
+        title="MCQ AssignmentTemplate",
         grading_mode=grading_mode,
         scoring_policy=ScoringPolicy.STANDARD,
         created_by_admin=admin_user,
     )
     question = Question.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         question_type=QuestionKind.MULTIPLE_CHOICE,
         kind=QuestionKind.MULTIPLE_CHOICE,
         prompt="Pick one",
@@ -119,19 +126,24 @@ def _make_mcq_assignment(teacher_user, student_user, admin_user, *, grading_mode
         status=EnrollmentStatus.ACTIVE,
     )
     assignment = Assignment.objects.create(
-        assessment=assessment,
+        assignment_template=assignment_template,
         audience_type="COURSE",
         course=course,
         created_by=teacher_user,
         open_at=timezone.now(),
         due_at=None,
     )
-    return assignment, question
+    snapshot_assignment_content(assignment, assignment_template, creator_user_id=teacher_user.id)
+    assignment_question = AssignmentQuestion.objects.get(
+        assignment=assignment,
+        source_template_question=question,
+    )
+    return assignment, assignment_question
 
 
 def _short_answer_payload(question, student_user, text="answer"):
     return {
-        "assignmentId": question.assessment_id,
+        "assignmentId": question.assignment_template_id,
         "studentId": student_user.id,
         "status": "SUBMITTED",
         "answers": [
@@ -522,15 +534,15 @@ class TestGradeSubmission:
         assignment, question, _ = _make_course_assignment(
             teacher_user, student_user, admin_user, grading_mode=GradingMode.MANUAL
         )
-        # Add second question
-        q2 = Question.objects.create(
-            assessment=assignment.assessment,
-            question_type=QuestionKind.SHORT_ANSWER,
-            kind=QuestionKind.SHORT_ANSWER,
-            prompt="Q2",
-            max_points=5.0,
-            auto_gradable=False,
-            graded=False,
+        # Teacher extensions contribute to the assignment's grading total too.
+        q2 = add_assignment_question(
+            assignment,
+            teacher_user,
+            {
+                "type": QuestionKind.SHORT_ANSWER,
+                "prompt": "Q2",
+                "maxPoints": 5.0,
+            },
         )
         sub = _make_submission(assignment, student_user, SubmissionStatus.SUBMITTED)
         _add_answer(sub, question, text="a1")
@@ -987,20 +999,17 @@ class TestAutoGrading:
         assignment, question = _make_mcq_assignment(
             teacher_user, student_user, admin_user, grading_mode=GradingMode.HYBRID
         )
-        # Add a short-answer question needing manual grading
-        Question.objects.create(
-            assessment=assignment.assessment,
-            question_type=QuestionKind.SHORT_ANSWER,
-            kind=QuestionKind.SHORT_ANSWER,
-            prompt="Explain",
-            max_points=5.0,
-            auto_gradable=False,
-            graded=False,
+        # Add a teacher-owned short-answer extension that still requires manual grading.
+        sa_q = add_assignment_question(
+            assignment,
+            teacher_user,
+            {
+                "type": QuestionKind.SHORT_ANSWER,
+                "prompt": "Explain",
+                "maxPoints": 5.0,
+            },
         )
         api_client.force_authenticate(user=student_user)
-        sa_q = Question.objects.filter(
-            assessment=assignment.assessment, kind=QuestionKind.SHORT_ANSWER
-        ).first()
         payload = {
             "assignmentId": assignment.id,
             "studentId": student_user.id,
@@ -1063,14 +1072,14 @@ class TestHybridScoring:
         assignment, mcq_q = _make_mcq_assignment(
             teacher_user, student_user, admin_user, grading_mode=GradingMode.HYBRID
         )
-        sa_q = Question.objects.create(
-            assessment=assignment.assessment,
-            question_type=QuestionKind.SHORT_ANSWER,
-            kind=QuestionKind.SHORT_ANSWER,
-            prompt="Explain",
-            max_points=5.0,
-            auto_gradable=False,
-            graded=False,
+        sa_q = add_assignment_question(
+            assignment,
+            teacher_user,
+            {
+                "type": QuestionKind.SHORT_ANSWER,
+                "prompt": "Explain",
+                "maxPoints": 5.0,
+            },
         )
         # Pre-create submission with answers
         sub = _make_submission(assignment, student_user, SubmissionStatus.SUBMITTED)

@@ -5,30 +5,20 @@
  * - On 401, attempts a silent token exchange via /auth/token-exchanges.
  * - If the refresh also fails, clears the user cookie and redirects to /login.
  * - Public endpoints (login, registration, password reset) skip the refresh cycle.
+ *
+ * Browser API base: always relative "/api/v1" (resolved by nginx/proxy).
+ * Server-side code resolves an absolute proxy URL separately in auth-session.ts.
  */
 import axios from 'axios';
 import Cookies from 'js-cookie';
+import type { AxiosRequestConfig } from 'axios';
 
-/** Resolve the API base URL, swapping localhost for the Docker service name when running inside a container. */
-function resolveApiUrl(): string {
-  const configured = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
-  try {
-    const url = new URL(configured);
-    if (
-      typeof window !== 'undefined' &&
-      url.hostname === 'localhost' &&
-      window.location.hostname !== 'localhost' &&
-      window.location.hostname !== '127.0.0.1'
-    ) {
-      url.hostname = 'backend';
-    }
-    return url.toString().replace(/\/$/, '');
-  } catch {
-    return configured.replace(/\/$/, '');
-  }
-}
+export type ApiRequestOptions = AxiosRequestConfig & {
+  suppressAuthRedirect?: boolean;
+};
 
-const API_URL = resolveApiUrl();
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || '/api/v1').replace(/\/$/, '');
+
 const PUBLIC_ENDPOINTS = new Set([
   '/auth/sessions',
   '/auth/sessions/oauth',
@@ -60,7 +50,8 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config ?? {};
     const path = normalizeRequestPath(originalRequest.url);
-    const retryState = originalRequest as { _retry?: boolean };
+    const retryState = originalRequest as { _retry?: boolean; suppressAuthRedirect?: boolean };
+    const suppressAuthRedirect = retryState.suppressAuthRedirect === true;
 
     if (
       error.response?.status === 401 &&
@@ -74,7 +65,11 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch {
         Cookies.remove('user_name');
-        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+        if (
+          !suppressAuthRedirect &&
+          typeof window !== 'undefined' &&
+          !window.location.pathname.includes('/login')
+        ) {
           window.location.href = '/login';
         }
       }
@@ -82,7 +77,11 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401) {
       Cookies.remove('user_name');
-      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+      if (
+        !suppressAuthRedirect &&
+        typeof window !== 'undefined' &&
+        !window.location.pathname.includes('/login')
+      ) {
         window.location.href = '/login';
       }
     }

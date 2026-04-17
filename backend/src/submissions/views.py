@@ -32,8 +32,8 @@ from core.audit import complete_audit, get_client_ip, log_audit
 from core.errors import error_response
 from core.models import AuditAction, AuditOutcome
 from core.pagination import paginate
-from core.permissions import has_role, has_sudo_permission, primary_role
-from courses.models import Enrollment
+from core.permissions import has_role, has_sudo_permission, primary_role, teacher_owns_assignment
+from courses.models import Enrollment, EnrollmentStatus
 
 from .models import Submission, SubmissionStatus
 from .serializers import SubmissionSerializer
@@ -42,7 +42,9 @@ from .services import (
     get_by_assignment,
     get_by_student,
     get_by_student_and_assignment,
+    get_by_student_and_assignment_for_dto,
     get_submission,
+    get_submission_for_dto,
     list_me,
     override_score,
     submission_to_compact_dto,
@@ -72,26 +74,8 @@ def _assignment_for(assignment_id: int) -> Assignment | None:
     )
 
 
-def _teacher_owns_assignment(user, assignment: Assignment) -> bool:
-    """
-    Check if the given user (teacher) owns the assignment.
-
-    Ownership is determined by either:
-    1. The assignment's teacher_id matches the user's ID, OR
-    2. The assignment's course belongs to the user's teacher profile
-
-    Args:
-        user: The User instance to check ownership for
-        assignment: The Assignment to check
-
-    Returns:
-        True if the user owns the assignment, False otherwise
-    """
-    if assignment.teacher_id == user.id:
-        return True
-    if assignment.course and assignment.course.teacher_profile:
-        return bool(assignment.course.teacher_profile.user_id == user.id)
-    return False
+# Backward-compatible alias — image_views.py imports this name.
+_teacher_owns_assignment = teacher_owns_assignment
 
 
 def _student_enrolled_in_assignment(user, assignment: Assignment) -> bool:
@@ -109,7 +93,9 @@ def _student_enrolled_in_assignment(user, assignment: Assignment) -> bool:
     if not assignment.course_id:
         return False
     return Enrollment.objects.filter(
-        course_id=assignment.course_id, student_profile__user_id=user.id
+        course_id=assignment.course_id,
+        student_profile__user_id=user.id,
+        status=EnrollmentStatus.ACTIVE,
     ).exists()
 
 
@@ -138,7 +124,7 @@ def _can_access_submission(user, submission) -> bool:
     if role == Role.STUDENT:
         return bool(submission.student_id == user.id)
     if role == Role.TEACHER:
-        return _teacher_owns_assignment(user, submission.assignment)
+        return teacher_owns_assignment(user, submission.assignment)
     return False
 
 
@@ -187,6 +173,8 @@ def _create_for_assignment(request, assignment_id: int, assignment: Assignment):
         )
     except ValueError as exc:
         return error_response(exc)
+    # Re-fetch with prefetches for efficient DTO serialization.
+    submission = get_submission_for_dto(submission.id)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_201_CREATED)
 
 
@@ -261,7 +249,7 @@ def assignment_submissions(request, assignment_id: int):
         not request.user.is_staff
         and not has_role(request.user, Role.RESEARCHER)
         and role == Role.TEACHER
-        and not _teacher_owns_assignment(request.user, assignment)
+        and not teacher_owns_assignment(request.user, assignment)
     ):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
@@ -286,7 +274,7 @@ def get_one(request, submission_id: int):
         404: "Submission not found" if ID invalid
     """
     try:
-        submission = get_submission(submission_id)
+        submission = get_submission_for_dto(submission_id)
     except ValueError as exc:
         return error_response(exc)
     if not _can_access_submission(request.user, submission):
@@ -324,7 +312,7 @@ def get_by_assignment_id(request, assignment_id: int):
         not request.user.is_staff
         and not has_role(request.user, Role.RESEARCHER)
         and role == Role.TEACHER
-        and not _teacher_owns_assignment(request.user, assignment)
+        and not teacher_owns_assignment(request.user, assignment)
     ):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
@@ -354,16 +342,15 @@ def get_by_student_id(request, student_id: int):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     elif role == Role.TEACHER:
         # Teacher can only see submissions for assignments they own (SUB-CN-08).
-        owned_submissions = list(
-            Submission.objects.filter(
-                student_id=student_id,
-                assignment__course__teacher_profile__user_id=request.user.id,
-            )
+        owned_qs = Submission.objects.filter(
+            student_id=student_id,
+            assignment__course__teacher_profile__user_id=request.user.id,
         )
-        if not owned_submissions:
+        if not owned_qs.exists():
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        owned_qs = owned_qs.select_related("student", "teacher", "assignment__course")
         return paginate(
-            owned_submissions,
+            owned_qs,
             request,
             transform_fn=lambda s: submission_to_compact_dto(s).model_dump(),
         )
@@ -409,12 +396,12 @@ def get_student_submission(request, student_id: int, assignment_id: int):
         if not _student_enrolled_in_assignment(request.user, assignment):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     elif role == Role.TEACHER:
-        if not _teacher_owns_assignment(request.user, assignment):
+        if not teacher_owns_assignment(request.user, assignment):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     else:
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     try:
-        submission = get_by_student_and_assignment(student_id, assignment_id)
+        submission = get_by_student_and_assignment_for_dto(student_id, assignment_id)
     except ValueError as exc:
         return error_response(exc)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
@@ -459,6 +446,8 @@ def save_draft(request, student_id: int, assignment_id: int):
         submission = create_submission(assignment_id, payload, SubmissionStatus.IN_PROGRESS)
     except ValueError as exc:
         return error_response(exc)
+    # Re-fetch with prefetches for efficient DTO serialization.
+    submission = get_submission_for_dto(submission.id)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
 
 
@@ -472,7 +461,7 @@ def list_me_view(request):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     status_filter = request.query_params.get("status")
     results = list_me(request.user.id, status_filter)
-    return paginate(results, request)
+    return paginate(results, request, transform_fn=lambda s: submission_to_compact_dto(s).model_dump())
 
 
 @api_view(["PATCH"])
@@ -508,7 +497,7 @@ def override_score_view(request, submission_id: int):
     submission = Submission.objects.filter(id=submission_id).select_related("assignment").first()
     if not submission:
         return error_response("Submission not found", status.HTTP_404_NOT_FOUND)
-    if role == Role.TEACHER and not _teacher_owns_assignment(request.user, submission.assignment):
+    if role == Role.TEACHER and not teacher_owns_assignment(request.user, submission.assignment):
         return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
 
     old_scores = list(
@@ -525,9 +514,11 @@ def override_score_view(request, submission_id: int):
     )
 
     try:
-        submission = override_score(submission_id, request.data)
+        override_score(submission_id, request.data)
     except ValueError as exc:
         complete_audit(audit_id, AuditOutcome.FAILURE)
         return error_response(exc)
     complete_audit(audit_id, AuditOutcome.SUCCESS)
+    # Re-fetch with prefetches for efficient DTO serialization.
+    submission = get_submission_for_dto(submission_id)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)

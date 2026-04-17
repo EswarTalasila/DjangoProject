@@ -58,7 +58,7 @@ class Course(models.Model):
     A course taught by a teacher.
 
     Enrollments link students to courses. Assignments distribute
-    assessments to course students.
+    assignment templates to course students.
     """
 
     name = models.CharField(max_length=255)

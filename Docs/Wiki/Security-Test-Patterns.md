@@ -349,7 +349,7 @@ def test_idor_user_cannot_access_other_user_data(api_client, django_user_model):
 
 **OWASP Reference**: [WSTG-ATHZ-04](https://owasp.org/www-project-web-security-testing-guide/stable/4-Web_Application_Security_Testing/05-Authorization_Testing/04-Testing_for_Insecure_Direct_Object_References)
 
-**Implementation Notes**: Test with courses, assessments, and submissions endpoints. Each resource type needs its own IDOR test. Verify both read and write operations are protected.
+**Implementation Notes**: Test with courses, assignment templates, and submissions endpoints. Each resource type needs its own IDOR test. Verify both read and write operations are protected.
 
 ### 4.4 Unauthenticated Access Rejection (WSTG-ATHZ-01)
 
@@ -369,7 +369,7 @@ def test_unauthenticated_access_rejected(api_client):
     protected_endpoints = [
         ('/api/courses/', 'get'),
         ('/api/courses/', 'post'),
-        ('/api/assessments/', 'get'),
+        ('/api/v1/assignment-templates/', 'get'),
         ('/api/submissions/', 'post'),
         ('/api/admin/users/', 'get'),
     ]

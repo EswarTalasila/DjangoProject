@@ -1,5 +1,10 @@
 import api from '@/lib/api';
-import type { Assessment } from '@/lib/assessment-api';
+import type {
+  QuestionData,
+  QuestionGroup,
+  QuestionImage,
+  QuestionKind,
+} from '@/lib/assignment-template-api';
 
 export type AudienceType = 'COURSE' | 'TEACHER';
 export type AssignmentStatus = 'ACTIVE' | 'ARCHIVED';
@@ -7,8 +12,8 @@ export type AssignmentStatus = 'ACTIVE' | 'ARCHIVED';
 export type Assignment = {
   id: number;
   title: string;
-  assessmentId: number;
-  assessmentTitle: string | null;
+  assignmentTemplateId: number;
+  assignmentTemplateTitle: string | null;
   audienceType: AudienceType;
   courseId: number | null;
   targetTeacherId: number | null;
@@ -17,9 +22,78 @@ export type Assignment = {
   status: AssignmentStatus;
 };
 
+export type AssignmentArchiveArtifact = {
+  id: number;
+  assignmentId: number;
+  identifiable: boolean;
+  filename: string;
+  sizeBytes: number;
+  sha256Hash: string;
+  generatedAt: string | null;
+  generatedByUserId: number | null;
+  manifest: Record<string, unknown>;
+};
+
+export type AssignmentQuestionOrigin = 'TEMPLATE' | 'TEACHER_ADDITION';
+
+export type AssignmentQuestion = {
+  questionId: number;
+  id: number;
+  type: QuestionKind;
+  prompt: string;
+  maxPoints: number;
+  autoGradable: boolean;
+  graded: boolean;
+  image: QuestionImage | null;
+  data: QuestionData | null;
+  selectAll: boolean | null;
+  min: number | null;
+  max: number | null;
+  groupId: number | null;
+  rubricId: number | null;
+  gradingStrategy: 'AUTO' | 'MANUAL';
+  orderIndex: number;
+  origin: AssignmentQuestionOrigin | null;
+  lockedFromSource: boolean;
+  sourceQuestionId: number | null;
+};
+
+export type AssignmentTeacherCriterion = {
+  id: number;
+  title: string;
+  description: string;
+  weight: number;
+  orderIndex: number;
+  levels: AssignmentTeacherCriterionLevel[];
+};
+
+export type AssignmentTeacherCriterionLevel = {
+  id: number;
+  label: string;
+  points: number;
+  description: string;
+  orderIndex: number;
+};
+
+export type AssignmentContent = {
+  id: number;
+  title: string;
+  assignmentId: number;
+  assignmentTemplateId: number;
+  assignmentTemplateTitle: string;
+  category: string | null;
+  gradingMode: string;
+  scoringPolicy: string;
+  submissionMode: string;
+  rubricId: number | null;
+  questions: AssignmentQuestion[];
+  questionGroups: QuestionGroup[];
+  teacherCriteria: AssignmentTeacherCriterion[];
+};
+
 export type AssignmentCreateInput = {
-  title?: string;
-  assessmentId: number;
+  title: string;
+  assignmentTemplateId: number;
   audienceType: 'COURSE';
   courseId: number;
   openAt: string;
@@ -32,6 +106,26 @@ export type AssignmentUpdateInput = {
   dueAt?: string | null;
 };
 
+export type AssignmentQuestionCreateInput = {
+  type: QuestionKind;
+  prompt: string;
+  maxPoints: number;
+  data?: QuestionData;
+  gradingStrategy?: 'AUTO' | 'MANUAL';
+};
+
+export type AssignmentTeacherCriterionInput = {
+  title: string;
+  description?: string;
+  weight: number;
+};
+
+export type AssignmentTeacherCriterionLevelInput = {
+  label: string;
+  description?: string;
+  points: number;
+};
+
 type Paginated<T> = {
   count: number;
   next: string | null;
@@ -39,7 +133,7 @@ type Paginated<T> = {
   results: T[];
 };
 
-/** POST /assignments/ — Create a new assignment linking an assessment to a course. */
+/** POST /assignments/ — Create a new assignment linking an assignment template to a course. */
 export async function createAssignment(payload: AssignmentCreateInput): Promise<Assignment> {
   const response = await api.post<Assignment>('/assignments/', payload);
   return response.data;
@@ -51,9 +145,9 @@ export async function getAssignment(assignmentId: number): Promise<Assignment> {
   return response.data;
 }
 
-/** GET /assignments/:id/template — Fetch the assessment template (questions) for an assignment. */
-export async function getAssignmentTemplate(assignmentId: number): Promise<Assessment> {
-  const response = await api.get<Assessment>(`/assignments/${assignmentId}/template`);
+/** GET /assignments/:id/template — Fetch the effective assignment content snapshot. */
+export async function getAssignmentContent(assignmentId: number): Promise<AssignmentContent> {
+  const response = await api.get<AssignmentContent>(`/assignments/${assignmentId}/template`);
   return response.data;
 }
 
@@ -66,9 +160,9 @@ export async function updateAssignment(
   return response.data;
 }
 
-/** DELETE /assignments/:id — Permanently delete an assignment. */
-export async function deleteAssignment(assignmentId: number): Promise<void> {
-  await api.delete(`/assignments/${assignmentId}`);
+/** DELETE /assignments/:id?purge=true — Permanently delete an archived assignment. */
+export async function purgeAssignment(assignmentId: number): Promise<void> {
+  await api.delete(`/assignments/${assignmentId}?purge=true`);
 }
 
 /** POST /assignments/:id/archive — Soft-archive an assignment. */
@@ -83,9 +177,245 @@ export async function restoreAssignment(assignmentId: number): Promise<Assignmen
   return response.data;
 }
 
-/** GET /assignments/courses/:id — List all assignments for a given course. */
-export async function listAssignmentsByCourse(courseId: number): Promise<Assignment[]> {
-  const response = await api.get<Paginated<Assignment> | Assignment[]>(`/assignments/courses/${courseId}`);
+/** POST /assignments/:id/questions — Add a teacher-authored question to an assignment. */
+export async function addAssignmentQuestion(
+  assignmentId: number,
+  payload: AssignmentQuestionCreateInput,
+): Promise<AssignmentContent> {
+  const response = await api.post<AssignmentContent>(`/assignments/${assignmentId}/questions`, payload);
+  return response.data;
+}
+
+/** PATCH /assignments/:id/questions/:questionId — Update a teacher-authored assignment question. */
+export async function updateAssignmentQuestion(
+  assignmentId: number,
+  questionId: number,
+  payload: AssignmentQuestionCreateInput,
+): Promise<AssignmentContent> {
+  const response = await api.patch<AssignmentContent>(
+    `/assignments/${assignmentId}/questions/${questionId}`,
+    payload,
+  );
+  return response.data;
+}
+
+/** DELETE /assignments/:id/questions/:questionId — Remove a teacher-authored assignment question. */
+export async function deleteAssignmentQuestion(
+  assignmentId: number,
+  questionId: number,
+): Promise<AssignmentContent> {
+  const response = await api.delete<AssignmentContent>(
+    `/assignments/${assignmentId}/questions/${questionId}`,
+  );
+  return response.data;
+}
+
+/** POST /assignments/:id/questions/reorder — Reorder teacher-authored questions. */
+export async function reorderAssignmentQuestions(
+  assignmentId: number,
+  orderedIds: number[],
+): Promise<AssignmentContent> {
+  const response = await api.post<AssignmentContent>(`/assignments/${assignmentId}/questions/reorder`, {
+    orderedIds,
+  });
+  return response.data;
+}
+
+/** POST /assignments/:id/teacher-criteria — Add a teacher-authored criterion to an assignment. */
+export async function addAssignmentTeacherCriterion(
+  assignmentId: number,
+  payload: AssignmentTeacherCriterionInput,
+): Promise<AssignmentContent> {
+  const response = await api.post<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria`,
+    payload,
+  );
+  return response.data;
+}
+
+/** PATCH /assignments/:id/teacher-criteria/:criterionId — Update a teacher-authored criterion. */
+export async function updateAssignmentTeacherCriterion(
+  assignmentId: number,
+  criterionId: number,
+  payload: AssignmentTeacherCriterionInput,
+): Promise<AssignmentContent> {
+  const response = await api.patch<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria/${criterionId}`,
+    payload,
+  );
+  return response.data;
+}
+
+/** DELETE /assignments/:id/teacher-criteria/:criterionId — Remove a teacher-authored criterion. */
+export async function deleteAssignmentTeacherCriterion(
+  assignmentId: number,
+  criterionId: number,
+): Promise<AssignmentContent> {
+  const response = await api.delete<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria/${criterionId}`,
+  );
+  return response.data;
+}
+
+/** POST /assignments/:id/teacher-criteria/reorder — Reorder teacher-authored criteria. */
+export async function reorderAssignmentTeacherCriteria(
+  assignmentId: number,
+  orderedIds: number[],
+): Promise<AssignmentContent> {
+  const response = await api.post<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria/reorder`,
+    { orderedIds },
+  );
+  return response.data;
+}
+
+/** POST /assignments/:id/teacher-criteria/:criterionId/levels — Add a teacher-authored level. */
+export async function addAssignmentTeacherCriterionLevel(
+  assignmentId: number,
+  criterionId: number,
+  payload: AssignmentTeacherCriterionLevelInput,
+): Promise<AssignmentContent> {
+  const response = await api.post<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria/${criterionId}/levels`,
+    payload,
+  );
+  return response.data;
+}
+
+/** PATCH /assignments/:id/teacher-criteria/:criterionId/levels/:levelId — Update a teacher-authored level. */
+export async function updateAssignmentTeacherCriterionLevel(
+  assignmentId: number,
+  criterionId: number,
+  levelId: number,
+  payload: AssignmentTeacherCriterionLevelInput,
+): Promise<AssignmentContent> {
+  const response = await api.patch<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria/${criterionId}/levels/${levelId}`,
+    payload,
+  );
+  return response.data;
+}
+
+/** DELETE /assignments/:id/teacher-criteria/:criterionId/levels/:levelId — Remove a teacher-authored level. */
+export async function deleteAssignmentTeacherCriterionLevel(
+  assignmentId: number,
+  criterionId: number,
+  levelId: number,
+): Promise<AssignmentContent> {
+  const response = await api.delete<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria/${criterionId}/levels/${levelId}`,
+  );
+  return response.data;
+}
+
+/** POST /assignments/:id/teacher-criteria/:criterionId/levels/reorder — Reorder teacher-authored levels. */
+export async function reorderAssignmentTeacherCriterionLevels(
+  assignmentId: number,
+  criterionId: number,
+  orderedIds: number[],
+): Promise<AssignmentContent> {
+  const response = await api.post<AssignmentContent>(
+    `/assignments/${assignmentId}/teacher-criteria/${criterionId}/levels/reorder`,
+    { orderedIds },
+  );
+  return response.data;
+}
+
+/** GET /assignments/:id/images — List reusable question images visible from the assignment context. */
+export async function listReusableAssignmentImages(assignmentId: number): Promise<QuestionImage[]> {
+  const response = await api.get<QuestionImage[]>(`/assignments/${assignmentId}/images`);
+  return response.data;
+}
+
+/** POST /assignments/:assignmentId/questions/:questionId/image — Upload question image. */
+export async function uploadAssignmentQuestionImage(
+  assignmentId: number,
+  questionId: number,
+  file: File,
+): Promise<QuestionImage> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await api.post<QuestionImage>(
+    `/assignments/${assignmentId}/questions/${questionId}/image`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return response.data;
+}
+
+/** POST /assignments/:assignmentId/questions/:questionId/image/reuse — Attach a previous image. */
+export async function reuseAssignmentQuestionImage(
+  assignmentId: number,
+  questionId: number,
+  assetId: string,
+): Promise<QuestionImage> {
+  const response = await api.post<QuestionImage>(
+    `/assignments/${assignmentId}/questions/${questionId}/image/reuse`,
+    { assetId },
+  );
+  return response.data;
+}
+
+/** DELETE /assignments/:assignmentId/questions/:questionId/image — Remove assignment question image. */
+export async function deleteAssignmentQuestionImage(
+  assignmentId: number,
+  questionId: number,
+): Promise<void> {
+  await api.delete(`/assignments/${assignmentId}/questions/${questionId}/image`);
+}
+
+/** GET /assignments/:id/archive-bundle — Fetch archive bundle metadata for an archived assignment. */
+export async function getAssignmentArchiveBundle(
+  assignmentId: number,
+  options?: { identifiable?: boolean },
+): Promise<AssignmentArchiveArtifact> {
+  const params = options?.identifiable === undefined ? undefined : { identifiable: options.identifiable };
+  const response = await api.get<AssignmentArchiveArtifact>(`/assignments/${assignmentId}/archive-bundle`, { params });
+  return response.data;
+}
+
+/** POST /assignments/:id/archive-bundle — Generate or replace an archived assignment bundle. */
+export async function generateAssignmentArchiveBundle(
+  assignmentId: number,
+  options?: { identifiable?: boolean },
+): Promise<AssignmentArchiveArtifact> {
+  const params = options?.identifiable === undefined ? undefined : { identifiable: options.identifiable };
+  const response = await api.post<AssignmentArchiveArtifact>(
+    `/assignments/${assignmentId}/archive-bundle`,
+    {},
+    { params },
+  );
+  return response.data;
+}
+
+/** GET /assignments/:id/archive-bundle/download — Download an archived assignment bundle ZIP. */
+export async function downloadAssignmentArchiveBundle(
+  assignmentId: number,
+  options?: { identifiable?: boolean },
+): Promise<{ blob: Blob; filename: string }> {
+  const params = options?.identifiable === undefined ? undefined : { identifiable: options.identifiable };
+  const response = await api.get<Blob>(`/assignments/${assignmentId}/archive-bundle/download`, {
+    params,
+    responseType: 'blob',
+  });
+  const disposition = response.headers['content-disposition'] as string | undefined;
+  const match = disposition?.match(/filename="?([^"]+)"?/i);
+  return {
+    blob: response.data,
+    filename: match?.[1] ?? `assignment-${assignmentId}-archive.zip`,
+  };
+}
+
+/** GET /assignments/courses/:id — List assignments for a given course. */
+export async function listAssignmentsByCourse(
+  courseId: number,
+  options?: { includeArchived?: boolean },
+): Promise<Assignment[]> {
+  const params = options?.includeArchived ? { includeArchived: true } : undefined;
+  const response = await api.get<Paginated<Assignment> | Assignment[]>(
+    `/assignments/courses/${courseId}`,
+    { params },
+  );
   const data = response.data;
   return Array.isArray(data) ? data : data.results;
 }

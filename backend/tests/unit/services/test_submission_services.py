@@ -6,12 +6,13 @@ All database access is mocked so tests run without a live database.
 from __future__ import annotations
 
 from types import SimpleNamespace
+from django.core.exceptions import ObjectDoesNotExist
 from unittest.mock import MagicMock, patch
 
 import pytest
 from django.utils import timezone
 
-from assessments.models import GradingMode
+from assignment_templates.models import GradingMode
 from submissions.models import AnswerType, SubmissionStatus
 
 pytestmark = pytest.mark.unit
@@ -37,6 +38,7 @@ def _mock_submission(
     *,
     id=1,
     assignment_id=10,
+    assignment_template_id=20,
     student_id=100,
     teacher_id=None,
     submitted_at=None,
@@ -48,47 +50,82 @@ def _mock_submission(
     sub = MagicMock()
     sub.id = id
     sub.assignment_id = assignment_id
+    sub.assignment.assignment_template_id = assignment_template_id
+    sub.assignment.id = assignment_id
     sub.student_id = student_id
+    sub.student = SimpleNamespace(name="Test Student", username="test-student") if student_id else None
     sub.teacher_id = teacher_id
+    sub.teacher = None
+    sub.assignment.title = "Mock Assignment"
+    sub.assignment.course = SimpleNamespace(name="Mock Course")
+    sub.assignment.assignment_template_id = assignment_template_id
     sub.submitted_at = submitted_at
     sub.score = score
     sub.status = status
+    answer_list = answers or []
     sub.answers = MagicMock()
-    sub.answers.all.return_value = answers or []
+    sub.answers.all.return_value = answer_list
+    sub.answers.order_by.return_value = MagicMock()
+    sub.answers.order_by.return_value.values_list.return_value = [
+        a.score for a in answer_list
+    ]
+    # Support chained .select_related() used by override_score (iterable)
+    # and .select_related().prefetch_related() used by _auto_score_submission.
+    sr_mock = MagicMock()
+    sr_mock.__iter__ = lambda self: iter(answer_list)
+    sr_mock.prefetch_related.return_value = answer_list
+    sub.answers.select_related.return_value = sr_mock
     return sub
 
 
-def _mock_answer(*, answer_type, question_id=1, score=None):
+def _mock_answer(*, answer_type, question_id=1, score=None, max_points=100.0):
     """Build a lightweight mock Answer with the given type."""
     answer = MagicMock()
     answer.answer_type = answer_type
     answer.question_id = question_id
     answer.score = score
+    answer.question.max_points = max_points
+    answer.question.order_index = question_id
+    answer.question.prompt = ""
     return answer
 
 
-def _mock_assignment(*, id=10, assessment_id=20):
+def _mock_assignment(*, id=10, assignment_template_id=20):
     """Build a lightweight mock Assignment."""
     a = MagicMock()
     a.id = id
-    a.assessment_id = assessment_id
+    a.assignment_template_id = assignment_template_id
     return a
 
 
 def _mock_assessment(*, id=20, grading_mode=GradingMode.AUTO):
-    """Build a lightweight mock Assessment."""
+    """Build a lightweight mock AssignmentTemplate."""
     a = MagicMock()
     a.id = id
     a.grading_mode = grading_mode
     return a
 
 
-def _mock_question(*, id=1, auto_gradable=True, max_points=5.0):
+def _mock_question(
+    *,
+    id=1,
+    auto_gradable=True,
+    max_points=5.0,
+    assignment_id=10,
+    assignment_template_id=20,
+    question_type="SHORT_ANSWER",
+):
     """Build a lightweight mock Question."""
     q = MagicMock()
     q.id = id
     q.auto_gradable = auto_gradable
     q.max_points = max_points
+    q.assignment_id = assignment_id
+    q.assignment_template_id = assignment_template_id
+    q.question_type = question_type
+    q.order_index = id
+    q.prompt = ""
+    q.data = {}
     return q
 
 
@@ -182,7 +219,9 @@ class TestAnswerToDto:
 
         ans = _mock_answer(answer_type=AnswerType.MULTIPLE_CHOICE, question_id=3, score=2.0)
         mc = MagicMock()
-        mc.selected.values_list.return_value = [0, 2]
+        sel0 = SimpleNamespace(choice_index=0)
+        sel2 = SimpleNamespace(choice_index=2)
+        mc.selected.all.return_value = [sel0, sel2]
         ans.multiple_choice = mc
 
         dto = answer_to_dto(ans)
@@ -214,6 +253,25 @@ class TestAnswerToDto:
 
         assert dto.data == {"val": 7}
 
+    def test_short_answer_missing_subrecord_returns_empty_data(self):
+        """Missing short-answer subtype should not crash DTO conversion."""
+        from submissions.services import answer_to_dto
+
+        class BrokenShortAnswer:
+            answer_type = AnswerType.SHORT_ANSWER
+            question_id = 4
+            score = None
+
+            @property
+            def short_answer(self):
+                raise ObjectDoesNotExist("err")
+
+        ans = BrokenShortAnswer()
+
+        dto = answer_to_dto(ans)
+
+        assert dto.data == {}
+
     def test_unknown_type_returns_empty_data(self):
         """Unrecognized answer type yields an empty dict."""
         from submissions.services import answer_to_dto
@@ -235,7 +293,7 @@ class TestCreateSubmission:
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
     @patch("submissions.services.Submission")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services.Assignment")
     def test_raises_when_assignment_not_found(
         self, mock_assign_model, mock_assess_model, mock_sub, _replace, _auto
@@ -251,39 +309,39 @@ class TestCreateSubmission:
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
     @patch("submissions.services.Submission")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services.Assignment")
     def test_raises_when_assessment_not_found(
         self, mock_assign_model, mock_assess_model, mock_sub, _replace, _auto
     ):
-        """ValueError raised when linked assessment does not exist."""
+        """ValueError raised when linked assignment_template does not exist."""
         from submissions.services import create_submission
 
         assignment = _mock_assignment()
         mock_assign_model.objects.filter.return_value.first.return_value = assignment
         mock_assess_model.objects.filter.return_value.first.return_value = None
 
-        with pytest.raises(ValueError, match="Assessment not found"):
+        with pytest.raises(ValueError, match="AssignmentTemplate not found"):
             create_submission(10, {"studentId": 1}, SubmissionStatus.SUBMITTED)
 
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
     @patch("submissions.services.Submission")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services.Assignment")
     @patch("submissions.services._find_existing_submission")
     def test_updates_existing_for_non_mood_meter(
         self, mock_find, mock_assign, mock_assess, mock_sub, _replace, _auto
     ):
-        """Non-MOOD_METER assessment redirects to edit_submission if submission exists."""
+        """Non-MOOD_METER assignment_template redirects to edit_submission if submission exists."""
         from submissions.services import create_submission
 
         assignment = _mock_assignment()
-        assessment = _mock_assessment(grading_mode=GradingMode.AUTO)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.AUTO)
         existing_sub = _mock_submission()
 
         mock_assign.objects.filter.return_value.first.return_value = assignment
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        mock_assess.objects.filter.return_value.first.return_value = assignment_template
         mock_find.return_value = existing_sub
 
         with patch("submissions.services.edit_submission") as mock_edit:
@@ -296,7 +354,7 @@ class TestCreateSubmission:
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
     @patch("submissions.services.Submission")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services.Assignment")
     @patch("submissions.services._find_existing_submission")
     def test_auto_score_called_for_auto_mode(
@@ -306,22 +364,22 @@ class TestCreateSubmission:
         from submissions.services import create_submission
 
         assignment = _mock_assignment()
-        assessment = _mock_assessment(grading_mode=GradingMode.AUTO)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.AUTO)
         new_sub = _mock_submission()
 
         mock_assign.objects.filter.return_value.first.return_value = assignment
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        mock_assess.objects.filter.return_value.first.return_value = assignment_template
         mock_find.return_value = None
         mock_sub.objects.create.return_value = new_sub
 
         create_submission(10, {"studentId": 1}, SubmissionStatus.SUBMITTED)
 
-        mock_auto.assert_called_once_with(new_sub, assessment)
+        mock_auto.assert_called_once_with(new_sub, assignment_template)
 
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
     @patch("submissions.services.Submission")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services.Assignment")
     @patch("submissions.services._find_existing_submission")
     def test_no_auto_score_for_in_progress(
@@ -331,11 +389,11 @@ class TestCreateSubmission:
         from submissions.services import create_submission
 
         assignment = _mock_assignment()
-        assessment = _mock_assessment(grading_mode=GradingMode.AUTO)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.AUTO)
         new_sub = _mock_submission()
 
         mock_assign.objects.filter.return_value.first.return_value = assignment
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        mock_assess.objects.filter.return_value.first.return_value = assignment_template
         mock_find.return_value = None
         mock_sub.objects.create.return_value = new_sub
 
@@ -346,7 +404,7 @@ class TestCreateSubmission:
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
     @patch("submissions.services.Submission")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services.Assignment")
     @patch("submissions.services._find_existing_submission")
     def test_no_auto_score_for_manual_mode(
@@ -356,11 +414,11 @@ class TestCreateSubmission:
         from submissions.services import create_submission
 
         assignment = _mock_assignment()
-        assessment = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.MANUAL)
         new_sub = _mock_submission()
 
         mock_assign.objects.filter.return_value.first.return_value = assignment
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        mock_assess.objects.filter.return_value.first.return_value = assignment_template
         mock_find.return_value = None
         mock_sub.objects.create.return_value = new_sub
 
@@ -371,7 +429,7 @@ class TestCreateSubmission:
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
     @patch("submissions.services.Submission")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services.Assignment")
     @patch("submissions.services._find_existing_submission")
     @patch("submissions.services.timezone")
@@ -385,11 +443,11 @@ class TestCreateSubmission:
         mock_tz.now.return_value = fake_now
 
         assignment = _mock_assignment()
-        assessment = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.MANUAL)
         new_sub = _mock_submission()
 
         mock_assign.objects.filter.return_value.first.return_value = assignment
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        mock_assess.objects.filter.return_value.first.return_value = assignment_template
         mock_find.return_value = None
         mock_sub.objects.create.return_value = new_sub
 
@@ -442,7 +500,9 @@ class TestGetByFilters:
         from submissions.services import get_by_assignment
 
         subs = [_mock_submission(id=1), _mock_submission(id=2)]
-        mock_model.objects.filter.return_value = subs
+        qs = MagicMock()
+        qs.select_related.return_value = subs
+        mock_model.objects.filter.return_value = qs
 
         result = get_by_assignment(10)
         assert len(result) == 2
@@ -453,7 +513,9 @@ class TestGetByFilters:
         from submissions.services import get_by_student
 
         subs = [_mock_submission(id=3)]
-        mock_model.objects.filter.return_value = subs
+        qs = MagicMock()
+        qs.select_related.return_value = subs
+        mock_model.objects.filter.return_value = qs
 
         result = get_by_student(100)
         assert len(result) == 1
@@ -497,54 +559,53 @@ class TestGetByStudentAndAssignment:
 class TestListMe:
     """Tests for the list_me service (user dashboard)."""
 
-    @patch("submissions.services.submission_to_compact_dto")
     @patch("submissions.services.Submission")
-    def test_combines_student_and_teacher_subs(self, mock_model, mock_compact):
-        """Merges student and teacher submissions for a user, deduplicating by id."""
+    def test_combines_student_and_teacher_subs(self, mock_model):
+        """Q-based filter returns ordered queryset for a user."""
         from submissions.services import list_me
 
         s1 = _mock_submission(id=1, assignment_id=10, status=SubmissionStatus.SUBMITTED, submitted_at=timezone.now())
         s2 = _mock_submission(id=2, assignment_id=11, status=SubmissionStatus.GRADED, submitted_at=timezone.now())
-        # Duplicate: same id=1 appearing in both querysets
-        s1_dup = _mock_submission(id=1, assignment_id=10, status=SubmissionStatus.SUBMITTED, submitted_at=timezone.now())
 
-        mock_model.objects.filter.side_effect = [[s1], [s1_dup, s2]]
-        mock_compact.return_value = MagicMock(model_dump=MagicMock(return_value={"id": 1}))
+        # list_me chains .filter(Q(...)).order_by(...) — mock the chain.
+        mock_qs = MagicMock()
+        mock_qs.order_by.return_value = mock_qs
+        mock_qs.__iter__ = MagicMock(return_value=iter([s1, s2]))
+        mock_qs.__len__ = MagicMock(return_value=2)
+        mock_model.objects.filter.return_value = mock_qs
 
         result = list_me(100, None)
 
-        # Deduplication by id: s1 and s1_dup share id=1, so only 2 unique
-        assert len(result) == 2
+        # Result is a (mock) queryset, verify order_by was called
+        mock_qs.order_by.assert_called_once()
 
-    @patch("submissions.services.submission_to_compact_dto")
     @patch("submissions.services.Submission")
-    def test_filters_by_status(self, mock_model, mock_compact):
+    def test_filters_by_status(self, mock_model):
         """When status param is provided, only matching submissions are returned."""
         from submissions.services import list_me
 
-        s1 = _mock_submission(id=1, status=SubmissionStatus.SUBMITTED, submitted_at=timezone.now())
-        s2 = _mock_submission(id=2, status=SubmissionStatus.GRADED, submitted_at=timezone.now())
-
-        mock_model.objects.filter.side_effect = [[s1, s2], []]
-
-        mock_compact.return_value = MagicMock(
-            model_dump=MagicMock(return_value={"status": SubmissionStatus.GRADED})
-        )
+        # Chain: .filter(Q(...)).filter(status=...).order_by(...) — mock the chain.
+        inner_qs = MagicMock()
+        inner_qs.order_by.return_value = inner_qs
+        mock_model.objects.filter.return_value.filter.return_value = inner_qs
 
         result = list_me(100, SubmissionStatus.GRADED)
 
-        assert len(result) == 1
-        assert result[0]["status"] == SubmissionStatus.GRADED
+        inner_qs.order_by.assert_called_once()
 
     @patch("submissions.services.Submission")
     def test_returns_empty_when_no_submissions(self, mock_model):
-        """Returns empty list when user has no submissions."""
+        """Returns empty queryset when user has no submissions."""
         from submissions.services import list_me
 
-        mock_model.objects.filter.side_effect = [[], []]
+        mock_qs = MagicMock()
+        mock_qs.order_by.return_value = mock_qs
+        mock_qs.__iter__ = MagicMock(return_value=iter([]))
+        mock_qs.__len__ = MagicMock(return_value=0)
+        mock_model.objects.filter.return_value = mock_qs
 
         result = list_me(100, None)
-        assert result == []
+        mock_qs.order_by.assert_called_once()
 
 
 # ============================================================================
@@ -574,18 +635,18 @@ class TestEditSubmission:
 
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services._find_existing_submission")
     def test_updates_fields_and_saves(self, mock_find, mock_assess, mock_replace, mock_auto):
         """Edit updates submitted_at, score, status and replaces answers."""
         from submissions.services import edit_submission
 
         sub = _mock_submission(status=SubmissionStatus.IN_PROGRESS)
-        sub.assignment = _mock_assignment(assessment_id=20)
+        sub.assignment = _mock_assignment(assignment_template_id=20)
         mock_find.return_value = sub
 
-        assessment = _mock_assessment(grading_mode=GradingMode.AUTO)
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        assignment_template = _mock_assessment(grading_mode=GradingMode.AUTO)
+        mock_assess.objects.filter.return_value.first.return_value = assignment_template
 
         edit_submission({
             "assignmentId": 10,
@@ -595,23 +656,23 @@ class TestEditSubmission:
         })
 
         mock_replace.assert_called_once()
-        mock_auto.assert_called_once_with(sub, assessment)
+        mock_auto.assert_called_once_with(sub, assignment_template)
         sub.save.assert_called_once()
 
     @patch("submissions.services._auto_score_submission")
     @patch("submissions.services._replace_answers")
-    @patch("submissions.services.Assessment")
+    @patch("submissions.services.AssignmentTemplate")
     @patch("submissions.services._find_existing_submission")
     def test_no_auto_score_for_manual(self, mock_find, mock_assess, _replace, mock_auto):
         """Edit does not auto-score when grading mode is MANUAL."""
         from submissions.services import edit_submission
 
         sub = _mock_submission(status=SubmissionStatus.IN_PROGRESS)
-        sub.assignment = _mock_assignment(assessment_id=20)
+        sub.assignment = _mock_assignment(assignment_template_id=20)
         mock_find.return_value = sub
 
-        assessment = _mock_assessment(grading_mode=GradingMode.MANUAL)
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        assignment_template = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        mock_assess.objects.filter.return_value.first.return_value = assignment_template
 
         edit_submission({
             "assignmentId": 10,
@@ -635,7 +696,7 @@ class TestOverrideScore:
         """ValueError raised when submission_id does not exist."""
         from submissions.services import override_score
 
-        mock_model.objects.filter.return_value.first.return_value = None
+        mock_model.objects.select_related.return_value.filter.return_value.first.return_value = None
 
         with pytest.raises(ValueError, match="Submission not found"):
             override_score(999, [10])
@@ -646,31 +707,29 @@ class TestOverrideScore:
         from submissions.services import override_score
 
         sub = _mock_submission()
-        mock_model.objects.filter.return_value.first.return_value = sub
+        mock_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
 
         with pytest.raises(ValueError, match="Override score request must include score values"):
             override_score(1, [])
 
     @patch("submissions.services.Answer")
-    @patch("submissions.services.Assessment")
     @patch("submissions.services.Submission")
-    def test_raises_when_assessment_not_found(self, mock_sub_model, mock_assess, _answer):
-        """ValueError raised when linked assessment does not exist."""
+    def test_raises_when_assessment_not_found(self, mock_sub_model, _answer):
+        """ValueError raised when linked assignment_template does not exist."""
         from submissions.services import override_score
 
         sub = _mock_submission()
-        sub.assignment = _mock_assignment(assessment_id=20)
-        mock_sub_model.objects.filter.return_value.first.return_value = sub
-        mock_assess.objects.filter.return_value.first.return_value = None
+        sub.assignment = _mock_assignment(assignment_template_id=20)
+        sub.assignment.assignment_template = None
+        mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
 
-        with pytest.raises(ValueError, match="Assessment not found"):
+        with pytest.raises(ValueError, match="AssignmentTemplate not found"):
             override_score(1, [10])
 
     @patch("submissions.services.Question")
     @patch("submissions.services.Answer")
-    @patch("submissions.services.Assessment")
     @patch("submissions.services.Submission")
-    def test_manual_mode_applies_scores_in_order(self, mock_sub_model, mock_assess, mock_answer_model, mock_question):
+    def test_manual_mode_applies_scores_in_order(self, mock_sub_model, mock_answer_model, mock_question):
         """MANUAL mode applies scores[i] to answers[i] and sums total."""
         from submissions.services import override_score
 
@@ -678,12 +737,11 @@ class TestOverrideScore:
         a2 = _mock_answer(answer_type=AnswerType.SHORT_ANSWER, question_id=2, score=None)
 
         sub = _mock_submission(answers=[a1, a2])
-        sub.assignment = _mock_assignment(assessment_id=20)
-        mock_sub_model.objects.filter.return_value.first.return_value = sub
-
-        assessment = _mock_assessment(grading_mode=GradingMode.MANUAL)
-        assessment.scoring_policy = "STANDARD"
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        sub.assignment = _mock_assignment(assignment_template_id=20)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        assignment_template.scoring_policy = "STANDARD"
+        sub.assignment.assignment_template = assignment_template
+        mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
 
         # Mock Question max_points lookup — no cap (values_list returns empty)
         mock_question.objects.filter.return_value.values_list.return_value = [(1, 100.0), (2, 100.0)]
@@ -697,21 +755,19 @@ class TestOverrideScore:
 
     @patch("submissions.services.Question")
     @patch("submissions.services.Answer")
-    @patch("submissions.services.Assessment")
     @patch("submissions.services.Submission")
-    def test_manual_mode_bonus_points(self, mock_sub_model, mock_assess, mock_answer_model, mock_question):
+    def test_manual_mode_bonus_points(self, mock_sub_model, mock_answer_model, mock_question):
         """Extra scores beyond answer count add the last score as bonus."""
         from submissions.services import override_score
 
         a1 = _mock_answer(answer_type=AnswerType.SHORT_ANSWER, question_id=1, score=None)
 
         sub = _mock_submission(answers=[a1])
-        sub.assignment = _mock_assignment(assessment_id=20)
-        mock_sub_model.objects.filter.return_value.first.return_value = sub
-
-        assessment = _mock_assessment(grading_mode=GradingMode.MANUAL)
-        assessment.scoring_policy = "STANDARD"
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        sub.assignment = _mock_assignment(assignment_template_id=20)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        assignment_template.scoring_policy = "STANDARD"
+        sub.assignment.assignment_template = assignment_template
+        mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
 
         mock_question.objects.filter.return_value.values_list.return_value = [(1, 100.0)]
 
@@ -723,9 +779,8 @@ class TestOverrideScore:
 
     @patch("submissions.services.Question")
     @patch("submissions.services.Answer")
-    @patch("submissions.services.Assessment")
     @patch("submissions.services.Submission")
-    def test_hybrid_mode_only_scores_short_answer(self, mock_sub_model, mock_assess, mock_answer_model, mock_question):
+    def test_hybrid_mode_only_scores_short_answer(self, mock_sub_model, mock_answer_model, mock_question):
         """HYBRID mode only applies manual scores to SHORT_ANSWER questions."""
         from submissions.services import override_score
 
@@ -733,12 +788,11 @@ class TestOverrideScore:
         a_sa = _mock_answer(answer_type=AnswerType.SHORT_ANSWER, question_id=2, score=None)
 
         sub = _mock_submission(answers=[a_mcq, a_sa])
-        sub.assignment = _mock_assignment(assessment_id=20)
-        mock_sub_model.objects.filter.return_value.first.return_value = sub
-
-        assessment = _mock_assessment(grading_mode=GradingMode.HYBRID)
-        assessment.scoring_policy = "STANDARD"
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        sub.assignment = _mock_assignment(assignment_template_id=20)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.HYBRID)
+        assignment_template.scoring_policy = "STANDARD"
+        sub.assignment.assignment_template = assignment_template
+        mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
 
         mock_question.objects.filter.return_value.values_list.return_value = [(1, 100.0), (2, 100.0)]
 
@@ -750,21 +804,19 @@ class TestOverrideScore:
 
     @patch("submissions.services.Question")
     @patch("submissions.services.Answer")
-    @patch("submissions.services.Assessment")
     @patch("submissions.services.Submission")
-    def test_hybrid_mode_bonus_points(self, mock_sub_model, mock_assess, mock_answer_model, mock_question):
+    def test_hybrid_mode_bonus_points(self, mock_sub_model, mock_answer_model, mock_question):
         """HYBRID mode adds last score as bonus if extra scores remain."""
         from submissions.services import override_score
 
         a_sa = _mock_answer(answer_type=AnswerType.SHORT_ANSWER, question_id=1, score=None)
 
         sub = _mock_submission(answers=[a_sa])
-        sub.assignment = _mock_assignment(assessment_id=20)
-        mock_sub_model.objects.filter.return_value.first.return_value = sub
-
-        assessment = _mock_assessment(grading_mode=GradingMode.HYBRID)
-        assessment.scoring_policy = "STANDARD"
-        mock_assess.objects.filter.return_value.first.return_value = assessment
+        sub.assignment = _mock_assignment(assignment_template_id=20)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.HYBRID)
+        assignment_template.scoring_policy = "STANDARD"
+        sub.assignment.assignment_template = assignment_template
+        mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
 
         mock_question.objects.filter.return_value.values_list.return_value = [(1, 100.0)]
 
@@ -774,6 +826,80 @@ class TestOverrideScore:
         assert a_sa.score == 5.0
         # total = 5.0 (from answer) + 3.0 (bonus, scores[-1])
         assert result.score == 8.0
+
+    @patch("submissions.services.Question")
+    @patch("submissions.services.Answer")
+    @patch("submissions.services.Submission")
+    def test_manual_mode_uses_question_order_not_raw_answer_order(
+        self,
+        mock_sub_model,
+        mock_answer_model,
+        mock_question,
+    ):
+        """Score payloads align with sorted question order, not arbitrary DB row order."""
+        from submissions.services import override_score
+
+        a_scale = _mock_answer(
+            answer_type=AnswerType.NUMBER_SCALE,
+            question_id=14,
+            score=None,
+            max_points=5.0,
+        )
+        a_mcq = _mock_answer(
+            answer_type=AnswerType.MULTIPLE_CHOICE,
+            question_id=13,
+            score=None,
+            max_points=2.0,
+        )
+        a_select_all = _mock_answer(
+            answer_type=AnswerType.MULTIPLE_CHOICE,
+            question_id=15,
+            score=None,
+            max_points=2.0,
+        )
+
+        sub = _mock_submission(answers=[a_scale, a_mcq, a_select_all])
+        sub.assignment = _mock_assignment(assignment_template_id=20)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        assignment_template.scoring_policy = "STANDARD"
+        sub.assignment.assignment_template = assignment_template
+        mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
+
+        mock_question.objects.filter.return_value.values_list.return_value = [
+            (13, 2.0),
+            (14, 5.0),
+            (15, 2.0),
+        ]
+
+        result = override_score(1, [2.0, 5.0, 1.0])
+
+        assert a_mcq.score == 2.0
+        assert a_scale.score == 5.0
+        assert a_select_all.score == 1.0
+        assert result.score == 8.0
+
+    @patch("submissions.services.Submission")
+    def test_error_uses_relative_question_label(self, mock_sub_model):
+        """Validation errors should refer to the question position, not the DB id."""
+        from submissions.services import override_score
+
+        answer = _mock_answer(
+            answer_type=AnswerType.MULTIPLE_CHOICE,
+            question_id=13,
+            score=None,
+            max_points=2.0,
+        )
+        answer.question.prompt = "Which classroom supports helped most?"
+
+        sub = _mock_submission(answers=[answer])
+        sub.assignment = _mock_assignment(assignment_template_id=20)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.MANUAL)
+        assignment_template.scoring_policy = "STANDARD"
+        sub.assignment.assignment_template = assignment_template
+        mock_sub_model.objects.select_related.return_value.filter.return_value.first.return_value = sub
+
+        with pytest.raises(ValueError, match=r"Question 1"):
+            override_score(1, [5.0])
 
 
 # ============================================================================
@@ -874,7 +1000,7 @@ class TestCreateAnswer:
         """MCQ answer creates a MultipleChoiceAnswer with selected indices."""
         from submissions.services import _create_answer
 
-        mock_q.objects.filter.return_value.first.return_value = _mock_question()
+        mock_q.objects.filter.return_value.first.return_value = _mock_question(question_type="MULTIPLE_CHOICE")
         answer_obj = MagicMock()
         mock_a.objects.create.return_value = answer_obj
         mc_obj = MagicMock()
@@ -917,7 +1043,7 @@ class TestCreateAnswer:
         """Number scale creates a NumberScaleAnswer with the value."""
         from submissions.services import _create_answer
 
-        mock_q.objects.filter.return_value.first.return_value = _mock_question()
+        mock_q.objects.filter.return_value.first.return_value = _mock_question(question_type="NUMBER_SCALE")
         answer_obj = MagicMock()
         mock_a.objects.create.return_value = answer_obj
 
@@ -949,9 +1075,9 @@ class TestAutoScoreSubmission:
         a.question = q
 
         sub = _mock_submission(answers=[a])
-        assessment = _mock_assessment(grading_mode=GradingMode.AUTO)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.AUTO)
 
-        _auto_score_submission(sub, assessment)
+        _auto_score_submission(sub, assignment_template)
 
         assert sub.score == 0.0
 
@@ -960,9 +1086,9 @@ class TestAutoScoreSubmission:
         from submissions.services import _auto_score_submission
 
         sub = _mock_submission(answers=[], submitted_at=None)
-        assessment = _mock_assessment(grading_mode=GradingMode.AUTO)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.AUTO)
 
-        _auto_score_submission(sub, assessment)
+        _auto_score_submission(sub, assignment_template)
 
         assert sub.status == SubmissionStatus.GRADED
         assert sub.submitted_at is not None
@@ -972,9 +1098,9 @@ class TestAutoScoreSubmission:
         from submissions.services import _auto_score_submission
 
         sub = _mock_submission(answers=[], status=SubmissionStatus.SUBMITTED)
-        assessment = _mock_assessment(grading_mode=GradingMode.HYBRID)
+        assignment_template = _mock_assessment(grading_mode=GradingMode.HYBRID)
 
-        _auto_score_submission(sub, assessment)
+        _auto_score_submission(sub, assignment_template)
 
         assert sub.status == SubmissionStatus.SUBMITTED
 
@@ -991,7 +1117,7 @@ class TestAutoScoreMcq:
         """Correct score is the sum of points for selected choices."""
         from submissions.services import _auto_score_mcq
 
-        q = _mock_question(auto_gradable=True)
+        q = _mock_question(auto_gradable=True, max_points=10.0)
         choice_a = SimpleNamespace(points=0)
         choice_b = SimpleNamespace(points=5)
         choice_c = SimpleNamespace(points=3)
@@ -999,7 +1125,7 @@ class TestAutoScoreMcq:
 
         ans = _mock_answer(answer_type=AnswerType.MULTIPLE_CHOICE, score=None)
         mc = MagicMock()
-        mc.selected.values_list.return_value = [1, 2]  # selected B and C
+        mc.selected.all.return_value = [SimpleNamespace(choice_index=1), SimpleNamespace(choice_index=2)]
         ans.multiple_choice = mc
 
         total = _auto_score_mcq(ans, q)
@@ -1017,7 +1143,12 @@ class TestAutoScoreMcq:
 
         ans = _mock_answer(answer_type=AnswerType.MULTIPLE_CHOICE)
         mc = MagicMock()
-        mc.selected.values_list.return_value = [-1, 0, 5, None]
+        mc.selected.all.return_value = [
+            SimpleNamespace(choice_index=-1),
+            SimpleNamespace(choice_index=0),
+            SimpleNamespace(choice_index=5),
+            SimpleNamespace(choice_index=None),
+        ]
         ans.multiple_choice = mc
 
         total = _auto_score_mcq(ans, q)
@@ -1034,11 +1165,36 @@ class TestAutoScoreMcq:
 
         ans = _mock_answer(answer_type=AnswerType.MULTIPLE_CHOICE)
         mc = MagicMock()
-        mc.selected.values_list.return_value = []
+        mc.selected.all.return_value = []
         ans.multiple_choice = mc
 
         total = _auto_score_mcq(ans, q)
         assert total == 0.0
+
+    def test_caps_score_at_max_points(self):
+        """Select-all totals should never exceed the question max_points."""
+        from submissions.services import _auto_score_mcq
+
+        q = _mock_question(max_points=2.0)
+        q.mcq_choices.all.return_value = [
+            SimpleNamespace(points=1),
+            SimpleNamespace(points=1),
+            SimpleNamespace(points=1),
+        ]
+
+        ans = _mock_answer(answer_type=AnswerType.MULTIPLE_CHOICE)
+        mc = MagicMock()
+        mc.selected.all.return_value = [
+            SimpleNamespace(choice_index=0),
+            SimpleNamespace(choice_index=1),
+            SimpleNamespace(choice_index=2),
+        ]
+        ans.multiple_choice = mc
+
+        total = _auto_score_mcq(ans, q)
+
+        assert total == 2.0
+        assert ans.score == 2.0
 
 
 # ============================================================================

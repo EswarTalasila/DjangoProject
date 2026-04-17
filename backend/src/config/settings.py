@@ -43,13 +43,12 @@ INSTALLED_APPS = [
     "core",
     "accounts",
     "courses",
-    "assessments",
+    "assignment_templates",
     "rubrics",
     "assignments",
     "submissions",
     "visualizations",
     "exports",
-    "packages",
 ]
 
 # Development-only apps (not loaded in production)
@@ -152,20 +151,18 @@ try:
 except PermissionError:
     logging.warning("Could not create MEDIA_ROOT at %s — ensure it exists and is writable", MEDIA_ROOT)
 
-# Package build storage — profile-driven base directory.
-# Testing uses /tmp so builds don't depend on bind-mounted MEDIA_ROOT permissions.
-import os as _os
-import tempfile as _tempfile
-
-if ENVIRONMENT == "testing":
-    _PKG_BASE = Path(_tempfile.gettempdir()) / "eel-package-builds" / _os.getenv("PYTEST_XDIST_WORKER", "main")
-else:
-    _PKG_BASE = MEDIA_ROOT
-PACKAGE_ARTIFACT_DIR = _PKG_BASE / "package_artifacts"
-PACKAGE_SNAPSHOT_DIR = _PKG_BASE / "snapshots"
-SUBMISSION_IMAGE_DIR = MEDIA_ROOT / "submissions"
-
-for directory in (PACKAGE_ARTIFACT_DIR, PACKAGE_SNAPSHOT_DIR, SUBMISSION_IMAGE_DIR):
+# Media and artifact directories must follow the profile-scoped runtime layout
+# documented in Prompt.md.
+IMAGE_ROOT = MEDIA_ROOT / "images"
+QUESTION_IMAGE_DIR = IMAGE_ROOT / "questions"
+SUBMISSION_IMAGE_DIR = IMAGE_ROOT / "submissions"
+ARTIFACT_ROOT = MEDIA_ROOT / "artifacts"
+for directory in (
+    IMAGE_ROOT,
+    QUESTION_IMAGE_DIR,
+    SUBMISSION_IMAGE_DIR,
+    ARTIFACT_ROOT,
+):
     try:
         directory.mkdir(parents=True, exist_ok=True)
     except PermissionError:
@@ -269,7 +266,7 @@ REST_FRAMEWORK = {
 #   - /api/schema/ (Raw OpenAPI YAML)
 SPECTACULAR_SETTINGS = {
     "TITLE": "EE Lab Data Dashboard API",
-    "DESCRIPTION": "API for managing educational assessments, submissions, and visualization.",
+    "DESCRIPTION": "API for managing assignment templates, assignments, submissions, and visualization.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,  # Don't include schema endpoint in schema itself
     "SWAGGER_UI_SETTINGS": {
@@ -300,10 +297,13 @@ X_FRAME_OPTIONS = "DENY"
 CSRF_COOKIE_SECURE = env.csrf_cookie_secure
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = "Lax"
+if env.csrf_trusted_origins_list:
+    CSRF_TRUSTED_ORIGINS = env.csrf_trusted_origins_list
 SESSION_COOKIE_SECURE = env.session_cookie_secure
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SECURE_SSL_REDIRECT = env.ssl_redirect_enabled
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_HSTS_SECONDS = 31536000 if env.is_production else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env.is_production
 SECURE_HSTS_PRELOAD = env.is_production

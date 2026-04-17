@@ -72,7 +72,8 @@ def _check_course_access(user, course):
                 {"detail": "You do not own this course"},
                 status=status.HTTP_403_FORBIDDEN,
             )
-    except Exception:
+    except AttributeError:
+        # User or course lacks a teacher_profile (RelatedObjectDoesNotExist)
         return Response(
             {"detail": "You do not own this course"},
             status=status.HTTP_403_FORBIDDEN,
@@ -203,7 +204,7 @@ def course_submissions(request, course_id):
         "startDate": params.get("startDate"),
         "endDate": params.get("endDate"),
         "category": params.get("category"),
-        "assessmentId": params.get("assessmentId"),
+        "assignmentTemplateId": params.get("assignmentTemplateId"),
         "assignmentId": params.get("assignmentId"),
         "status": params.get("status"),
         "includeAnswers": params.get("includeAnswers"),
@@ -247,7 +248,7 @@ def course_submissions(request, course_id):
     # Parse filters
     start_date = _parse_date(params.get("startDate"))
     end_date = _parse_date(params.get("endDate"), end_of_day=True)
-    assessment_id = _parse_int(params.get("assessmentId"))
+    assignment_template_id = _parse_int(params.get("assignmentTemplateId"))
     assignment_id = _parse_int(params.get("assignmentId"))
 
     # Validate param types
@@ -259,7 +260,7 @@ def course_submissions(request, course_id):
             {"detail": "Invalid date format. Use YYYY-MM-DD."},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    if assessment_id == "invalid" or assignment_id == "invalid":
+    if assignment_template_id == "invalid" or assignment_id == "invalid":
         _audit_failure(
             request.user, "submissions", course, filters, identifiable=identifiable, row_count=0
         )
@@ -299,9 +300,9 @@ def course_submissions(request, course_id):
     if end_date:
         qs = qs.filter(submitted_at__lte=end_date)
     if category:
-        qs = qs.filter(assignment__assessment__category=category)
-    if assessment_id:
-        qs = qs.filter(assignment__assessment_id=assessment_id)
+        qs = qs.filter(assignment__assignment_template__category=category)
+    if assignment_template_id:
+        qs = qs.filter(assignment__assignment_template_id=assignment_template_id)
     if assignment_id:
         qs = qs.filter(assignment_id=assignment_id)
     if status_filter:
@@ -327,7 +328,7 @@ def course_submissions(request, course_id):
         start_date=start_date,
         end_date=end_date,
         category=category,
-        assessment_id=assessment_id,
+        assignment_template_id=assignment_template_id,
         assignment_id=assignment_id,
         status_filter=status_filter,
         include_answers=include_answers,
@@ -339,4 +340,3 @@ def course_submissions(request, course_id):
         generator, row_count, is_anonymized,
         f"submissions-course-{course_id}-{today}.csv",
     )
-

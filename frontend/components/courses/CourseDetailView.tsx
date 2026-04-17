@@ -12,22 +12,15 @@ import { getCourse, updateCourse, type CourseSummary } from '@/lib/course-api';
 import CourseRosterTab from './CourseRosterTab';
 import CourseRegistrationTab from './CourseRegistrationTab';
 import CourseAssignmentsTab from './CourseAssignmentsTab';
-import CourseGradebookTab from './CourseGradebookTab';
+import { toErrorMessage } from '@/lib/utils';
 
-type ApiError = { response?: { data?: { detail?: string } } };
-
-function extractDetail(error: unknown, fallback: string): string {
-  return (error as ApiError).response?.data?.detail || fallback;
-}
-
-const TABS = ['roster', 'registration', 'assignments', 'gradebook'] as const;
+const TABS = ['roster', 'registration', 'assignments'] as const;
 type Tab = (typeof TABS)[number];
 
 const TAB_LABELS: Record<Tab, string> = {
   roster: 'Roster',
   registration: 'Registration',
   assignments: 'Assignments',
-  gradebook: 'Gradebook',
 };
 
 type CourseDetailViewProps = {
@@ -112,7 +105,7 @@ export default function CourseDetailView({
       setIsEditingName(false);
       toast.success('Course name updated.');
     } catch (error: unknown) {
-      toast.error(extractDetail(error, 'Failed to update course name.'));
+      toast.error(toErrorMessage(error, 'Failed to update course name.'));
     } finally {
       setIsSavingName(false);
     }
@@ -246,9 +239,6 @@ export default function CourseDetailView({
           userRole={userRole}
           userId={userId}
         />
-      )}
-      {activeTab === 'gradebook' && canManage && (
-        <CourseGradebookTab courseId={courseId} />
       )}
     </div>
   );

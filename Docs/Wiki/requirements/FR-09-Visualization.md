@@ -7,7 +7,7 @@
 | **Domain** | VIZ |
 | **Applies To** | ADMIN (system role), RESEARCHER, TEACHER |
 | **Related Issues** | #28 (Role Separation), #31 (API REST Standardization) |
-| **Dependencies** | FR-03 SUDO (`VIEW_IDENTIFIABLE_VIZ` permission), FR-05 CRS (course ownership), FR-06 ASMT (assessment metadata, `GradingMode.MOOD_METER`), FR-08 SUB (submission data source) |
+| **Dependencies** | FR-03 SUDO (`VIEW_IDENTIFIABLE_VIZ` permission), FR-05 CRS (course ownership), FR-06 ATMPL (assignment template metadata, `GradingMode.MOOD_METER`), FR-08 SUB (submission data source) |
 
 ---
 
@@ -22,7 +22,7 @@
 - Read-only data aggregation — no mutations.
 - Role-gated access: `IsTeacherOrAbove` (TEACHER, RESEARCHER, ADMIN); students excluded.
 - Researcher anonymization: identifiable fields omitted unless researcher holds `VIEW_IDENTIFIABLE_VIZ` sudo permission.
-- Query param filtering: `startDate`, `endDate`, `category`, `assessmentId` where applicable.
+- Query param filtering: `startDate`, `endDate`, `category`, `assignmentTemplateId` where applicable.
 - Client-side chart rendering: backend returns computed numbers, frontend renders with Recharts + custom mood meter grid component.
 
 ### Out of Scope
@@ -30,12 +30,12 @@
 - Individual student answer viewing (FR-08 SUB-UC-04, SUB-UC-05).
 - Data export to CSV/PDF (FR-10 EXP).
 - Mood meter frontend visualization UX is temporarily deferred; backend mood meter aggregate endpoint remains available.
-- Assessment template management (FR-06 ASMT).
+- AssignmentTemplate template management (FR-06 ATMPL).
 - Assignment lifecycle (FR-07 ASGN).
 - Student-facing dashboards (students cannot access VIZ endpoints).
 - Server-side chart/image/SVG generation.
 - Trend-over-time charts (future enhancement; current spec covers point-in-time aggregates).
-- Wireframes and Playwright E2E scripts (tracked separately).
+- UI wireframes and future browser smoke flows (tracked separately).
 
 ### Removals
 - `POST /api/v1/visualization/` — current raw-data endpoint. This endpoint returns raw `VisualizationSubmissionDTO` arrays and is replaced entirely by the aggregate endpoints defined in this spec. To be removed when FR-09 aggregate endpoints are implemented. Raw submission data remains available through FR-08 SUB endpoints (`GET /api/v1/assignments/{id}/submissions`, `GET /api/v1/students/{id}/submissions`, etc.).
@@ -134,7 +134,7 @@
 
 **Roles:** ADMIN, RESEARCHER, TEACHER
 **Endpoint:** `GET /api/v1/visualizations/courses/{courseId}/summary`
-**Query Params:** `startDate` (ISO date, optional), `endDate` (ISO date, optional), `category` (string, optional), `assessmentId` (int, optional)
+**Query Params:** `startDate` (ISO date, optional), `endDate` (ISO date, optional), `category` (string, optional), `assignmentTemplateId` (int, optional)
 
 **Main Flow:**
 1. System resolves course by `courseId`.
@@ -144,8 +144,8 @@
    - RESEARCHER / ADMIN: can access any course.
 4. System queries assignments linked to this course.
 5. If `startDate` / `endDate` provided, filter assignments by `open_at` within the date range.
-6. If `category` provided, filter to assignments whose assessment has matching category.
-7. If `assessmentId` provided, filter to assignments linked to that assessment.
+6. If `category` provided, filter to assignments whose assignment template has matching category.
+7. If `assignmentTemplateId` provided, filter to assignments linked to that assignment template.
 8. For each matching assignment, system computes:
    - `submittedCount`: submissions with status `SUBMITTED` or `GRADED`.
    - `totalStudents`: active enrollments in the course.
@@ -160,15 +160,15 @@
 ```json
 {
   "generatedAt": "2026-02-28T14:30:00Z",
-  "filters": { "startDate": null, "endDate": null, "category": null, "assessmentId": null },
+  "filters": { "startDate": null, "endDate": null, "category": null, "assignmentTemplateId": null },
   "courseId": 5,
   "courseName": "Art 101",
   "enrolledCount": 30,
   "assignments": [
     {
       "assignmentId": 12,
-      "assessmentTitle": "Midterm",
-      "assessmentCategory": "math",
+      "assignmentTemplateTitle": "Midterm",
+      "assignmentTemplateCategory": "math",
       "submittedCount": 25,
       "totalStudents": 30,
       "completionPct": 0.83,
@@ -180,7 +180,7 @@
 }
 ```
 
-> **Anonymized response:** `courseId`, `courseName`, `assignmentId`, and `assessmentTitle` are omitted. `assessmentCategory` is retained (non-identifying).
+> **Anonymized response:** `courseId`, `courseName`, `assignmentId`, and `assignmentTemplateTitle` are omitted. `assignmentTemplateCategory` is retained (non-identifying).
 
 **Errors:**
 - `VIZ-UC-02-E1`: Course not found (`404 Not Found`).
@@ -231,8 +231,8 @@
   "generatedAt": "2026-02-28T14:30:00Z",
   "filters": { "startDate": null, "endDate": null },
   "assignmentId": 12,
-  "assessmentTitle": "Midterm",
-  "assessmentCategory": "math",
+  "assignmentTemplateTitle": "Midterm",
+  "assignmentTemplateCategory": "math",
   "totalStudents": 30,
   "submittedCount": 25,
   "gradedCount": 22,
@@ -251,7 +251,7 @@
 }
 ```
 
-> **Anonymized response:** `assignmentId` and `assessmentTitle` are omitted. `assessmentCategory`, all numeric stats, and `distribution` are retained.
+> **Anonymized response:** `assignmentId` and `assignmentTemplateTitle` are omitted. `assignmentTemplateCategory`, all numeric stats, and `distribution` are retained.
 
 **Errors:**
 - `VIZ-UC-03-E1`: Assignment not found (`404 Not Found`).
@@ -278,7 +278,7 @@
 **Main Flow:**
 1. System resolves assignment by `assignmentId`.
 2. System validates caller has TEACHER or above role via `IsTeacherOrAbove`.
-3. System validates the assignment's assessment has `grading_mode=GradingMode.MOOD_METER`. If not, return `409 Conflict` with generic message (VIZ-CN-04).
+3. System validates the assignment's assignment template has `grading_mode=GradingMode.MOOD_METER`. If not, return `409 Conflict` with generic message (VIZ-CN-04).
 4. System validates caller access:
    - TEACHER: must own the assignment's course.
    - RESEARCHER / ADMIN: can access any assignment.
@@ -311,7 +311,7 @@
 
 **Errors:**
 - `VIZ-UC-04-E1`: Assignment not found (`404 Not Found`).
-- `VIZ-UC-04-E2`: Assignment's assessment is not a mood meter type (`409 Conflict`; response: `{"detail": "Incompatible assessment type"}`). Generic message to prevent assessment type enumeration.
+- `VIZ-UC-04-E2`: Assignment's assignment template is not a mood meter type (`409 Conflict`; response: `{"detail": "Incompatible assignment template type"}`). Generic message to prevent assignment template type enumeration.
 - `VIZ-UC-04-E3`: Teacher does not own the assignment's course (`403 Forbidden`).
 - `VIZ-UC-04-E4`: Caller is a student (`403 Forbidden` via `IsTeacherOrAbove`).
 - `VIZ-UC-04-E5`: Unauthenticated request (`401 Unauthorized`).
@@ -329,8 +329,8 @@
 ### VIZ-CN-01 — Researcher Anonymization via Sudo
 
 - Researchers without `VIEW_IDENTIFIABLE_VIZ` sudo permission receive anonymized responses where identifiable fields are **omitted entirely** (not nulled, not replaced with opaque tokens).
-- Identifiable fields subject to omission: `courseId`, `courseName`, `assignmentId`, `assessmentTitle`, `studentId`, `teacherId`.
-- Non-identifiable fields always retained: all numeric aggregates (`enrolledCount`, `avgScore`, `completionPct`, etc.), `assessmentCategory`, `distribution`, quadrant data.
+- Identifiable fields subject to omission: `courseId`, `courseName`, `assignmentId`, `assignmentTemplateTitle`, `studentId`, `teacherId`.
+- Non-identifiable fields always retained: all numeric aggregates (`enrolledCount`, `avgScore`, `completionPct`, etc.), `assignmentTemplateCategory`, `distribution`, quadrant data.
 - Authorization check: `has_sudo_permission(user, SudoPermission.VIEW_IDENTIFIABLE_VIZ)` from FR-03.
 - Access matrix:
   - TEACHER: identifiable data for own courses only (course ownership gate, not sudo).
@@ -356,11 +356,11 @@
 - RESEARCHER and ADMIN bypass this check entirely.
 - Applies to: VIZ-UC-01 through VIZ-UC-04.
 
-### VIZ-CN-04 — Mood Meter Assessment Type Gate
+### VIZ-CN-04 — Mood Meter AssignmentTemplate Type Gate
 
-- The `/mood-meter` endpoint (VIZ-UC-04) requires the assignment's assessment to have `grading_mode=GradingMode.MOOD_METER`.
-- If the assessment uses any other grading mode, the endpoint returns `409 Conflict` with `{"detail": "Incompatible assessment type"}`.
-- The error message is intentionally generic to prevent assessment type enumeration.
+- The `/mood-meter` endpoint (VIZ-UC-04) requires the assignment's assignment template to have `grading_mode=GradingMode.MOOD_METER`.
+- If the assignment template uses any other grading mode, the endpoint returns `409 Conflict` with `{"detail": "Incompatible assignment template type"}`.
+- The error message is intentionally generic to prevent assignment template type enumeration.
 - Applies to: VIZ-UC-04.
 
 ### VIZ-CN-05 — Null Safety for Aggregates
@@ -388,7 +388,7 @@
 ### VIZ-CN-08 — Query Performance
 
 - Aggregate queries must use Django ORM aggregation functions (`Count`, `Avg`, `Max`, `Min`) computed at the database level, not Python-side iteration over submission objects.
-- Queries must use `select_related()` or `prefetch_related()` to avoid N+1 patterns when traversing assignment → assessment or assignment → course relationships.
+- Queries must use `select_related()` or `prefetch_related()` to avoid N+1 patterns when traversing assignment → assignment template or assignment → course relationships.
 - Applies to: VIZ-UC-01 through VIZ-UC-04.
 
 ### VIZ-CN-09 — Client-Side Chart Rendering
@@ -421,8 +421,8 @@
 |-------|------|-----------|-------------|
 | `startDate` | ISO date string | VIZ-UC-02, VIZ-UC-03 | Filter start (inclusive). VIZ-UC-02: filters by assignment `open_at`. VIZ-UC-03: filters by submission `submitted_at`. |
 | `endDate` | ISO date string | VIZ-UC-02, VIZ-UC-03 | Filter end (inclusive). |
-| `category` | string | VIZ-UC-02 | Filter assignments by assessment category. |
-| `assessmentId` | int | VIZ-UC-02 | Filter assignments by assessment ID. |
+| `category` | string | VIZ-UC-02 | Filter assignments by assignment template category. |
+| `assignmentTemplateId` | int | VIZ-UC-02 | Filter assignments by assignment template ID. |
 
 ---
 
@@ -440,7 +440,7 @@ Expected statuses by UC:
 | `401` | Unauthenticated request | All VIZ UCs |
 | `403` | Role violation (student) or ownership violation (teacher accessing non-owned course/assignment) | All VIZ UCs |
 | `404` | Course or assignment not found | VIZ-UC-02, VIZ-UC-03, VIZ-UC-04 |
-| `409` | Incompatible assessment type (non-mood-meter assignment on `/mood-meter` endpoint) | VIZ-UC-04 |
+| `409` | Incompatible assignment template type (non-mood-meter assignment on `/mood-meter` endpoint) | VIZ-UC-04 |
 
 ---
 
@@ -468,7 +468,7 @@ Expected statuses by UC:
   - Researcher with `VIEW_IDENTIFIABLE_VIZ` sees full data.
 - Query param filtering:
   - Date range filtering on course and assignment endpoints.
-  - Category and assessmentId filtering on course endpoint.
+  - Category and assignmentTemplateId filtering on course endpoint.
 
 ### Frontend Unit/Integration
 - Recharts chart components render correctly with aggregate data shapes.
@@ -495,7 +495,7 @@ Expected statuses by UC:
   - Students blocked from all VIZ access (403).
   - Teacher course ownership gate enforced on all endpoints.
   - Researcher anonymization via `VIEW_IDENTIFIABLE_VIZ` sudo permission prevents PII exposure.
-  - Mood meter 409 message is generic to prevent assessment type enumeration.
+  - Mood meter 409 message is generic to prevent assignment template type enumeration.
 - **NFR-Privacy**
   - Researcher anonymization aligns with data minimization principles: identifiable fields omitted entirely when not authorized.
   - Mood meter responses are inherently aggregate (no student-level data exposed).
@@ -520,7 +520,7 @@ Expected statuses by UC:
 |----|-----------|-------|
 | FR-03 SUDO | `VIEW_IDENTIFIABLE_VIZ` added to `SudoPermission` enum | New enum value; checked via `has_sudo_permission(user, SudoPermission.VIEW_IDENTIFIABLE_VIZ)`. FR-03 spec must be updated to include this permission in SUDO-CN-09 scope definitions. |
 | FR-05 CRS | Course ownership (`CRS-CN-01`) | Teacher ownership gate uses `course.teacher_profile` to restrict VIZ access. |
-| FR-06 ASMT | `GradingMode.MOOD_METER` | VIZ-UC-04 mood meter type gate checks assessment grading mode. Assessment metadata (`title`, `category`) used in VIZ response fields. |
+| FR-06 ATMPL | `GradingMode.MOOD_METER` | VIZ-UC-04 mood meter type gate checks assignment template grading mode. AssignmentTemplate metadata (`title`, `category`) used in VIZ response fields. |
 | FR-07 ASGN | Assignment → course → teacher relationship | Assignment ownership derived via `assignment.course.teacher_profile` for VIZ-UC-03/04 ownership gate. |
 | FR-08 SUB | Submission data source | All VIZ aggregates are computed from `Submission` records. `SubmissionStatus` enum values (`NOT_STARTED`, `IN_PROGRESS`, `SUBMITTED`, `GRADED`) drive completion rate and grade computations. |
 
@@ -537,7 +537,7 @@ Completed alignment:
 4. `VIEW_IDENTIFIABLE_VIZ` sudo permission is enforced for researcher de-anonymization.
 5. Teacher ownership gates are enforced at course and assignment scopes.
 6. Researcher anonymization omits identifiable fields (IDs/titles/names) while retaining numeric aggregates.
-7. Mood meter type gate returns `409 Conflict` on non-mood-meter assessments.
+7. Mood meter type gate returns `409 Conflict` on non-mood-meter assignment templates.
 8. Integration suite covers UC/CN behavior and representative error paths (`tests/integration/test_visualizations_routes.py`).
 
 Known deferred/frontend items:

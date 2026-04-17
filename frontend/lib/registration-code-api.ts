@@ -2,6 +2,7 @@ import api from '@/lib/api';
 
 export type RegistrationCodeType = 'STUDENT' | 'TEACHER' | 'RESEARCHER';
 
+// ARCHIVED remains on the client type only to tolerate legacy rows that may still exist.
 export type RegistrationCodeStatus = 'ACTIVE' | 'EXHAUSTED' | 'EXPIRED' | 'REVOKED' | 'ARCHIVED';
 
 export type RegistrationCode = {
@@ -89,12 +90,10 @@ export async function createStudentRegistrationCode(
 export async function listRegistrationCodes(params?: {
   status?: RegistrationCodeStatus;
   codeType?: RegistrationCodeType;
-  includeArchived?: boolean;
 }): Promise<RegistrationCodeListResponse> {
   const query = new URLSearchParams();
   if (params?.status) query.set('status', params.status);
   if (params?.codeType) query.set('codeType', params.codeType);
-  if (params?.includeArchived) query.set('includeArchived', 'true');
   const qs = query.toString();
   const response = await api.get<RegistrationCodeListResponse>(`/codes${qs ? `?${qs}` : ''}`);
   return response.data;
@@ -107,8 +106,12 @@ export async function getRegistrationCode(id: number): Promise<RegistrationCode>
 
 export async function updateRegistrationCodeStatus(
   id: number,
-  status: 'REVOKED' | 'ARCHIVED',
+  status: 'REVOKED',
 ): Promise<RegistrationCode> {
   const response = await api.patch<RegistrationCode>(`/codes/${id}`, { status });
   return response.data;
+}
+
+export async function deleteRegistrationCode(id: number): Promise<void> {
+  await api.delete(`/codes/${id}`);
 }

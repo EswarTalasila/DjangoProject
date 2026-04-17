@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { server } from "../mocks/server";
 
-const API_BASE = "http://localhost:8000/api/v1";
+const API_BASE = "http://localhost:8080/api/v1";
 
 async function loadVisualizationApi() {
   vi.resetModules();
@@ -33,7 +33,7 @@ const sampleCourseSummary = {
     startDate: null,
     endDate: null,
     category: null,
-    assessmentId: null,
+    assignmentTemplateId: null,
   },
   courseId: 1,
   courseName: "Algebra",
@@ -41,8 +41,9 @@ const sampleCourseSummary = {
   assignments: [
     {
       assignmentId: 10,
-      assessmentTitle: "Quiz 1",
-      assessmentCategory: "MATH",
+      assignmentTitle: "Quiz 1 - Period A",
+      assignmentTemplateTitle: "Quiz 1",
+      assignmentTemplateCategory: "MATH",
       submittedCount: 25,
       totalStudents: 30,
       completionPct: 83.3,
@@ -57,8 +58,9 @@ const sampleAssignmentSummary = {
   generatedAt: "2026-01-15T10:00:00Z",
   filters: { startDate: null, endDate: null },
   assignmentId: 10,
-  assessmentTitle: "Quiz 1",
-  assessmentCategory: "MATH",
+  assignmentTitle: "Quiz 1 - Period A",
+  assignmentTemplateTitle: "Quiz 1",
+  assignmentTemplateCategory: "MATH",
   totalStudents: 30,
   submittedCount: 25,
   gradedCount: 20,

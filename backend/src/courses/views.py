@@ -27,6 +27,7 @@ from core.errors import error_response
 from core.lifecycle import ConflictError
 from core.models import AuditAction, AuditOutcome
 from core.pagination import paginate
+from core.parsers import parse_include_archived
 from rest_framework.permissions import IsAuthenticated
 
 from core.permissions import IsTeacher, IsTeacherOrAbove
@@ -48,22 +49,6 @@ from .services import (
     remove_student_from_course,
     restore_course,
 )
-
-
-def _parse_include_archived(request):
-    raw = request.query_params.get("includeArchived")
-    if raw is None or raw == "":
-        return False, None
-    value = raw.lower()
-    if value not in {"true", "false"}:
-        return (
-            None,
-            Response(
-                {"detail": "includeArchived must be true or false"},
-                status=status.HTTP_400_BAD_REQUEST,
-            ),
-        )
-    return value == "true", None
 
 
 @api_view(["GET", "POST"])
@@ -97,7 +82,7 @@ def list_or_create(request):
         course_data = course_to_dto(course).model_dump()
         return Response(course_data, status=status.HTTP_201_CREATED)
 
-    include_archived, include_archived_error = _parse_include_archived(request)
+    include_archived, include_archived_error = parse_include_archived(request)
     if include_archived_error is not None:
         return include_archived_error
     courses = list_courses_for_user(request.user, include_archived=include_archived)

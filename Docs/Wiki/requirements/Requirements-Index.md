@@ -16,7 +16,7 @@
 | Type | Role | Implementation | Description |
 |------|------|----------------|-------------|
 | **System Role** | ADMIN | `is_staff=True` | Platform administrator, Django admin access |
-| **User Role** | RESEARCHER | `Role.RESEARCHER` | Highest user role, study oversight, assessment design |
+| **User Role** | RESEARCHER | `Role.RESEARCHER` | Highest user role, study oversight, assignment template design |
 | **User Role** | TEACHER | `Role.TEACHER` | Course management, student enrollment, grading |
 | **User Role** | STUDENT | `Role.STUDENT` | Assignment completion, submission |
 
@@ -63,7 +63,7 @@ FR-02  → REG
 FR-03  → SUDO
 FR-04  → USER
 FR-05  → CRS
-FR-06  → ASMT
+FR-06  → ATMPL
 FR-07  → ASGN
 FR-08  → SUB
 FR-09  → VIZ
@@ -73,7 +73,6 @@ FR-12  → ENV
 FR-13  → INFRA
 FR-14  → ARCH
 FR-15  → IMG
-FR-16  → PKG
 ```
 
 > **Rationale:** Domain prefix (AUTH, REG, etc.) identifies the FR. No range alignment needed — numbering is sequential per domain from 01.
@@ -82,7 +81,7 @@ FR-16  → PKG
 
 | Feature Domains | Role Keywords |
 |-----------------|---------------|
-| AUTH, REG, SUDO, USER, CRS, ASMT, ASGN, SUB, VIZ, EXP, OBS, ENV, INFRA, ARCH, IMG, PKG | ADMIN, RESEARCHER, TEACHER, STUDENT |
+| AUTH, REG, SUDO, USER, CRS, ATMPL, ASGN, SUB, VIZ, EXP, OBS, ENV, INFRA, ARCH, IMG | ADMIN, RESEARCHER, TEACHER, STUDENT |
 
 ### Role Coverage Policy
 
@@ -130,12 +129,12 @@ test_AUTH_UC_01_TEACHER, and test_AUTH_UC_01_STUDENT all pass.
 
 ```
 FR:            ^FR-\d{2}$
-DOMAIN-US:     ^(AUTH|REG|SUDO|USER|CRS|ASMT|ASGN|SUB|VIZ|EXP|OBS|ENV|INFRA|ARCH|IMG|PKG)-US-\d{2}[a-z]?$
-DOMAIN-UC:     ^(AUTH|REG|SUDO|USER|CRS|ASMT|ASGN|SUB|VIZ|EXP|OBS|ENV|INFRA|ARCH|IMG|PKG)-UC-\d{2}[a-z]?$
-DOMAIN-UC-E:   ^(AUTH|REG|SUDO|USER|CRS|ASMT|ASGN|SUB|VIZ|EXP|OBS|ENV|INFRA|ARCH|IMG|PKG)-UC-\d{2}[a-z]?-E\d+[a-z]?(-(ADMIN|RESEARCHER|TEACHER|STUDENT|ALL))?$
-DOMAIN-CN:     ^(AUTH|REG|SUDO|USER|CRS|ASMT|ASGN|SUB|VIZ|EXP|OBS|ENV|INFRA|ARCH|IMG|PKG)-CN-\d{2}$
-ROLE-STANDIN:  ^(AUTH|REG|SUDO|USER|CRS|ASMT|ASGN|SUB|VIZ|EXP|OBS|ENV|INFRA|ARCH|IMG|PKG)-UC-\d{2}[a-z]?-(ADMIN|RESEARCHER|TEACHER|STUDENT|ALL)$
-ROLE-STANDIN-US: ^(AUTH|REG|SUDO|USER|CRS|ASMT|ASGN|SUB|VIZ|EXP|OBS|ENV|INFRA|ARCH|IMG|PKG)-US-\d{2}[a-z]?-(ADMIN|RESEARCHER|TEACHER|STUDENT|ALL)$
+DOMAIN-US:     ^(AUTH|REG|SUDO|USER|CRS|ATMPL|ASGN|SUB|VIZ|EXP|OBS|ENV|INFRA|ARCH|IMG)-US-\d{2}[a-z]?$
+DOMAIN-UC:     ^(AUTH|REG|SUDO|USER|CRS|ATMPL|ASGN|SUB|VIZ|EXP|OBS|ENV|INFRA|ARCH|IMG)-UC-\d{2}[a-z]?$
+DOMAIN-UC-E:   ^(AUTH|REG|SUDO|USER|CRS|ATMPL|ASGN|SUB|VIZ|EXP|OBS|ENV|INFRA|ARCH|IMG)-UC-\d{2}[a-z]?-E\d+[a-z]?(-(ADMIN|RESEARCHER|TEACHER|STUDENT|ALL))?$
+DOMAIN-CN:     ^(AUTH|REG|SUDO|USER|CRS|ATMPL|ASGN|SUB|VIZ|EXP|OBS|ENV|INFRA|ARCH|IMG)-CN-\d{2}$
+ROLE-STANDIN:  ^(AUTH|REG|SUDO|USER|CRS|ATMPL|ASGN|SUB|VIZ|EXP|OBS|ENV|INFRA|ARCH|IMG)-UC-\d{2}[a-z]?-(ADMIN|RESEARCHER|TEACHER|STUDENT|ALL)$
+ROLE-STANDIN-US: ^(AUTH|REG|SUDO|USER|CRS|ATMPL|ASGN|SUB|VIZ|EXP|OBS|ENV|INFRA|ARCH|IMG)-US-\d{2}[a-z]?-(ADMIN|RESEARCHER|TEACHER|STUDENT|ALL)$
 ```
 
 ---
@@ -147,7 +146,7 @@ ROLE-STANDIN-US: ^(AUTH|REG|SUDO|USER|CRS|ASMT|ASGN|SUB|VIZ|EXP|OBS|ENV|INFRA|AR
 - `FR-03-Sudo.md`
 - `FR-04-User.md`
 - `FR-05-Courses.md`
-- `FR-06-Assessments.md`
+- `FR-06-Assignment-Templates.md`
 - `FR-07-Assignments.md`
 - `FR-08-Submissions.md`
 - `FR-09-Visualization.md`
@@ -157,7 +156,6 @@ ROLE-STANDIN-US: ^(AUTH|REG|SUDO|USER|CRS|ASMT|ASGN|SUB|VIZ|EXP|OBS|ENV|INFRA|AR
 - `FR-13-Infrastructure.md`
 - `FR-14-Lifecycle-Archival.md`
 - `FR-15-Image-Upload.md`
-- `FR-16-Packaging-Workspace.md`
 
 ---
 

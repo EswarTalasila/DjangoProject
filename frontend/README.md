@@ -22,16 +22,20 @@ app/
 ├── (dashboard)/             <-- Private Pages (Has Header)
 │   ├── layout.tsx
 │   ├── page.tsx
-│   ├── courses/
-│   │   ├── page.tsx         <-- List of courses
-│   │   └── [courseId]/      <-- Dynamic Route (e.g., /courses/12)
-│   │       └── page.tsx     <-- Course Detail / Student Roster
-│   ├── assessments/
-│   │   ├── page.tsx         <-- List of assessments
-│   │   └── builder/
-│   │       └── page.tsx
-│   └── profile/
-│       └── page.tsx
+│   ├── dashboard/
+│   │   ├── assignment-templates/
+│   │   │   ├── page.tsx     <-- List of assignment templates
+│   │   │   ├── new/
+│   │   │   │   └── page.tsx
+│   │   │   └── [id]/
+│   │   │       ├── page.tsx
+│   │   │       └── edit/
+│   │   │           └── page.tsx
+│   │   ├── assignments/
+│   │   ├── courses/
+│   │   ├── rubrics/
+│   │   ├── submissions/
+│   │   └── visualizations/
 │
 ├── api/                     <-- Next.js API
 ├── favicon.ico
@@ -56,7 +60,7 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:8080](http://localhost:8080) with your browser to use the app through the local nginx proxy.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

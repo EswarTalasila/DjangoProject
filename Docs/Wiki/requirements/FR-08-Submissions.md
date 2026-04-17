@@ -7,7 +7,7 @@
 | **Domain** | SUB |
 | **Applies To** | ADMIN (system role), RESEARCHER, TEACHER, STUDENT |
 | **Related Issues** | TBD |
-| **Dependencies** | FR-05 CRS (course enrollment), FR-06 ASMT (assessment/question types), FR-07 ASGN (assignment lifecycle and archive), FR-14 ARCH (archive status gates) |
+| **Dependencies** | FR-05 CRS (course enrollment), FR-06 ATMPL (assignment template/question types), FR-07 ASGN (assignment lifecycle and archive), FR-14 ARCH (archive status gates) |
 
 ---
 
@@ -18,7 +18,7 @@
   - save draft (partial answers, `IN_PROGRESS`)
   - submit final answers (`SUBMITTED` → auto-grade if applicable → `GRADED`)
   - manual grading by teacher/admin (`GRADED`)
-- 3 answer types matching assessment question types: `MULTIPLE_CHOICE`, `SHORT_ANSWER`, `NUMBER_SCALE`.
+- 3 answer types matching assignment template question types: `MULTIPLE_CHOICE`, `SHORT_ANSWER`, `NUMBER_SCALE`.
 - Auto-grading on submit for non-MANUAL grading modes:
   - `MULTIPLE_CHOICE`: sum `McqChoice.points` for selected indices.
   - `NUMBER_SCALE`: exact-match against `target` for full `max_points`.
@@ -33,21 +33,21 @@
 
 ### Out of Scope
 - Submission pre-creation at assignment time (FR-07 `ASGN-CN-05`).
-- Assessment template management (FR-06 ASMT).
+- AssignmentTemplate template management (FR-06 ATMPL).
 - Assignment lifecycle (FR-07 ASGN).
 - Visualization and analytics dashboards (FR-09 VIZ).
 - Paper submission upload (not in current system).
 - Due-date enforcement at submission time (`due_at` is a visibility filter in FR-07 `ASGN-CN-08`, not a submission blocker; archive is the hard deadline mechanism).
 - Bulk grading across multiple submissions.
-- Wireframes and Playwright E2E scripts (tracked separately).
+- UI wireframes and future browser smoke flows (tracked separately).
 
 ### Core Intent
 - Manage submission lifecycle from pre-creation through draft, submit, and grading with role-appropriate access controls.
-- Support auto-grading on submit for eligible question types with hybrid grading mode for mixed assessments.
+- Support auto-grading on submit for eligible question types with hybrid grading mode for mixed assignment templates.
 - Enforce archive-based hard deadline semantics and student self-access restrictions across all submission operations.
 
 ### Deprecations
-- Teacher self-assessment flow: `teacher_self_assess` view function is implemented but not wired to any URL pattern (dead code). `GET /api/v1/teachers/{teacher_id}/submissions` is a legacy endpoint with no active write path — the corresponding create route was never wired. Related to deprecated `TEACHER` audience type from FR-07 (`ASGN-CN-11`). Removal target: next FR-08 implementation release.
+- Teacher self-assignment template flow: `teacher_self_assess` view function is implemented but not wired to any URL pattern (dead code). `GET /api/v1/teachers/{teacher_id}/submissions` is a legacy endpoint with no active write path — the corresponding create route was never wired. Related to deprecated `TEACHER` audience type from FR-07 (`ASGN-CN-11`). Removal target: next FR-08 implementation release.
 - Generic edit endpoint: `PATCH /api/v1/submissions/` overlaps with SUB-UC-01 (save draft) and SUB-UC-02 (submit). Rationalization target: next FR-08 implementation release.
 
 ---
@@ -124,7 +124,7 @@
 6. System finds existing pre-created submission for this student + assignment.
 7. System replaces all existing answers with the submitted answers (full replacement per `SUB-CN-10`).
 9. System sets submission status to `SUBMITTED` and `submitted_at` to current timestamp.
-10. System resolves the assessment linked to the assignment.
+10. System resolves the assignment template linked to the assignment.
 11. If grading mode is not `MANUAL`: system runs auto-grading (`SUB-CN-03`).
     - `AUTO`: status → `GRADED`, score calculated.
     - `HYBRID`: status remains `SUBMITTED`, auto-gradable answers scored, awaits manual grading for `SHORT_ANSWER` answers.
@@ -153,7 +153,7 @@
 3. System resolves submission by `submission_id`.
 4. System validates caller owns the assignment associated with the submission (`SUB-CN-08`).
    - ADMIN: bypasses ownership check.
-5. System resolves the assessment linked to the submission's assignment.
+5. System resolves the assignment template linked to the submission's assignment.
 6. System applies scores based on grading mode:
    - `HYBRID`: apply scores only to `SHORT_ANSWER` answers; preserve existing auto-scores for `MULTIPLE_CHOICE` and `NUMBER_SCALE`.
    - `MANUAL` / other: apply scores to all answers in positional order.
@@ -318,7 +318,7 @@
 - Applies to: all SUB UCs involving STUDENT role.
 
 ### SUB-CN-03 — Auto-Grading on Submit
-- When a submission is submitted (status → `SUBMITTED`) and the assessment's grading mode is not `MANUAL`:
+- When a submission is submitted (status → `SUBMITTED`) and the assignment template's grading mode is not `MANUAL`:
   - `MULTIPLE_CHOICE`: sum `McqChoice.points` for selected choice indices via `_auto_score_mcq()`.
   - `NUMBER_SCALE`: if `answer.val == question.target`, award `max_points`; else 0, via `_auto_score_number_scale()`.
   - `SHORT_ANSWER`: skip (not auto-gradable).
@@ -328,7 +328,7 @@
 - Applies to: SUB-UC-02.
 
 ### SUB-CN-04 — Mood Meter On-Demand Submissions
-- ~~`MOOD_METER` assessments skip submission pre-creation~~ (removed; MOOD_METER no longer supported).
+- ~~`MOOD_METER` assignment templates skip submission pre-creation~~ (removed; MOOD_METER no longer supported).
 - No mood meter submission behavior is part of the active FR-08 contract.
 - Applies to: SUB-UC-02.
 
@@ -363,17 +363,17 @@
   - `ShortAnswerAnswer` → `text` field (student's text response).
   - `NumberScaleAnswer` → `val` field (student's selected numeric value).
   - `MoodMeterAnswer` → `row` (energy axis) and `col` (pleasantness axis) fields.
-- Answer type must match the question type from the assessment template.
+- Answer type must match the question type from the assignment template.
 - Applies to: SUB-UC-01, SUB-UC-02.
 
 ### SUB-CN-10 — Answer Replacement Semantics
 - Draft saves (SUB-UC-01) and final submissions (SUB-UC-02) replace all existing answers (full replacement, not merge).
 - Old answers and their type-specific extensions are deleted; new answers are created.
 - This ensures answer state is always consistent with the latest student input.
-- Analogous to `ASMT-CN-08` (question replacement semantics) from FR-06.
+- Analogous to `ATMPL-CN-08` (question replacement semantics) from FR-06.
 - Applies to: SUB-UC-01, SUB-UC-02.
 
-### SUB-CN-11 — Teacher Self-Assessment Legacy Dead Path
+### SUB-CN-11 — Teacher Self-AssignmentTemplate Legacy Dead Path
 - `teacher_self_assess` view function is implemented in `submissions/views.py` but was never wired to any URL pattern (dead code).
 - `GET /api/v1/teachers/{teacher_id}/submissions` is a legacy read endpoint whose corresponding write route was never activated.
 - Related to deprecated `TEACHER` audience type from FR-07 (`ASGN-CN-11`).
@@ -400,7 +400,7 @@
 > **Trailing-slash note:** Django framework may accept trailing-slash variants. Canonical paths in this contract omit the trailing slash.
 
 **Legacy / dead paths (not part of target FR-08 contract):**
-- `GET /api/v1/teachers/{teacher_id}/submissions` — legacy read path for teacher self-assessments; corresponding write route (`teacher_self_assess`) was never wired to any URL.
+- `GET /api/v1/teachers/{teacher_id}/submissions` — legacy read path for teacher self-assignment templates; corresponding write route (`teacher_self_assess`) was never wired to any URL.
 - `PATCH /api/v1/submissions/` — generic edit endpoint; overlaps with SUB-UC-01 and SUB-UC-02.
 - Removal policy: remove in the next FR-08 implementation release.
 
@@ -465,7 +465,7 @@ Expected statuses by UC:
 - **NFR-Performance**
   - Paginated submission listing by assignment and by student.
   - Compact DTO for list views (no answer payload).
-  - Auto-grading is synchronous; large assessments may warrant future async optimization.
+  - Auto-grading is synchronous; large assignment templates may warrant future async optimization.
 - **NFR-Maintainability**
   - Submission domain behavior centralized in service layer (`submissions/services.py`).
   - Answer type extensions use consistent OneToOne pattern matching question types from FR-06.
@@ -479,7 +479,7 @@ Expected statuses by UC:
 | Domain | SUB dependency | Integration note |
 |--------|----------------|------------------|
 | FR-05 CRS | Course enrollment for submission access | Student must be enrolled in assignment's course for write operations (SUB-CN-02) |
-| FR-06 ASMT | Assessment question types and grading modes | Answer types match question types from ASMT; grading mode determines auto-grade behavior (SUB-CN-03) |
+| FR-06 ATMPL | AssignmentTemplate question types and grading modes | Answer types match question types from ATMPL; grading mode determines auto-grade behavior (SUB-CN-03) |
 | FR-07 ASGN | Assignment lifecycle and archive gates | Submission pre-creation at assignment time (ASGN-CN-05); archive blocks writes (SUB-CN-06, SUB-CN-07) |
 | FR-09 VIZ | Visualization data source | VIZ aggregates computed from submission records and status values |
 | FR-10 EXP | Export data source | EXP exports submission-level data including answers and scores |

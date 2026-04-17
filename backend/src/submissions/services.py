@@ -3,7 +3,7 @@ Submission domain helpers.
 
 This module provides business logic for managing submissions including:
 - Creating and editing submissions
-- Auto-scoring based on assessment grading mode
+- Auto-scoring based on assignment template grading mode
 - Manual score overrides by teachers
 - Converting submissions to DTOs for API responses
 
@@ -13,11 +13,17 @@ Submission lifecycle:
 
 from collections.abc import Iterable
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
+from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 
-from assessments.models import Assessment, GradingMode, Question, ScoringPolicy
-from assignments.models import Assignment
+from assignment_templates.models import (
+    AssignmentTemplate,
+    GradingMode,
+    ScoringPolicy,
+)
+from assignments.models import Assignment, AssignmentQuestion
 from core.dtos import AnswerDTO, SubmissionCompactDTO, SubmissionDTO
 
 from .models import (
@@ -30,6 +36,67 @@ from .models import (
     Submission,
     SubmissionStatus,
 )
+
+# Backward-compatible alias retained for tests that patch submissions.services.Question.
+Question = AssignmentQuestion
+
+
+# ── Prefetch helpers ──────────────────────────────────────────────────
+
+# Shared prefetch paths for answer sub-types used by DTO serialization.
+_ANSWER_SUBTYPE_PREFETCHES = [
+    "answers__multiple_choice__selected",
+    "answers__short_answer",
+    "answers__number_scale",
+    "answers__mood_meter",
+    "answers__file_upload",
+]
+
+# Extended prefetch paths that also pull question + mcq_choices for scoring.
+_ANSWER_SCORING_PREFETCHES = [
+    *_ANSWER_SUBTYPE_PREFETCHES,
+    "answers__question",
+]
+
+
+def _prefetch_submission_for_dto(qs: QuerySet[Submission]) -> QuerySet[Submission]:
+    """Add prefetches needed to serialize submissions to DTOs without N+1."""
+    return qs.select_related(
+        "assignment__course__teacher_profile__user",
+    ).prefetch_related(*_ANSWER_SUBTYPE_PREFETCHES, "answers__question")
+
+
+def _prefetch_submission_for_scoring(qs: QuerySet[Submission]) -> QuerySet[Submission]:
+    """Add prefetches needed to auto-score submissions without N+1."""
+    return qs.prefetch_related(*_ANSWER_SCORING_PREFETCHES)
+
+
+def get_submission_for_dto(submission_id: int) -> Submission:
+    """Retrieve a single submission with answer sub-types prefetched for DTO conversion.
+
+    Raises:
+        ValueError: If submission not found
+    """
+    submission = _prefetch_submission_for_dto(
+        Submission.objects.filter(id=submission_id)
+    ).first()
+    if not submission:
+        raise ValueError("Submission not found")
+    return submission
+
+
+def get_by_student_and_assignment_for_dto(student_id: int, assignment_id: int) -> Submission:
+    """Get a student's submission with answer prefetches for DTO conversion.
+
+    Raises:
+        ValueError: If no submission exists
+    """
+    submission = _prefetch_submission_for_dto(
+        Submission.objects.filter(student_id=student_id, assignment_id=assignment_id)
+    ).first()
+    if not submission:
+        raise ValueError("Submission not found")
+    return submission
 
 # Valid forward transitions in the submission state machine (SUB-CN-01).
 _VALID_TRANSITIONS: dict[str, set[str]] = {
@@ -53,6 +120,10 @@ def submission_to_dto(submission: Submission) -> SubmissionDTO:
         SubmissionDTO with id, assignmentId, studentId, teacherId, submittedAt,
         score, status, and answers.
     """
+    ordered_answers = sorted(
+        list(submission.answers.all()),
+        key=lambda answer: (getattr(answer.question, "order_index", 0), getattr(answer, "id", 0)),
+    )
     return SubmissionDTO(
         id=submission.id,
         assignmentId=submission.assignment_id,
@@ -61,7 +132,7 @@ def submission_to_dto(submission: Submission) -> SubmissionDTO:
         submittedAt=submission.submitted_at,
         score=submission.score,
         status=submission.status,
-        answers=[answer_to_dto(answer) for answer in submission.answers.all()],
+        answers=[answer_to_dto(answer) for answer in ordered_answers],
     )
 
 
@@ -77,9 +148,38 @@ def submission_to_compact_dto(submission: Submission) -> SubmissionCompactDTO:
     Returns:
         SubmissionCompactDTO with id, assignmentId, submittedAt, score, status (no answers)
     """
+    # Resolve student name
+    student_name = None
+    if submission.student_id:
+        student = getattr(submission, 'student', None)
+        if student:
+            student_name = student.name or student.username
+        else:
+            from accounts.models import User
+            student = User.objects.filter(id=submission.student_id).only('name', 'username').first()
+            if student:
+                student_name = student.name or student.username
+    elif submission.teacher_id:
+        teacher = getattr(submission, 'teacher', None)
+        if teacher:
+            student_name = f"{teacher.name or teacher.username} (teacher)"
+
+    # Resolve course and assignment title
+    assignment = getattr(submission, 'assignment', None)
+    assignment_title = None
+    course_name = None
+    if assignment:
+        assignment_title = assignment.title
+        course = getattr(assignment, 'course', None)
+        if course:
+            course_name = course.name
+
     return SubmissionCompactDTO(
         id=submission.id,
         assignmentId=submission.assignment_id,
+        studentName=student_name,
+        courseName=course_name,
+        assignmentTitle=assignment_title,
         submittedAt=submission.submitted_at,
         score=submission.score,
         status=submission.status,
@@ -102,14 +202,32 @@ def answer_to_dto(answer: Answer) -> AnswerDTO:
         AnswerDTO with questionId, type, data, and score
     """
     data: dict
-    if answer.answer_type == AnswerType.MULTIPLE_CHOICE:
-        selected = list(answer.multiple_choice.selected.values_list("choice_index", flat=True))
-        data = {"selected": selected}
-    elif answer.answer_type == AnswerType.SHORT_ANSWER:
-        data = {"text": answer.short_answer.text}
-    elif answer.answer_type == AnswerType.NUMBER_SCALE:
-        data = {"val": answer.number_scale.val}
-    else:
+    try:
+        if answer.answer_type == AnswerType.MULTIPLE_CHOICE:
+            # Use .all() to leverage prefetch cache instead of values_list() which always queries.
+            selected = [sel.choice_index for sel in answer.multiple_choice.selected.all()]
+            data = {"selected": selected}
+        elif answer.answer_type == AnswerType.SHORT_ANSWER:
+            data = {"text": answer.short_answer.text}
+        elif answer.answer_type == AnswerType.NUMBER_SCALE:
+            data = {"val": answer.number_scale.val}
+        elif answer.answer_type == AnswerType.MOOD_METER:
+            data = {
+                "quadrant": answer.mood_meter.quadrant,
+                "moodName": answer.mood_meter.mood_name,
+                "row": answer.mood_meter.row,
+                "col": answer.mood_meter.col,
+            }
+        elif answer.answer_type == AnswerType.FILE_UPLOAD:
+            data = {
+                "storageKey": answer.file_upload.storage_key,
+                "originalFilename": answer.file_upload.original_filename,
+                "mimeType": answer.file_upload.mime_type,
+                "sizeBytes": answer.file_upload.size_bytes,
+            }
+        else:
+            data = {}
+    except ObjectDoesNotExist:
         data = {}
     return AnswerDTO(
         questionId=answer.question_id,
@@ -132,9 +250,9 @@ def create_submission(assignment_id: int, payload: dict, target_status: str) -> 
     assignment = Assignment.objects.filter(id=assignment_id).first()
     if not assignment:
         raise ValueError("Assignment not found")
-    assessment = Assessment.objects.filter(id=assignment.assessment_id).first()
-    if not assessment:
-        raise ValueError("Assessment not found")
+    assignment_template = AssignmentTemplate.objects.filter(id=assignment.assignment_template_id).first()
+    if not assignment_template:
+        raise ValueError("AssignmentTemplate not found")
 
     student_id = payload.get("studentId")
     teacher_id = payload.get("teacherId")
@@ -159,10 +277,10 @@ def create_submission(assignment_id: int, payload: dict, target_status: str) -> 
     )
     _replace_answers(submission, payload.get("answers") or [])
     if target_status != SubmissionStatus.IN_PROGRESS and (
-        assessment.scoring_policy == ScoringPolicy.COMPLETION
-        or assessment.grading_mode != GradingMode.MANUAL
+        assignment_template.scoring_policy == ScoringPolicy.COMPLETION
+        or assignment_template.grading_mode != GradingMode.MANUAL
     ):
-        _auto_score_submission(submission, assessment)
+        _auto_score_submission(submission, assignment_template)
     submission.save()
     return submission
 
@@ -186,14 +304,18 @@ def get_submission(submission_id: int) -> Submission:
     return submission
 
 
-def get_by_assignment(assignment_id: int) -> list[Submission]:
-    """Get all submissions for an assignment."""
-    return list(Submission.objects.filter(assignment_id=assignment_id))
+def get_by_assignment(assignment_id: int):
+    """Get all submissions for an assignment (returns lazy queryset for pagination)."""
+    return Submission.objects.filter(
+        assignment_id=assignment_id,
+    ).select_related('student', 'teacher', 'assignment__course')
 
 
-def get_by_student(student_id: int) -> list[Submission]:
-    """Get all submissions by a student across all assignments."""
-    return list(Submission.objects.filter(student_id=student_id))
+def get_by_student(student_id: int):
+    """Get all submissions by a student across all assignments (returns lazy queryset)."""
+    return Submission.objects.filter(
+        student_id=student_id,
+    ).select_related('assignment__course')
 
 
 def get_by_student_and_assignment(student_id: int, assignment_id: int) -> Submission:
@@ -219,7 +341,7 @@ def get_by_student_and_assignment(student_id: int, assignment_id: int) -> Submis
     return submission
 
 
-def list_me(user_id: int, status: str | None) -> list[dict]:
+def list_me(user_id: int, status: str | None) -> QuerySet[Submission]:
     """
     List all submissions for a user, whether as student or teacher.
 
@@ -227,22 +349,23 @@ def list_me(user_id: int, status: str | None) -> list[dict]:
     where the user is the teacher (self-assessments). Optionally filters
     by submission status.
 
+    Returns a lazy queryset ordered newest-first (undated drafts last).
+
     Args:
         user_id: The user's ID
         status: Optional status filter (IN_PROGRESS, SUBMITTED, GRADED)
 
     Returns:
-        List of compact submission DTOs
+        Ordered queryset of Submissions
     """
-    student_subs = Submission.objects.filter(student_id=user_id)
-    teacher_subs = Submission.objects.filter(teacher_id=user_id)
-    submissions = {sub.id: sub for sub in list(student_subs) + list(teacher_subs)}
-    items = list(submissions.values())
+    from django.db.models import F, Q
+
+    qs = Submission.objects.filter(Q(student_id=user_id) | Q(teacher_id=user_id))
     if status:
-        items = [sub for sub in items if sub.status == status]
-    # Sort newest submissions first, with undated drafts last.
-    items.sort(key=lambda s: (s.submitted_at is not None, s.submitted_at), reverse=True)
-    return [submission_to_compact_dto(sub).model_dump() for sub in items]
+        qs = qs.filter(status=status)
+    return qs.order_by(F("submitted_at").desc(nulls_last=True)).select_related(
+        "student", "teacher", "assignment__course"
+    )
 
 
 @transaction.atomic
@@ -277,16 +400,18 @@ def edit_submission(payload: dict) -> Submission:
 
     _replace_answers(submission, payload.get("answers") or [])
 
-    assessment = Assessment.objects.filter(id=submission.assignment.assessment_id).first()
+    assignment_template = AssignmentTemplate.objects.filter(
+        id=submission.assignment.assignment_template_id
+    ).first()
     if (
-        assessment
+        assignment_template
         and new_status != SubmissionStatus.IN_PROGRESS
         and (
-            assessment.scoring_policy == ScoringPolicy.COMPLETION
-            or assessment.grading_mode != GradingMode.MANUAL
+            assignment_template.scoring_policy == ScoringPolicy.COMPLETION
+            or assignment_template.grading_mode != GradingMode.MANUAL
         )
     ):
-        _auto_score_submission(submission, assessment)
+        _auto_score_submission(submission, assignment_template)
 
     submission.save()
     return submission
@@ -314,61 +439,83 @@ def override_score(submission_id: int, scores: list) -> Submission:
         The updated Submission with new scores and GRADED status
 
     Raises:
-        ValueError: If submission not found, no scores provided, or assessment not found
+        ValueError: If submission not found, no scores provided, or assignment template not found
     """
-    submission = Submission.objects.filter(id=submission_id).first()
+    submission = (
+        Submission.objects.select_related("assignment__assignment_template")
+        .filter(id=submission_id)
+        .first()
+    )
     if not submission:
         raise ValueError("Submission not found")
     if not scores:
         raise ValueError("Override score request must include score values")
 
-    assessment = Assessment.objects.filter(id=submission.assignment.assessment_id).first()
-    if not assessment:
-        raise ValueError("Assessment not found")
-    if assessment.scoring_policy == ScoringPolicy.COMPLETION:
+    assignment_template = submission.assignment.assignment_template
+    if not assignment_template:
+        raise ValueError("AssignmentTemplate not found")
+    if assignment_template.scoring_policy == ScoringPolicy.COMPLETION:
         raise ValueError(
-            "Completion-scored assessments always award full credit and cannot be manually overridden"
+            "Completion-scored assignment templates always award full credit and cannot be manually overridden"
         )
 
-    answers = list(submission.answers.all())
-    total = 0.0
-
-    # Build a lookup for max_points per question so we can validate scores.
-    question_ids = [a.question_id for a in answers]
-    max_pts_map = dict(
-        Question.objects.filter(id__in=question_ids).values_list("id", "max_points")
+    answers = sorted(
+        list(submission.answers.select_related("question")),
+        key=lambda answer: (getattr(answer.question, "order_index", 0), getattr(answer, "id", 0)),
     )
 
-    def _validate_score(answer, score_val):
-        cap = max_pts_map.get(answer.question_id)
+    def _question_label(answer, display_index):
+        prompt = (answer.question.prompt or "").strip()
+        prompt_snippet = ""
+        if prompt:
+            prompt_snippet = f" ({prompt[:48]}{'...' if len(prompt) > 48 else ''})"
+        return f"Question {display_index + 1}{prompt_snippet}"
+
+    def _validate_score(answer, score_val, display_index):
+        cap = answer.question.max_points
         if cap is not None and score_val > cap:
             raise ValueError(
-                f"Score {score_val} exceeds max points ({cap}) for question {answer.question_id}"
+                f"Score {score_val} exceeds max points ({cap}) for {_question_label(answer, display_index)}"
             )
 
-    # HYBRID mode: only manually score SHORT_ANSWER questions
-    # Other question types (MCQ, NUMBER_SCALE) keep their auto-calculated scores
-    if assessment.grading_mode == GradingMode.HYBRID:
+    def _apply_scores(answers, scores, *, scorable_filter=None):
+        """Apply scores to answers and return the total.
+
+        Args:
+            answers: Ordered answer queryset.
+            scores: List of numeric score values to apply.
+            scorable_filter: Optional callable(answer) -> bool. When provided,
+                only answers where the filter returns True consume a score from
+                the list; other answers keep their existing score.
+        """
+        total = 0.0
         score_index = 0
-        for answer in answers:
-            if answer.answer_type == AnswerType.SHORT_ANSWER and score_index < len(scores):
-                _validate_score(answer, scores[score_index])
+        for display_index, answer in enumerate(answers):
+            cap = answer.question.max_points
+            if cap is not None and answer.score is not None and answer.score > cap:
+                # Repair legacy auto-scores created before max-point capping.
+                answer.score = float(cap)
+            should_score = scorable_filter(answer) if scorable_filter else True
+            if should_score and score_index < len(scores):
+                _validate_score(answer, scores[score_index], display_index)
                 answer.score = scores[score_index]
                 score_index += 1
             total += answer.score or 0.0
-        # If extra scores remain, add the last one as bonus points
+        # Extra scores beyond consumed count are added as bonus
         if score_index != len(scores):
             total += scores[-1]
+        return total
+
+    if assignment_template.grading_mode == GradingMode.HYBRID:
+        # HYBRID: only manually score SHORT_ANSWER questions;
+        # other types (MCQ, NUMBER_SCALE) keep their auto-calculated scores
+        total = _apply_scores(
+            answers, scores,
+            scorable_filter=lambda a: a.answer_type == AnswerType.SHORT_ANSWER,
+        )
     else:
-        # MANUAL and other modes: apply scores to answers in order
-        for idx, answer in enumerate(answers):
-            if idx < len(scores):
-                _validate_score(answer, scores[idx])
-                answer.score = scores[idx]
-            total += answer.score or 0.0
-        # Extra scores beyond answer count are added as bonus
-        if len(scores) > len(answers):
-            total += scores[-1]
+        # MANUAL and other modes: apply scores to all answers in order
+        total = _apply_scores(answers, scores)
 
     Answer.objects.bulk_update(answers, ["score"])
     submission.score = total
@@ -418,12 +565,43 @@ def _create_answer(submission: Submission, payload: dict) -> Answer:
     question_id = payload.get("questionId")
     if question_id is None:
         raise ValueError("Question ID is required")
+    # Keep the model lookup routed through the module alias so older unit tests
+    # can still patch submissions.services.Question while the schema shifts to
+    # assignment-owned questions.
     question = Question.objects.filter(id=question_id).first()
     if not question:
         raise ValueError("Question not found")
+    # Verify the question belongs to the submission's assignment.
+    question_assignment_id = getattr(question, "assignment_id", None)
+    if question_assignment_id is not None:
+        if question_assignment_id != submission.assignment_id:
+            raise ValueError(
+                f"Question {question_id} does not belong to assignment {submission.assignment_id}"
+            )
+    else:
+        question_assignment_template_id = getattr(question, "assignment_template_id", None)
+        submission_assignment_template_id = getattr(
+            submission.assignment,
+            "assignment_template_id",
+            None,
+        )
+        if (
+            question_assignment_template_id is not None
+            and submission_assignment_template_id is not None
+            and question_assignment_template_id != submission_assignment_template_id
+        ):
+            raise ValueError(
+                f"Question {question_id} does not belong to assignment {submission.assignment_id}"
+            )
     answer_type = payload.get("type")
     if not answer_type:
         raise ValueError("Answer type is required")
+    # Bug 3 fix: verify answer type matches question kind
+    if answer_type != question.question_type:
+        raise ValueError(
+            f"Answer type mismatch: payload type '{answer_type}' does not match "
+            f"question type '{question.question_type}'"
+        )
     answer = Answer.objects.create(
         submission=submission,
         question=question,
@@ -441,10 +619,31 @@ def _create_answer(submission: Submission, payload: dict) -> Answer:
         ShortAnswerAnswer.objects.create(answer=answer, text=data.get("text", ""))
     elif answer_type == AnswerType.NUMBER_SCALE:
         NumberScaleAnswer.objects.create(answer=answer, val=data.get("val"))
+    elif answer_type == AnswerType.MOOD_METER:
+        from .models import MoodMeterAnswer
+        MoodMeterAnswer.objects.create(
+            answer=answer,
+            quadrant=data.get("quadrant", ""),
+            mood_name=data.get("moodName", ""),
+            row=data.get("row"),
+            col=data.get("col"),
+        )
+    elif answer_type == AnswerType.FILE_UPLOAD:
+        from .models import FileUploadAnswer
+        FileUploadAnswer.objects.create(
+            answer=answer,
+            storage_key=data.get("storageKey", ""),
+            original_filename=data.get("originalFilename", ""),
+            mime_type=data.get("mimeType", ""),
+            size_bytes=data.get("sizeBytes", 0),
+        )
     return answer
 
 
-def _auto_score_submission(submission: Submission, assessment: Assessment) -> None:
+def _auto_score_submission(
+    submission: Submission,
+    assignment_template: AssignmentTemplate,
+) -> None:
     """
     Calculate auto-scores for all gradable answers in a submission.
 
@@ -454,15 +653,22 @@ def _auto_score_submission(submission: Submission, assessment: Assessment) -> No
 
     For AUTO grading mode, also marks the submission as GRADED.
     """
-    if assessment.scoring_policy == ScoringPolicy.COMPLETION:
+    if assignment_template.scoring_policy == ScoringPolicy.COMPLETION:
         submission.score = 100.0
         submission.status = SubmissionStatus.GRADED
         if submission.submitted_at is None:
             submission.submitted_at = timezone.now()
         return
 
+    # Prefetch answers with question + mcq_choices + number_scale to avoid N+1.
+    answers = list(
+        submission.answers
+        .select_related("question")
+        .prefetch_related("multiple_choice__selected")
+    )
+
     total = 0.0
-    for answer in submission.answers.all():
+    for answer in answers:
         question = answer.question
         if not question.auto_gradable:
             continue
@@ -471,39 +677,60 @@ def _auto_score_submission(submission: Submission, assessment: Assessment) -> No
         elif answer.answer_type == AnswerType.NUMBER_SCALE:
             total += _auto_score_number_scale(answer, question)
     submission.score = total
-    if assessment.grading_mode == GradingMode.AUTO:
+    if assignment_template.grading_mode == GradingMode.AUTO:
         submission.status = SubmissionStatus.GRADED
         if submission.submitted_at is None:
             submission.submitted_at = timezone.now()
 
 
-def _auto_score_mcq(answer: Answer, question: Question) -> float:
+def _auto_score_mcq(answer: Answer, question: AssignmentQuestion) -> float:
     """
     Auto-score a multiple choice answer by summing points for selected choices.
 
     Each choice has an associated point value. The score is the sum of points
     for all selected choices.
+
+    Choice scores are read from the assignment-owned question snapshot's
+    ``data["choices"]`` payload. A compatibility fallback still supports older
+    call sites and tests that attach ``question.mcq_choices`` helper objects.
     """
-    choices = list(question.mcq_choices.all())
-    selected = list(answer.multiple_choice.selected.values_list("choice_index", flat=True))
+    choices = list((question.data or {}).get("choices") or [])
+    if not choices and hasattr(question, "mcq_choices"):
+        # Compatibility fallback for older tests and pre-snapshot call sites
+        # that still model MCQ choices as related objects with `points`.
+        choices = [
+            {"score": getattr(choice, "points", 0)}
+            for choice in question.mcq_choices.all()
+        ]
+    selected = [sel.choice_index for sel in answer.multiple_choice.selected.all()]
     score = 0.0
     for idx in selected:
         if idx is None or idx < 0 or idx >= len(choices):
             continue
-        score += choices[idx].points
+        score += float(choices[idx].get("score", 0))
+    if question.max_points is not None:
+        score = min(score, float(question.max_points))
     answer.score = score
     answer.save(update_fields=["score"])
     return score
 
 
-def _auto_score_number_scale(answer: Answer, question: Question) -> float:
+def _auto_score_number_scale(answer: Answer, question: AssignmentQuestion) -> float:
     """
     Auto-score a number scale answer by comparing to the target value.
 
     Full points are awarded only if the answer exactly matches the target.
     If no target is set, returns 0.
+
+    The target value is read from the assignment-owned question snapshot's
+    ``data["target"]`` payload. A compatibility fallback still supports older
+    call sites and tests that attach ``question.number_scale`` helper objects.
     """
-    target = question.number_scale.target
+    target = (question.data or {}).get("target")
+    if target is None and hasattr(question, "number_scale"):
+        # Compatibility fallback for older tests and callers that still attach
+        # the target through a related helper object.
+        target = getattr(question.number_scale, "target", None)
     if target is None:
         return 0.0
     val = answer.number_scale.val

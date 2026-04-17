@@ -8,6 +8,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Cookies from "js-cookie";
 import api from "@/lib/api";
+import type { ApiError } from "@/lib/api-error";
+import { isApiErrorRecord } from "@/lib/api-error";
+import { toErrorMessage } from "@/lib/utils";
 import { toast } from "sonner";
 import { GoogleOAuthProvider, useGoogleLogin } from "@react-oauth/google";
 
@@ -90,7 +93,6 @@ type CodeForm = z.infer<typeof codeSchema>;
 type StudentRegisterForm = z.infer<typeof studentRegisterSchema>;
 type NonStudentLocalForm = z.infer<typeof nonStudentLocalSchema>;
 type OAuthNameForm = z.infer<typeof oauthNameSchema>;
-type ApiError = { response?: { data?: unknown } };
 
 function RegisterPageContent() {
     const router = useRouter();
@@ -126,9 +128,9 @@ function RegisterPageContent() {
         form: UseFormReturn<StudentRegisterForm> | UseFormReturn<NonStudentLocalForm> | UseFormReturn<OAuthNameForm>
     ) => {
         const errorData = error.response?.data;
-        if (typeof errorData === "object" && errorData !== null && !Array.isArray(errorData)) {
-            if ("errors" in errorData && Array.isArray((errorData as { errors?: string[] }).errors)) {
-                const passwordErrors = (errorData as { errors: string[] }).errors;
+        if (isApiErrorRecord(errorData)) {
+            if (Array.isArray(errorData.errors)) {
+                const passwordErrors = errorData.errors;
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 (form as UseFormReturn<any>).setError("password", { type: "manual", message: passwordErrors.join(" ") });
                 return;
@@ -141,7 +143,7 @@ function RegisterPageContent() {
                     ? new Set<string>(["firstName", "lastName"])
                     : new Set<string>(["firstName", "lastName", "email", "password", "confirmPassword"]);
 
-            Object.entries(errorData as Record<string, unknown>).forEach(([field, messages]) => {
+            Object.entries(errorData).forEach(([field, messages]) => {
                 if (validFields.has(field)) {
                     const message = Array.isArray(messages) ? String(messages[0]) : String(messages);
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -152,11 +154,7 @@ function RegisterPageContent() {
             if (hasFieldError) return;
         }
 
-        if (typeof errorData === "string") {
-            setGeneralError(errorData);
-            return;
-        }
-        setGeneralError((errorData as { detail?: string })?.detail || "An unexpected error occurred.");
+        setGeneralError(toErrorMessage(error, "An unexpected error occurred."));
     };
 
     const onValidateCode = async (data: CodeForm) => {
@@ -171,9 +169,7 @@ function RegisterPageContent() {
             setCodeContext(responseData);
             setStep("DETAILS");
         } catch (error: unknown) {
-            const err = error as ApiError;
-            const detail = (err.response?.data as { detail?: string } | undefined)?.detail;
-            const errorMsg = detail || "Invalid registration code.";
+            const errorMsg = toErrorMessage(error, "Invalid registration code.");
             codeForm.setError("code", { type: "manual", message: errorMsg });
         } finally {
             setIsLoading(false);

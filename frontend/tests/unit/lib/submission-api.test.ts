@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { server } from "../mocks/server";
 
-const API_BASE = "http://localhost:8000/api/v1";
+const API_BASE = "http://localhost:8080/api/v1";
 
 async function loadSubmissionApi() {
   vi.resetModules();
@@ -173,7 +173,7 @@ describe("submission api", () => {
   });
 
   describe("listStudentSubmissions", () => {
-    it("fetches all submissions for a student", async () => {
+    it("fetches all submissions for a student and normalizes paginated response", async () => {
       server.use(
         http.get(`${API_BASE}/students/42/submissions/`, () =>
           HttpResponse.json({
@@ -188,12 +188,7 @@ describe("submission api", () => {
       const { listStudentSubmissions } = await loadSubmissionApi();
       const result = await listStudentSubmissions(42);
 
-      expect(result).toEqual({
-        count: 1,
-        next: null,
-        previous: null,
-        results: [compactSubmission],
-      });
+      expect(result).toEqual([compactSubmission]);
     });
   });
 

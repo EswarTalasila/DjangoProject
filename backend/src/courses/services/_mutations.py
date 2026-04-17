@@ -9,18 +9,9 @@ from django.utils import timezone
 
 from accounts.models import Role, StudentProfile, User
 from accounts.services import create_user_from_payload, generate_managed_username
-from assessments.models import Assessment, QuestionKind
 from assignments.models import Assignment, AssignmentStatus
-from core.helpers import answer_type_from_question
 from core.lifecycle import ConflictError
-from submissions.models import (
-    Answer,
-    MultipleChoiceAnswer,
-    NumberScaleAnswer,
-    ShortAnswerAnswer,
-    Submission,
-    SubmissionStatus,
-)
+from submissions.models import Submission, SubmissionStatus
 
 from ..models import Course, CourseStatus, Enrollment, EnrollmentStatus
 from ._queries import _teacher_profile_for
@@ -153,11 +144,10 @@ def _create_submissions_for_student(student_user: User, course: Course) -> None:
     that were already created. This creates NOT_STARTED submissions with
     empty answers for each assignment in the course.
     """
-    assignments = Assignment.objects.filter(course=course)
+    from assignments.services._content import provision_submission_answers
+
+    assignments = Assignment.objects.filter(course=course, status=AssignmentStatus.ACTIVE)
     for assignment in assignments:
-        assessment = Assessment.objects.filter(id=assignment.assessment_id).first()
-        if not assessment:
-            continue
         if Submission.objects.filter(student=student_user, assignment=assignment).exists():
             continue
 
@@ -168,21 +158,7 @@ def _create_submissions_for_student(student_user: User, course: Course) -> None:
             submitted_at=None,
             status=SubmissionStatus.NOT_STARTED,
         )
-
-        for question in assessment.questions.all():
-            answer = Answer.objects.create(
-                submission=submission,
-                question=question,
-                answer_type=answer_type_from_question(question),
-                score=0.0,
-                skipped=False,
-            )
-            if question.kind == QuestionKind.MULTIPLE_CHOICE:
-                MultipleChoiceAnswer.objects.create(answer=answer)
-            elif question.kind == QuestionKind.SHORT_ANSWER:
-                ShortAnswerAnswer.objects.create(answer=answer, text="")
-            elif question.kind == QuestionKind.NUMBER_SCALE:
-                NumberScaleAnswer.objects.create(answer=answer, val=None)
+        provision_submission_answers(submission)
 
 
 @transaction.atomic
@@ -195,11 +171,11 @@ def archive_course(request_user: User, course: Course) -> Course:
     active_assignments = Assignment.objects.filter(
         course=course, status=AssignmentStatus.ACTIVE
     )
-    for asgn in active_assignments:
-        asgn.status = AssignmentStatus.ARCHIVED
-        asgn.archived_at = timezone.now()
-        asgn.archived_by = request_user
-        asgn.save(update_fields=["status", "archived_at", "archived_by"])
+    for assignment in active_assignments:
+        assignment.status = AssignmentStatus.ARCHIVED
+        assignment.archived_at = timezone.now()
+        assignment.archived_by = request_user
+        assignment.save(update_fields=["status", "archived_at", "archived_by"])
     course.status = CourseStatus.ARCHIVED
     course.archived_at = timezone.now()
     course.archived_by = request_user

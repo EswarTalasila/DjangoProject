@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { cn, toErrorMessage, triggerBrowserDownload } from '@/lib/utils';
+import {
+  cn,
+  toErrorMessage,
+  formatDate,
+  formatShortDate,
+  formatDateTime,
+  formatScore,
+  triggerBrowserDownload,
+} from '@/lib/utils';
 
 describe('cn', () => {
   it('merges duplicate tailwind classes', () => {
@@ -34,6 +42,34 @@ describe('toErrorMessage', () => {
     expect(toErrorMessage(error)).toBe('Something went wrong');
   });
 
+  it('extracts the first non_field_errors entry when detail is absent', () => {
+    const error = {
+      response: { data: { non_field_errors: ['Form is invalid.'] } },
+    };
+    expect(toErrorMessage(error)).toBe('Form is invalid.');
+  });
+
+  it('extracts the first field error when detail is absent', () => {
+    const error = {
+      response: { data: { email: ['Email is already in use.'] } },
+    };
+    expect(toErrorMessage(error)).toBe('Email is already in use.');
+  });
+
+  it('extracts the first password policy error from errors arrays', () => {
+    const error = {
+      response: { data: { errors: ['Password too weak.', 'Missing symbol.'] } },
+    };
+    expect(toErrorMessage(error)).toBe('Password too weak.');
+  });
+
+  it('extracts plain string response bodies', () => {
+    const error = {
+      response: { data: 'Backend says no.' },
+    };
+    expect(toErrorMessage(error)).toBe('Backend says no.');
+  });
+
   it('returns default message for null error', () => {
     expect(toErrorMessage(null)).toBe('Unexpected error.');
   });
@@ -56,6 +92,89 @@ describe('toErrorMessage', () => {
 
   it('returns default message for string error', () => {
     expect(toErrorMessage('just a string')).toBe('Unexpected error.');
+  });
+
+  it('uses custom fallback when provided', () => {
+    expect(toErrorMessage(null, 'Custom fallback')).toBe('Custom fallback');
+  });
+
+  it('uses custom fallback when detail is empty string', () => {
+    const error = { response: { data: { detail: '' } } };
+    expect(toErrorMessage(error, 'Fallback for empty')).toBe('Fallback for empty');
+  });
+});
+
+describe('formatDate', () => {
+  it('returns dash for null', () => {
+    expect(formatDate(null)).toBe('-');
+  });
+
+  it('returns dash for invalid date', () => {
+    expect(formatDate('not-a-date')).toBe('-');
+  });
+
+  it('formats a valid ISO date string', () => {
+    const result = formatDate('2026-03-15T14:30:00Z');
+    expect(result).toBeTruthy();
+    expect(result).not.toBe('-');
+  });
+});
+
+describe('formatShortDate', () => {
+  it('returns dash for null', () => {
+    expect(formatShortDate(null)).toBe('-');
+  });
+
+  it('returns dash for invalid date', () => {
+    expect(formatShortDate('garbage')).toBe('-');
+  });
+
+  it('formats a valid date to en-US short format', () => {
+    const result = formatShortDate('2026-03-15T14:30:00Z');
+    expect(result).toContain('2026');
+    expect(result).toContain('Mar');
+  });
+});
+
+describe('formatDateTime', () => {
+  it('returns dash for null', () => {
+    expect(formatDateTime(null)).toBe('-');
+  });
+
+  it('returns dash for invalid date', () => {
+    expect(formatDateTime('bad')).toBe('-');
+  });
+
+  it('formats a valid date to en-US date+time', () => {
+    const result = formatDateTime('2026-03-15T14:30:00Z');
+    expect(result).toContain('2026');
+    expect(result).toContain('Mar');
+  });
+});
+
+describe('formatScore', () => {
+  it('returns dash for null', () => {
+    expect(formatScore(null)).toBe('-');
+  });
+
+  it('returns dash for undefined', () => {
+    expect(formatScore(undefined)).toBe('-');
+  });
+
+  it('formats integer scores without decimals', () => {
+    expect(formatScore(10)).toBe('10');
+  });
+
+  it('formats decimal scores with trimmed trailing zeros', () => {
+    expect(formatScore(8.5)).toBe('8.5');
+  });
+
+  it('formats zero', () => {
+    expect(formatScore(0)).toBe('0');
+  });
+
+  it('trims trailing zeros from decimals', () => {
+    expect(formatScore(7.10)).toBe('7.1');
   });
 });
 

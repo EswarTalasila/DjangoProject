@@ -6,7 +6,7 @@
 | **Date** | 2026-02-28 |
 | **Domain** | ENV |
 | **Applies To** | ADMIN (bootstrap/deployment), ALL (runtime behavior) |
-| **Related Issues** | #30 (environment profile system), #29 (auth/registration integration), #32 (observability controls) |
+| **Related Issues** | #30 (environment profile system), #29 (auth/registration integration) |
 | **Dependencies** | FR-13 INFRA (Docker Compose and Taskfile pass `ENVIRONMENT` to backend service) |
 
 ---
@@ -18,9 +18,7 @@
 - Default profile behavior (`development`)
 - Profile-aware startup validation and fail-fast production checks
 - Profile-aware admin bootstrap behavior (`ensure_admin`)
-- Profile-aware test data seeding behavior (`seed_e2e`)
 - Profile-aware API documentation and debug tooling exposure
-- Profile-aware OpenTelemetry behavior
 - Profile-aware OAuth configuration validation
 - Docker/Task runner profile passthrough and explicit environment selection
 
@@ -50,7 +48,7 @@
 | ENV-US-01 | ADMIN | As an admin I can run the system with explicit environment profiles so that development, testing, and production behavior stay predictable. |
 | ENV-US-02 | ADMIN | As an admin I can fail startup in insecure production configurations so that unsafe deployments never serve traffic. |
 | ENV-US-03 | ADMIN | As an admin I can bootstrap admin credentials safely in every profile so that initial access is reliable and secure. |
-| ENV-US-04 | ALL | As a team member I can rely on profile-based gates for seeding, API docs, OAuth validation, and tracing so that tools are available in dev/test but locked in production. |
+| ENV-US-04 | ALL | As a team member I can rely on profile-based gates for API docs and OAuth validation so that tools are available in dev/test but locked in production. |
 
 ---
 
@@ -299,14 +297,11 @@
 
 **Tests:**
 **Backend Unit:**
-- test_ENV_UC_06_ADMIN_tracing_defaults_by_profile
 - test_ENV_UC_06_E1_missing_oauth_blocks_production
-- test_ENV_UC_06_E2_otel_enabled_without_endpoint
 - test_ENV_CN_08_production_session_security
 - test_ENV_CN_09_default_admin_email_blocked
 
 **Backend Integration:**
-- test_ENV_UC_06_tracing_mode_by_profile
 - test_ENV_UC_06_oauth_required_validation
 
 **System Tests (Black Box):**
@@ -436,16 +431,6 @@ This section defines the canonical environment key contract to freeze before imp
 | `ADMIN_EMAIL` | required | required | required | Used by `ensure_admin` |
 | `ADMIN_PASSWORD` | required | required | required | Production strict policy |
 
-#### Observability keys
-
-| Key | development | testing | production | Notes |
-|---|---|---|---|---|
-| `OTEL_ENABLED` | optional | optional (default true in policy) | optional (default false) | Runtime tracing toggle |
-| `OTEL_SERVICE_NAME` | optional | optional | optional | Service name |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | optional | optional | optional | Collector endpoint |
-| `OTEL_EXPORTER_OTLP_HEADERS` | optional | optional | optional | Export headers |
-| `OTEL_TRACE_FILE` | optional | optional | optional | Local trace export file |
-
 #### Docker/compose support keys
 
 | Key | development | testing | production | Notes |
@@ -453,16 +438,6 @@ This section defines the canonical environment key contract to freeze before imp
 | `POSTGRES_DB` | required (compose) | required (compose) | required (compose) | Compose database service |
 | `POSTGRES_USER` | required (compose) | required (compose) | required (compose) | Compose database service |
 | `POSTGRES_PASSWORD` | required (compose) | required (compose) | required (compose) | Compose database service |
-
-#### E2E/testing keys
-
-| Key | development | testing | production | Notes |
-|---|---|---|---|---|
-| `E2E_BASE_URL` | optional | optional | n/a | Playwright target |
-| `E2E_API_URL` | optional | optional | n/a | Playwright API target |
-| `E2E_USE_DOCKER` | optional | optional | n/a | Script toggle |
-
-E2E identity keys (`E2E_ADMIN_*`, `E2E_TEACHER_*`, `E2E_STUDENT_*`) are supported as overrides but are not required in `.env.template`; deterministic seed defaults remain the baseline path.
 
 #### Keys to deprecate from template
 
@@ -485,7 +460,7 @@ Environment diagnostics are part of FR-12 acceptance behavior.
 
 Code ownership:
 - `env_report` (`manage.py env_report`) owns `ENV-*` diagnostics.
-- `profile_guard.py` owns `ENV-P*` diagnostics.
+- `_check:env:<profile>` and `check-env.sh` own `ENV-P*` diagnostics.
 
 This contract is required so Task output, CI logs, and requirements tracing stay consistent as checks expand.
 
@@ -539,9 +514,7 @@ Use v5 naming from `Requirements-Index.md` and `Testing-Index.md`:
 - Production boot guard: startup sequence rejects insecure configurations end-to-end.
 - Idempotent bootstrap: repeated `ensure_admin` invocations produce no side effects.
 - Profile-aware bootstrap: credential validation differs correctly across profiles.
-- Seed behavior: testing auto-seed and development manual seed operate correctly.
 - Route gating by profile: URL map includes/excludes docs endpoints based on active profile.
-- Tracing mode by profile: `effective_otel_enabled` produces correct defaults per environment.
 - OAuth validation: required OAuth env values checked at startup in production.
 
 ### System Tests (Black Box)
@@ -562,8 +535,6 @@ Use v5 naming from `Requirements-Index.md` and `Testing-Index.md`:
   - Production secrets follow encrypted-at-rest handling and key separation policy (ENV-CN-06).
 - **NFR-OPS-04** (Deployment Guards)
   - Seed data and API docs/debug tooling gated by profile (ENV-CN-07).
-- **NFR-OPS-05** (Observability Instrumentation)
-  - Profile-driven tracing enablement policy; testing on-by-default, production opt-in (ENV-CN-11).
 - **NFR-SEC-04** (Password Strength Policy)
   - Bootstrap admin password meets strict policy and denylist in production (ENV-CN-04).
 - **NFR-SEC-05** (Session Security)
@@ -580,9 +551,6 @@ Use v5 naming from `Requirements-Index.md` and `Testing-Index.md`:
 | FR | Reference | Notes |
 |----|-----------|-------|
 | FR-01 AUTH | OAuth config validation at startup | Production startup enforces presence of `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` for configured auth flows (ENV-UC-02, ENV-UC-06, ENV-CN-10). |
-| FR-04 USER | Seed data creates test users | `seed_e2e` creates deterministic test users with known credentials; gated by profile (ENV-UC-04, ENV-CN-07). |
-| FR-08 SUB | Seed data creates test submissions | `seed_e2e` may create test submissions for E2E fixtures; gated by profile (ENV-UC-04). |
-| FR-11 OBS | `effective_otel_enabled` tracing toggle | FR-11 consumes `effective_otel_enabled` from `env.py` to determine tracing behavior. FR-12 defines the profile-driven defaults (ENV-CN-11). Production OTel validation (`_validate_otel_export_policy`) enforces OBS-CN-06. |
 | FR-13 INFRA | Docker Compose and Taskfile `ENVIRONMENT` passthrough | FR-13 owns `docker-compose.yml` and `Taskfile.yml`; must explicitly set `ENVIRONMENT` per ENV-CN-12. Backend service environment block must include `ENVIRONMENT` variable. |
 
 ---
@@ -592,14 +560,12 @@ Use v5 naming from `Requirements-Index.md` and `Testing-Index.md`:
 All FR-12 items are implemented. Final state as of 2026-03-03:
 
 1. **`ENVIRONMENT` field in `config/env.py`.** DONE. `Literal["development", "testing", "production"]` with default `"development"`. Profile convenience properties (`is_development`, `is_testing`, `is_production`) derive from this single field (ENV-CN-01).
-2. **Production startup validation (aggregated).** DONE. `@model_validator` `validate_runtime_contract` collects all violations in one pass (ENV-CN-02) and raises a single consolidated error. Checks: debug override, secret key, admin bootstrap, allowed hosts, CORS, database URL, OAuth, OTel export policy.
+2. **Production startup validation (aggregated).** DONE. `@model_validator` `validate_runtime_contract` collects all violations in one pass (ENV-CN-02) and raises a single consolidated error. Checks: debug override, secret key, admin bootstrap, allowed hosts, CORS, database URL, and OAuth.
 3. **`ensure_admin` profile-aware validation.** DONE. Reads `env.is_production`; rejects default/placeholder emails, enforces 12+ char password with denylist, validates email format, calls Django `validate_password` (ENV-CN-04, ENV-CN-05, ENV-CN-09).
-4. **`seed_e2e` production guard.** DONE. `CommandError("seed_e2e is blocked in production.")` when `env.is_production` (ENV-CN-07).
-5. **API docs gated by profile.** DONE. `config/urls.py` registers Swagger/ReDoc/schema only when `settings.ENVIRONMENT != "production"` (ENV-UC-05, ENV-CN-07).
-6. **Profile-aware tracing.** DONE. `effective_otel_enabled` and `_validate_otel_export_policy` enforce ENV-CN-11 defaults (testing=on, dev=configurable, prod=opt-in).
-7. **Diagnostics.** DONE. `env_report` management command (`core/management/commands/env_report.py`) and `profile_guard.py` (`scripts/runtime/profile_guard.py`) operational.
-8. **`.env.template` cleanup.** DONE. Template aligned with section 6.2 contract; legacy keys (`GOOGLE_OAUTH_*`, `JWT_*`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`) removed.
+4. **API docs gated by profile.** DONE. `config/urls.py` registers Swagger/ReDoc/schema only when `settings.ENVIRONMENT != "production"` (ENV-UC-05).
+5. **Diagnostics.** DONE. `env_report` management command remains operational.
+6. **`.env.template` cleanup.** DONE. Template aligned with section 6.2 contract; legacy keys (`GOOGLE_OAUTH_*`, `JWT_*`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`) removed.
 
 ### Deferred / Out of FR-12 Scope
 - **ENV-CN-12 Taskfile/Compose passthrough**: `docker-compose.yml` and `Taskfile.yml` already set `ENVIRONMENT` explicitly. FR-13 INFRA owns further deployment template changes.
-- **System tests (ST-ENV-*)**: Black-box system tests require a running Docker stack and are deferred to E2E test infrastructure (FR-13).
+- **System tests (ST-ENV-*)**: Black-box system tests require a running Docker stack and remain separate from the current unit/integration harness.

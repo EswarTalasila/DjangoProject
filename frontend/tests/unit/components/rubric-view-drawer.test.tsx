@@ -24,7 +24,7 @@ async function loadComponent() {
   vi.resetModules();
   setupModuleMocks();
   const imported = await import(
-    "@/components/assessments/RubricTemplatePreviewDrawer"
+    "@/components/assignment-templates/RubricTemplatePreviewDrawer"
   );
   return imported.default;
 }
