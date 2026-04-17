@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactElement } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -170,7 +170,7 @@ function formatQuestionKind(kind: QuestionKind): string {
   }
 }
 
-function describeQuestionData(question: AssignmentQuestion): JSX.Element | null {
+function describeQuestionData(question: AssignmentQuestion): ReactElement | null {
   const data = question.data ?? {};
 
   if (question.type === 'MULTIPLE_CHOICE') {

@@ -4,6 +4,7 @@ import type {
   QuestionGroup,
   QuestionImage,
   QuestionKind,
+  SubmissionMode,
 } from '@/lib/assignment-template-api';
 
 export type AudienceType = 'COURSE' | 'TEACHER';
@@ -84,7 +85,7 @@ export type AssignmentContent = {
   category: string | null;
   gradingMode: string;
   scoringPolicy: string;
-  submissionMode: string;
+  submissionMode: SubmissionMode;
   rubricId: number | null;
   questions: AssignmentQuestion[];
   questionGroups: QuestionGroup[];
