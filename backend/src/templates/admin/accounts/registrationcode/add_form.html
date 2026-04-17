@@ -1,0 +1,61 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block content %}
+<form method="post" id="registrationcode_form">
+  {% csrf_token %}
+
+  {% if form.non_field_errors %}
+  <p class="errornote">
+    {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+  </p>
+  {% endif %}
+
+  <fieldset class="module aligned">
+    <h2>Generate Registration Codes</h2>
+
+    {% for field in form %}
+    <div class="form-row{% if field.errors %} errors{% endif %}"{% if field.name == "course" %} id="row-course"{% endif %}>
+      {% if field.errors %}
+      <ul class="errorlist">
+        {% for error in field.errors %}<li>{{ error }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      <div>
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}
+        <p class="help">{{ field.help_text|safe }}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </fieldset>
+
+  <div class="submit-row" style="display: flex; gap: 8px; justify-content: flex-start; padding: 10px 14px;">
+    <button type="submit" class="button">Generate Codes</button>
+    <a href="{% url 'admin:accounts_registrationcode_changelist' %}" class="button cancel-link">Cancel</a>
+  </div>
+</form>
+
+<script>
+(function() {
+  const codeTypeSelect = document.getElementById('id_code_type');
+  const courseRow = document.getElementById('row-course');
+  if (!codeTypeSelect || !courseRow) return;
+
+  function toggleCourse() {
+    courseRow.style.display = codeTypeSelect.value === 'STUDENT' ? '' : 'none';
+    if (codeTypeSelect.value !== 'STUDENT') {
+      const courseSelect = document.getElementById('id_course');
+      if (courseSelect) courseSelect.value = '';
+    }
+  }
+
+  codeTypeSelect.addEventListener('change', toggleCourse);
+  toggleCourse();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,1319 @@
+openapi: 3.0.3
+info:
+  title: EE Lab Data Dashboard API
+  version: 1.0.0
+  description: API for managing assignment templates, assignments, submissions, and
+    visualization.
+paths:
+  /api/v1/assignment-templates/:
+    get:
+      operationId: v1_assignment_templates_retrieve
+      description: List assignment templates or create a new one.
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_assignment_templates_create
+      description: List assignment templates or create a new one.
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignment-templates/{assignment_template_id}:
+    get:
+      operationId: v1_assignment_templates_retrieve_2
+      description: Get, update, or delete a specific assignment template.
+      parameters:
+      - in: path
+        name: assignment_template_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: v1_assignment_templates_partial_update
+      description: Get, update, or delete a specific assignment template.
+      parameters:
+      - in: path
+        name: assignment_template_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: v1_assignment_templates_destroy
+      description: Get, update, or delete a specific assignment template.
+      parameters:
+      - in: path
+        name: assignment_template_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '204':
+          description: No response body
+  /api/v1/assignment-templates/{assignment_template_id}/archive:
+    post:
+      operationId: v1_assignment_templates_archive_create
+      description: Archive an assignment template.
+      parameters:
+      - in: path
+        name: assignment_template_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignment-templates/{assignment_template_id}/publish:
+    post:
+      operationId: v1_assignment_templates_publish_create
+      description: Publish a draft assignment template.
+      parameters:
+      - in: path
+        name: assignment_template_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignment-templates/{assignment_template_id}/questions/{question_id}/image:
+    post:
+      operationId: v1_assignment_templates_questions_image_create
+      description: Upload (POST) or remove (DELETE) the image for a question.
+      parameters:
+      - in: path
+        name: assignment_template_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: question_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: v1_assignment_templates_questions_image_destroy
+      description: Upload (POST) or remove (DELETE) the image for a question.
+      parameters:
+      - in: path
+        name: assignment_template_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: question_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '204':
+          description: No response body
+  /api/v1/assignment-templates/{assignment_template_id}/restore:
+    post:
+      operationId: v1_assignment_templates_restore_create
+      description: Restore an archived assignment template.
+      parameters:
+      - in: path
+        name: assignment_template_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignment-templates/images/{storage_key}:
+    get:
+      operationId: v1_assignment_templates_images_retrieve
+      description: Serve a question image blob by storage key.
+      parameters:
+      - in: path
+        name: storage_key
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignments/:
+    post:
+      operationId: v1_assignments_create
+      description: Create a new assignment from an assignment template.
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignments/{assignment_id}:
+    get:
+      operationId: v1_assignments_retrieve
+      description: Get, update, or delete a specific assignment.
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: v1_assignments_partial_update
+      description: Get, update, or delete a specific assignment.
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: v1_assignments_destroy
+      description: Get, update, or delete a specific assignment.
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '204':
+          description: No response body
+  /api/v1/assignments/{assignment_id}/archive:
+    post:
+      operationId: v1_assignments_archive_create
+      description: Archive an assignment.
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignments/{assignment_id}/archive-bundle:
+    get:
+      operationId: v1_assignments_archive_bundle_retrieve
+      description: Get or generate assignment archive bundle metadata.
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_assignments_archive_bundle_create
+      description: Get or generate assignment archive bundle metadata.
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignments/{assignment_id}/archive-bundle/download:
+    get:
+      operationId: v1_assignments_archive_bundle_download_retrieve
+      description: Download an existing assignment archive bundle.
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignments/{assignment_id}/restore:
+    post:
+      operationId: v1_assignments_restore_create
+      description: Restore an archived assignment.
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignments/{assignment_id}/submissions:
+    get:
+      operationId: v1_assignments_submissions_retrieve
+      description: |-
+        List all submissions for an assignment (GET) or create a new one (POST).
+
+        GET: Returns all submissions for the assignment (teachers/admins only).
+        POST: Creates a new submission (students only, for their own work).
+
+        Args:
+            assignment_id: ID of the assignment (path parameter)
+
+        GET Returns:
+            200: Array of submission DTOs
+            403: Forbidden if student (they should use get_student_submission)
+            403: Forbidden if teacher doesn't own the assignment
+            404: "Assignment not found"
+
+        POST: See create_for_assignment for request/response format
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_assignments_submissions_create
+      description: |-
+        List all submissions for an assignment (GET) or create a new one (POST).
+
+        GET: Returns all submissions for the assignment (teachers/admins only).
+        POST: Creates a new submission (students only, for their own work).
+
+        Args:
+            assignment_id: ID of the assignment (path parameter)
+
+        GET Returns:
+            200: Array of submission DTOs
+            403: Forbidden if student (they should use get_student_submission)
+            403: Forbidden if teacher doesn't own the assignment
+            404: "Assignment not found"
+
+        POST: See create_for_assignment for request/response format
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignments/{assignment_id}/template:
+    get:
+      operationId: v1_assignments_template_retrieve
+      description: Get the template attached to an assignment using assignment access
+        rules.
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignments/courses/{course_id}:
+    get:
+      operationId: v1_assignments_courses_retrieve
+      description: List all assignments for a specific course.
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/assignments/users/{user_id}:
+    get:
+      operationId: v1_assignments_users_retrieve
+      description: List all assignments for a specific user.
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/me:
+    get:
+      operationId: v1_auth_me_retrieve
+      description: Return authenticated user profile for frontend role gating.
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/password:
+    patch:
+      operationId: v1_auth_password_partial_update
+      description: Change password for the authenticated user and revoke all sessions.
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/password-reset-codes:
+    post:
+      operationId: v1_auth_password_reset_codes_create
+      description: Issue a one-time reset code for a selected target user.
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/password-resets:
+    post:
+      operationId: v1_auth_password_resets_create
+      description: Complete a password reset using a valid code.
+      tags:
+      - v1
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/reset-code-validations:
+    post:
+      operationId: v1_auth_reset_code_validations_create
+      description: Verify a reset code before allowing password update.
+      tags:
+      - v1
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/session-revocations:
+    post:
+      operationId: v1_auth_session_revocations_create
+      description: End the current session and clear auth cookies (idempotent).
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/sessions:
+    post:
+      operationId: v1_auth_sessions_create
+      description: Authenticate a user with role-constrained identifier + password.
+      tags:
+      - v1
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/sessions/oauth:
+    post:
+      operationId: v1_auth_sessions_oauth_create
+      description: Authenticate a user via Google OAuth and establish auth cookies.
+      tags:
+      - v1
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/token-exchanges:
+    post:
+      operationId: v1_auth_token_exchanges_create
+      description: Exchange a refresh token for a new access token.
+      tags:
+      - v1
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/codes:
+    get:
+      operationId: v1_codes_retrieve
+      description: List or create registration codes according to request method.
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_codes_create
+      description: List or create registration codes according to request method.
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/codes/{code_id}:
+    get:
+      operationId: v1_codes_retrieve_2
+      description: Get or transition a single registration code within role scope.
+      parameters:
+      - in: path
+        name: code_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: v1_codes_partial_update
+      description: Get or transition a single registration code within role scope.
+      parameters:
+      - in: path
+        name: code_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/courses/:
+    get:
+      operationId: v1_courses_retrieve
+      description: |-
+        List all courses for the user (GET) or create a new course (POST).
+
+        GET: Returns courses the user can access.
+            Students see their enrolled courses. Teachers see their own courses.
+            Researchers and admins see all courses.
+        POST: Creates a new course owned by the requesting teacher.
+
+        Request Body (POST):
+            {"name": "Course Name"}
+
+        Returns:
+            GET 200: Array of course DTOs with id, name, teacherId
+            POST 200: Created course DTO
+            POST 403: Forbidden if not a teacher (admins cannot create courses)
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_courses_create
+      description: |-
+        List all courses for the user (GET) or create a new course (POST).
+
+        GET: Returns courses the user can access.
+            Students see their enrolled courses. Teachers see their own courses.
+            Researchers and admins see all courses.
+        POST: Creates a new course owned by the requesting teacher.
+
+        Request Body (POST):
+            {"name": "Course Name"}
+
+        Returns:
+            GET 200: Array of course DTOs with id, name, teacherId
+            POST 200: Created course DTO
+            POST 403: Forbidden if not a teacher (admins cannot create courses)
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/courses/{course_id}:
+    get:
+      operationId: v1_courses_retrieve_2
+      description: |-
+        Get, update, or delete a specific course.
+
+        GET: Returns course details (requires view permission).
+        PATCH: Updates course name (requires manage permission).
+        DELETE: Deletes course and all enrollments (requires manage permission).
+
+        Args:
+            course_id: Database ID of the course (path parameter)
+
+        Request Body (PATCH):
+            {"name": "New Course Name"}
+
+        Returns:
+            GET/PATCH 200: Course DTO
+            DELETE 204: No content on success
+            403: Forbidden if user lacks permission
+            404: "Course not found"
+
+        Warning:
+            DELETE performs a hard delete of the course and all student
+            enrollments. Student users created for this course are also deleted.
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: v1_courses_partial_update
+      description: |-
+        Get, update, or delete a specific course.
+
+        GET: Returns course details (requires view permission).
+        PATCH: Updates course name (requires manage permission).
+        DELETE: Deletes course and all enrollments (requires manage permission).
+
+        Args:
+            course_id: Database ID of the course (path parameter)
+
+        Request Body (PATCH):
+            {"name": "New Course Name"}
+
+        Returns:
+            GET/PATCH 200: Course DTO
+            DELETE 204: No content on success
+            403: Forbidden if user lacks permission
+            404: "Course not found"
+
+        Warning:
+            DELETE performs a hard delete of the course and all student
+            enrollments. Student users created for this course are also deleted.
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: v1_courses_destroy
+      description: |-
+        Get, update, or delete a specific course.
+
+        GET: Returns course details (requires view permission).
+        PATCH: Updates course name (requires manage permission).
+        DELETE: Deletes course and all enrollments (requires manage permission).
+
+        Args:
+            course_id: Database ID of the course (path parameter)
+
+        Request Body (PATCH):
+            {"name": "New Course Name"}
+
+        Returns:
+            GET/PATCH 200: Course DTO
+            DELETE 204: No content on success
+            403: Forbidden if user lacks permission
+            404: "Course not found"
+
+        Warning:
+            DELETE performs a hard delete of the course and all student
+            enrollments. Student users created for this course are also deleted.
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '204':
+          description: No response body
+  /api/v1/courses/{course_id}/archive:
+    post:
+      operationId: v1_courses_archive_create
+      description: Archive a course (ARCH-UC-03). Course owner or admin.
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/courses/{course_id}/restore:
+    post:
+      operationId: v1_courses_restore_create
+      description: Restore an archived course (ARCH-UC-04). Course owner or admin.
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/courses/{course_id}/students:
+    get:
+      operationId: v1_courses_students_retrieve
+      description: |-
+        List students (GET) or add a student (POST) to a course.
+
+        GET: Returns paginated roster of active enrollments.
+        POST: Creates a new student and enrolls them (teacher-owner only).
+
+        Returns:
+            GET 200: Paginated student DTOs
+            POST 201: Created student DTO
+            403: Forbidden
+            404: Course not found
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_courses_students_create
+      description: |-
+        List students (GET) or add a student (POST) to a course.
+
+        GET: Returns paginated roster of active enrollments.
+        POST: Creates a new student and enrolls them (teacher-owner only).
+
+        Returns:
+            GET 200: Paginated student DTOs
+            POST 201: Created student DTO
+            403: Forbidden
+            404: Course not found
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/courses/{course_id}/students/{student_user_id}:
+    delete:
+      operationId: v1_courses_students_destroy
+      description: |-
+        Remove a student from a course (and delete their user account).
+
+        Unenrolls the student and permanently deletes their user account.
+        This is typically used when a student is removed from a class roster.
+
+        Args:
+            course_id: Database ID of the course (path parameter)
+            student_user_id: User ID of the student to remove (path parameter)
+
+        Returns:
+            200: "Student removed successfully"
+            403: Forbidden if teacher doesn't own the course
+            404: "Course not found" or "Student not found in course"
+
+        Warning:
+            This performs a hard delete of the student user account and
+            all their submissions. Consider soft delete for data retention.
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: student_user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '204':
+          description: No response body
+  /api/v1/enrollments:
+    post:
+      operationId: v1_enrollments_create
+      description: Redeem a student invite code for the authenticated student account.
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/exports/courses/{course_id}/roster:
+    get:
+      operationId: v1_exports_courses_roster_retrieve
+      description: GET /api/v1/exports/courses/{courseId}/roster
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/exports/courses/{course_id}/submissions:
+    get:
+      operationId: v1_exports_courses_submissions_retrieve
+      description: GET /api/v1/exports/courses/{courseId}/submissions
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/registration/accounts:
+    post:
+      operationId: v1_registration_accounts_create
+      description: Unified registration endpoint.
+      tags:
+      - v1
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/registration/code-validations:
+    post:
+      operationId: v1_registration_code_validations_create
+      description: Validate a registration code and return non-sensitive context.
+      tags:
+      - v1
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/rubrics/:
+    get:
+      operationId: v1_rubrics_retrieve
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_rubrics_create
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/rubrics/{rubric_id}:
+    get:
+      operationId: v1_rubrics_retrieve_2
+      parameters:
+      - in: path
+        name: rubric_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    patch:
+      operationId: v1_rubrics_partial_update
+      parameters:
+      - in: path
+        name: rubric_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: v1_rubrics_destroy
+      parameters:
+      - in: path
+        name: rubric_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '204':
+          description: No response body
+  /api/v1/rubrics/{rubric_id}/archive:
+    post:
+      operationId: v1_rubrics_archive_create
+      parameters:
+      - in: path
+        name: rubric_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/students/{student_id}/assignments/{assignment_id}/draft/:
+    patch:
+      operationId: v1_students_assignments_draft_partial_update
+      description: |-
+        Save a draft submission (SUB-UC-01).
+
+        Only students can save drafts. Validates:
+        - Caller is a student (SUB-UC-01-E2)
+        - Student ID matches caller (SUB-UC-01-E3)
+        - Assignment exists (SUB-UC-01-E4)
+        - Assignment is not archived (SUB-CN-07, SUB-UC-01-E5)
+        - Student is enrolled (SUB-UC-01-E6)
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: student_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/students/{student_id}/assignments/{assignment_id}/submission/:
+    get:
+      operationId: v1_students_assignments_submission_retrieve
+      description: |-
+        Get a specific student's submission for a specific assignment.
+
+        Used by the frontend to load a student's work for viewing or editing.
+        Students can only access their own; teachers access via ownership;
+        researchers and admins can access any submission.
+
+        Args:
+            student_id: User ID of the student (path parameter)
+            assignment_id: ID of the assignment (path parameter)
+
+        Returns:
+            200: Submission DTO with all answers
+            403: Forbidden if student accessing another's submission
+            403: Forbidden if teacher doesn't own the assignment
+            403: Forbidden if student not enrolled in assignment's course
+            404: "Assignment not found" or "Submission not found"
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      - in: path
+        name: student_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/students/{student_id}/submissions/:
+    get:
+      operationId: v1_students_submissions_retrieve
+      description: |-
+        List all submissions by a specific student (SUB-UC-07).
+
+        Access control:
+        - ADMIN/RESEARCHER: any student's submissions
+        - TEACHER: submissions for students in courses they own (SUB-CN-08)
+        - STUDENT: own submissions only
+      parameters:
+      - in: path
+        name: student_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/submissions/{submission_id}:
+    get:
+      operationId: v1_submissions_retrieve
+      description: |-
+        Retrieve a single submission by its ID.
+
+        Returns the full submission with all answers. Access is controlled
+        by role: students see only their own, teachers see their assignments'.
+
+        Args:
+            submission_id: Database ID of the submission (path parameter)
+
+        Returns:
+            200: Full submission DTO with answers
+            403: Forbidden if user cannot access this submission
+            404: "Submission not found" if ID invalid
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/submissions/{submission_id}/images:
+    get:
+      operationId: v1_submissions_images_retrieve
+      description: Upload an image (POST) or list images (GET) for a submission.
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_submissions_images_create
+      description: Upload an image (POST) or list images (GET) for a submission.
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/submissions/{submission_id}/images/{image_id}:
+    get:
+      operationId: v1_submissions_images_retrieve_2
+      description: Retrieve (GET) or delete (DELETE) a specific image.
+      parameters:
+      - in: path
+        name: image_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: submission_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: v1_submissions_images_destroy
+      description: Retrieve (GET) or delete (DELETE) a specific image.
+      parameters:
+      - in: path
+        name: image_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      - in: path
+        name: submission_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '204':
+          description: No response body
+  /api/v1/submissions/{submission_id}/override-score:
+    patch:
+      operationId: v1_submissions_override_score_partial_update
+      description: |-
+        Override scores for individual answers in a submission (teacher grading).
+
+        Teachers use this to manually grade or adjust scores for student answers.
+        Only teachers who own the assignment or admins can override scores.
+
+        Args:
+            submission_id: ID of the submission to grade (path parameter)
+
+        Request Body:
+            [
+                {"answerId": 1, "score": 10},
+                {"answerId": 2, "score": 8},
+                ...
+            ]
+
+        Returns:
+            200: Updated submission DTO with new scores
+            400: "Expected list of scores" if body isn't an array
+            403: Forbidden if not teacher/admin or doesn't own assignment
+            404: "Submission not found"
+      parameters:
+      - in: path
+        name: submission_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/submissions/me:
+    get:
+      operationId: v1_submissions_me_retrieve
+      description: List submissions for the authenticated caller (SUB-UC-08).
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/sudo-grants:
+    get:
+      operationId: v1_sudo_grants_retrieve
+      description: Dispatch GET (list) and POST (grant) for sudo grants.
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_sudo_grants_create
+      description: Dispatch GET (list) and POST (grant) for sudo grants.
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/sudo-grants/{grant_id}:
+    delete:
+      operationId: v1_sudo_grants_destroy
+      description: Revoke a sudo grant.
+      parameters:
+      - in: path
+        name: grant_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '204':
+          description: No response body
+  /api/v1/sudo-grants/me:
+    get:
+      operationId: v1_sudo_grants_me_retrieve
+      description: Return current-user sudo grant permissions for frontend capability
+        gating.
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/users:
+    post:
+      operationId: v1_users_create
+      description: Create a new user account with specified role (privileged operation).
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/users/:
+    post:
+      operationId: v1_users_create_2
+      description: Create a new user account with specified role (privileged operation).
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/users/{user_id}:
+    patch:
+      operationId: v1_users_partial_update
+      description: Update or delete an existing user account.
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: v1_users_destroy
+      description: Update or delete an existing user account.
+      parameters:
+      - in: path
+        name: user_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '204':
+          description: No response body
+  /api/v1/users/staff:
+    get:
+      operationId: v1_users_staff_retrieve
+      description: List staff directory users (researchers and teachers).
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/users/students:
+    get:
+      operationId: v1_users_students_retrieve
+      description: List student users with their active course enrollments.
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/visualizations/assignments/{assignment_id}/mood-meter:
+    get:
+      operationId: v1_visualizations_assignments_mood_meter_retrieve
+      description: GET /api/v1/visualizations/assignments/{assignmentId}/mood-meter
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/visualizations/assignments/{assignment_id}/summary:
+    get:
+      operationId: v1_visualizations_assignments_summary_retrieve
+      description: GET /api/v1/visualizations/assignments/{assignmentId}/summary
+      parameters:
+      - in: path
+        name: assignment_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/visualizations/courses/{course_id}/summary:
+    get:
+      operationId: v1_visualizations_courses_summary_retrieve
+      description: GET /api/v1/visualizations/courses/{courseId}/summary
+      parameters:
+      - in: path
+        name: course_id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+  /api/v1/visualizations/dashboard:
+    get:
+      operationId: v1_visualizations_dashboard_retrieve
+      description: GET /api/v1/visualizations/dashboard
+      tags:
+      - v1
+      responses:
+        '200':
+          description: No response body
+components: {}

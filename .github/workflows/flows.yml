@@ -1,0 +1,45 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: ${{ matrix.target }} tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - backend
+          - frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Task
+        uses: arduino/setup-task@v1
+
+      - name: Prepare CI root env
+        run: |
+          cat > .env <<'EOF'
+          ENV_TARGET=local
+          PUBLIC_HOST=localhost
+          PUBLIC_SCHEME=http
+          DJANGO_SECRET_KEY=ci-test-django-secret-key-0123456789abcdef
+          POSTGRES_DB=eelab_test
+          POSTGRES_USER=eelab_test
+          POSTGRES_PASSWORD=eelab_test_password
+          GOOGLE_CLIENT_ID=ci-google-client-id
+          GOOGLE_CLIENT_SECRET=ci-google-client-secret
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID=ci-google-client-id
+          ADMIN_USERNAME=Admin
+          ADMIN_EMAIL=admin@example.com
+          ADMIN_PASSWORD=AdminPassword123!
+          EOF
+          task env:local
+
+      - name: Run ${{ matrix.target }} tests
+        run: task test:${{ matrix.target }}

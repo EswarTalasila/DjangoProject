@@ -2,25 +2,25 @@
 
 ## Targets
 - Local dev: Docker Compose.
-- Self-hosted prod: Docker Compose with Traefik for TLS.
+- Self-hosted prod: Docker Compose with the shared nginx proxy stack for TLS and routing.
 
 ## Containers
 - `frontend`: Angular static assets (nginx or lightweight static server).
 - `backend`: Django REST API (gunicorn + uvicorn or gunicorn + ASGI).
 - `database`: PostgreSQL.
-- `proxy`: Traefik (TLS termination and routing).
+- `proxy`: shared nginx proxy (TLS termination and routing).
 
 ## Templates
-- Docker Compose template: `<repository>/Deployment/templates/docker-compose.template.yml`
-- Docker Compose dev template: `<repository>/Deployment/templates/docker-compose.dev.template.yml`
-- Traefik template: `<repository>/Deployment/templates/traefik.template.yml`
+- Proxy compose template: `<repository>/Deployment/templates/compose.proxy.template.yml`
+- Dev compose template: `<repository>/Deployment/templates/compose.dev.template.yml`
+- Test compose template: `<repository>/Deployment/templates/compose.test.template.yml`
+- Prod compose template: `<repository>/Deployment/templates/compose.prod.template.yml`
 - Gitignore template: `<repository>/Deployment/templates/.gitignore.template`
 - Python tooling template: `<repository>/Deployment/templates/pyproject.template.toml`
 - Pre-commit template: `<repository>/Deployment/templates/.pre-commit-config.template.yaml`
 - Pytest template: `<repository>/Deployment/templates/pytest.ini.template`
 - Bandit template: `<repository>/Deployment/templates/bandit.yaml.template`
 - Semgrep template: `<repository>/Deployment/templates/semgrep.yml.template`
-- Playwright template: `<repository>/Deployment/templates/playwright.config.template.ts`
 - ZAP baseline template: `<repository>/Deployment/templates/zap-baseline.sh.template`
 
 ## Python environment
@@ -43,17 +43,18 @@
 - Avoid `.env.local` variants to keep configuration declarative and consistent.
 - Production runtime should use an environment file or secrets manager with the same variable names.
 
-## Proxy agnostic behavior
+## Proxy behavior
 - App should honor `X-Forwarded-*` headers.
+- Browser and SSR traffic should both traverse the shared proxy.
 - Do not hard-code hostnames or TLS assumptions.
 
-## Traefik notes
-- Provide labels for `/` -> frontend and `/api` -> backend routing.
-- Use LetsEncrypt ACME TLS and HTTP-01 or DNS-01 challenge.
+## Shared proxy notes
+- Route `/` -> frontend and `/api/v1`, `/admin`, `/static` -> backend.
+- Keep dev/test/prod isolated by compose project, proxy alias, and named volumes.
 
 ## Database migrations
 - Use Django migrations only.
-- Migrations run on deploy and before app starts.
+- Keep migrations explicit; app startup should not hide migration execution inside container entrypoints.
 
 ## Backups
 - Nightly database dump to local disk or mounted volume.

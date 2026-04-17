@@ -4,7 +4,6 @@ from django.contrib import admin
 
 from .models import (
     Answer,
-    MoodMeterAnswer,
     MultipleChoiceAnswer,
     MultipleChoiceSelected,
     NumberScaleAnswer,
@@ -34,5 +33,4 @@ admin.site.register(MultipleChoiceAnswer)
 admin.site.register(MultipleChoiceSelected)
 admin.site.register(ShortAnswerAnswer)
 admin.site.register(NumberScaleAnswer)
-admin.site.register(MoodMeterAnswer)
 admin.site.register(Response)

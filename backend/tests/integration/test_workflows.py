@@ -4,20 +4,25 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from accounts.models import Role, User, UserRole
-from assessments.models import Question
-
+from accounts.models import User
 
 def login(client: APIClient, username: str, password: str) -> dict:
     response = client.post(
-        "/api/v1/auth/login",
-        {"username": username, "password": password},
+        "/api/v1/auth/sessions",
+        {"identifier": username, "password": password},
         format="json",
     )
     assert response.status_code == 200
     payload = response.json()
-    client.credentials(HTTP_AUTHORIZATION=f"Bearer {payload['accessToken']}")
+    access_cookie = response.cookies.get("access_token")
+    assert access_cookie is not None
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {access_cookie.value}")
     return payload
+
+
+def admin_authenticate(client: APIClient, user: User) -> None:
+    """Authenticate admin via force_authenticate (admins are blocked from API login)."""
+    client.force_authenticate(user=user)
 
 
 def step(message: str) -> None:
@@ -38,15 +43,16 @@ class TestWorkflows:
             name="Admin",
             password="adminpass",
         )
-        UserRole.objects.create(user=admin, role=Role.ADMIN)
+        admin.is_staff = True
+        admin.save()
 
         admin_client = APIClient()
-        step("Admin login")
-        login(admin_client, admin.username, "adminpass")
+        step("Admin login (force_authenticate — admins blocked from API login)")
+        admin_authenticate(admin_client, admin)
 
-        step("Admin creates assessment")
-        assessment_payload = {
-            "title": "Workflow Assessment",
+        step("Admin creates assignment_template")
+        assignment_template_payload = {
+            "title": "Workflow AssignmentTemplate",
             "gradingMode": "AUTO",
             "questions": [
                 {
@@ -57,56 +63,49 @@ class TestWorkflows:
                 }
             ],
         }
-        assessment_response = admin_client.post(
-            "/api/v1/assessments/", assessment_payload, format="json"
+        assignment_template_response = admin_client.post(
+            "/api/v1/assignment-templates/", assignment_template_payload, format="json"
         )
-        assert assessment_response.status_code == 201
-        assessment_id = assessment_response.json()["id"]
-        question = Question.objects.filter(assessment_id=assessment_id).first()
-        assert question is not None
-
+        assert assignment_template_response.status_code == 201
+        assignment_template_id = assignment_template_response.json()["id"]
         step("Admin creates teacher")
         teacher_payload = {
-            "username": "teacher@example.com",
+            "email": "teacher@example.com",
             "password": "teacherpass",
             "name": "Teacher",
             "role": "ROLE_TEACHER",
         }
-        response = admin_client.post("/api/v1/auth/createuser", teacher_payload, format="json")
-        assert response.status_code == 200
+        response = admin_client.post("/api/v1/users", teacher_payload, format="json")
+        assert response.status_code == 201
+        teacher_username = User.objects.get(email="teacher@example.com").username
 
         teacher_client = APIClient()
         step("Teacher login")
-        login(teacher_client, teacher_payload["username"], "teacherpass")
+        login(teacher_client, teacher_username, "teacherpass")
 
         step("Teacher creates course")
         course_response = teacher_client.post(
             "/api/v1/courses/", {"name": "Workflow Course"}, format="json"
         )
-        assert course_response.status_code == 200
+        assert course_response.status_code == 201
         course_id = course_response.json()["id"]
 
         student_payload = {
             "name": "Student",
-            "username": "student@example.com",
-            "courseId": course_id,
             "consent": True,
+            "password": "studentpass",
         }
         step("Teacher creates student")
-        student_response = teacher_client.post("/api/v1/students/", student_payload, format="json")
-        assert student_response.status_code == 200
-        student_id = student_response.json()["id"]
-
-        step("Admin sets student password")
-        set_password = admin_client.post(
-            f"/api/v1/auth/users/{student_id}/set-password",
-            "studentpass",
-            content_type="text/plain",
+        student_response = teacher_client.post(
+            f"/api/v1/courses/{course_id}/students", student_payload, format="json"
         )
-        assert set_password.status_code == 200
+        assert student_response.status_code == 201
+        student_id = student_response.json()["id"]
+        student_username = student_response.json()["username"]
 
         assignment_payload = {
-            "assessmentId": assessment_id,
+            "title": "Workflow Course Assignment",
+            "assignmentTemplateId": assignment_template_id,
             "audienceType": "COURSE",
             "courseId": course_id,
             "openAt": timezone.now().isoformat(),
@@ -117,23 +116,28 @@ class TestWorkflows:
         )
         assert assignment_response.status_code == 201
         assignment_id = assignment_response.json()["id"]
+        assignment_content_response = teacher_client.get(
+            f"/api/v1/assignments/{assignment_id}/template"
+        )
+        assert assignment_content_response.status_code == 200
+        assignment_question_id = assignment_content_response.json()["questions"][0]["id"]
 
         student_client = APIClient()
         step("Student login")
-        login(student_client, student_payload["username"], "studentpass")
+        login(student_client, student_username, "studentpass")
 
         step("Student fetches assignments")
         assignments_response = student_client.get(f"/api/v1/assignments/users/{student_id}")
         assert assignments_response.status_code == 200
-        assert any(a["id"] == assignment_id for a in assignments_response.json())
+        assert any(a["id"] == assignment_id for a in assignments_response.json()["results"])
 
         step("Student saves draft submission")
-        draft_response = student_client.put(
-            f"/api/v1/students/{student_id}/assignments/{assignment_id}/draft",
+        draft_response = student_client.patch(
+            f"/api/v1/students/{student_id}/assignments/{assignment_id}/draft/",
             {
                 "answers": [
                     {
-                        "questionId": question.id,
+                        "questionId": assignment_question_id,
                         "type": "SHORT_ANSWER",
                         "data": {"text": "Draft"},
                     }
@@ -153,7 +157,7 @@ class TestWorkflows:
                 "status": "SUBMITTED",
                 "answers": [
                     {
-                        "questionId": question.id,
+                        "questionId": assignment_question_id,
                         "type": "SHORT_ANSWER",
                         "data": {"text": "Final"},
                     }
@@ -170,7 +174,7 @@ class TestWorkflows:
             f"/api/v1/assignments/{assignment_id}/submissions"
         )
         assert submissions_response.status_code == 200
-        assert any(s["id"] == submission_id for s in submissions_response.json())
+        assert any(s["id"] == submission_id for s in submissions_response.json()["results"])
 
         step("Teacher overrides score")
         override_response = teacher_client.patch(

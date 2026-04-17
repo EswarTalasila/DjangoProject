@@ -1,0 +1,68 @@
+@startuml
+!theme plain
+skinparam stateBorderColor #333
+skinparam stateBackgroundColor #FAFAFA
+skinparam stateFontSize 12
+skinparam arrowColor #666
+skinparam defaultFontSize 10
+skinparam noteBackgroundColor #FEFCE8
+skinparam noteBorderColor #CCC
+
+title **FR-01: PasswordResetRequest — State Diagram**\n<size:10>Request lifecycle: PENDING → APPROVED → EXPIRED</size>
+
+state "PENDING" as pending #CFD8DC {
+  pending : Model default status
+  pending : Not used in current
+  pending :  issuer-generated flow
+}
+
+state "APPROVED" as approved #C8E6C9 {
+  approved : status = "APPROVED"
+  approved : Code is valid and
+  approved :  can be redeemed
+  approved : 30-minute window
+}
+
+state "EXPIRED" as expired #FFCDD2 {
+  expired : status = "EXPIRED"
+  expired : Code can no longer
+  expired :  be used
+}
+
+state "DENIED" as denied #E0E0E0 {
+  denied : Exists in enum
+  denied : Never set in
+  denied :  current codebase
+}
+
+[*] --> approved : issue_password_reset_code()\nCreated directly as APPROVED\n(skips PENDING state)
+
+approved --> expired : **Time expires**\nexpires_at <= now\n(detected by verify_password_reset_code\nor complete_password_reset)
+
+approved --> expired : **New reset issued for same user**\n_expire_open_reset_requests()\nPENDING/APPROVED → EXPIRED\nInvalidates any prior active codes
+
+approved --> expired : **Cleanup job**\ncleanup_temporary_reset_codes()\nExpires past-due APPROVED requests
+
+pending --> expired : **New reset issued for same user**\n_expire_open_reset_requests()
+
+note right of approved
+  **Current flow only uses APPROVED.**
+  issue_password_reset_code() creates
+  with status=APPROVED directly because
+  the issuer (teacher/admin/researcher)
+  is the reviewer.
+
+  PENDING would be used by a future
+  self-service request flow where a
+  student requests a reset and a
+  teacher must approve it.
+end note
+
+note bottom of denied
+  DENIED exists in the enum for
+  future use (teacher denies a
+  student's self-service request).
+  Currently never set by any code path.
+end note
+
+@enduml

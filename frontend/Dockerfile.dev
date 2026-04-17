@@ -1,45 +1,21 @@
 # =============================================================================
 # Frontend Development Dockerfile
 # =============================================================================
-# This Dockerfile is used for local development with hot reload support.
-# It installs Chromium for headless testing (Karma unit tests).
-#
-# Usage:
-#   docker compose up frontend
-#
-# The source code is mounted as a volume in docker-compose.yml, so changes
-# are reflected immediately without rebuilding the image.
+# Optimized for fast iterative rebuilds in Docker Compose.
+# Dependencies are installed at container start into a persisted named volume,
+# so image rebuilds do not re-run npm dependency installation.
 # =============================================================================
 
 FROM node:22-alpine
 
 WORKDIR /app
 
-# -----------------------------------------------------------------------------
-# Install system dependencies
-# -----------------------------------------------------------------------------
-# Chromium is required for headless browser testing with Karma
+# Chromium supports browser-driven test workflows when executed in this image.
 RUN apk add --no-cache chromium
 
-# -----------------------------------------------------------------------------
-# Install Node dependencies
-# -----------------------------------------------------------------------------
-# Copy package files first to leverage Docker layer caching.
-# Dependencies are only reinstalled when package*.json changes.
-COPY package*.json ./
-RUN npm ci
-
-# -----------------------------------------------------------------------------
-# Environment configuration
-# -----------------------------------------------------------------------------
-# Point to Alpine's Chromium for Karma tests
 ENV CHROME_BIN=/usr/bin/chromium
+ENV NEXT_TELEMETRY_DISABLED=1
 
-EXPOSE 4200
+EXPOSE 3000
 
-# -----------------------------------------------------------------------------
-# Default command
-# -----------------------------------------------------------------------------
-# Note: In development, docker-compose.yml mounts the source code as a volume
-# and may override this command. The --poll flag enables file watching in Docker.
-CMD ["npm", "start", "--", "--host", "0.0.0.0", "--poll", "2000"]
+CMD ["npm", "run", "dev"]

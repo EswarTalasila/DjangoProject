@@ -1,12 +1,11 @@
 """
 Submission management API endpoints.
 
-This module handles student and teacher submission workflows including:
-- Creating and editing submissions for assignments
+This module handles student submission workflows including:
 - Saving draft submissions (in-progress work)
 - Submitting final answers
 - Teacher grading and score override
-- Listing submissions by various filters (assignment, student, teacher)
+- Listing submissions by various filters (assignment, student)
 
 Submissions go through a lifecycle:
     NOT_STARTED -> IN_PROGRESS (draft) -> SUBMITTED -> (optionally) GRADED
@@ -14,36 +13,45 @@ Submissions go through a lifecycle:
 Permission Model:
     - Students can only access/modify their own submissions
     - Teachers can access submissions for assignments they own
-    - Admins can access all submissions
+    - Researchers can read all submissions
+    - Admins (is_staff) can access all submissions
 """
+
+import logging
+
+from django.utils import timezone
 
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from accounts.models import Role, User
-from accounts.services import teacher_owns_student
-from assignments.models import Assignment
-from core.errors import error_response, server_error_response
-from core.permissions import primary_role
-from courses.models import Enrollment
+from accounts.models import Role, SudoPermission
+from assignments.models import Assignment, AssignmentStatus
+from core.audit import complete_audit, get_client_ip, log_audit
+from core.errors import error_response
+from core.models import AuditAction, AuditOutcome
+from core.pagination import paginate
+from core.permissions import has_role, has_sudo_permission, primary_role, teacher_owns_assignment
+from courses.models import Enrollment, EnrollmentStatus
 
-from .models import Submission
-from .serializers import AnswerSerializer, SubmissionSerializer
+from .models import Submission, SubmissionStatus
+from .serializers import SubmissionSerializer
 from .services import (
     create_submission,
-    edit_submission,
     get_by_assignment,
     get_by_student,
     get_by_student_and_assignment,
-    get_by_teacher,
+    get_by_student_and_assignment_for_dto,
     get_submission,
-    list_mine,
+    get_submission_for_dto,
+    list_me,
     override_score,
+    submission_to_compact_dto,
     submission_to_dto,
-    submit_teacher_self_assessment,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _assignment_for(assignment_id: int) -> Assignment | None:
@@ -66,26 +74,8 @@ def _assignment_for(assignment_id: int) -> Assignment | None:
     )
 
 
-def _teacher_owns_assignment(user, assignment: Assignment) -> bool:
-    """
-    Check if the given user (teacher) owns the assignment.
-
-    Ownership is determined by either:
-    1. The assignment's teacher_id matches the user's ID, OR
-    2. The assignment's course belongs to the user's teacher profile
-
-    Args:
-        user: The User instance to check ownership for
-        assignment: The Assignment to check
-
-    Returns:
-        True if the user owns the assignment, False otherwise
-    """
-    if assignment.teacher_id == user.id:
-        return True
-    if assignment.course and assignment.course.teacher_profile:
-        return bool(assignment.course.teacher_profile.user_id == user.id)
-    return False
+# Backward-compatible alias — image_views.py imports this name.
+_teacher_owns_assignment = teacher_owns_assignment
 
 
 def _student_enrolled_in_assignment(user, assignment: Assignment) -> bool:
@@ -103,7 +93,9 @@ def _student_enrolled_in_assignment(user, assignment: Assignment) -> bool:
     if not assignment.course_id:
         return False
     return Enrollment.objects.filter(
-        course_id=assignment.course_id, student_profile__user_id=user.id
+        course_id=assignment.course_id,
+        student_profile__user_id=user.id,
+        status=EnrollmentStatus.ACTIVE,
     ).exists()
 
 
@@ -112,7 +104,8 @@ def _can_access_submission(user, submission) -> bool:
     Determine if a user has permission to access a submission.
 
     Access rules by role:
-        - ADMIN: Full access to all submissions
+        - Admin (is_staff): Full access to all submissions
+        - RESEARCHER: Full read access to all submissions (data oversight)
         - STUDENT: Can only access their own submissions
         - TEACHER: Can access submissions for assignments they own
 
@@ -124,48 +117,64 @@ def _can_access_submission(user, submission) -> bool:
         True if user can access the submission, False otherwise
     """
     role = primary_role(user)
-    if role == Role.ADMIN:
+    if user.is_staff:
         return True
+    if has_role(user, Role.RESEARCHER):
+        return has_sudo_permission(user, SudoPermission.VIEW_SUBMISSIONS)
     if role == Role.STUDENT:
         return bool(submission.student_id == user.id)
     if role == Role.TEACHER:
-        return _teacher_owns_assignment(user, submission.assignment)
+        return teacher_owns_assignment(user, submission.assignment)
     return False
+
+
+def _researcher_can_view_submissions(user) -> bool:
+    """
+    Researchers are default-deny for submissions and require explicit sudo.
+    """
+    role = primary_role(user)
+    if user.is_staff or role != Role.RESEARCHER:
+        return True
+    return has_sudo_permission(user, SudoPermission.VIEW_SUBMISSIONS)
 
 
 def _create_for_assignment(request, assignment_id: int, assignment: Assignment):
     """
     Internal helper to create a submission with role-based validation.
 
-    Validates that:
-    - Students can only create submissions for themselves
-    - Students must be enrolled in the assignment's course
-    - Teachers cannot create student submissions (they use teacher_self_assess)
-
-    Args:
-        request: The HTTP request with user and submission data
-        assignment_id: ID of the assignment to submit to
-        assignment: Pre-fetched Assignment instance
-
-    Returns:
-        Response with created submission DTO (201) or error response
+    Only students can submit. Validates:
+    - Caller is a student (SUB-UC-02-E2)
+    - Assignment is not archived (SUB-CN-06)
+    - Assignment has opened (openAt <= now)
+    - Student ID matches caller (self-only)
+    - Student is enrolled in the assignment's course (SUB-UC-02-E5)
     """
     role = primary_role(request.user)
+    if role != Role.STUDENT:
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+    if assignment.status == AssignmentStatus.ARCHIVED:
+        return Response(
+            {"detail": "Assignment is archived"},
+            status=status.HTTP_409_CONFLICT,
+        )
+    if assignment.open_at and assignment.open_at > timezone.now():
+        return Response({"detail": "Assignment has not opened yet"}, status=status.HTTP_403_FORBIDDEN)
     serializer = SubmissionSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    if role == Role.STUDENT:
-        if serializer.validated_data.get("studentId") != request.user.id:
-            return Response(status=status.HTTP_403_FORBIDDEN)
-        if not _student_enrolled_in_assignment(request.user, assignment):
-            return Response(status=status.HTTP_403_FORBIDDEN)
-    elif role == Role.TEACHER:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+    if serializer.validated_data.get("studentId") != request.user.id:
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+    if not _student_enrolled_in_assignment(request.user, assignment):
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     try:
-        submission = create_submission(assignment_id, serializer.validated_data, "SUBMITTED")
+        submission = create_submission(
+            assignment_id,
+            serializer.validated_data,
+            SubmissionStatus.SUBMITTED,
+        )
     except ValueError as exc:
         return error_response(exc)
-    except Exception:
-        return server_error_response()
+    # Re-fetch with prefetches for efficient DTO serialization.
+    submission = get_submission_for_dto(submission.id)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_201_CREATED)
 
 
@@ -230,54 +239,21 @@ def assignment_submissions(request, assignment_id: int):
     assignment = _assignment_for(assignment_id)
     if not assignment:
         return error_response("Assignment not found", status.HTTP_404_NOT_FOUND)
+    if not _researcher_can_view_submissions(request.user):
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     role = primary_role(request.user)
     if role == Role.STUDENT:
-        return Response(status=status.HTTP_403_FORBIDDEN)
-    if role == Role.TEACHER and not _teacher_owns_assignment(request.user, assignment):
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+    # Admins and researchers can view any assignment's submissions
+    if (
+        not request.user.is_staff
+        and not has_role(request.user, Role.RESEARCHER)
+        and role == Role.TEACHER
+        and not teacher_owns_assignment(request.user, assignment)
+    ):
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
-    return Response([submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK)
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated])
-def teacher_self_assess(request, assessment_id: int):
-    """
-    Submit a teacher's self-assessment for mood meter or reflection.
-
-    Teachers complete self-assessments that aren't tied to specific
-    assignments. This creates a submission with the teacher as both
-    creator and subject.
-
-    Args:
-        assessment_id: ID of the assessment being completed (path parameter)
-
-    Request Body:
-        [
-            {"questionId": 1, "value": "response text"},
-            {"questionId": 2, "value": "5"},
-            ...
-        ]
-
-    Returns:
-        201: Submission DTO
-        400: "Expected list of answers" if body isn't an array
-        400: ValueError message if validation fails
-    """
-    if not isinstance(request.data, list):
-        return Response("Expected list of answers", status=status.HTTP_400_BAD_REQUEST)
-    answers = []
-    for entry in request.data:
-        serializer = AnswerSerializer(data=entry)
-        serializer.is_valid(raise_exception=True)
-        answers.append(serializer.validated_data)
-    try:
-        submission = submit_teacher_self_assessment(request.user.id, assessment_id, answers)
-    except ValueError as exc:
-        return error_response(exc)
-    except Exception:
-        return server_error_response()
-    return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_201_CREATED)
+    return paginate(submissions, request, transform_fn=lambda s: submission_to_compact_dto(s).model_dump())
 
 
 @api_view(["GET"])
@@ -298,13 +274,11 @@ def get_one(request, submission_id: int):
         404: "Submission not found" if ID invalid
     """
     try:
-        submission = get_submission(submission_id)
+        submission = get_submission_for_dto(submission_id)
     except ValueError as exc:
         return error_response(exc)
-    except Exception:
-        return server_error_response()
     if not _can_access_submission(request.user, submission):
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
 
 
@@ -314,8 +288,8 @@ def get_by_assignment_id(request, assignment_id: int):
     """
     List all submissions for a specific assignment.
 
-    Teachers and admins can view all submissions for an assignment
-    to review student work and grades.
+    Teachers, researchers, and admins can view all submissions for an
+    assignment to review student work and grades.
 
     Args:
         assignment_id: ID of the assignment (path parameter)
@@ -328,75 +302,62 @@ def get_by_assignment_id(request, assignment_id: int):
     assignment = _assignment_for(assignment_id)
     if not assignment:
         return error_response("Assignment not found", status.HTTP_404_NOT_FOUND)
+    if not _researcher_can_view_submissions(request.user):
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     role = primary_role(request.user)
     if role == Role.STUDENT:
-        return Response(status=status.HTTP_403_FORBIDDEN)
-    if role == Role.TEACHER and not _teacher_owns_assignment(request.user, assignment):
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+    # Admins and researchers can view any assignment's submissions
+    if (
+        not request.user.is_staff
+        and not has_role(request.user, Role.RESEARCHER)
+        and role == Role.TEACHER
+        and not teacher_owns_assignment(request.user, assignment)
+    ):
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_assignment(assignment_id)
-    return Response([submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK)
+    return paginate(submissions, request, transform_fn=lambda s: submission_to_compact_dto(s).model_dump())
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_by_student_id(request, student_id: int):
     """
-    List all submissions by a specific student.
+    List all submissions by a specific student (SUB-UC-07).
 
-    Students can only view their own submissions. Teachers can view
-    submissions from students they created. Admins can view any student's.
-
-    Args:
-        student_id: User ID of the student (path parameter)
-
-    Returns:
-        200: Array of submission DTOs
-        403: Forbidden if requesting other student's data (as student)
-        403: Forbidden if teacher doesn't own this student
+    Access control:
+    - ADMIN/RESEARCHER: any student's submissions
+    - TEACHER: submissions for students in courses they own (SUB-CN-08)
+    - STUDENT: own submissions only
     """
     role = primary_role(request.user)
-    if role == Role.ADMIN:
+    if request.user.is_staff:
+        pass
+    elif has_role(request.user, Role.RESEARCHER):
+        if not has_sudo_permission(request.user, SudoPermission.VIEW_SUBMISSIONS):
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         pass
     elif role == Role.STUDENT:
         if request.user.id != student_id:
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     elif role == Role.TEACHER:
-        student_user = User.objects.filter(id=student_id).first()
-        if not student_user or not teacher_owns_student(request.user, student_user):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+        # Teacher can only see submissions for assignments they own (SUB-CN-08).
+        owned_qs = Submission.objects.filter(
+            student_id=student_id,
+            assignment__course__teacher_profile__user_id=request.user.id,
+        )
+        if not owned_qs.exists():
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        owned_qs = owned_qs.select_related("student", "teacher", "assignment__course")
+        return paginate(
+            owned_qs,
+            request,
+            transform_fn=lambda s: submission_to_compact_dto(s).model_dump(),
+        )
     else:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submissions = get_by_student(student_id)
-    return Response([submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK)
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def get_by_teacher_id(request, teacher_id: int):
-    """
-    List all submissions created by a specific teacher (self-assessments).
-
-    Returns teacher self-assessment submissions. Teachers can only view
-    their own; admins can view any teacher's.
-
-    Args:
-        teacher_id: User ID of the teacher (path parameter)
-
-    Returns:
-        200: Array of submission DTOs
-        403: Forbidden if teacher requesting another teacher's data
-        403: Forbidden if student (no access to teacher submissions)
-    """
-    role = primary_role(request.user)
-    if role == Role.ADMIN:
-        pass
-    elif role == Role.TEACHER:
-        if request.user.id != teacher_id:
-            return Response(status=status.HTTP_403_FORBIDDEN)
-    else:
-        return Response(status=status.HTTP_403_FORBIDDEN)
-    submissions = get_by_teacher(teacher_id)
-    return Response([submission_to_dto(sub).model_dump() for sub in submissions], status=status.HTTP_200_OK)
+    return paginate(submissions, request, transform_fn=lambda s: submission_to_compact_dto(s).model_dump())
 
 
 @api_view(["GET"])
@@ -406,7 +367,8 @@ def get_student_submission(request, student_id: int, assignment_id: int):
     Get a specific student's submission for a specific assignment.
 
     Used by the frontend to load a student's work for viewing or editing.
-    Students can only access their own; teachers access via ownership.
+    Students can only access their own; teachers access via ownership;
+    researchers and admins can access any submission.
 
     Args:
         student_id: User ID of the student (path parameter)
@@ -423,164 +385,83 @@ def get_student_submission(request, student_id: int, assignment_id: int):
     assignment = _assignment_for(assignment_id)
     if not assignment:
         return error_response("Assignment not found", status.HTTP_404_NOT_FOUND)
-    if role == Role.ADMIN:
+    if request.user.is_staff:
         pass
+    elif has_role(request.user, Role.RESEARCHER):
+        if not has_sudo_permission(request.user, SudoPermission.VIEW_SUBMISSIONS):
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     elif role == Role.STUDENT:
         if request.user.id != student_id:
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         if not _student_enrolled_in_assignment(request.user, assignment):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     elif role == Role.TEACHER:
-        if not _teacher_owns_assignment(request.user, assignment):
-            return Response(status=status.HTTP_403_FORBIDDEN)
+        if not teacher_owns_assignment(request.user, assignment):
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     else:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     try:
-        submission = get_by_student_and_assignment(student_id, assignment_id)
+        submission = get_by_student_and_assignment_for_dto(student_id, assignment_id)
     except ValueError as exc:
         return error_response(exc)
-    except Exception:
-        return server_error_response()
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
 
 
-@api_view(["PUT"])
+@api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 def save_draft(request, student_id: int, assignment_id: int):
     """
-    Save a draft submission (work in progress, not yet submitted).
+    Save a draft submission (SUB-UC-01).
 
-    Students use this to save partial work before final submission.
-    Creates or updates a submission with IN_PROGRESS status.
-
-    Args:
-        student_id: User ID of the student (path parameter)
-        assignment_id: ID of the assignment (path parameter)
-
-    Request Body:
-        {
-            "answers": [
-                {"questionId": 1, "value": "partial answer"},
-                ...
-            ]
-        }
-
-    Returns:
-        200: Submission DTO with IN_PROGRESS status
-        403: Forbidden if student saving another's draft
-        403: Forbidden if not enrolled in assignment's course
-        404: "Assignment not found"
+    Only students can save drafts. Validates:
+    - Caller is a student (SUB-UC-01-E2)
+    - Student ID matches caller (SUB-UC-01-E3)
+    - Assignment exists (SUB-UC-01-E4)
+    - Assignment is not archived (SUB-CN-07, SUB-UC-01-E5)
+    - Student is enrolled (SUB-UC-01-E6)
     """
     role = primary_role(request.user)
+    if role != Role.STUDENT:
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+    if request.user.id != student_id:
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     assignment = _assignment_for(assignment_id)
     if not assignment:
         return error_response("Assignment not found", status.HTTP_404_NOT_FOUND)
-    if role == Role.ADMIN:
-        pass
-    elif role == Role.STUDENT:
-        if request.user.id != student_id:
-            return Response(status=status.HTTP_403_FORBIDDEN)
-        if not _student_enrolled_in_assignment(request.user, assignment):
-            return Response(status=status.HTTP_403_FORBIDDEN)
-    else:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+    if assignment.status == AssignmentStatus.ARCHIVED:
+        return Response(
+            {"detail": "Assignment is archived"},
+            status=status.HTTP_409_CONFLICT,
+        )
+    if not _student_enrolled_in_assignment(request.user, assignment):
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     answers = request.data.get("answers", [])
     payload = {
         "assignmentId": assignment_id,
         "studentId": student_id,
-        "status": "IN_PROGRESS",
+        "status": SubmissionStatus.IN_PROGRESS,
         "answers": answers,
     }
     try:
-        submission = create_submission(assignment_id, payload, "IN_PROGRESS")
+        submission = create_submission(assignment_id, payload, SubmissionStatus.IN_PROGRESS)
     except ValueError as exc:
         return error_response(exc)
-    except Exception:
-        return server_error_response()
+    # Re-fetch with prefetches for efficient DTO serialization.
+    submission = get_submission_for_dto(submission.id)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
-def list_mine_view(request):
+def list_me_view(request):
     """
-    List submissions for the authenticated user with optional status filter.
-
-    Used by the dashboard to show the user's own submissions. Supports
-    filtering by status (e.g., only IN_PROGRESS or only SUBMITTED).
-
-    Query Parameters:
-        userId: Required - User ID to fetch submissions for
-        status: Optional - Filter by submission status (IN_PROGRESS, SUBMITTED, etc.)
-
-    Returns:
-        200: Array of submission summary DTOs (lighter than full DTOs)
-        400: Bad request if userId not provided
-        403: Forbidden if requesting another user's submissions (non-admin)
+    List submissions for the authenticated caller (SUB-UC-08).
     """
-    user_id = request.query_params.get("userId")
-    if user_id is None:
-        return Response(status=status.HTTP_400_BAD_REQUEST)
-    if request.user.id != int(user_id) and primary_role(request.user) != Role.ADMIN:
-        return Response(status=status.HTTP_403_FORBIDDEN)
+    if not _researcher_can_view_submissions(request.user):
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     status_filter = request.query_params.get("status")
-    return Response(list_mine(int(user_id), status_filter), status=status.HTTP_200_OK)
-
-
-@api_view(["PUT"])
-@permission_classes([IsAuthenticated])
-def edit(request):
-    """
-    Update an existing submission (answers and/or status).
-
-    Used by students to modify their submission before final submit,
-    or by teachers to update grading information.
-
-    Request Body:
-        {
-            "assignmentId": 123,
-            "studentId": 456,         # For student submissions
-            "teacherId": 789,         # For teacher self-assessments
-            "status": "SUBMITTED",    # Optional status update
-            "answers": [...]          # Updated answers
-        }
-
-    Returns:
-        200: Updated submission DTO
-        403: Forbidden if student editing another's submission
-        403: Forbidden if teacher editing submission they don't own
-        404: "Assignment not found"
-    """
-    serializer = SubmissionSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
-    assignment_id = serializer.validated_data.get("assignmentId")
-    student_id = serializer.validated_data.get("studentId")
-    teacher_id = serializer.validated_data.get("teacherId")
-    assignment = _assignment_for(assignment_id)
-    if not assignment:
-        return error_response("Assignment not found", status.HTTP_404_NOT_FOUND)
-    role = primary_role(request.user)
-    if role == Role.ADMIN:
-        pass
-    elif role == Role.STUDENT:
-        if request.user.id != student_id:
-            return Response(status=status.HTTP_403_FORBIDDEN)
-        if not _student_enrolled_in_assignment(request.user, assignment):
-            return Response(status=status.HTTP_403_FORBIDDEN)
-    elif role == Role.TEACHER:
-        if request.user.id != teacher_id:
-            return Response(status=status.HTTP_403_FORBIDDEN)
-        if not _teacher_owns_assignment(request.user, assignment):
-            return Response(status=status.HTTP_403_FORBIDDEN)
-    else:
-        return Response(status=status.HTTP_403_FORBIDDEN)
-    try:
-        submission = edit_submission(serializer.validated_data)
-    except ValueError as exc:
-        return error_response(exc)
-    except Exception:
-        return server_error_response()
-    return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)
+    results = list_me(request.user.id, status_filter)
+    return paginate(results, request, transform_fn=lambda s: submission_to_compact_dto(s).model_dump())
 
 
 @api_view(["PATCH"])
@@ -609,19 +490,35 @@ def override_score_view(request, submission_id: int):
         404: "Submission not found"
     """
     if not isinstance(request.data, list):
-        return Response("Expected list of scores", status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": "Expected list of scores"}, status=status.HTTP_400_BAD_REQUEST)
     role = primary_role(request.user)
-    if role not in (Role.ADMIN, Role.TEACHER):
-        return Response(status=status.HTTP_403_FORBIDDEN)
+    if not request.user.is_staff and role != Role.TEACHER:
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
     submission = Submission.objects.filter(id=submission_id).select_related("assignment").first()
     if not submission:
         return error_response("Submission not found", status.HTTP_404_NOT_FOUND)
-    if role == Role.TEACHER and not _teacher_owns_assignment(request.user, submission.assignment):
-        return Response(status=status.HTTP_403_FORBIDDEN)
+    if role == Role.TEACHER and not teacher_owns_assignment(request.user, submission.assignment):
+        return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
+    old_scores = list(
+        submission.answers.order_by("id").values_list("score", flat=True)
+    )
+    audit_id = log_audit(
+        actor=request.user,
+        action=AuditAction.SCORE_OVERRIDE,
+        target_resource_type="Submission",
+        target_resource_id=submission_id,
+        old_value={"scores": old_scores},
+        new_value={"scores": request.data},
+        ip_address=get_client_ip(request),
+    )
+
     try:
-        submission = override_score(submission_id, request.data)
+        override_score(submission_id, request.data)
     except ValueError as exc:
+        complete_audit(audit_id, AuditOutcome.FAILURE)
         return error_response(exc)
-    except Exception:
-        return server_error_response()
+    complete_audit(audit_id, AuditOutcome.SUCCESS)
+    # Re-fetch with prefetches for efficient DTO serialization.
+    submission = get_submission_for_dto(submission_id)
     return Response(submission_to_dto(submission).model_dump(), status=status.HTTP_200_OK)

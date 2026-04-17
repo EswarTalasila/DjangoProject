@@ -1,0 +1,212 @@
+"""
+Course and student domain mutations — create, edit, and delete operations.
+"""
+
+import logging
+
+from django.db import transaction
+from django.utils import timezone
+
+from accounts.models import Role, StudentProfile, User
+from accounts.services import create_user_from_payload, generate_managed_username
+from assignments.models import Assignment, AssignmentStatus
+from core.lifecycle import ConflictError
+from submissions.models import Submission, SubmissionStatus
+
+from ..models import Course, CourseStatus, Enrollment, EnrollmentStatus
+from ._queries import _teacher_profile_for
+
+logger = logging.getLogger(__name__)
+
+
+@transaction.atomic
+def create_course(request_user: User, name: str) -> Course:
+    """
+    Create a new course owned by the given teacher.
+
+    Args:
+        request_user: The teacher creating the course
+        name: The course name
+
+    Returns:
+        The created Course
+
+    Raises:
+        ValueError: If the user doesn't have a teacher profile
+    """
+    teacher_profile = _teacher_profile_for(request_user)
+    if not teacher_profile:
+        raise ValueError("Teacher profile not found")
+    return Course.objects.create(name=name, teacher_profile=teacher_profile)
+
+
+@transaction.atomic
+def edit_course(course: Course, name: str) -> Course:
+    """Update a course's name."""
+    course.name = name
+    course.save(update_fields=["name"])
+    return course
+
+
+@transaction.atomic
+def delete_course(course: Course) -> None:
+    """
+    Delete a course and its enrollments.
+
+    Enrollment records are cascade-deleted by Django. Student User
+    accounts are intentionally preserved (CRS-CN-05).
+    """
+    course.delete()
+
+
+@transaction.atomic
+def create_student_in_course(request_user: User, course_id: int, payload: dict) -> Enrollment:
+    """
+    Create a new student and enroll them in a course.
+
+    Args:
+        request_user: The teacher adding the student
+        course_id: ID of the course to enroll into (from URL path)
+        payload: Dict with name, and optionally consent and password
+
+    Returns:
+        The created Enrollment
+
+    Raises:
+        ValueError: If course not found, profile creation failed, or student already enrolled
+    """
+    course = Course.objects.filter(id=course_id).first()
+    if not course:
+        raise ValueError("Course not found")
+
+    # ARCH-CN: Cannot enroll students in an archived course
+    from ..models import CourseStatus
+    if course.status == CourseStatus.ARCHIVED:
+        raise ConflictError("Cannot add students to an archived course.")
+
+    raw_username = str(payload.get("username", "")).strip()
+    if raw_username:
+        raise ValueError("username is system-managed and must not be provided")
+
+    create_payload = dict(payload)
+    create_payload["username"] = generate_managed_username(name=payload.get("name"))
+    student_user = create_user_from_payload(
+        create_payload, role_override=Role.STUDENT, creator=request_user
+    )
+    student_profile = StudentProfile.objects.filter(user=student_user).first()
+    if not student_profile:
+        raise ValueError("StudentProfile not created")
+
+    consent = payload.get("consent")
+    if consent is not None:
+        student_profile.consent = consent
+        student_profile.save(update_fields=["consent"])
+
+    if Enrollment.objects.filter(course=course, student_profile=student_profile).exists():
+        raise ValueError("Student already enrolled in this course")
+
+    enrollment = Enrollment.objects.create(
+        course=course, student_profile=student_profile, status=EnrollmentStatus.ACTIVE
+    )
+
+    _create_submissions_for_student(student_user, course)
+    return enrollment
+
+
+@transaction.atomic
+def remove_student_from_course(course: Course, student_user_id: int) -> None:
+    """
+    Remove a student from a course by setting enrollment to DROPPED.
+
+    The student User account is preserved (CRS-CN-05). Already-DROPPED
+    enrollments are treated as not found (CRS-UC-08-E2).
+    """
+    if course.status == CourseStatus.ARCHIVED:
+        raise ConflictError("Cannot remove students from an archived course.")
+
+    student_profile = StudentProfile.objects.filter(user_id=student_user_id).first()
+    if not student_profile:
+        raise ValueError("Student not found in course")
+    enrollment = Enrollment.objects.filter(
+        course=course, student_profile=student_profile, status=EnrollmentStatus.ACTIVE
+    ).first()
+    if not enrollment:
+        raise ValueError("Student not found in course")
+    enrollment.status = EnrollmentStatus.DROPPED
+    enrollment.save(update_fields=["status"])
+
+
+def _create_submissions_for_student(student_user: User, course: Course) -> None:
+    """
+    Create placeholder submissions for all existing course assignments.
+
+    When a student is enrolled, they need submission records for assignments
+    that were already created. This creates NOT_STARTED submissions with
+    empty answers for each assignment in the course.
+    """
+    from assignments.services._content import provision_submission_answers
+
+    assignments = Assignment.objects.filter(course=course, status=AssignmentStatus.ACTIVE)
+    for assignment in assignments:
+        if Submission.objects.filter(student=student_user, assignment=assignment).exists():
+            continue
+
+        submission = Submission.objects.create(
+            assignment=assignment,
+            student=student_user,
+            teacher=None,
+            submitted_at=None,
+            status=SubmissionStatus.NOT_STARTED,
+        )
+        provision_submission_answers(submission)
+
+
+@transaction.atomic
+def archive_course(request_user: User, course: Course) -> Course:
+    """ARCH-UC-03: Archive a course and cascade-archive its ACTIVE assignments."""
+    from ..models import CourseStatus
+    if course.status == CourseStatus.ARCHIVED:
+        raise ConflictError("Course is already archived.")
+    # ARCH-CN-13: cascade-archive all ACTIVE assignments in same transaction
+    active_assignments = Assignment.objects.filter(
+        course=course, status=AssignmentStatus.ACTIVE
+    )
+    for assignment in active_assignments:
+        assignment.status = AssignmentStatus.ARCHIVED
+        assignment.archived_at = timezone.now()
+        assignment.archived_by = request_user
+        assignment.save(update_fields=["status", "archived_at", "archived_by"])
+    course.status = CourseStatus.ARCHIVED
+    course.archived_at = timezone.now()
+    course.archived_by = request_user
+    course.save(update_fields=["status", "archived_at", "archived_by"])
+    return course
+
+
+@transaction.atomic
+def restore_course(request_user: User, course: Course) -> Course:
+    """ARCH-UC-04: Restore an archived course. Does NOT cascade-restore assignments (ARCH-CN-14)."""
+    from ..models import CourseStatus
+    if course.status != CourseStatus.ARCHIVED:
+        raise ConflictError("Course is not archived.")
+    course.status = CourseStatus.ACTIVE
+    course.archived_at = None
+    course.archived_by = None
+    course.restored_at = timezone.now()
+    course.restored_by = request_user
+    course.save(update_fields=["status", "archived_at", "archived_by", "restored_at", "restored_by"])
+    return course
+
+
+@transaction.atomic
+def purge_course(course: Course) -> None:
+    """ARCH-UC-06: Hard-delete an archived course. Admin-only."""
+    from ..models import CourseStatus
+    if course.status != CourseStatus.ARCHIVED:
+        raise ConflictError("Only archived courses can be purged.")
+    has_active = Assignment.objects.filter(
+        course=course, status=AssignmentStatus.ACTIVE
+    ).exists()
+    if has_active:
+        raise ConflictError("Cannot purge: course has active assignments.")
+    course.delete()

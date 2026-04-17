@@ -6,7 +6,7 @@ Each DTO corresponds to a service function's return type and ensures
 type safety, IDE autocomplete, and runtime validation.
 
 Usage:
-    from core.dtos import CourseDTO, AssessmentDTO
+    from core.dtos import CourseDTO, AssignmentTemplateDTO
 
     def course_to_dto(course: Course) -> CourseDTO:
         return CourseDTO(id=course.id, name=course.name, ...)
@@ -16,7 +16,6 @@ from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
-
 
 # =============================================================================
 # Course DTOs
@@ -34,6 +33,7 @@ class EnrollmentStudentDTO(BaseModel):
     role: str
     consent: bool
     courseId: int
+    enrolledAt: datetime | None
 
 
 class CourseDTO(BaseModel):
@@ -47,10 +47,13 @@ class CourseDTO(BaseModel):
     studentCount: int
     assignmentIds: list[int]
     teacherId: int | None
+    teacherName: str | None
+    createdAt: datetime | None
+    status: str = "ACTIVE"
 
 
 # =============================================================================
-# Assessment DTOs
+# AssignmentTemplate DTOs
 # =============================================================================
 
 
@@ -59,6 +62,17 @@ class ChoiceDTO(BaseModel):
 
     prompt: str
     score: int
+
+
+class QuestionImageDTO(BaseModel):
+    """Image attached to a question (supporting figure)."""
+
+    id: str
+    storageKey: str
+    url: str
+    originalFilename: str
+    mimeType: str
+    sizeBytes: int
 
 
 class QuestionDTO(BaseModel):
@@ -73,13 +87,30 @@ class QuestionDTO(BaseModel):
     maxPoints: float
     autoGradable: bool
     graded: bool
+    image: QuestionImageDTO | None = None
     data: dict[str, Any] | None = None
     selectAll: bool | None = None
     min: int | None = None
     max: int | None = None
+    groupId: int | None = None
+    rubricId: int | None = None
+    gradingStrategy: str = "AUTO"
+    orderIndex: int = 0
+    origin: str | None = None
+    lockedFromSource: bool = False
+    sourceQuestionId: int | None = None
 
 
-class AssessmentDTO(BaseModel):
+class QuestionGroupDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    rubricId: int | None = None
+    orderIndex: int = 0
+
+
+class AssignmentTemplateDTO(BaseModel):
     """Full assessment with all questions."""
 
     model_config = ConfigDict(from_attributes=True)
@@ -88,9 +119,96 @@ class AssessmentDTO(BaseModel):
     title: str
     category: str | None
     gradingMode: str
+    scoringPolicy: str = "STANDARD"
+    submissionMode: str = "DIGITAL"
+    status: str = "ACTIVE"
+    rubricId: int | None = None
     questions: list[QuestionDTO]
-    rubricId: int | None
-    rubricAssessmentIds: list[int]
+    questionGroups: list[QuestionGroupDTO] = []
+
+
+class TeacherCriterionLevelDTO(BaseModel):
+    """Teacher-authored rubric level nested under an assignment-local criterion."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    label: str
+    points: float
+    description: str
+    orderIndex: int
+
+
+class TeacherCriterionDTO(BaseModel):
+    """Teacher-authored assignment-local criterion layered onto a template rubric."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    description: str
+    weight: float
+    orderIndex: int
+    levels: list[TeacherCriterionLevelDTO] = []
+
+
+class AssignmentContentDTO(BaseModel):
+    """Effective assignment content shown to teachers and students."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    assignmentId: int
+    assignmentTemplateId: int
+    assignmentTemplateTitle: str
+    category: str | None
+    gradingMode: str
+    scoringPolicy: str = "STANDARD"
+    submissionMode: str = "DIGITAL"
+    rubricId: int | None = None
+    questions: list[QuestionDTO]
+    questionGroups: list[QuestionGroupDTO] = []
+    teacherCriteria: list[TeacherCriterionDTO] = []
+
+
+# =============================================================================
+# Rubric DTOs
+# =============================================================================
+
+
+class RubricLevelDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    label: str
+    points: float
+    description: str
+    orderIndex: int
+
+
+class RubricCriterionDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    description: str
+    orderIndex: int
+    weight: float
+    levels: list[RubricLevelDTO]
+
+
+class RubricDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    description: str
+    status: str
+    createdBy: int
+    createdAt: datetime
+    updatedAt: datetime
+    criteria: list[RubricCriterionDTO]
 
 
 # =============================================================================
@@ -99,17 +217,20 @@ class AssessmentDTO(BaseModel):
 
 
 class AssignmentDTO(BaseModel):
-    """Assignment linking assessment to audience."""
+    """Assignment linking an assignment template to an audience."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    assessmentId: int
+    title: str
+    assignmentTemplateId: int
+    assignmentTemplateTitle: str | None = None
     audienceType: str
     courseId: int | None
     targetTeacherId: int | None
     openAt: datetime | None
     dueAt: datetime | None
+    status: str = "ACTIVE"
 
 
 # =============================================================================
@@ -150,30 +271,23 @@ class SubmissionCompactDTO(BaseModel):
 
     id: int
     assignmentId: int
+    studentName: str | None = None
+    courseName: str | None = None
+    assignmentTitle: str | None = None
     submittedAt: datetime | None
     score: float | None
     status: str
 
 
-# =============================================================================
-# Visualization DTOs
-# =============================================================================
-
-
-class VisualizationSubmissionDTO(BaseModel):
-    """Submission data for visualization dashboards with context."""
+class SubmissionImageDTO(BaseModel):
+    """Image metadata for submission image responses (FR-15)."""
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
-    assignmentId: int
-    studentId: int | None
-    teacherId: int | None
-    submittedAt: datetime | None
-    score: float | None
+    id: str
+    originalFilename: str
+    mimeType: str
+    sizeBytes: int
+    uploadedByUserId: int | None
     status: str
-    answers: list[AnswerDTO]
-    courseId: int | None
-    courseName: str | None
-    assessmentTitle: str | None
-    assessmentCategory: str | None
+    createdAt: datetime

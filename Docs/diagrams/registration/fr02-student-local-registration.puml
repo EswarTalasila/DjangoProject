@@ -1,0 +1,175 @@
+@startuml
+!theme plain
+skinparam sequenceArrowThickness 1.5
+skinparam sequenceParticipantBorderColor #333
+skinparam sequenceLifeLineBorderColor #999
+skinparam noteBorderColor #CCC
+skinparam noteBackgroundColor #FEFCE8
+skinparam sequenceGroupBorderColor #666
+skinparam defaultFontSize 11
+
+title **FR-02: Student LOCAL Registration**\nPOST /api/v1/registration/accounts\n<size:10>Auth: AllowAny | Throttle: AnonAuthThrottle (20/min) | method=LOCAL</size>
+
+actor       "New Student"    as C
+participant "Frontend\n(Next.js)"    as FE  #E8F4FD
+participant "register_account\n(views.py:173)" as V  #E8F0E8
+participant "StudentInviteRegister\nSerializer\n(serializers.py:141)" as S  #E8F0E8
+participant "RegistrationService\n(_registration.py)" as RS  #FFF3E0
+participant "Utils\n(_utils.py)"     as U   #FFF3E0
+participant "RolesService\n(_roles.py)"  as R  #FFF3E0
+database    "PostgreSQL"     as DB  #F3E5F5
+participant "SimpleJWT"      as JWT #FCE4EC
+
+== Request ==
+C -> FE : Enter code + name + password
+FE -> V : POST /api/v1/registration/accounts\n**{method: "LOCAL", code: "REG-A1B2...",\n firstName, lastName, password,\n confirmPassword}**
+
+== Dispatch ==
+V -> V : method = data["method"].upper()
+note right of V : "LOCAL" → _register_local()
+
+== Serializer Validation ==
+V -> S : StudentInviteRegisterSerializer(\n  data=payload)
+note right of S
+  Fields (StrictFieldsSerializer):
+  - code: CharField(max=64)
+  - firstName: CharField(max=255)
+  - lastName: CharField(max=255)
+  - email: EmailField(max=320, optional)
+  - password: CharField(max=255, trim=False)
+  - confirmPassword: CharField(max=255, trim=False)
+  **Rejects unknown fields**
+end note
+alt #FFE0E0 missing required fields
+  S --> V : ValidationError
+  V --> FE : **400** {field: ["This field is required."]}
+end
+alt #FFE0E0 unknown field present
+  S --> V : ValidationError
+  V --> FE : **400** {"<field>": ["Unknown field."]}
+end
+
+== Password Match ==
+V -> V : password == confirmPassword?
+alt #FFE0E0 mismatch
+  V --> FE : **400** {"detail": "Passwords do not match."}
+end
+
+== Password Strength ==
+V -> U : password_strength_errors(password)
+note right of U
+  Policy checks (all must pass):
+  1. len >= 8 → "...at least 8 characters."
+  2. [A-Z] → "...one uppercase letter."
+  3. [a-z] → "...one lowercase letter."
+  4. [0-9] → "...one number."
+  5. special → "...one special character."
+end note
+alt #FFE0E0 any policy violated
+  U --> V : errors = ["first failure", ...]
+  V --> FE : **400** {"detail": "Password does not meet\npolicy requirements.",\n"errors": [...]}
+end
+
+== Code Pre-Validation (non-locking read) ==
+V -> RS : validate_registration_code(code)
+RS -> U : normalize_registration_code_input(code)\n→ str(code).strip().upper()
+RS -> U : _registration_code_hashes_for_lookup(code)
+note right of U
+  For each key in [SECRET_KEY, *FALLBACKS]:
+    salted_hmac("registration-code",
+      normalized, secret=key,
+      algorithm="sha256").hexdigest()
+  → list of 64-char hex candidates
+end note
+RS -> DB : SELECT * FROM registration_codes\nWHERE code_hash IN (<candidates>)\nLIMIT 1
+alt #FFE0E0 not found / archived / inactive / expired / exhausted
+  RS --> V : None
+  V --> FE : **400** {"detail": "Invalid or expired code"}
+end
+RS --> V : record (code_type = STUDENT)
+
+== Branch: Student Code ==
+V -> V : record.code_type == STUDENT\n→ student flow
+
+== Redeem Student Invite ==
+V -> RS : redeem_student_invite(payload)
+note right of RS : @transaction.atomic
+
+=== SELECT FOR UPDATE ===
+RS -> DB : SELECT * FROM registration_codes\nWHERE code_hash = <hash>\n**FOR UPDATE**
+note right of DB : Row-level lock prevents\nconcurrent redemption
+alt #FFE0E0 code invalid on re-check
+  RS --> V : ValueError("Invalid or expired code")
+  V --> FE : **400**
+end
+
+RS -> RS : code_type == STUDENT? ✓
+RS -> RS : course_id present? ✓
+RS -> RS : firstName & lastName present? ✓
+
+=== Generate Username ===
+RS -> U : generate_managed_username(\n  first_name, last_name)
+note right of U
+  Seed: first_initial + last_name
+    (lowercase, alnum only)
+  Pad/truncate to 7 chars
+  Append digit index (start=0)
+  Total: 8 chars fixed width
+  e.g. "John Smith" → "jsmith00"
+end note
+U -> DB : SELECT EXISTS FROM app_users\nWHERE username ILIKE 'jsmith00'\n   OR email ILIKE 'jsmith00'
+note right of DB : Collision check\n(increment suffix if taken)
+U --> RS : username = "jsmith00"
+
+=== Create User ===
+RS -> R : create_user_from_payload(\n  {username, name, password},\n  role_override=STUDENT,\n  creator=None)
+R -> DB : INSERT INTO app_users\n(username='jsmith00',\n name='John Smith',\n password_hash=PBKDF2(password),\n email=NULL, enabled=True)
+R -> DB : DELETE FROM user_roles\nWHERE user_id={new_user.id}
+R -> DB : INSERT INTO user_roles\n(user_id, role='STUDENT')
+R -> DB : INSERT INTO student_profiles\n(user_id, created_by_user_id={self},\n consent=False)
+
+=== Enroll in Course ===
+RS -> DB : SELECT * FROM student_profiles\nWHERE user_id={user.id}
+RS -> DB : SELECT * FROM enrollments\nWHERE course_id={course}\n  AND student_profile_id={profile}
+alt already enrolled
+  RS --> V : ValueError("Student already\nenrolled in this course")
+  V --> FE : **400**
+end
+RS -> DB : INSERT INTO enrollments\n(course_id, student_profile_id,\n status='ACTIVE')
+
+=== Consume Code ===
+RS -> DB : UPDATE registration_codes\nSET times_used = times_used + 1,\n    is_active = (times_used < max_uses)\nWHERE id={code.id}
+note right of DB
+  Code deactivated when
+  times_used >= max_uses
+  (single-use or multi-use)
+end note
+
+RS --> V : (user, enrollment)
+
+== Token Generation ==
+V -> JWT : RefreshToken.for_user(user)
+JWT -> DB : INSERT INTO\ntoken_blacklist_outstandingtoken\n(user_id, jti, token,\n created_at, expires_at)
+JWT --> V : refresh (contains .access_token)
+
+== Response ==
+V --> FE : **201** Created
+note right of V
+  {
+    "accessToken": "eyJ...",
+    "tokenType": "Bearer",
+    "refreshToken": "eyJ...",
+    "role": "STUDENT",
+    "id": "123",
+    "username": "jsmith00",
+    "name": "John Smith",
+    "email": null,
+    "message": "User registered",
+    "courseId": 42,
+    "createdNewUser": true,
+    "alreadyEnrolled": false
+  }
+end note
+FE -> FE : Set cookies + redirect /dashboard
+
+@enduml

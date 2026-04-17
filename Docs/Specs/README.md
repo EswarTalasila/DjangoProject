@@ -1,6 +1,6 @@
 # <repository> Spec Sheets
 
-This folder contains the rewrite spec set for the Python/Django + Angular (TypeScript) + Postgres stack, designed to be proxy-agnostic and self-hosted with Docker and Traefik. The rewrite is parity-focused: same UI and workflows, versioned APIs with compatibility for existing `/api/*`, and no new features beyond critical fixes.
+This folder contains the rewrite spec set for the Python/Django + Angular (TypeScript) + Postgres stack, designed around the shared nginx proxy and self-hosted Docker deployment model. The rewrite is parity-focused: same UI and workflows, versioned APIs with compatibility for existing `/api/*`, and no new features beyond critical fixes.
 
 ## Index
 - `<repository>/Docs/Specs/00-Overview.md`

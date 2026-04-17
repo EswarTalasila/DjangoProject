@@ -1,7 +1,7 @@
 """
 Submission and answer models for student work.
 
-This module defines the models that store student responses to assessments.
+This module defines the models that store student responses to assignment templates.
 When an assignment is created, empty submissions are generated for each
 enrolled student. Students then fill in answers and submit their work.
 
@@ -11,8 +11,7 @@ Model Hierarchy:
             ├── MultipleChoiceAnswer (1:1 extension)
             │   └── MultipleChoiceSelected (1:N selected choices)
             ├── ShortAnswerAnswer (1:1 extension)
-            ├── NumberScaleAnswer (1:1 extension)
-            └── MoodMeterAnswer (1:1 extension)
+            └── NumberScaleAnswer (1:1 extension)
 
     Response (legacy survey-style response, may be deprecated)
 
@@ -21,25 +20,27 @@ Submission Lifecycle:
 
 Database Tables:
     submissions, answer, multiple_choice_answer, multiple_choice_selected,
-    short_answer_answer, number_scale_answer, mood_meter_answer, response
+    short_answer_answer, number_scale_answer, response
 
 Note:
     Submissions are pre-created when assignments are made. Students cannot
     create their own submissions - they can only update existing ones.
 """
 
+import uuid
+
 from django.db import models
 
 from accounts.models import User
-from assessments.models import Question
-from assignments.models import Assignment
+from assignment_templates.models import Question
+from assignments.models import Assignment, AssignmentQuestion
 
 
 class SubmissionStatus(models.TextChoices):
     """
     Enumeration of submission lifecycle states.
 
-    Tracks the progress of a student's work through the assessment process.
+    Tracks the progress of a student's work through the assignment process.
 
     Values:
         NOT_STARTED: Submission created but student hasn't begun
@@ -58,7 +59,7 @@ class Submission(models.Model):
     """
     A student's work for a specific assignment.
 
-    Submissions are pre-created when a teacher assigns an assessment to a course.
+    Submissions are pre-created when a teacher assigns an assignment template to a course.
     Each enrolled student gets one submission per assignment. Students update
     their submission by adding answers and eventually submitting for grading.
 
@@ -116,6 +117,16 @@ class Submission(models.Model):
         """Database table configuration for Submission."""
 
         db_table = "submissions"
+        constraints = [
+            # Exactly one of student or teacher must be set (XOR).
+            models.CheckConstraint(
+                condition=(
+                    models.Q(student_id__isnull=False, teacher_id__isnull=True)
+                    | models.Q(student_id__isnull=True, teacher_id__isnull=False)
+                ),
+                name="ck_submission_owner_xor",
+            ),
+        ]
 
     def __str__(self):
         """Return a readable string representation."""
@@ -133,20 +144,20 @@ class AnswerType(models.TextChoices):
         MULTIPLE_CHOICE: Selection from options (MultipleChoiceAnswer)
         SHORT_ANSWER: Free-text response (ShortAnswerAnswer)
         NUMBER_SCALE: Numeric rating (NumberScaleAnswer)
-        MOOD_METER: Grid position (MoodMeterAnswer)
     """
 
     MULTIPLE_CHOICE = "MULTIPLE_CHOICE", "Multiple Choice"
     SHORT_ANSWER = "SHORT_ANSWER", "Short Answer"
     NUMBER_SCALE = "NUMBER_SCALE", "Number Scale"
     MOOD_METER = "MOOD_METER", "Mood Meter"
+    FILE_UPLOAD = "FILE_UPLOAD", "File Upload"
 
 
 class Answer(models.Model):
     """
     Base answer model for student responses to questions.
 
-    Each answer corresponds to one question in the assessment. The answer_type
+    Each answer corresponds to one question in the assignment template. The answer_type
     determines which extension model contains the actual response data.
 
     Attributes:
@@ -160,7 +171,6 @@ class Answer(models.Model):
         multiple_choice: MultipleChoiceAnswer (if answer_type=MULTIPLE_CHOICE)
         short_answer: ShortAnswerAnswer (if answer_type=SHORT_ANSWER)
         number_scale: NumberScaleAnswer (if answer_type=NUMBER_SCALE)
-        mood_meter: MoodMeterAnswer (if answer_type=MOOD_METER)
     """
 
     # Discriminator for which extension model to use
@@ -168,7 +178,10 @@ class Answer(models.Model):
 
     # The question being answered
     question = models.ForeignKey(
-        Question, on_delete=models.CASCADE, db_column="question_id", related_name="answers"
+        AssignmentQuestion,
+        on_delete=models.CASCADE,
+        db_column="question_id",
+        related_name="answers",
     )
 
     # Parent submission containing this answer
@@ -335,22 +348,17 @@ class MoodMeterAnswer(models.Model):
     """
     Extension model for MOOD_METER responses.
 
-    Contains the grid position (row/column) where the student clicked
-    on the mood meter to indicate their emotional state.
-
-    Grid Layout (example):
-        row 0: High energy
-        row 1: Low energy
-        col 0: Negative pleasantness
-        col 1: Positive pleasantness
+    Stores the selected mood as a quadrant + mood name from the Yale RULER
+    mood meter grid. Quadrants represent energy (high/low) × pleasantness (high/low).
 
     Attributes:
         answer: One-to-one link to base Answer (also primary key)
-        row: Y-position on the mood meter grid (energy axis)
-        col: X-position on the mood meter grid (pleasantness axis)
+        quadrant: Which quadrant the selected mood belongs to
+        mood_name: The specific mood label selected (e.g., "Excited", "Calm")
+        row: Grid row position (0-9)
+        col: Grid column position (0-9)
     """
 
-    # Link to base answer (shares the same primary key)
     answer = models.OneToOneField(
         Answer,
         on_delete=models.CASCADE,
@@ -359,20 +367,124 @@ class MoodMeterAnswer(models.Model):
         related_name="mood_meter",
     )
 
-    # Y-position on the grid (energy level)
-    row = models.IntegerField()
-
-    # X-position on the grid (pleasantness level)
-    col = models.IntegerField()
+    quadrant = models.CharField(max_length=64, blank=True, default="")
+    mood_name = models.CharField(max_length=64, blank=True, default="")
+    row = models.IntegerField(null=True, blank=True)
+    col = models.IntegerField(null=True, blank=True)
 
     class Meta:
-        """Database table configuration for MoodMeterAnswer."""
-
         db_table = "mood_meter_answer"
 
     def __str__(self):
-        """Return a readable string representation."""
-        return f"MoodMeterAnswer({self.answer_id})"
+        return f"MoodMeterAnswer({self.answer_id}: {self.mood_name})"
+
+
+class FileUploadAnswer(models.Model):
+    """
+    Extension model for FILE_UPLOAD responses.
+
+    Stores metadata about an uploaded file (PDF, image, etc.) submitted
+    as the student's answer. The actual file is stored via the media system.
+
+    Attributes:
+        answer: One-to-one link to base Answer (also primary key)
+        storage_key: Path to the file in the media storage backend
+        original_filename: The name of the file as uploaded
+        mime_type: MIME type of the uploaded file
+        size_bytes: File size in bytes
+    """
+
+    answer = models.OneToOneField(
+        Answer,
+        on_delete=models.CASCADE,
+        primary_key=True,
+        db_column="id",
+        related_name="file_upload",
+    )
+
+    storage_key = models.CharField(max_length=512, blank=True, default="")
+    original_filename = models.CharField(max_length=255, blank=True, default="")
+    mime_type = models.CharField(max_length=64, blank=True, default="")
+    size_bytes = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "file_upload_answer"
+
+    def __str__(self):
+        return f"FileUploadAnswer({self.answer_id}: {self.original_filename})"
+
+
+class ImageStatus(models.TextChoices):
+    """Status lifecycle for submission images (FR-15 IMG)."""
+
+    PENDING_SCAN = "PENDING_SCAN", "Pending Scan"
+    READY = "READY", "Ready"
+    REJECTED = "REJECTED", "Rejected"
+    DELETED = "DELETED", "Deleted"
+
+
+class SubmissionImage(models.Model):
+    """Image attached to a submission (FR-15 IMG)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    submission = models.ForeignKey(
+        Submission,
+        on_delete=models.CASCADE,
+        db_column="submission_id",
+        related_name="images",
+    )
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        db_column="uploaded_by_user_id",
+        related_name="uploaded_images",
+    )
+    submission_owner = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        db_column="submission_owner_user_id",
+        related_name="owned_submission_images",
+    )
+    # Link to the shared ImageAsset (nullable during migration transition)
+    asset = models.ForeignKey(
+        "core.ImageAsset",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column="asset_id",
+        related_name="submission_images",
+    )
+    # Blob metadata kept on SubmissionImage for backward compatibility
+    storage_key = models.CharField(max_length=512, unique=True)
+    original_filename = models.CharField(max_length=255)
+    mime_type = models.CharField(max_length=64)
+    size_bytes = models.PositiveIntegerField()
+    sha256_hash = models.CharField(max_length=64)
+    status = models.CharField(max_length=16, choices=ImageStatus.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "submission_image"
+        indexes = [
+            models.Index(fields=["submission", "status"], name="idx_subimg_sub_status"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(size_bytes__gt=0),
+                name="ck_subimg_size_positive",
+            ),
+            models.UniqueConstraint(
+                fields=["submission", "sha256_hash"],
+                condition=~models.Q(status="DELETED"),
+                name="uq_subimg_hash_active",
+            ),
+        ]
+
+    def __str__(self):
+        return f"SubmissionImage({self.id})"
 
 
 class Response(models.Model):

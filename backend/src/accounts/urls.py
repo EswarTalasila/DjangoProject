@@ -1,19 +1,21 @@
-"""Accounts URL routes - /api/auth/*"""
+"""Accounts URL routes - /api/v1/auth/*"""
 
 from django.urls import path
 
 from . import views
 
 urlpatterns = [
-    path("login", views.login, name="auth-login"),
-    path("register", views.register, name="auth-register"),
-    path("google", views.login_with_google, name="auth-google"),
-    path("check-email", views.check_email, name="auth-check-email"),
-    path("createuser", views.create_user, name="auth-create-user"),
-    path("create/bulk", views.bulk_create, name="auth-create-bulk"),
-    path("edituser/<int:user_id>", views.edit_user, name="auth-edit-user"),
-    path("reset/<int:user_id>", views.reset_password, name="auth-reset-password"),
-    path("users/<int:user_id>/set-password", views.set_password, name="auth-set-password"),
-    path("teachers-admins", views.list_teachers_admins, name="auth-teachers-admins"),
-    path("user/<str:username>", views.delete_user, name="auth-delete-user"),
+    path("sessions", views.login, name="auth-sessions"),
+    path("me", views.current_user_profile, name="auth-me"),
+    path("sessions/oauth", views.login_with_google, name="auth-sessions-oauth"),
+    path("token-exchanges", views.refresh, name="auth-token-exchanges"),
+    path("session-revocations", views.logout, name="auth-session-revocations"),
+    path("password", views.change_password, name="auth-password"),
+    path(
+        "password-reset-codes",
+        views.issue_password_reset_code_view,
+        name="auth-password-reset-codes",
+    ),
+    path("reset-code-validations", views.verify_reset_code, name="auth-reset-code-validations"),
+    path("password-resets", views.complete_reset_code, name="auth-password-resets"),
 ]

@@ -14,7 +14,22 @@ Output Serializers (for response formatting):
     StudentOutputSerializer: Student details with enrollment info
 """
 
+from collections.abc import Mapping
+
 from rest_framework import serializers
+
+
+class StrictFieldsSerializer(serializers.Serializer):
+    """Serializer base that rejects undeclared input fields."""
+
+    def to_internal_value(self, data):
+        if isinstance(data, Mapping):
+            unknown_fields = sorted(set(data.keys()) - set(self.fields.keys()))
+            if unknown_fields:
+                raise serializers.ValidationError(
+                    {field: ["Unknown field."] for field in unknown_fields}
+                )
+        return super().to_internal_value(data)
 
 
 class CourseInputSerializer(serializers.Serializer):
@@ -26,6 +41,18 @@ class CourseInputSerializer(serializers.Serializer):
     """
 
     name = serializers.CharField(max_length=255)
+
+
+class StudentNestedInputSerializer(StrictFieldsSerializer):
+    """
+    Validates student creation payloads for the nested course endpoint.
+
+    courseId comes from the URL path parameter, not the request body.
+    """
+
+    name = serializers.CharField(max_length=255)
+    consent = serializers.BooleanField(required=False)
+    password = serializers.CharField(required=False, allow_blank=True, trim_whitespace=False)
 
 
 class CourseOutputSerializer(serializers.Serializer):
@@ -51,7 +78,7 @@ class CourseOutputSerializer(serializers.Serializer):
     teacherId = serializers.IntegerField(allow_null=True)
 
 
-class StudentInputSerializer(serializers.Serializer):
+class StudentInputSerializer(StrictFieldsSerializer):
     """
     Validates student creation payloads.
 
@@ -60,14 +87,12 @@ class StudentInputSerializer(serializers.Serializer):
 
     Fields:
         name: Student's display name
-        username: Email address (unique identifier)
         consent: Data collection consent flag
         courseId: Course to enroll the student in (required)
         password: Optional password (generated if not provided)
     """
 
     name = serializers.CharField(max_length=255)
-    username = serializers.EmailField(max_length=320)
     consent = serializers.BooleanField(required=False)
     courseId = serializers.IntegerField()
     password = serializers.CharField(required=False, allow_blank=True, trim_whitespace=False)
@@ -80,15 +105,15 @@ class StudentOutputSerializer(serializers.Serializer):
     Fields:
         id: Student's user ID
         name: Display name
-        username: Email address
-        role: Always "ROLE_STUDENT" for students
+        username: Student login identifier
+        role: Always "STUDENT" for students
         consent: Data collection consent status
         courseId: ID of the course they're enrolled in (context-dependent)
     """
 
     id = serializers.IntegerField()
     name = serializers.CharField()
-    username = serializers.EmailField()
+    username = serializers.CharField()
     role = serializers.CharField()
     consent = serializers.BooleanField()
     courseId = serializers.IntegerField(allow_null=True)

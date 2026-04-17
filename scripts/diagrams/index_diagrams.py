@@ -46,7 +46,7 @@ def main() -> int:
     add_section("UML Entity Diagrams (Postgres)")
     add_list(sorted(entity_dir.glob("*.wsd")))
 
-    add_section("Sequence Diagrams (API, from OTEL traces)")
+    add_section("Sequence Diagrams (API)")
     if sequence_dir.exists():
         modules = sorted([p for p in sequence_dir.iterdir() if p.is_dir()])
         if not modules:

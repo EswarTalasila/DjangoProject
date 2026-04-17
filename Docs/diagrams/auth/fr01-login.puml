@@ -1,0 +1,135 @@
+@startuml
+!theme plain
+skinparam sequenceArrowThickness 1.5
+skinparam sequenceParticipantBorderColor #333
+skinparam sequenceLifeLineBorderColor #999
+skinparam noteBorderColor #CCC
+skinparam noteBackgroundColor #FEFCE8
+skinparam sequenceGroupBorderColor #666
+skinparam sequenceDividerBorderColor #AAA
+skinparam defaultFontSize 11
+
+title **FR-01: Credential Login**\nPOST /api/v1/auth/sessions\n<size:10>Throttle: AnonAuthThrottle (20/min)</size>
+
+actor       "Client"       as C
+participant "Frontend\n(Next.js)"  as FE  #E8F4FD
+participant "LoginView\n(views.py:477)"   as V  #E8F0E8
+participant "LoginSerializer\n(serializers.py:230)" as S  #E8F0E8
+participant "AuthService\n(_auth.py)"      as A  #FFF3E0
+database    "PostgreSQL\n(accounts_user)" as DB #F3E5F5
+participant "SimpleJWT\n(RefreshToken)"    as JWT #FCE4EC
+
+== Request ==
+C -> FE : Enter identifier + password
+FE -> V : POST /api/v1/auth/sessions\n**{identifier, password}**
+
+== Serializer Validation ==
+V -> S : validate(request.data)
+note right of S
+  Fields:
+  - identifier: CharField(max=320) OR username
+  - password: CharField(max=255, trim=False)
+  validate() normalizes username->identifier
+end note
+alt #FFE0E0 missing or blank fields
+  S --> V : ValidationError
+  V --> FE : **400** {field: ["This field is required."]}
+  FE --> C : Show field errors
+end
+
+== Per-Identifier Rate Limiting ==
+V -> A : check_identifier_throttle("login", identifier)
+A -> A : cache.get("login:{normalized_id}")
+note right of A
+  Limit: 5 failures per 900s (15 min)
+  Key: "login:{lowercase(identifier)}"
+  Stored: list of Unix timestamps
+end note
+alt #FFE0E0 5+ failed attempts in window
+  A --> V : throttled = True
+  V --> FE : **429** {"detail": "Too many failed attempts.\nPlease try again later."}\nRetry-After: {seconds}
+  FE --> C : Show rate limit message
+end
+
+== User Lookup ==
+V -> A : find_user_by_identifier(identifier)
+A -> A : normalized = identifier.strip().lower()
+A -> DB : SELECT * FROM accounts_user\nWHERE username ILIKE {normalized}\nLIMIT 1
+alt username match found
+  DB --> A : user record
+else #F5F5F5 no username match
+  A -> DB : SELECT * FROM accounts_user\nWHERE email ILIKE {normalized}\nLIMIT 1
+  alt email match found
+    DB --> A : user record
+  else #FFE0E0 no match at all
+    A --> V : user = None
+    V -> A : register_identifier_failure("login", identifier)
+    A -> A : cache.append(timestamp)
+    V --> FE : **401** {"detail": "Invalid identifier or password."}
+    FE --> C : Show error
+  end
+end
+
+== Identifier Restriction ==
+V -> A : identifier_allowed_for_user(identifier, user)
+note right of A
+  Students: must use **username only**
+  Non-students: username OR email
+end note
+alt #FFE0E0 student used email
+  V -> A : register_identifier_failure("login", identifier)
+  V --> FE : **401** {"detail": "Invalid identifier or password."}
+  FE --> C : Show error (no hint about restriction)
+end
+
+== Password Verification ==
+V -> A : authenticate_user(identifier, password)
+A -> DB : user.check_password(password)
+note right of DB
+  Django password check:
+  PBKDF2_SHA256(password, salt, iterations)
+  compared to stored hash
+end note
+alt #FFE0E0 password mismatch
+  A --> V : user = None
+  V -> A : register_identifier_failure("login", identifier)
+  V --> FE : **401** {"detail": "Invalid identifier or password."}
+  FE --> C : Show error
+end
+
+== Success: Token Generation ==
+V -> A : clear_identifier_failures("login", identifier)
+A -> A : cache.delete("login:{normalized_id}")
+V -> JWT : RefreshToken.for_user(user)
+JWT -> DB : INSERT INTO token_blacklist_outstandingtoken\n(user_id, jti, token, created_at, expires_at)
+JWT --> V : refresh_token (contains .access_token)
+note right of JWT
+  Access Token: short-lived JWT
+  Refresh Token: long-lived JWT
+  Both signed with SECRET_KEY
+end note
+
+== Response ==
+V -> A : build_user_response(user, access, refresh)
+A -> DB : primary_role(user)\nSELECT role FROM accounts_userrole\nWHERE user_id = {user.id}\nORDER BY role ASC LIMIT 1
+note right of A
+  Role priority: STUDENT < TEACHER < RESEARCHER
+  Returns lowest (primary) role
+end note
+V --> FE : **200** OK
+note right of V
+  Response body:
+  {
+    "accessToken": "eyJ...",
+    "tokenType": "Bearer",
+    "role": "STUDENT|TEACHER|RESEARCHER",
+    "id": "123",
+    "username": "normalized_username",
+    "name": "Display Name",
+    "email": "user@example.com" | null
+  }
+end note
+FE -> FE : Set cookies:\naccess_token (1 day)\nuser_role\nuser_name
+FE -> C : Redirect to /dashboard
+
+@enduml

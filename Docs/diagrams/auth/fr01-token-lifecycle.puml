@@ -1,0 +1,104 @@
+@startuml
+!theme plain
+skinparam sequenceArrowThickness 1.5
+skinparam sequenceParticipantBorderColor #333
+skinparam sequenceLifeLineBorderColor #999
+skinparam noteBorderColor #CCC
+skinparam noteBackgroundColor #FEFCE8
+skinparam sequenceGroupBorderColor #666
+skinparam defaultFontSize 11
+
+title **FR-01: Token Lifecycle**\nRefresh, Logout, Session Invalidation
+
+actor       "Client"     as C
+participant "Frontend"   as FE  #E8F4FD
+participant "Views\n(views.py)" as V  #E8F0E8
+participant "AuthService\n(_auth.py)" as A  #FFF3E0
+database    "PostgreSQL\n(token_blacklist)" as DB #F3E5F5
+participant "SimpleJWT"  as JWT #FCE4EC
+
+== Token Refresh ==
+note over C, JWT
+  **POST /api/v1/auth/token-exchanges**
+  Auth: None | Throttle: AnonAuthThrottle (20/min)
+end note
+
+FE -> V : POST /api/v1/auth/token-exchanges\n**{refreshToken: "eyJ..."}**
+V -> JWT : RefreshToken(token_str)
+note right of JWT
+  Validates:
+  1. JWT signature (SECRET_KEY)
+  2. Token type = "refresh"
+  3. Expiry (exp claim)
+  4. JTI not blacklisted
+end note
+alt #FFE0E0 invalid / expired / blacklisted
+  JWT --> V : TokenError
+  V --> FE : **401** {"detail": "Invalid refresh token."}
+  FE -> FE : Clear cookies, redirect /login
+else valid
+  JWT --> V : token object
+  V -> JWT : str(token.access_token)
+  note right of JWT
+    Generates NEW access token
+    from refresh token's user claim
+    Short-lived (default 5 min)
+  end note
+  JWT --> V : new access JWT string
+  V --> FE : **200** {"accessToken": "eyJ...", "tokenType": "Bearer"}
+  FE -> FE : Update access_token cookie
+end
+
+|||
+
+== Logout ==
+note over C, JWT
+  **POST /api/v1/auth/session-revocations**
+  Auth: IsAuthenticated
+end note
+
+FE -> V : POST /api/v1/auth/session-revocations\n**{refreshToken: "eyJ..."}**\nAuthorization: Bearer {access_token}
+V -> A : blacklist_refresh_token(token_str)
+A -> JWT : RefreshToken(token_str)
+alt #FFE0E0 invalid token
+  JWT --> A : TokenError
+  A --> V : False
+  V --> FE : **400** {"detail": "Invalid refresh token."}
+else valid token
+  A -> JWT : token.blacklist()
+  JWT -> DB : INSERT INTO token_blacklist_blacklistedtoken\n(token_id={outstanding.id},\n blacklisted_at=NOW())
+  note right of DB
+    BlacklistedToken references
+    OutstandingToken (created at login).
+    Future refresh attempts with
+    this JTI will be rejected.
+  end note
+  DB --> JWT : created
+  JWT --> A : success
+  A --> V : True
+  V --> FE : **200** {"message": "Logged out."}
+  FE -> FE : Clear all cookies\nRedirect /login
+end
+
+|||
+
+== Session Invalidation (on password change) ==
+note over C, JWT
+  Called internally by password change flow
+  Blacklists ALL outstanding tokens for user
+end note
+
+V -> A : invalidate_user_sessions(user)
+A -> DB : SELECT id FROM\ntoken_blacklist_outstandingtoken\nWHERE user_id={user.id}\n  AND id NOT IN\n    (SELECT token_id FROM\n     token_blacklist_blacklistedtoken)
+loop for each non-blacklisted token
+  A -> DB : INSERT INTO\ntoken_blacklist_blacklistedtoken\n(token_id={id}, blacklisted_at=NOW())
+end
+A --> V : count = {N} sessions invalidated
+note right of A
+  Effect: ALL refresh tokens for user
+  become invalid. Any existing access
+  tokens remain valid until their
+  short expiry (5 min default).
+end note
+
+@enduml

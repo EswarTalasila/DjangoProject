@@ -9,7 +9,6 @@ Django REST Framework API backend for the EE Lab Data Dashboard.
 - Django REST Framework
 - PostgreSQL 16
 - JWT Authentication (SimpleJWT)
-- OpenTelemetry instrumentation
 
 ## Project Structure
 
@@ -17,13 +16,13 @@ Django REST Framework API backend for the EE Lab Data Dashboard.
 backend/
 ├── src/
 │   ├── accounts/          # User models, auth views, profile services
-│   ├── assessments/       # Assessment templates, questions, grading modes
+│   ├── assignment_templates/ # Assignment templates, questions, grading modes
 │   ├── assignments/       # Assignment creation and distribution
 │   ├── courses/           # Course CRUD, enrollment, student management
 │   ├── submissions/       # Submission lifecycle, grading, score override
 │   ├── visualizations/    # Dashboard data aggregation
 │   ├── exports/           # CSV/PDF export (stub)
-│   ├── core/              # Shared permissions, error handlers, otel
+│   ├── core/              # Shared permissions, error handlers, media/storage
 │   ├── config/            # Django settings, URL routing, WSGI/ASGI
 │   └── manage.py
 ├── tests/
@@ -58,9 +57,9 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 
 # Set required environment variables
-export DATABASE_URL=postgres://datadash:password@localhost:5432/datadash
+export DATABASE_URL=postgres://eelab:password@localhost:5432/eelab
 export DJANGO_SECRET_KEY=local-dev-secret-key
-export DJANGO_DEBUG=true
+export ENVIRONMENT=development
 export DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1
 
 # Run migrations
@@ -119,11 +118,16 @@ scripts/lint/run_docstring_check.sh
 ## Management Commands
 
 ```bash
+# Ensure bootstrap admin exists (idempotent; strict validation in production)
+python src/manage.py ensure_admin
+
 # Create superuser
 python src/manage.py createsuperuser
 
-# Seed E2E test data
-python src/manage.py seed_e2e
+# Environment diagnostics report (profile-aware)
+python src/manage.py env_report --profile development
+python src/manage.py env_report --profile testing
+python src/manage.py env_report --profile production --strict
 
 # Open Django shell
 python src/manage.py shell
@@ -142,42 +146,33 @@ python src/manage.py showmigrations
 
 Base URL: `/api/v1/`
 
+For canonical endpoint definitions, use:
+- `/Users/znboston/Learning/csc492/2026Spring-Team26-EE-Lab/Docs/Wiki/API-Reference.md`
+
+Quick auth/registration snapshot:
+
 | Endpoint | Methods | Auth | Description |
 |----------|---------|------|-------------|
-| `/auth/login` | POST | Public | User login |
-| `/auth/register` | POST | Public | User registration (student only) |
-| `/auth/google` | POST | Public | Google OAuth login |
-| `/auth/check-email` | POST | Public | Check if email exists |
-| `/auth/createuser` | POST | Teacher/Admin | Create user with role |
-| `/auth/edituser/{id}` | POST | Teacher/Admin | Edit user |
-| `/auth/deleteuser/{username}` | DELETE | Teacher/Admin | Delete user |
-| `/assessments/` | GET, POST | Admin | List/create assessments |
-| `/assessments/{id}` | GET, PUT, DELETE | Admin | Assessment CRUD |
-| `/assignments/` | GET, POST | Teacher | List/create assignments |
-| `/assignments/{id}` | GET, DELETE | Teacher | Assignment detail/delete |
-| `/courses/` | GET, POST | Teacher | List/create courses |
-| `/courses/{id}` | GET, PUT, DELETE | Teacher | Course CRUD |
-| `/students/` | POST | Teacher | Create student |
-| `/submissions/` | POST | Student/Teacher | Create submission |
-| `/submissions/{id}` | GET | Owner | Get submission |
-| `/submissions/{id}/override-score` | PATCH | Teacher | Override score |
-| `/visualizations/` | POST | Teacher/Admin | Get visualization data |
+| `/auth/sessions` | POST | Public | User login via identifier/password |
+| `/auth/sessions/oauth` | POST | Public | Google OAuth login |
+| `/auth/token-exchanges` | POST | Public | Exchange refresh token for access token |
+| `/auth/session-revocations` | POST | Access token | Revoke refresh token / logout |
+| `/auth/password` | PATCH | Access token | Change password |
+| `/registration/code-validations` | POST | Public | Validate registration code |
+| `/registration/accounts` | POST | Public | Register account (`method: LOCAL|OAUTH`) |
+| `/enrollments` | POST | Student | Join course with student code |
 
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `ENVIRONMENT` | Runtime profile (`development/testing/production`) | `development` |
 | `DATABASE_URL` | PostgreSQL connection URL | Required |
 | `DJANGO_SECRET_KEY` | Django secret key | Required |
-| `DJANGO_DEBUG` | Enable debug mode | `false` |
 | `DJANGO_ALLOWED_HOSTS` | Comma-separated hosts | `localhost` |
-| `DJANGO_CORS_ALLOWED_ORIGINS` | Comma-separated CORS origins | `http://localhost:4200` |
-| `JWT_SECRET_KEY` | JWT signing key | Falls back to DJANGO_SECRET_KEY |
-| `JWT_EXPIRATION_HOURS` | Access token lifetime | `1` |
-| `JWT_REFRESH_EXPIRATION_DAYS` | Refresh token lifetime | `7` |
-| `OTEL_ENABLED` | Enable OpenTelemetry | `false` |
-| `OTEL_SERVICE_NAME` | Service name for traces | `eel-backend` |
-| `OTEL_TRACE_FILE` | Path for trace output | `traces.jsonl` |
+| `DJANGO_CORS_ALLOWED_ORIGINS` | Comma-separated CORS origins | `http://localhost:3000` |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID | Required in production |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | Required in production |
 
 ## Architecture Notes
 

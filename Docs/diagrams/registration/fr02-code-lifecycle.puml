@@ -1,0 +1,199 @@
+@startuml
+!theme plain
+skinparam sequenceArrowThickness 1.5
+skinparam sequenceParticipantBorderColor #333
+skinparam sequenceLifeLineBorderColor #999
+skinparam noteBorderColor #CCC
+skinparam noteBackgroundColor #FEFCE8
+skinparam sequenceGroupBorderColor #666
+skinparam defaultFontSize 11
+
+title **FR-02: Registration Code Lifecycle**\nGET/PATCH /api/v1/codes | GET/PATCH /api/v1/codes/{id}\n<size:10>Auth: IsAuthenticated | No throttle</size>
+
+actor       "Manager\n(Teacher/Admin/\nResearcher)" as M
+participant "Frontend\n(Next.js)"    as FE  #E8F4FD
+participant "codes_collection\n/ code_detail\n(views.py:436/445)" as V  #E8F0E8
+participant "RegistrationService\n(_registration.py)" as RS  #FFF3E0
+database    "PostgreSQL"             as DB  #F3E5F5
+
+== List Codes: GET /api/v1/codes ==
+M -> FE : View code management page
+FE -> V : GET /api/v1/codes\nAuthorization: Bearer {token}\n?codeType=STUDENT\n&status=ACTIVE\n&includeArchived=false
+
+V -> RS : registration_code_scope_queryset(\n  request.user)
+note right of RS
+  **Scope by role:**
+  - Admin (is_staff): ALL codes
+  - Researcher: own TEACHER codes
+    + own STUDENT codes (if CREATE_STUDENT sudo)
+  - Teacher: own STUDENT codes only
+  - Student: empty queryset
+end note
+RS --> V : scoped queryset
+
+V -> V : Apply filters:
+note right of V
+  1. codeType filter → .filter(code_type=...)
+  2. includeArchived → .filter(archived_at__isnull=True)
+  3. Order by: -created_at
+  4. status filter → Python-level using
+     registration_code_status()
+end note
+
+V -> DB : SELECT * FROM registration_codes\nWHERE <scope + filters>\nORDER BY created_at DESC\nLIMIT 50 OFFSET 0
+note right of DB
+  Paginated: LimitOffsetPagination
+  default_limit=50, max_limit=200
+end note
+
+V --> FE : **200** OK
+note right of V
+  {
+    "count": 15,
+    "next": "?limit=50&offset=50",
+    "previous": null,
+    "results": [
+      {
+        "id": 101,
+        "code": null,
+        "codePrefix": "REG-A1B2",
+        "codeType": "STUDENT",
+        "status": "ACTIVE",
+        "maxUses": 25,
+        "timesUsed": 12,
+        "usesRemaining": 13,
+        "expiresAt": "2026-03-01T...",
+        "isActive": true,
+        "courseId": 42,
+        "courseName": "Physics 101",
+        "metadata": null,
+        "createdByUserId": 5,
+        "createdAt": "...",
+        "archivedAt": null
+      }, ...
+    ]
+  }
+end note
+note right of FE
+  **"code" is always null in list/detail**
+  Plaintext only available at creation time.
+  codePrefix shown for identification.
+end note
+
+|||
+
+== Code Detail: GET /api/v1/codes/{id} ==
+FE -> V : GET /api/v1/codes/101\nAuthorization: Bearer {token}
+V -> DB : SELECT * FROM registration_codes\nWHERE id=101\n  AND <scope filter>
+alt #FFE0E0 not found (or out of scope)
+  V --> FE : **404** {"detail": "Registration\ncode not found."}
+end
+V --> FE : **200** {<serialized code>}
+
+|||
+
+== Revoke Code: PATCH /api/v1/codes/{id} ==
+note over M, DB
+  **Transition: ACTIVE → REVOKED**
+  Permanently deactivates code before expiry/exhaustion
+end note
+
+M -> FE : Click "Revoke" on active code
+FE -> V : PATCH /api/v1/codes/101\nAuthorization: Bearer {token}\n**{status: "REVOKED"}**
+
+V -> V : RegistrationCodeUpdateSerializer\n  choices: ["REVOKED", "ARCHIVED"]
+
+V -> RS : transition_registration_code_status(\n  actor, registration_code_id=101,\n  next_status="REVOKED")
+note right of RS : @transaction.atomic
+
+RS -> DB : SELECT * FROM registration_codes\nWHERE id=101 AND <scope>\n**FOR UPDATE**
+alt #FFE0E0 not found
+  RS --> V : ValueError("Registration code\nnot found.")
+  V --> FE : **404**
+end
+
+RS -> RS : current_status =\nregistration_code_status(record)
+note right of RS
+  **Status computation (priority order):**
+  1. archived_at != NULL → ARCHIVED
+  2. expires_at <= now → EXPIRED
+  3. times_used >= max_uses → EXHAUSTED
+  4. not is_active → REVOKED
+  5. otherwise → ACTIVE
+end note
+
+alt #FFE0E0 current_status != ACTIVE
+  RS --> V : ValueError("Only ACTIVE codes\ncan be revoked.")
+  V --> FE : **400**
+end
+
+RS -> DB : UPDATE registration_codes\nSET is_active = False\nWHERE id=101
+
+RS --> V : updated record
+V --> FE : **200** {<serialized code\nwith status: "REVOKED">}
+
+|||
+
+== Archive Code: PATCH /api/v1/codes/{id} ==
+note over M, DB
+  **Transition: EXHAUSTED|EXPIRED|REVOKED → ARCHIVED**
+  Soft-delete for cleanup (hidden from default list)
+end note
+
+M -> FE : Click "Archive" on\nexhausted/expired/revoked code
+FE -> V : PATCH /api/v1/codes/101\nAuthorization: Bearer {token}\n**{status: "ARCHIVED"}**
+
+V -> RS : transition_registration_code_status(\n  actor, registration_code_id=101,\n  next_status="ARCHIVED")
+note right of RS : @transaction.atomic
+
+RS -> DB : SELECT * FROM registration_codes\nWHERE id=101 AND <scope>\n**FOR UPDATE**
+alt #FFE0E0 not found
+  RS --> V : ValueError("Registration code\nnot found.")
+  V --> FE : **404**
+end
+
+RS -> RS : current_status =\nregistration_code_status(record)
+alt #FFE0E0 status not in (EXHAUSTED, EXPIRED, REVOKED)
+  RS --> V : ValueError("Only EXHAUSTED, EXPIRED,\nor REVOKED codes can be\narchived.")
+  V --> FE : **400**
+end
+
+RS -> DB : UPDATE registration_codes\nSET archived_at = NOW()\nWHERE id=101
+
+RS --> V : updated record
+V --> FE : **200** {<serialized code\nwith status: "ARCHIVED",\narchivedAt: "2026-...">}
+
+|||
+
+== Code Status State Machine ==
+note over M, DB #FEFCE8
+  **Registration Code Lifecycle**
+
+           create
+             │
+             ▼
+        ┌─────────┐
+        │ ACTIVE  │
+        └────┬────┘
+       ╱     │     ╲
+  (max uses)(revoke)(time)
+      │      │      │
+      ▼      ▼      ▼
+  ┌────────┐┌───────┐┌────────┐
+  │EXHAUSTED││REVOKED││EXPIRED │
+  └────┬───┘└───┬───┘└────┬───┘
+       │        │         │
+       └────────┼─────────┘
+                │ archive
+                ▼
+          ┌──────────┐
+          │ ARCHIVED │
+          └──────────┘
+
+  **Transitions enforced by service layer.**
+  ACTIVE → REVOKED (manual deactivation)
+  {EXHAUSTED,EXPIRED,REVOKED} → ARCHIVED
+  No other transitions allowed.
+end note
+
+@enduml

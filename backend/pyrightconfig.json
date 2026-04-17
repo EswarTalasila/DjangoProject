@@ -1,0 +1,15 @@
+{
+  "include": ["src"],
+  "exclude": ["**/migrations", "**/__pycache__"],
+  "typeCheckingMode": "standard",
+  "reportAttributeAccessIssue": "none",
+  "reportUnknownMemberType": "none",
+  "reportMissingImports": "none",
+  "reportMissingModuleSource": "none",
+  "reportArgumentType": "warning",
+  "reportReturnType": "warning",
+  "reportGeneralClassIssues": "none",
+  "reportPossiblyUnbound": "warning",
+  "reportOperatorIssue": "warning",
+  "reportGeneralTypeIssues": "warning"
+}

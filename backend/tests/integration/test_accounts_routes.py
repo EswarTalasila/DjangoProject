@@ -1,154 +1,2007 @@
 """Integration tests for accounts routes."""
 
-import pytest
+from datetime import timedelta
 
-from accounts.models import Role, User, UserRole
+import pytest
+from django.utils import timezone
+
+from accounts.models import (
+    OAuthAccount,
+    OAuthProvider,
+    PasswordResetCode,
+    PasswordResetRequest,
+    PasswordResetRequestStatus,
+    RegistrationCode,
+    RegistrationCodeType,
+    ResearcherProfile,
+    Role,
+    StudentProfile,
+    SudoGrant,
+    SudoPermission,
+    TeacherProfile,
+    User,
+    UserRole,
+)
+from accounts.services import registration_code_hash, registration_code_prefix
+from courses.models import Course, Enrollment, EnrollmentStatus
+
+pytestmark = pytest.mark.integration
+
 
 
 @pytest.mark.django_db
 class TestAccountRoutes:
-    def test_register_creates_student_only(self, api_client):
-        """Test that register creates student only."""
+    @staticmethod
+    def _assert_auth_cookies(response) -> None:
+        assert "access_token" in response.cookies
+        assert "refresh_token" in response.cookies
+        assert response.cookies["access_token"]["httponly"]
+        assert response.cookies["refresh_token"]["httponly"]
+
+    @staticmethod
+    def _refresh_cookie_value(response) -> str:
+        return response.cookies["refresh_token"].value
+
+    @staticmethod
+    def _access_cookie_value(response) -> str:
+        return response.cookies["access_token"].value
+
+    def _student_code(self, teacher_user, code="INVITE1", course_name="Course A", max_uses=5):
+        course = Course.objects.create(
+            name=course_name, teacher_profile=teacher_user.teacher_profile
+        )
+        return RegistrationCode.objects.create(
+            code_hash=registration_code_hash(code),
+            code_prefix=registration_code_prefix(code),
+            code_type=RegistrationCodeType.STUDENT,
+            created_by=teacher_user,
+            course=course,
+            max_uses=max_uses,
+            times_used=0,
+            expires_at=timezone.now() + timedelta(days=1),
+            is_active=True,
+        )
+
+    def _non_student_code(self, creator, *, code: str, code_type: str):
+        return RegistrationCode.objects.create(
+            code_hash=registration_code_hash(code),
+            code_prefix=registration_code_prefix(code),
+            code_type=code_type,
+            created_by=creator,
+            course=None,
+            max_uses=1,
+            times_used=0,
+            expires_at=timezone.now() + timedelta(days=1),
+            is_active=True,
+        )
+
+    def _create_user_for_auth_uc_01(
+        self, *, role: str, username: str, email: str | None = None, password: str = "StartPass123!"
+    ) -> User:
+        user = User.objects.create_user(
+            username=username,
+            email=email,
+            name=f"{role} User",
+            password=password,
+        )
+        if role == "ADMIN":
+            user.is_staff = True
+            user.save(update_fields=["is_staff"])
+            return user
+        UserRole.objects.create(user=user, role=role)
+        if role == Role.TEACHER:
+            TeacherProfile.objects.create(user=user)
+        return user
+
+    def _assert_auth_uc_01_role_login(
+        self,
+        api_client,
+        *,
+        role: str,
+        identifier: str,
+        password: str = "StartPass123!",
+        expected_status: int = 200,
+        expected_detail: str | None = None,
+    ) -> None:
         response = api_client.post(
-            "/api/v1/auth/register",
+            "/api/v1/auth/sessions",
+            {"identifier": identifier, "password": password},
+            format="json",
+        )
+        assert response.status_code == expected_status
+        payload = response.json()
+        if expected_status != 200:
+            if expected_detail is not None:
+                assert payload["detail"] == expected_detail
+            assert "accessToken" not in payload
+            assert "refreshToken" not in payload
+            return
+        self._assert_auth_cookies(response)
+        assert payload["role"] == role
+
+    def test_REG_UC_01_STUDENT(self, api_client):
+        """Local registration creates a student from invite code with generated username."""
+        teacher = User.objects.create_user(
+            username="teacher@example.com",
+            name="Teacher",
+            password="testpass123",
+        )
+        UserRole.objects.create(user=teacher, role=Role.TEACHER)
+        TeacherProfile.objects.get_or_create(user=teacher)
+        self._student_code(teacher, code="INVITE-STUDENT-1")
+        response = api_client.post(
+            "/api/v1/registration/accounts",
             {
-                "username": "student@example.com",
-                "password": "testpass123",
-                "name": "Student Name",
-                "role": "ROLE_ADMIN",
+                "method": "LOCAL",
+                "code": "INVITE-STUDENT-1",
+                "password": "Testpass123!",
+                "confirmPassword": "Testpass123!",
+                "firstName": "Student",
+                "lastName": "Name",
             },
             format="json",
         )
-        assert response.status_code == 200
-        user = User.objects.get(username="student@example.com")
+        assert response.status_code == 201
+        payload = response.json()
+        self._assert_auth_cookies(response)
+        assert payload["role"] == Role.STUDENT
+        user = User.objects.get(username=payload["username"])
         role = user.roles.values_list("role", flat=True).first()
         assert role == Role.STUDENT
 
-    def test_login_success_returns_token(self, api_client):
-        """Test that login success returns token."""
-        api_client.post(
-            "/api/v1/auth/register",
+    def test_REG_UC_01_E5(self, api_client, teacher_user, monkeypatch):
+        """Student code OAuth registration attempts are rejected."""
+        self._student_code(teacher_user, code="INVITE-STUDENT-OAUTH")
+        monkeypatch.setattr(
+            "accounts.views._google_userinfo",
+            lambda _token: {
+                "sub": "student-oauth-sub",
+                "email": "student-oauth@example.com",
+                "name": "Student OAuth",
+            },
+        )
+        response = api_client.post(
+            "/api/v1/registration/accounts",
             {
-                "username": "login@example.com",
-                "password": "testpass123",
-                "name": "Login User",
+                "method": "OAUTH",
+                "code": "INVITE-STUDENT-OAUTH",
+                "accessToken": "oauth-token",
+                "firstName": "Student",
+                "lastName": "OAuth",
             },
             format="json",
         )
+        assert response.status_code == 400
+        assert "do not support OAuth" in response.json()["detail"]
+
+    def test_REG_UC_01_RESEARCHER(self, api_client, admin_user, monkeypatch):
+        """Researcher invite code supports both OAuth and local registration."""
+        oauth_code = "INVITE-RESEARCHER-OAUTH"
+        local_code = "INVITE-RESEARCHER-LOCAL"
+        self._non_student_code(
+            admin_user, code=oauth_code, code_type=RegistrationCodeType.RESEARCHER
+        )
+        self._non_student_code(
+            admin_user, code=local_code, code_type=RegistrationCodeType.RESEARCHER
+        )
+        monkeypatch.setattr(
+            "accounts.views._google_userinfo",
+            lambda _token: {
+                "sub": "researcher-oauth-sub",
+                "email": "researcher-oauth@example.com",
+                "name": "Researcher OAuth",
+                "email_verified": True,
+            },
+        )
         response = api_client.post(
-            "/api/v1/auth/login",
-            {"username": "login@example.com", "password": "testpass123"},
+            "/api/v1/registration/accounts",
+            {
+                "method": "OAUTH",
+                "code": oauth_code,
+                "accessToken": "oauth-token",
+                "firstName": "Researcher",
+                "lastName": "OAuth",
+            },
+            format="json",
+        )
+        assert response.status_code == 201
+        payload = response.json()
+        assert payload["role"] == Role.RESEARCHER
+        assert payload["username"].startswith("roauth")
+        self._assert_auth_cookies(response)
+
+        user = User.objects.get(username=payload["username"])
+        assert user.email == "researcher-oauth@example.com"
+        assert user.roles.filter(role=Role.RESEARCHER).exists()
+        assert OAuthAccount.objects.filter(
+            user=user,
+            provider=OAuthProvider.GOOGLE,
+            subject="researcher-oauth-sub",
+        ).exists()
+
+        local_response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": local_code,
+                "firstName": "Local",
+                "lastName": "Researcher",
+                "email": "local-researcher@example.com",
+                "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
+            },
+            format="json",
+        )
+        assert local_response.status_code == 201
+        local_payload = local_response.json()
+        assert local_payload["role"] == Role.RESEARCHER
+        assert local_payload["username"] == "lresear0"
+        self._assert_auth_cookies(local_response)
+
+    def test_REG_UC_01_TEACHER(self, api_client, researcher_user):
+        """Teacher invite code supports local non-student registration."""
+        self._non_student_code(
+            researcher_user,
+            code="INVITE-TEACHER-LOCAL",
+            code_type=RegistrationCodeType.TEACHER,
+        )
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "INVITE-TEACHER-LOCAL",
+                "firstName": "Local",
+                "lastName": "Teacher",
+                "email": "local-teacher@example.com",
+                "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
+            },
+            format="json",
+        )
+        assert response.status_code == 201
+        payload = response.json()
+        assert payload["role"] == Role.TEACHER
+        assert payload["username"] == "lteache0"
+        self._assert_auth_cookies(response)
+
+    def test_REG_UC_01_E3(self, api_client, researcher_user):
+        """Non-student local registration requires email."""
+        self._non_student_code(
+            researcher_user,
+            code="INVITE-TEACHER-MISSING",
+            code_type=RegistrationCodeType.TEACHER,
+        )
+        response = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "INVITE-TEACHER-MISSING",
+                "firstName": "Missing",
+                "lastName": "Fields",
+                "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "email is required" in response.json()["detail"]
+
+    def test_AUTH_UC_01(self, api_client):
+        """Domain aggregator: all supported role-specific AUTH-UC-01 login paths must pass."""
+
+        self._create_user_for_auth_uc_01(
+            role=Role.RESEARCHER,
+            username="researcher-login",
+            email="researcher-login@example.com",
+        )
+        self._assert_auth_uc_01_role_login(
+            api_client,
+            role=Role.RESEARCHER,
+            identifier="researcher-login",
+        )
+
+        self._create_user_for_auth_uc_01(
+            role=Role.TEACHER,
+            username="teacher-login",
+            email="teacher-login@example.com",
+        )
+        self._assert_auth_uc_01_role_login(
+            api_client,
+            role=Role.TEACHER,
+            identifier="teacher-login@example.com",
+        )
+
+        self._create_user_for_auth_uc_01(
+            role=Role.STUDENT,
+            username="student-login",
+            email="student-login@example.com",
+        )
+        self._assert_auth_uc_01_role_login(
+            api_client,
+            role=Role.STUDENT,
+            identifier="student-login",
+        )
+
+    def test_AUTH_UC_01_ADMIN(self, api_client):
+        """ADMIN login via API is blocked and redirected to Django admin flow."""
+        self._create_user_for_auth_uc_01(
+            role="ADMIN",
+            username="admin-role",
+            email="admin-role@example.com",
+        )
+        self._assert_auth_uc_01_role_login(
+            api_client,
+            role="ADMIN",
+            identifier="admin-role@example.com",
+            expected_status=403,
+            expected_detail="Admin accounts must use Django admin.",
+        )
+
+    def test_AUTH_UC_01_RESEARCHER(self, api_client):
+        """RESEARCHER login via identifier."""
+        self._create_user_for_auth_uc_01(
+            role=Role.RESEARCHER,
+            username="researcher-role",
+            email="researcher-role@example.com",
+        )
+        self._assert_auth_uc_01_role_login(
+            api_client,
+            role=Role.RESEARCHER,
+            identifier="researcher-role",
+        )
+
+    def test_AUTH_UC_01_STUDENT(self, api_client):
+        """STUDENT login via username identifier."""
+        self._create_user_for_auth_uc_01(
+            role=Role.STUDENT,
+            username="student-role",
+            email="student-role@example.com",
+        )
+        self._assert_auth_uc_01_role_login(
+            api_client,
+            role=Role.STUDENT,
+            identifier="student-role",
+        )
+
+    def test_REG_UC_01(self, api_client, teacher_user):
+        """Validate-code returns course context for a valid student invite."""
+        self._student_code(teacher_user, code="INVITE-CONTEXT", course_name="Biology")
+        response = api_client.post(
+            "/api/v1/registration/code-validations",
+            {"code": "INVITE-CONTEXT"},
             format="json",
         )
         assert response.status_code == 200
         payload = response.json()
-        assert "accessToken" in payload
-        assert payload["role"] == Role.STUDENT
+        assert payload["valid"] is True
+        assert payload["code_type"] == RegistrationCodeType.STUDENT
+        assert payload["context"]["course_name"] == "Biology"
 
-    def test_check_email_existing_user(self, api_client, admin_user):
-        """Test that check email existing user."""
-        User.objects.create_user(username="check@example.com", name="Check User", password=None)
-        response = api_client.post("/api/v1/auth/check-email", {"email": "check@example.com"})
-        assert response.status_code == 200
-        data = response.json()
-        assert data["exists"] is True
-        assert data["needsPassword"] is True
+    def test_REG_UC_01_E1_CODE_VALIDATION(self, api_client):
+        """Validate-code returns generic invalid response for bad/expired codes."""
+        response = api_client.post(
+            "/api/v1/registration/code-validations",
+            {"code": "REG-UC01-E1-INVALID"},
+            format="json",
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Invalid or expired code"
 
-    def test_admin_can_create_teacher(self, api_client, admin_user):
-        """Test that admin can create teacher."""
+    def test_REG_UC_01a_STUDENT(self, api_client, teacher_user):
+        """Authenticated student can redeem another code to join an additional course."""
+        first_code = self._student_code(teacher_user, code="INVITE-FIRST", course_name="Math")
+        second_code = self._student_code(teacher_user, code="INVITE-SECOND", course_name="Science")
+        assert first_code.course_id != second_code.course_id
+
+        create_res = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "INVITE-FIRST",
+                "firstName": "Multi",
+                "lastName": "Student",
+                "password": "Testpass123!",
+                "confirmPassword": "Testpass123!",
+            },
+            format="json",
+        )
+        assert create_res.status_code == 201
+        username = create_res.json()["username"]
+
+        user = User.objects.get(username=username)
+        api_client.force_authenticate(user=user)
+        redeem_res = api_client.post(
+            "/api/v1/enrollments",
+            {"code": "INVITE-SECOND"},
+            format="json",
+        )
+        assert redeem_res.status_code == 201
+        redeem_payload = redeem_res.json()
+        assert redeem_payload["alreadyEnrolled"] is False
+        assert redeem_payload["createdNewUser"] is False
+        assert redeem_payload["message"] == "Invite redeemed"
+        assert redeem_payload["username"] == username
+        assert redeem_payload["courseId"] == second_code.course_id
+
+        enrollment_count = Enrollment.objects.filter(student_profile=user.student_profile).count()
+        assert enrollment_count == 2
+        first_code.refresh_from_db()
+        second_code.refresh_from_db()
+        assert first_code.times_used == 1
+        assert second_code.times_used == 1
+
+    def test_REG_CN_20(self, api_client, teacher_user):
+        """Already-enrolled redemption succeeds and does not consume code usage."""
+        first_code = self._student_code(teacher_user, code="IDEMP-FIRST", course_name="Math")
+        second_code = RegistrationCode.objects.create(
+            code_hash=registration_code_hash("IDEMP-SECOND"),
+            code_prefix=registration_code_prefix("IDEMP-SECOND"),
+            code_type=RegistrationCodeType.STUDENT,
+            created_by=teacher_user,
+            course=first_code.course,
+            max_uses=1,
+            times_used=0,
+            expires_at=timezone.now() + timedelta(days=1),
+            is_active=True,
+        )
+
+        create_res = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "IDEMP-FIRST",
+                "firstName": "Repeat",
+                "lastName": "Student",
+                "password": "Testpass123!",
+                "confirmPassword": "Testpass123!",
+            },
+            format="json",
+        )
+        assert create_res.status_code == 201
+        username = create_res.json()["username"]
+
+        user = User.objects.get(username=username)
+        api_client.force_authenticate(user=user)
+        redeem_res = api_client.post(
+            "/api/v1/enrollments",
+            {"code": "IDEMP-SECOND"},
+            format="json",
+        )
+        assert redeem_res.status_code == 201
+        payload = redeem_res.json()
+        assert payload["alreadyEnrolled"] is True
+        assert payload["message"] == "Already enrolled"
+
+        enrollment_count = Enrollment.objects.filter(student_profile=user.student_profile).count()
+        assert enrollment_count == 1
+
+        second_code.refresh_from_db()
+        assert second_code.times_used == 0
+        assert second_code.is_active is True
+
+    def test_REG_UC_01a_E2(self, api_client, teacher_user):
+        """Join-course endpoint is authenticated and student-role scoped."""
+        code = self._student_code(teacher_user, code="JOIN-AUTH")
+
+        unauthenticated = api_client.post(
+            "/api/v1/enrollments",
+            {"code": "JOIN-AUTH"},
+            format="json",
+        )
+        assert unauthenticated.status_code == 401
+
+        api_client.force_authenticate(user=teacher_user)
+        forbidden = api_client.post(
+            "/api/v1/enrollments",
+            {"code": "JOIN-AUTH"},
+            format="json",
+        )
+        assert forbidden.status_code == 403
+
+        code.refresh_from_db()
+        assert code.times_used == 0
+
+    def test_REG_UC_02_TEACHER(self, api_client, teacher_user):
+        """Teacher can generate student registration codes for their own course."""
+        course = Course.objects.create(
+            name="Code Gen Course", teacher_profile=teacher_user.teacher_profile
+        )
+        api_client.force_authenticate(user=teacher_user)
+        response = api_client.post(
+            "/api/v1/codes",
+            {
+                "codeType": RegistrationCodeType.STUDENT,
+                "count": 2,
+                "usesPerCode": 3,
+                "expiresAt": (timezone.now() + timedelta(days=2)).isoformat(),
+                "courseId": course.id,
+            },
+            format="json",
+        )
+        assert response.status_code == 201
+        payload = response.json()
+        assert payload["count"] == 2
+        assert len(payload["codes"]) == 2
+        assert all(entry["codeType"] == RegistrationCodeType.STUDENT for entry in payload["codes"])
+        assert all(entry["status"] == "ACTIVE" for entry in payload["codes"])
+        assert all(entry["code"] is not None for entry in payload["codes"])
+        assert all(entry["codePrefix"] is not None for entry in payload["codes"])
+
+        # Hash-at-rest: returned plaintext codes are not persisted directly.
+        generated_hashes = {registration_code_hash(entry["code"]) for entry in payload["codes"]}
+        db_hashes = set(
+            RegistrationCode.objects.filter(
+                created_by=teacher_user,
+                course=course,
+                code_type=RegistrationCodeType.STUDENT,
+            ).values_list("code_hash", flat=True)
+        )
+        assert generated_hashes.issubset(db_hashes)
+
+    def test_REG_UC_02_RESEARCHER(self, api_client, researcher_user):
+        """Researcher can generate a teacher code with metadata when count is one."""
+        api_client.force_authenticate(user=researcher_user)
+        metadata = {"district": "Wake", "school": "NCSU Lab School"}
+        response = api_client.post(
+            "/api/v1/codes",
+            {
+                "codeType": RegistrationCodeType.TEACHER,
+                "count": 1,
+                "usesPerCode": 2,
+                "expiresAt": (timezone.now() + timedelta(days=2)).isoformat(),
+                "metadata": metadata,
+            },
+            format="json",
+        )
+        assert response.status_code == 201
+        payload = response.json()
+        assert payload["count"] == 1
+        assert payload["codes"][0]["codeType"] == RegistrationCodeType.TEACHER
+        assert payload["codes"][0]["metadata"] == metadata
+
+        persisted = RegistrationCode.objects.get(id=payload["codes"][0]["id"])
+        assert persisted.metadata == metadata
+
+    def test_REG_UC_02_E4(self, api_client, researcher_user):
+        """Metadata with count greater than one is rejected."""
+        api_client.force_authenticate(user=researcher_user)
+        response = api_client.post(
+            "/api/v1/codes",
+            {
+                "codeType": RegistrationCodeType.TEACHER,
+                "count": 2,
+                "usesPerCode": 1,
+                "expiresAt": (timezone.now() + timedelta(days=2)).isoformat(),
+                "metadata": {"district": "Wake"},
+            },
+            format="json",
+        )
+        assert response.status_code == 400
+        assert "count must be 1" in str(response.json())
+
+    def test_REG_CN_10(self, api_client, researcher_user, admin_user, teacher_user):
+        """Researcher sudo permission expands code generation and lifecycle scope to student codes."""
+        course = Course.objects.create(
+            name="Researcher Student Code Scope",
+            teacher_profile=teacher_user.teacher_profile,
+        )
+        foreign_code = self._student_code(teacher_user, code="TEACHER-ONLY-SCOPE")
+
+        api_client.force_authenticate(user=researcher_user)
+        denied = api_client.post(
+            "/api/v1/codes",
+            {
+                "codeType": RegistrationCodeType.STUDENT,
+                "count": 1,
+                "usesPerCode": 1,
+                "expiresAt": (timezone.now() + timedelta(days=2)).isoformat(),
+                "courseId": course.id,
+            },
+            format="json",
+        )
+        assert denied.status_code == 403
+
+        SudoGrant.objects.create(
+            user=researcher_user,
+            granted_by=admin_user,
+            permissions=[SudoPermission.ISSUE_STUDENT_REG_CODE],
+        )
+
+        allowed = api_client.post(
+            "/api/v1/codes",
+            {
+                "codeType": RegistrationCodeType.STUDENT,
+                "count": 1,
+                "usesPerCode": 1,
+                "expiresAt": (timezone.now() + timedelta(days=2)).isoformat(),
+                "courseId": course.id,
+            },
+            format="json",
+        )
+        assert allowed.status_code == 201
+        created_code_id = allowed.json()["codes"][0]["id"]
+
+        list_response = api_client.get("/api/v1/codes")
+        assert list_response.status_code == 200
+        listed_ids = {entry["id"] for entry in list_response.json()["results"]}
+        assert created_code_id in listed_ids
+        assert foreign_code.id not in listed_ids
+
+        detail_response = api_client.get(f"/api/v1/codes/{created_code_id}")
+        assert detail_response.status_code == 200
+        assert detail_response.json()["codeType"] == RegistrationCodeType.STUDENT
+
+        revoke_response = api_client.patch(
+            f"/api/v1/codes/{created_code_id}",
+            {"status": "REVOKED"},
+            format="json",
+        )
+        assert revoke_response.status_code == 200
+        assert revoke_response.json()["status"] == "REVOKED"
+
+        forbidden_foreign = api_client.patch(
+            f"/api/v1/codes/{foreign_code.id}",
+            {"status": "REVOKED"},
+            format="json",
+        )
+        assert forbidden_foreign.status_code == 404
+
+    def test_REG_UC_03_TEACHER(self, api_client, teacher_user):
+        """Teacher can list, revoke, and delete own student codes."""
+        code = self._student_code(teacher_user, code="LIFE-ONE", max_uses=1)
+        api_client.force_authenticate(user=teacher_user)
+
+        list_response = api_client.get("/api/v1/codes")
+        assert list_response.status_code == 200
+        listed_payload = list_response.json()["results"]
+        listed_ids = {entry["id"] for entry in listed_payload}
+        assert code.id in listed_ids
+        listed_code = next(entry for entry in listed_payload if entry["id"] == code.id)
+        assert listed_code["code"] is None
+        assert listed_code["codePrefix"] == registration_code_prefix("LIFE-ONE")
+
+        detail_response = api_client.get(f"/api/v1/codes/{code.id}")
+        assert detail_response.status_code == 200
+        detail_payload = detail_response.json()
+        assert detail_payload["code"] is None
+        assert detail_payload["codePrefix"] == registration_code_prefix("LIFE-ONE")
+
+        revoke_response = api_client.patch(
+            f"/api/v1/codes/{code.id}",
+            {"status": "REVOKED"},
+            format="json",
+        )
+        assert revoke_response.status_code == 200
+        assert revoke_response.json()["status"] == "REVOKED"
+
+        delete_response = api_client.delete(f"/api/v1/codes/{code.id}")
+        assert delete_response.status_code == 204
+
+    def test_REG_UC_03_E1(self, api_client, teacher_user):
+        """Teacher cannot transition registration codes outside their scope."""
+        other_teacher = User.objects.create_user(
+            username="other-teacher",
+            email="other-teacher@example.com",
+            name="Other Teacher",
+            password="StartPass123!",
+        )
+        UserRole.objects.create(user=other_teacher, role=Role.TEACHER)
+        TeacherProfile.objects.create(user=other_teacher)
+        foreign_code = self._student_code(other_teacher, code="FOREIGN-CODE")
+
+        api_client.force_authenticate(user=teacher_user)
+        response = api_client.patch(
+            f"/api/v1/codes/{foreign_code.id}",
+            {"status": "REVOKED"},
+            format="json",
+        )
+        assert response.status_code == 404
+
+    def test_AUTH_UC_03(self, api_client):
+        """Refresh returns a new access token and logout invalidates the refresh token."""
+        user = User.objects.create_user(
+            username="refresh-user",
+            email="refresh@example.com",
+            name="Refresh User",
+            password="StartPass123!",
+        )
+        UserRole.objects.create(user=user, role=Role.TEACHER)
+        TeacherProfile.objects.create(user=user)
+
+        login_response = api_client.post(
+            "/api/v1/auth/sessions",
+            {"identifier": "refresh@example.com", "password": "StartPass123!"},
+            format="json",
+        )
+        assert login_response.status_code == 200
+        refresh_token = self._refresh_cookie_value(login_response)
+
+        refresh_response = api_client.post(
+            "/api/v1/auth/token-exchanges",
+            {"refreshToken": refresh_token},
+            format="json",
+        )
+        assert refresh_response.status_code == 200
+        assert refresh_response.json()["message"] == "Session refreshed."
+        assert "access_token" in refresh_response.cookies
+
+        api_client.force_authenticate(user=user)
+        logout_response = api_client.post(
+            "/api/v1/auth/session-revocations",
+            {"refreshToken": refresh_token},
+            format="json",
+        )
+        assert logout_response.status_code == 200
+
+        refresh_after_logout = api_client.post(
+            "/api/v1/auth/token-exchanges",
+            {"refreshToken": refresh_token},
+            format="json",
+        )
+        assert refresh_after_logout.status_code == 401
+
+    def test_AUTH_CN_10_COOKIE_HTTPONLY(self, api_client):
+        """Login sets HttpOnly auth cookies and cookie-backed auth works for refresh/logout."""
+        user = User.objects.create_user(
+            username="cookie-auth-user",
+            email="cookie-auth@example.com",
+            name="Cookie Auth User",
+            password="StartPass123!",
+        )
+        UserRole.objects.create(user=user, role=Role.TEACHER)
+        TeacherProfile.objects.create(user=user)
+
+        login_response = api_client.post(
+            "/api/v1/auth/sessions",
+            {"identifier": "cookie-auth@example.com", "password": "StartPass123!"},
+            format="json",
+        )
+        assert login_response.status_code == 200
+        assert login_response.cookies["access_token"]["httponly"]
+        assert login_response.cookies["refresh_token"]["httponly"]
+
+        refresh_response = api_client.post("/api/v1/auth/token-exchanges", {}, format="json")
+        assert refresh_response.status_code == 200
+        assert refresh_response.json()["message"] == "Session refreshed."
+        assert "access_token" in refresh_response.cookies
+
+        # No force_authenticate and no Authorization header: IsAuthenticated uses access cookie.
+        logout_response = api_client.post("/api/v1/auth/session-revocations", {}, format="json")
+        assert logout_response.status_code == 200
+        assert "access_token" in logout_response.cookies
+        assert "refresh_token" in logout_response.cookies
+
+    def test_AUTH_UC_04(self, api_client):
+        """Password change invalidates existing refresh tokens and requires re-login."""
+        user = User.objects.create_user(
+            username="changepass-user",
+            email="changepass@example.com",
+            name="Change Pass",
+            password="OldPass123!",
+        )
+        UserRole.objects.create(user=user, role=Role.TEACHER)
+        TeacherProfile.objects.create(user=user)
+
+        login_response = api_client.post(
+            "/api/v1/auth/sessions",
+            {"identifier": "changepass-user", "password": "OldPass123!"},
+            format="json",
+        )
+        assert login_response.status_code == 200
+        refresh_token = self._refresh_cookie_value(login_response)
+        api_client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {self._access_cookie_value(login_response)}"
+        )
+
+        change_response = api_client.patch(
+            "/api/v1/auth/password",
+            {
+                "currentPassword": "OldPass123!",
+                "newPassword": "NewPass123!",
+                "confirmPassword": "NewPass123!",
+            },
+            format="json",
+        )
+        assert change_response.status_code == 200
+
+        refresh_after_change = api_client.post(
+            "/api/v1/auth/token-exchanges",
+            {"refreshToken": refresh_token},
+            format="json",
+        )
+        assert refresh_after_change.status_code == 401
+
+        relogin = api_client.post(
+            "/api/v1/auth/sessions",
+            {"identifier": "changepass-user", "password": "NewPass123!"},
+            format="json",
+        )
+        assert relogin.status_code == 200
+
+    def test_AUTH_UC_05_STUDENT(self, api_client, teacher_user):
+        """Teacher directly issues student reset code; student verifies and completes reset."""
+        self._student_code(teacher_user, code="RESET-CODE-1", course_name="Reset Course")
+        register = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "RESET-CODE-1",
+                "firstName": "Reset",
+                "lastName": "Student",
+                "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
+            },
+            format="json",
+        )
+        assert register.status_code == 201
+        student_identifier = register.json()["username"]
+        student_user = User.objects.get(username=student_identifier)
+
+        api_client.force_authenticate(user=teacher_user)
+        issue_response = api_client.post(
+            "/api/v1/auth/password-reset-codes",
+            {"targetUserId": student_user.id},
+            format="json",
+        )
+        assert issue_response.status_code == 201
+        issue_payload = issue_response.json()
+        assert issue_payload["targetUserId"] == student_user.id
+        assert issue_payload["targetRole"] == Role.STUDENT
+        reset_code = issue_payload["resetCode"]
+        assert reset_code.startswith("RESET-")
+        latest_request = student_user.password_reset_requests.order_by("-id").first()
+        assert latest_request is not None
+        assert latest_request.status == PasswordResetRequestStatus.APPROVED
+        assert latest_request.reviewed_by_id == teacher_user.id
+
+        verify_response = api_client.post(
+            "/api/v1/auth/reset-code-validations",
+            {"identifier": student_identifier, "resetCode": reset_code},
+            format="json",
+        )
+        assert verify_response.status_code == 200
+        assert verify_response.json()["valid"] is True
+
+        api_client.force_authenticate(user=None)
+        complete_response = api_client.post(
+            "/api/v1/auth/password-resets",
+            {
+                "identifier": student_identifier,
+                "resetCode": reset_code,
+                "newPassword": "AfterReset123!",
+                "confirmPassword": "AfterReset123!",
+            },
+            format="json",
+        )
+        assert complete_response.status_code == 200
+
+        login_after = api_client.post(
+            "/api/v1/auth/sessions",
+            {"identifier": student_identifier, "password": "AfterReset123!"},
+            format="json",
+        )
+        assert login_after.status_code == 200
+
+    def test_AUTH_CN_05_STUDENT(self, api_client, teacher_user):
+        """Student accounts cannot issue reset codes for other users."""
+        self._student_code(teacher_user, code="RESET-CODE-2", course_name="Reset Course 2")
+        register = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "RESET-CODE-2",
+                "firstName": "Blocked",
+                "lastName": "Blockedrequest",
+                "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
+            },
+            format="json",
+        )
+        assert register.status_code == 201
+        student_user = User.objects.get(username=register.json()["username"])
+
+        api_client.force_authenticate(user=student_user)
+        issue_response = api_client.post(
+            "/api/v1/auth/password-reset-codes",
+            {"targetUserId": teacher_user.id},
+            format="json",
+        )
+        assert issue_response.status_code == 403
+
+    def test_AUTH_UC_07_E1(self, api_client, teacher_user):
+        """Teacher direct-reset endpoint is restricted to students in the teacher's own courses."""
+        other_teacher = User.objects.create_user(
+            username="other-reset-teacher",
+            email="other-reset-teacher@example.com",
+            name="Other Reset Teacher",
+            password="StartPass123!",
+        )
+        UserRole.objects.create(user=other_teacher, role=Role.TEACHER)
+        TeacherProfile.objects.create(user=other_teacher)
+        self._student_code(other_teacher, code="FOREIGN-RESET-CODE")
+
+        register = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "FOREIGN-RESET-CODE",
+                "firstName": "Foreign",
+                "lastName": "Student",
+                "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
+            },
+            format="json",
+        )
+        assert register.status_code == 201
+        student_user = User.objects.get(username=register.json()["username"])
+
+        api_client.force_authenticate(user=teacher_user)
+        response = api_client.post(
+            "/api/v1/auth/password-reset-codes",
+            {"targetUserId": student_user.id},
+            format="json",
+        )
+        assert response.status_code == 403
+
+    def test_AUTH_UC_07_RESEARCHER(self, api_client, teacher_user, researcher_user):
+        """Researcher default issuance is teacher-only without additional sudo flags."""
+        api_client.force_authenticate(user=researcher_user)
+        researcher_attempt = api_client.post(
+            "/api/v1/auth/password-reset-codes",
+            {"targetUserId": teacher_user.id},
+            format="json",
+        )
+        assert researcher_attempt.status_code == 201
+        assert researcher_attempt.json()["resetCode"].startswith("RESET-")
+
+        researcher_target = User.objects.create_user(
+            username="target-researcher",
+            email="target-researcher@example.com",
+            name="Target Researcher",
+            password="StartPass123!",
+        )
+        UserRole.objects.create(user=researcher_target, role=Role.RESEARCHER)
+        ResearcherProfile.objects.create(user=researcher_target)
+        forbidden = api_client.post(
+            "/api/v1/auth/password-reset-codes",
+            {"targetUserId": researcher_target.id},
+            format="json",
+        )
+        assert forbidden.status_code == 403
+
+    def test_USER_UC_01_ADMIN(self, api_client, admin_user):
+        """Admin can create a teacher account; response contains user object."""
         api_client.force_authenticate(user=admin_user)
         payload = {
-            "username": "teacher@example.com",
+            "email": "teacher-contact@example.com",
             "password": "testpass123",
             "name": "Teacher Name",
             "role": "ROLE_TEACHER",
         }
-        response = api_client.post("/api/v1/auth/createuser", payload, format="json")
-        assert response.status_code == 200
-        created = User.objects.get(username="teacher@example.com")
+        response = api_client.post("/api/v1/users", payload, format="json")
+        assert response.status_code == 201
+        body = response.json()
+        assert body["name"] == "Teacher Name"
+        assert body["email"] == "teacher-contact@example.com"
+        assert body["role"] == Role.TEACHER
+        assert "id" in body
+        assert "username" in body
+        created = User.objects.get(email="teacher-contact@example.com")
         assert created.teacher_profile is not None
 
-    def test_teacher_cannot_create_admin(self, api_client, teacher_user):
-        """Test that teacher cannot create admin."""
+    def test_USER_UC_01_E2(self, api_client, teacher_user):
+        """Teacher cannot create a researcher account."""
         api_client.force_authenticate(user=teacher_user)
         payload = {
-            "username": "admin2@example.com",
+            "email": "researcher@example.com",
             "password": "testpass123",
-            "name": "Admin Two",
-            "role": "ROLE_ADMIN",
+            "name": "Researcher",
+            "role": "ROLE_RESEARCHER",
         }
-        response = api_client.post("/api/v1/auth/createuser", payload, format="json")
+        response = api_client.post("/api/v1/users", payload, format="json")
         assert response.status_code == 403
 
-    def test_edit_user_requires_authorization(self, api_client, teacher_user, admin_user):
-        """Test that edit user requires authorization."""
+    def test_REG_CN_16(self, api_client, teacher_user):
+        """Student username is generated, collision-suffixed, and immutable."""
+        self._student_code(teacher_user, code="REG-CN16-STUDENT-A")
+        first_register = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "REG-CN16-STUDENT-A",
+                "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
+                "firstName": "Jane",
+                "lastName": "Smith",
+            },
+            format="json",
+        )
+        assert first_register.status_code == 201
+        first_username = first_register.json()["username"]
+        assert first_username == "jsmith00"
+
+        self._student_code(teacher_user, code="REG-CN16-STUDENT-B")
+        second_register = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "REG-CN16-STUDENT-B",
+                "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
+                "firstName": "Jane",
+                "lastName": "Smith",
+            },
+            format="json",
+        )
+        assert second_register.status_code == 201
+        second_username = second_register.json()["username"]
+        assert second_username == "jsmith01"
+
+        student = User.objects.get(username=first_username)
+        original_username = first_username
+
+        api_client.force_authenticate(user=teacher_user)
+        response = api_client.patch(
+            f"/api/v1/users/{student.id}",
+            {"username": "renamed-student"},
+            format="json",
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Usernames are system-managed and immutable."
+
+        student.refresh_from_db()
+        assert student.username == original_username
+
+    def test_USER_UC_02_E1(self, api_client, teacher_user, admin_user):
+        """Teacher edit outside scope is masked as not found."""
         api_client.force_authenticate(user=teacher_user)
         payload = {
             "name": "Admin Updated",
-            "username": admin_user.username,
-            "role": "ROLE_ADMIN",
         }
-        response = api_client.post(f"/api/v1/auth/edituser/{admin_user.id}", payload, format="json")
-        assert response.status_code == 403
+        response = api_client.patch(f"/api/v1/users/{admin_user.id}", payload, format="json")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "User not found"
 
-    def test_list_teachers_admins_returns_role_prefix(self, api_client, admin_user, teacher_user):
-        """Test that list teachers admins returns role prefix."""
+    def test_USER_UC_04_ADMIN(self, api_client, admin_user, teacher_user):
+        """Staff listing returns teacher and researcher users with plain role strings."""
         api_client.force_authenticate(user=admin_user)
-        response = api_client.get("/api/v1/auth/teachers-admins")
+        response = api_client.get("/api/v1/users/staff")
         assert response.status_code == 200
-        roles = {entry["role"] for entry in response.json()}
-        assert "ROLE_ADMIN" in roles
-        assert "ROLE_TEACHER" in roles
+        results = response.json()["results"]
+        usernames = {entry["username"] for entry in results}
+        assert teacher_user.username in usernames
+        for entry in results:
+            assert entry["role"] in (Role.TEACHER, Role.RESEARCHER)
+            assert not entry["role"].startswith("ROLE_")
 
-    def test_bulk_create_users_returns_count(self, api_client, admin_user):
-        """Test that bulk create users returns count."""
+    def test_USER_UC_04_E1(self, api_client, teacher_user):
+        """Staff listing is forbidden for non-admin/non-researcher callers."""
+        api_client.force_authenticate(user=teacher_user)
+        response = api_client.get("/api/v1/users/staff")
+        assert response.status_code == 403
+
+    def test_USER_UC_03_E1(self, api_client, admin_user, teacher_user):
+        """Delete outside scope returns 403 Forbidden."""
+        api_client.force_authenticate(user=teacher_user)
+        response = api_client.delete(f"/api/v1/users/{admin_user.id}")
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Forbidden"
+
+    def test_USER_UC_03_E2(self, api_client, admin_user):
+        """Delete request returns 404 when target user does not exist."""
         api_client.force_authenticate(user=admin_user)
-        payload = [
-            {"username": "bulk1@example.com", "name": "Bulk One", "role": "ROLE_TEACHER"},
-            {"username": "bulk2@example.com", "name": "Bulk Two", "role": "ROLE_TEACHER"},
-        ]
-        response = api_client.post("/api/v1/auth/create/bulk", payload, format="json")
+        response = api_client.delete("/api/v1/users/99999999")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "User not found"
+
+    def test_USER_UC_03_ADMIN(self, api_client, admin_user):
+        """Admin can delete a teacher account; returns 204."""
+        target = User.objects.create_user(
+            username="del-target",
+            email="del-target@example.com",
+            name="Delete Target",
+            password="StartPass123!",
+        )
+        UserRole.objects.create(user=target, role=Role.TEACHER)
+        TeacherProfile.objects.create(user=target)
+        target_id = target.id
+
+        api_client.force_authenticate(user=admin_user)
+        response = api_client.delete(f"/api/v1/users/{target_id}")
+        assert response.status_code == 204
+        assert not User.objects.filter(id=target_id).exists()
+
+    def test_USER_UC_03_E2(self, api_client, admin_user):
+        """Delete for non-existent user returns 404."""
+        api_client.force_authenticate(user=admin_user)
+        response = api_client.delete("/api/v1/users/999999")
+        assert response.status_code == 404
+
+    def test_USER_UC_04_RESEARCHER(self, api_client, researcher_user, teacher_user):
+        """Researcher can access staff listing."""
+        api_client.force_authenticate(user=researcher_user)
+        response = api_client.get("/api/v1/users/staff")
         assert response.status_code == 200
-        assert response.json() == 2
+        results = response.json()["results"]
+        usernames = {entry["username"] for entry in results}
+        assert teacher_user.username in usernames
 
-    def test_reset_password_requires_permission(self, api_client, teacher_user, admin_user):
-        """Test that reset password requires permission."""
+    def test_USER_UC_04_E1(self, api_client, teacher_user):
+        """Non-admin/non-researcher is denied access to staff listing."""
         api_client.force_authenticate(user=teacher_user)
-        response = api_client.put(f"/api/v1/auth/reset/{admin_user.id}")
+        response = api_client.get("/api/v1/users/staff")
         assert response.status_code == 403
 
-    def test_delete_user_admin_only(self, api_client, admin_user, teacher_user):
-        """Test that delete user admin only."""
-        api_client.force_authenticate(user=teacher_user)
-        response = api_client.delete(f"/api/v1/auth/user/{admin_user.username}")
-        assert response.status_code == 403
+    def test_USER_UC_02_E2(self, api_client, admin_user):
+        """Staff-target user cannot be edited; masked as 404."""
+        staff_target = User.objects.create_user(
+            username="staff-target",
+            email="staff-target@example.com",
+            name="Staff Target",
+            password="StartPass123!",
+            is_staff=True,
+        )
+        api_client.force_authenticate(user=admin_user)
+        response = api_client.patch(
+            f"/api/v1/users/{staff_target.id}",
+            {"name": "Hacked Name"},
+            format="json",
+        )
+        assert response.status_code == 404
 
-    def test_create_user_sets_single_role(self, api_client, admin_user):
-        """Test that create user sets single role."""
+    def test_USER_UC_01(self, api_client, admin_user):
+        """Created user is assigned exactly one role; response returns user object."""
         api_client.force_authenticate(user=admin_user)
         payload = {
-            "username": "single@example.com",
+            "email": "single@example.com",
             "password": "testpass123",
             "name": "Single Role",
             "role": "ROLE_TEACHER",
         }
-        response = api_client.post("/api/v1/auth/createuser", payload, format="json")
-        assert response.status_code == 200
-        roles = UserRole.objects.filter(user__username="single@example.com")
+        response = api_client.post("/api/v1/users", payload, format="json")
+        assert response.status_code == 201
+        body = response.json()
+        assert body["role"] == Role.TEACHER
+        assert body["email"] == "single@example.com"
+        assert body["name"] == "Single Role"
+        roles = UserRole.objects.filter(user__email="single@example.com")
         assert roles.count() == 1
         assert roles.first().role == Role.TEACHER
 
-    def test_set_password_updates_user(self, api_client, admin_user):
-        """Test that set password updates user."""
+    def test_AUTH_UC_01_TEACHER(self, api_client):
+        """Non-students can log in with either username or email."""
         user = User.objects.create_user(
-            username="newpass@example.com", name="New Pass", password=None
+            username="teachernotemail",
+            email="teachernotemail@example.com",
+            name="Teacher No Email",
+            password="StartPass123!",
         )
-        assert user.password is None
+        UserRole.objects.create(user=user, role=Role.TEACHER)
+        TeacherProfile.objects.create(user=user)
+
+        username_login = api_client.post(
+            "/api/v1/auth/sessions",
+            {"identifier": "teachernotemail", "password": "StartPass123!"},
+            format="json",
+        )
+        assert username_login.status_code == 200
+
+        email_login = api_client.post(
+            "/api/v1/auth/sessions",
+            {"identifier": "teachernotemail@example.com", "password": "StartPass123!"},
+            format="json",
+        )
+        assert email_login.status_code == 200
+
+    def test_AUTH_CN_12(self, api_client):
+        """Students cannot log in with email, even when an email value exists."""
+        user = User.objects.create_user(
+            username="student-only",
+            email="student-only@example.com",
+            name="Student Identifier Policy",
+            password="StartPass123!",
+        )
+        UserRole.objects.create(user=user, role=Role.STUDENT)
+
+        email_login = api_client.post(
+            "/api/v1/auth/sessions",
+            {"identifier": "student-only@example.com", "password": "StartPass123!"},
+            format="json",
+        )
+        assert email_login.status_code == 401
+
+        username_login = api_client.post(
+            "/api/v1/auth/sessions",
+            {"identifier": "student-only", "password": "StartPass123!"},
+            format="json",
+        )
+        assert username_login.status_code == 200
+
+    def test_USER_UC_01_E3(self, api_client, admin_user):
+        """Non-student user creation requires an email."""
+        api_client.force_authenticate(user=admin_user)
+        payload = {
+            "password": "testpass123",
+            "name": "Teacher Missing Email",
+            "role": "ROLE_TEACHER",
+        }
+        response = api_client.post("/api/v1/users", payload, format="json")
+        assert response.status_code == 400
+        assert response.json()["detail"] == "email is required for non-student users"
+
+    # ── Bucket 1: AUTH-UC-05/06/07 Issuer-Driven Reset Flow ──
+
+    def _create_non_student_for_reset(self, *, role, username, email, password="StartPass123!"):
+        """Helper: create a non-student user ready for issuer-driven reset tests."""
+        user = User.objects.create_user(
+            username=username, email=email, name=f"{role} Reset User", password=password
+        )
+        UserRole.objects.create(user=user, role=role)
+        if role == Role.TEACHER:
+            TeacherProfile.objects.create(user=user)
+        elif role == Role.RESEARCHER:
+            ResearcherProfile.objects.create(user=user)
+        return user
+
+    def _issue_reset_code(self, api_client, *, issuer: User, target: User):
+        """Issue a reset code through the canonical issuer endpoint."""
+        api_client.force_authenticate(user=issuer)
         response = api_client.post(
-            f"/api/v1/auth/users/{user.id}/set-password",
-            "updatedpass",
-            content_type="text/plain",
+            "/api/v1/auth/password-reset-codes",
+            {"targetUserId": target.id},
+            format="json",
         )
+        api_client.force_authenticate(user=None)
+        return response
+
+    def test_AUTH_UC_05(self, api_client, researcher_user):
+        """Domain aggregator: issuer-driven reset flow (issue -> verify -> complete -> login)."""
+        teacher = self._create_non_student_for_reset(
+            role=Role.TEACHER,
+            username="reset-agg-teacher",
+            email="reset-agg-teacher@example.com",
+        )
+        issue_response = self._issue_reset_code(
+            api_client,
+            issuer=researcher_user,
+            target=teacher,
+        )
+        assert issue_response.status_code == 201
+        reset_code = issue_response.json()["resetCode"]
+
+        verify_response = api_client.post(
+            "/api/v1/auth/reset-code-validations",
+            {"identifier": teacher.email, "resetCode": reset_code},
+            format="json",
+        )
+        assert verify_response.status_code == 200
+        assert verify_response.json()["valid"] is True
+
+        complete_response = api_client.post(
+            "/api/v1/auth/password-resets",
+            {
+                "identifier": teacher.email,
+                "resetCode": reset_code,
+                "newPassword": "NewTeacherPass1!",
+                "confirmPassword": "NewTeacherPass1!",
+            },
+            format="json",
+        )
+        assert complete_response.status_code == 200
+
+        login_response = api_client.post(
+            "/api/v1/auth/sessions",
+            {"identifier": teacher.email, "password": "NewTeacherPass1!"},
+            format="json",
+        )
+        assert login_response.status_code == 200
+
+    def test_AUTH_UC_05_RESEARCHER(self, api_client, admin_user):
+        """Admin can issue a reset code for a researcher target account."""
+        researcher_target = self._create_non_student_for_reset(
+            role=Role.RESEARCHER,
+            username="reset-researcher",
+            email="reset-researcher@example.com",
+        )
+        issue_response = self._issue_reset_code(
+            api_client,
+            issuer=admin_user,
+            target=researcher_target,
+        )
+        assert issue_response.status_code == 201
+
+        complete = api_client.post(
+            "/api/v1/auth/password-resets",
+            {
+                "identifier": researcher_target.email,
+                "resetCode": issue_response.json()["resetCode"],
+                "newPassword": "NewResPass1!",
+                "confirmPassword": "NewResPass1!",
+            },
+            format="json",
+        )
+        assert complete.status_code == 200
+
+        login = api_client.post(
+            "/api/v1/auth/sessions",
+            {
+                "identifier": researcher_target.email,
+                "password": "NewResPass1!",
+            },
+            format="json",
+        )
+        assert login.status_code == 200
+
+    def test_AUTH_UC_05_TEACHER(self, api_client, researcher_user):
+        """Researcher can issue a reset code for a teacher target account."""
+        teacher_target = self._create_non_student_for_reset(
+            role=Role.TEACHER,
+            username="reset-teacher-05",
+            email="reset-teacher-05@example.com",
+        )
+        issue_response = self._issue_reset_code(
+            api_client,
+            issuer=researcher_user,
+            target=teacher_target,
+        )
+        assert issue_response.status_code == 201
+
+        complete = api_client.post(
+            "/api/v1/auth/password-resets",
+            {
+                "identifier": teacher_target.email,
+                "resetCode": issue_response.json()["resetCode"],
+                "newPassword": "NewTeach1!Pass",
+                "confirmPassword": "NewTeach1!Pass",
+            },
+            format="json",
+        )
+        assert complete.status_code == 200
+
+        login = api_client.post(
+            "/api/v1/auth/sessions",
+            {
+                "identifier": teacher_target.email,
+                "password": "NewTeach1!Pass",
+            },
+            format="json",
+        )
+        assert login.status_code == 200
+
+    def test_AUTH_UC_05_E1(self, api_client, teacher_user):
+        """AUTH-UC-05-E1: issuer is denied when target is outside allowed role chain."""
+        teacher_target = self._create_non_student_for_reset(
+            role=Role.TEACHER,
+            username="deny-teacher",
+            email="deny-teacher@example.com",
+        )
+        api_client.force_authenticate(user=teacher_user)
+        deny_response = api_client.post(
+            "/api/v1/auth/password-reset-codes",
+            {"targetUserId": teacher_target.id},
+            format="json",
+        )
+        assert deny_response.status_code == 403
+
+    def test_AUTH_UC_05_E2(self, api_client, researcher_user):
+        """AUTH-UC-05-E2: expired reset code is rejected by validation and completion."""
+        teacher_target = self._create_non_student_for_reset(
+            role=Role.TEACHER,
+            username="expire-teacher",
+            email="expire-teacher@example.com",
+        )
+        issue = self._issue_reset_code(api_client, issuer=researcher_user, target=teacher_target)
+        assert issue.status_code == 201
+
+        request_id = issue.json()["requestId"]
+        code_obj = PasswordResetCode.objects.get(request_id=request_id)
+        code_obj.expires_at = timezone.now() - timedelta(minutes=1)
+        code_obj.save(update_fields=["expires_at"])
+
+        verify_response = api_client.post(
+            "/api/v1/auth/reset-code-validations",
+            {"identifier": teacher_target.email, "resetCode": issue.json()["resetCode"]},
+            format="json",
+        )
+        assert verify_response.status_code == 400
+
+        complete_response = api_client.post(
+            "/api/v1/auth/password-resets",
+            {
+                "identifier": teacher_target.email,
+                "resetCode": issue.json()["resetCode"],
+                "newPassword": "ExpirePass123!",
+                "confirmPassword": "ExpirePass123!",
+            },
+            format="json",
+        )
+        assert complete_response.status_code == 400
+
+    def test_AUTH_UC_05_E3(self, api_client, researcher_user):
+        """AUTH-UC-05-E3: reset code invalid, expired, and already-used are all rejected."""
+        teacher_target = self._create_non_student_for_reset(
+            role=Role.TEACHER,
+            username="e3-teacher",
+            email="e3-teacher@example.com",
+        )
+
+        issued = self._issue_reset_code(api_client, issuer=researcher_user, target=teacher_target)
+        assert issued.status_code == 201
+        reset_code = issued.json()["resetCode"]
+        request_id = issued.json()["requestId"]
+
+        wrong = api_client.post(
+            "/api/v1/auth/reset-code-validations",
+            {"identifier": teacher_target.email, "resetCode": "RESET-WRONG"},
+            format="json",
+        )
+        assert wrong.status_code == 400
+        assert wrong.json()["valid"] is False
+
+        complete = api_client.post(
+            "/api/v1/auth/password-resets",
+            {
+                "identifier": teacher_target.email,
+                "resetCode": reset_code,
+                "newPassword": "AfterE3Test1!",
+                "confirmPassword": "AfterE3Test1!",
+            },
+            format="json",
+        )
+        assert complete.status_code == 200
+
+        used = api_client.post(
+            "/api/v1/auth/password-resets",
+            {
+                "identifier": teacher_target.email,
+                "resetCode": reset_code,
+                "newPassword": "Another1!Pass",
+                "confirmPassword": "Another1!Pass",
+            },
+            format="json",
+        )
+        assert used.status_code == 400
+
+        reissued = self._issue_reset_code(api_client, issuer=researcher_user, target=teacher_target)
+        assert reissued.status_code == 201
+        expired_obj = PasswordResetCode.objects.get(request_id=reissued.json()["requestId"])
+        expired_obj.expires_at = timezone.now() - timedelta(minutes=1)
+        expired_obj.save(update_fields=["expires_at"])
+
+        expired = api_client.post(
+            "/api/v1/auth/reset-code-validations",
+            {"identifier": teacher_target.email, "resetCode": reissued.json()["resetCode"]},
+            format="json",
+        )
+        assert expired.status_code == 400
+
+        old_request = PasswordResetRequest.objects.get(id=request_id)
+        assert old_request.status == PasswordResetRequestStatus.EXPIRED
+
+    def test_AUTH_UC_05_E4(self, api_client, researcher_user):
+        """AUTH-UC-05-E4: issuing a new code invalidates the previous code for that target."""
+        teacher_target = self._create_non_student_for_reset(
+            role=Role.TEACHER,
+            username="e4-teacher",
+            email="e4-teacher@example.com",
+        )
+        first = self._issue_reset_code(api_client, issuer=researcher_user, target=teacher_target)
+        second = self._issue_reset_code(api_client, issuer=researcher_user, target=teacher_target)
+        assert first.status_code == 201
+        assert second.status_code == 201
+
+        first_verify = api_client.post(
+            "/api/v1/auth/reset-code-validations",
+            {"identifier": teacher_target.email, "resetCode": first.json()["resetCode"]},
+            format="json",
+        )
+        second_verify = api_client.post(
+            "/api/v1/auth/reset-code-validations",
+            {"identifier": teacher_target.email, "resetCode": second.json()["resetCode"]},
+            format="json",
+        )
+        assert first_verify.status_code == 400
+        assert second_verify.status_code == 200
+
+    def test_AUTH_UC_05_E5(self, api_client, researcher_user):
+        """AUTH-UC-05-E5: reset password validation (weak, mismatch, same as old)."""
+        teacher_target = self._create_non_student_for_reset(
+            role=Role.TEACHER,
+            username="e5-teacher",
+            email="e5-teacher@example.com",
+            password="OldPass123!",
+        )
+        issue = self._issue_reset_code(api_client, issuer=researcher_user, target=teacher_target)
+        assert issue.status_code == 201
+        reset_code = issue.json()["resetCode"]
+
+        weak = api_client.post(
+            "/api/v1/auth/password-resets",
+            {
+                "identifier": teacher_target.email,
+                "resetCode": reset_code,
+                "newPassword": "short",
+                "confirmPassword": "short",
+            },
+            format="json",
+        )
+        assert weak.status_code == 400
+
+        mismatch = api_client.post(
+            "/api/v1/auth/password-resets",
+            {
+                "identifier": teacher_target.email,
+                "resetCode": reset_code,
+                "newPassword": "ValidNew1!Pass",
+                "confirmPassword": "Different1!Pass",
+            },
+            format="json",
+        )
+        assert mismatch.status_code == 400
+
+        same = api_client.post(
+            "/api/v1/auth/password-resets",
+            {
+                "identifier": teacher_target.email,
+                "resetCode": reset_code,
+                "newPassword": "OldPass123!",
+                "confirmPassword": "OldPass123!",
+            },
+            format="json",
+        )
+        assert same.status_code == 400
+
+    def test_AUTH_CN_06(self, api_client, teacher_user, researcher_user):
+        """AUTH-CN-06: reset code expiry is fixed at 30 minutes for issuer-driven flows."""
+        self._student_code(teacher_user, code="CN06-STUDENT", course_name="CN06 Course")
+        reg = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "CN06-STUDENT",
+                "firstName": "Cnsix",
+                "lastName": "Student",
+                "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
+            },
+            format="json",
+        )
+        assert reg.status_code == 201
+        student = User.objects.get(username=reg.json()["username"])
+
+        student_issue = self._issue_reset_code(api_client, issuer=teacher_user, target=student)
+        assert student_issue.status_code == 201
+        student_request = PasswordResetRequest.objects.get(id=student_issue.json()["requestId"])
+        student_code = PasswordResetCode.objects.get(request=student_request)
+        student_delta = (student_code.expires_at - student_request.reviewed_at).total_seconds()
+        assert 1795 <= student_delta <= 1805
+
+        teacher_target = self._create_non_student_for_reset(
+            role=Role.TEACHER,
+            username="cn06-teacher",
+            email="cn06-teacher@example.com",
+        )
+        teacher_issue = self._issue_reset_code(
+            api_client,
+            issuer=researcher_user,
+            target=teacher_target,
+        )
+        assert teacher_issue.status_code == 201
+        teacher_request = PasswordResetRequest.objects.get(id=teacher_issue.json()["requestId"])
+        teacher_code = PasswordResetCode.objects.get(request=teacher_request)
+        teacher_delta = (teacher_code.expires_at - teacher_request.reviewed_at).total_seconds()
+        assert 1795 <= teacher_delta <= 1805
+
+    def test_AUTH_CN_07(self, api_client, researcher_user):
+        """AUTH-CN-07: reset codes are single-use; second use is rejected."""
+        teacher_target = self._create_non_student_for_reset(
+            role=Role.TEACHER,
+            username="cn07-teacher",
+            email="cn07-teacher@example.com",
+        )
+        issue = self._issue_reset_code(api_client, issuer=researcher_user, target=teacher_target)
+        reset_code = issue.json()["resetCode"]
+
+        first = api_client.post(
+            "/api/v1/auth/password-resets",
+            {
+                "identifier": teacher_target.email,
+                "resetCode": reset_code,
+                "newPassword": "FirstNew1!Pass",
+                "confirmPassword": "FirstNew1!Pass",
+            },
+            format="json",
+        )
+        assert first.status_code == 200
+
+        second = api_client.post(
+            "/api/v1/auth/password-resets",
+            {
+                "identifier": teacher_target.email,
+                "resetCode": reset_code,
+                "newPassword": "SecondNew1!Pass",
+                "confirmPassword": "SecondNew1!Pass",
+            },
+            format="json",
+        )
+        assert second.status_code == 400
+
+    def test_AUTH_CN_08(self, api_client, researcher_user):
+        """AUTH-CN-08: failed validation does not consume the reset code (atomic)."""
+        teacher_target = self._create_non_student_for_reset(
+            role=Role.TEACHER,
+            username="cn08-teacher",
+            email="cn08-teacher@example.com",
+            password="OldAtomic1!",
+        )
+        issue = self._issue_reset_code(api_client, issuer=researcher_user, target=teacher_target)
+        assert issue.status_code == 201
+        request_id = issue.json()["requestId"]
+        reset_code = issue.json()["resetCode"]
+
+        fail_response = api_client.post(
+            "/api/v1/auth/password-resets",
+            {
+                "identifier": teacher_target.email,
+                "resetCode": reset_code,
+                "newPassword": "OldAtomic1!",
+                "confirmPassword": "OldAtomic1!",
+            },
+            format="json",
+        )
+        assert fail_response.status_code == 400
+
+        code_obj = PasswordResetCode.objects.get(request_id=request_id)
+        assert code_obj.used_at is None
+
+        success = api_client.post(
+            "/api/v1/auth/password-resets",
+            {
+                "identifier": teacher_target.email,
+                "resetCode": reset_code,
+                "newPassword": "NewAtomic1!Pass",
+                "confirmPassword": "NewAtomic1!Pass",
+            },
+            format="json",
+        )
+        assert success.status_code == 200
+
+        code_obj.refresh_from_db()
+        assert code_obj.used_at is not None
+
+    def test_AUTH_CN_10(self, api_client, researcher_user):
+        """AUTH-CN-10: issuer flow returns RESET code only; no request token is exposed."""
+        teacher_target = self._create_non_student_for_reset(
+            role=Role.TEACHER,
+            username="cn10-teacher",
+            email="cn10-teacher@example.com",
+        )
+        issue = self._issue_reset_code(api_client, issuer=researcher_user, target=teacher_target)
+        assert issue.status_code == 201
+        payload = issue.json()
+        assert payload["resetCode"].startswith("RESET-")
+        assert "requestToken" not in payload
+
+    def test_AUTH_UC_06(self, api_client, researcher_user):
+        """Domain aggregator: reset-code verification reflects current validity."""
+        teacher_target = self._create_non_student_for_reset(
+            role=Role.TEACHER,
+            username="uc06-teacher",
+            email="uc06-teacher@example.com",
+        )
+        issue = self._issue_reset_code(api_client, issuer=researcher_user, target=teacher_target)
+        assert issue.status_code == 201
+        reset_code = issue.json()["resetCode"]
+
+        valid = api_client.post(
+            "/api/v1/auth/reset-code-validations",
+            {"identifier": teacher_target.email, "resetCode": reset_code},
+            format="json",
+        )
+        assert valid.status_code == 200
+        assert valid.json()["valid"] is True
+
+        complete = api_client.post(
+            "/api/v1/auth/password-resets",
+            {
+                "identifier": teacher_target.email,
+                "resetCode": reset_code,
+                "newPassword": "UC06NewPass1!",
+                "confirmPassword": "UC06NewPass1!",
+            },
+            format="json",
+        )
+        assert complete.status_code == 200
+
+        invalid = api_client.post(
+            "/api/v1/auth/reset-code-validations",
+            {"identifier": teacher_target.email, "resetCode": reset_code},
+            format="json",
+        )
+        assert invalid.status_code == 400
+
+    def test_AUTH_UC_06_RESEARCHER(self, api_client, admin_user):
+        """Researcher account reset code can be validated by identifier + reset code."""
+        researcher_target = self._create_non_student_for_reset(
+            role=Role.RESEARCHER,
+            username="uc06-researcher",
+            email="uc06-researcher@example.com",
+        )
+        issue = self._issue_reset_code(api_client, issuer=admin_user, target=researcher_target)
+        assert issue.status_code == 201
+
+        status_response = api_client.post(
+            "/api/v1/auth/reset-code-validations",
+            {
+                "identifier": researcher_target.email,
+                "resetCode": issue.json()["resetCode"],
+            },
+            format="json",
+        )
+        assert status_response.status_code == 200
+        assert status_response.json()["valid"] is True
+
+    def test_AUTH_UC_06_TEACHER(self, api_client, researcher_user):
+        """Teacher account reset code can be validated by identifier + reset code."""
+        teacher_target = self._create_non_student_for_reset(
+            role=Role.TEACHER,
+            username="uc06-teacher2",
+            email="uc06-teacher2@example.com",
+        )
+        issue = self._issue_reset_code(api_client, issuer=researcher_user, target=teacher_target)
+        assert issue.status_code == 201
+
+        status_response = api_client.post(
+            "/api/v1/auth/reset-code-validations",
+            {
+                "identifier": teacher_target.email,
+                "resetCode": issue.json()["resetCode"],
+            },
+            format="json",
+        )
+        assert status_response.status_code == 200
+        assert status_response.json()["valid"] is True
+
+    def test_AUTH_UC_07(self, api_client, admin_user, researcher_user, teacher_user):
+        """Domain aggregator: admin/researcher/teacher issuance chains are enforced."""
+        teacher_target = self._create_non_student_for_reset(
+            role=Role.TEACHER,
+            username="uc07-t1",
+            email="uc07-t1@example.com",
+        )
+        researcher_target = self._create_non_student_for_reset(
+            role=Role.RESEARCHER,
+            username="uc07-r2",
+            email="uc07-r2@example.com",
+        )
+
+        researcher_issue = self._issue_reset_code(
+            api_client,
+            issuer=researcher_user,
+            target=teacher_target,
+        )
+        assert researcher_issue.status_code == 201
+
+        admin_issue = self._issue_reset_code(
+            api_client,
+            issuer=admin_user,
+            target=researcher_target,
+        )
+        assert admin_issue.status_code == 201
+
+        self._student_code(teacher_user, code="UC07-STUDENT", course_name="UC07 Course")
+        reg = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "UC07-STUDENT",
+                "firstName": "Ucseven",
+                "lastName": "Student",
+                "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
+            },
+            format="json",
+        )
+        assert reg.status_code == 201
+        student_target = User.objects.get(username=reg.json()["username"])
+
+        teacher_issue = self._issue_reset_code(
+            api_client,
+            issuer=teacher_user,
+            target=student_target,
+        )
+        assert teacher_issue.status_code == 201
+
+    def test_AUTH_UC_07_ADMIN(self, api_client, admin_user):
+        """Admin can issue reset codes for any non-admin role target."""
+        teacher_target = self._create_non_student_for_reset(
+            role=Role.TEACHER,
+            username="uc07-admin-t",
+            email="uc07-admin-t@example.com",
+        )
+        issue = self._issue_reset_code(api_client, issuer=admin_user, target=teacher_target)
+        assert issue.status_code == 201
+        assert issue.json()["targetRole"] == Role.TEACHER
+        assert issue.json()["resetCode"].startswith("RESET-")
+
+    def test_AUTH_UC_07_TEACHER(self, api_client, teacher_user):
+        """Teacher generates reset code for student enrolled in their course."""
+        self._student_code(teacher_user, code="UC07-T-STU", course_name="Teacher Reset Course")
+        reg = api_client.post(
+            "/api/v1/registration/accounts",
+            {
+                "method": "LOCAL",
+                "code": "UC07-T-STU",
+                "firstName": "Teacher",
+                "lastName": "Resetstudent",
+                "password": "StartPass123!",
+                "confirmPassword": "StartPass123!",
+            },
+            format="json",
+        )
+        assert reg.status_code == 201
+        student = User.objects.get(username=reg.json()["username"])
+
+        issue = self._issue_reset_code(api_client, issuer=teacher_user, target=student)
+        assert issue.status_code == 201
+        payload = issue.json()
+        assert payload["targetUserId"] == student.id
+        assert payload["targetRole"] == Role.STUDENT
+        assert payload["resetCode"].startswith("RESET-")
+        assert "expiresAt" in payload
+
+
+@pytest.mark.django_db
+@pytest.mark.integration
+class TestListStudents:
+    """USER-UC-05: List students endpoint for staff management."""
+
+    URL = "/api/v1/users/students"
+
+    @staticmethod
+    def _enroll_student(student_user, teacher_user, course_name="Test Course", status_val=None):
+        """Create a course and enroll the student with the given status (default ACTIVE)."""
+        tp = TeacherProfile.objects.get(user=teacher_user)
+        course = Course.objects.create(name=course_name, teacher_profile=tp)
+        sp = student_user.student_profile
+        enrollment_status = status_val if status_val is not None else EnrollmentStatus.ACTIVE
+        Enrollment.objects.create(course=course, student_profile=sp, status=enrollment_status)
+        return course
+
+    def test_USER_UC_05_RESEARCHER(self, api_client, researcher_user, teacher_user, student_user):
+        """Researcher can list students; response has count + results with student id."""
+        self._enroll_student(student_user, teacher_user, course_name="Researcher List Course")
+        api_client.force_authenticate(user=researcher_user)
+        response = api_client.get(self.URL)
         assert response.status_code == 200
-        user.refresh_from_db()
-        assert user.password is not None
+        payload = response.json()
+        assert "count" in payload
+        assert "results" in payload
+        student_ids = {entry["id"] for entry in payload["results"]}
+        assert student_user.id in student_ids
+
+    def test_USER_UC_05_ADMIN(self, api_client, admin_user, teacher_user, student_user):
+        """Admin can list students."""
+        self._enroll_student(student_user, teacher_user, course_name="Admin List Course")
+        api_client.force_authenticate(user=admin_user)
+        response = api_client.get(self.URL)
+        assert response.status_code == 200
+        payload = response.json()
+        assert "count" in payload
+        assert "results" in payload
+        student_ids = {entry["id"] for entry in payload["results"]}
+        assert student_user.id in student_ids
+
+    def test_USER_UC_05_E1(self, api_client, teacher_user, student_user):
+        """Teacher gets 403 when attempting to list students."""
+        self._enroll_student(student_user, teacher_user, course_name="Forbidden Course")
+        api_client.force_authenticate(user=teacher_user)
+        response = api_client.get(self.URL)
+        assert response.status_code == 403
+
+    def test_USER_UC_05_search(self, api_client, researcher_user, teacher_user, student_user):
+        """q param filters student list by name/username substring."""
+        self._enroll_student(student_user, teacher_user, course_name="Search Course")
+        api_client.force_authenticate(user=researcher_user)
+
+        # Search by a substring of the student's name
+        name_fragment = student_user.name[:3]
+        response = api_client.get(self.URL, {"q": name_fragment})
+        assert response.status_code == 200
+        student_ids = {entry["id"] for entry in response.json()["results"]}
+        assert student_user.id in student_ids
+
+        # Search by a nonsense string returns no results
+        response_empty = api_client.get(self.URL, {"q": "zzzznonexistentzzzz"})
+        assert response_empty.status_code == 200
+        assert response_empty.json()["count"] == 0
+
+    def test_USER_UC_05_course_filter(
+        self, api_client, researcher_user, teacher_user, student_user, admin_user
+    ):
+        """courseId param returns only students enrolled in that course."""
+        course_a = self._enroll_student(
+            student_user, teacher_user, course_name="Filter Course A"
+        )
+
+        # Create a second student NOT in course_a
+        other_student = User.objects.create_user(
+            username="other-student-filter",
+            name="Other Filter Student",
+            password="StartPass123!",
+        )
+        UserRole.objects.create(user=other_student, role=Role.STUDENT)
+        StudentProfile.objects.create(user=other_student, created_by=admin_user, consent=False)
+        tp = TeacherProfile.objects.get(user=teacher_user)
+        course_b = Course.objects.create(name="Filter Course B", teacher_profile=tp)
+        sp_other = other_student.student_profile
+        Enrollment.objects.create(
+            course=course_b, student_profile=sp_other, status=EnrollmentStatus.ACTIVE
+        )
+
+        api_client.force_authenticate(user=researcher_user)
+        response = api_client.get(self.URL, {"courseId": course_a.id})
+        assert response.status_code == 200
+        result_ids = {entry["id"] for entry in response.json()["results"]}
+        assert student_user.id in result_ids
+        assert other_student.id not in result_ids
+
+    def test_USER_UC_05_courses_in_response(
+        self, api_client, researcher_user, teacher_user, student_user
+    ):
+        """Each student result includes their active course enrollments as courses: [{id, name}]."""
+        course = self._enroll_student(
+            student_user, teacher_user, course_name="Enrollment Courses Test"
+        )
+        api_client.force_authenticate(user=researcher_user)
+        response = api_client.get(self.URL)
+        assert response.status_code == 200
+        results = response.json()["results"]
+        student_entry = next(
+            (entry for entry in results if entry["id"] == student_user.id), None
+        )
+        assert student_entry is not None
+        assert "courses" in student_entry
+        course_entries = student_entry["courses"]
+        assert len(course_entries) >= 1
+        course_ids = {c["id"] for c in course_entries}
+        assert course.id in course_ids
+        # Verify shape: each course has id and name
+        for c in course_entries:
+            assert "id" in c
+            assert "name" in c
+
+    def test_USER_UC_05_dropped_excluded(
+        self, api_client, researcher_user, teacher_user, admin_user
+    ):
+        """Students with ONLY DROPPED enrollments do not appear in results."""
+        # Create a student with ONLY a DROPPED enrollment
+        dropped_student = User.objects.create_user(
+            username="dropped-only-student",
+            name="Dropped Only Student",
+            password="StartPass123!",
+        )
+        UserRole.objects.create(user=dropped_student, role=Role.STUDENT)
+        StudentProfile.objects.create(
+            user=dropped_student, created_by=admin_user, consent=False
+        )
+        tp = TeacherProfile.objects.get(user=teacher_user)
+        course = Course.objects.create(name="Dropped Course", teacher_profile=tp)
+        sp = dropped_student.student_profile
+        Enrollment.objects.create(
+            course=course, student_profile=sp, status=EnrollmentStatus.DROPPED
+        )
+
+        api_client.force_authenticate(user=researcher_user)
+
+        # Default listing: dropped-only student should not appear
+        response = api_client.get(self.URL)
+        assert response.status_code == 200
+        result_ids = {entry["id"] for entry in response.json()["results"]}
+        assert dropped_student.id not in result_ids
+
+        # courseId filter: dropped-only student should not appear either
+        response_filtered = api_client.get(self.URL, {"courseId": course.id})
+        assert response_filtered.status_code == 200
+        filtered_ids = {entry["id"] for entry in response_filtered.json()["results"]}
+        assert dropped_student.id not in filtered_ids

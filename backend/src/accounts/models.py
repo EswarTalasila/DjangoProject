@@ -5,50 +5,61 @@ This module defines the core user model and associated profiles that power
 the authentication and role-based access control system. The architecture
 supports three user types:
 
-    ADMIN: Full system access, can manage assessments and view all data
+    RESEARCHER: Can design assessments, oversee studies, view all data
     TEACHER: Can create courses, enroll students, create assignments
     STUDENT: Can view assigned assessments and submit responses
 
+Admin status is determined by the User.is_staff field, not by a role.
+
 User Creation Flows:
     1. Self-registration (register endpoint): Creates user + STUDENT role + StudentProfile
-    2. Teacher creation (admin creates): Creates user + TEACHER role + TeacherProfile
-    3. Student import (teacher imports): Creates user + STUDENT role + StudentProfile
-    4. OAuth login (Google): Creates/links user via OAuthAccount
+    2. Researcher creation (admin creates): Creates user + RESEARCHER role + ResearcherProfile
+    3. Teacher creation (admin creates): Creates user + TEACHER role + TeacherProfile
+    4. Student import (teacher imports): Creates user + STUDENT role + StudentProfile
+    5. OAuth login (Google): Creates/links user via OAuthAccount
 
 Database Tables:
-    app_users        - Core user accounts (email-based authentication)
-    user_roles       - Many-to-many join table for user roles
-    teacher_profiles - Extended data for teacher accounts
-    student_profiles - Extended data for student accounts (includes consent)
-    oauth_accounts   - Linked external identity provider accounts
+    app_users           - Core user accounts (username/email authentication)
+    user_roles          - Many-to-many join table for user roles
+    sudo_grants         - Elevated permissions for researchers
+    researcher_profiles - Extended data for researcher accounts
+    teacher_profiles    - Extended data for teacher accounts
+    student_profiles    - Extended data for student accounts (includes consent)
+    oauth_accounts      - Linked external identity provider accounts
+    registration_codes  - Invite codes used for code-gated registration/enrollment
+    password_reset_requests - Issuer-anchored password reset issuance records
+    password_reset_codes - One-time reset codes issued from reset records
 
 Note:
-    The User model uses email as the username field. All emails are
-    normalized to lowercase during creation.
+    The User model stores both username and email identifiers.
+    Students use username-first flows, while non-student roles keep
+    an email for communication and can authenticate with either identifier.
 """
 
 from typing import cast
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
 class UserManager(BaseUserManager):
     """
-    Custom manager for User model with email-based authentication.
+    Custom manager for User model with username-based authentication.
 
     Provides factory methods for creating regular users and superusers,
-    handling email normalization and password hashing automatically.
+    handling username normalization and password hashing automatically.
     """
 
-    def create_user(self, username, name, password=None, **extra_fields) -> "User":
+    def create_user(self, username, name, password=None, email=None, **extra_fields) -> "User":
         """
-        Create and persist a user with a normalized email.
+        Create and persist a user with a normalized username identifier.
 
         Args:
-            username: Email address (will be normalized to lowercase)
+            username: Login identifier (normalized to lowercase)
             name: Display name for the user
             password: Optional plain-text password (hashed before storage)
+            email: Optional contact/login email (normalized lowercase)
             **extra_fields: Additional fields to set on the user model
 
         Returns:
@@ -61,8 +72,20 @@ class UserManager(BaseUserManager):
             raise ValueError("username is required")
         if not name:
             raise ValueError("name is required")
-        username = self.normalize_email(username)
-        user = cast("User", self.model(username=username, name=name, **extra_fields))
+        username = str(username).strip().lower()
+        normalized_email = str(email).strip().lower() if email else None
+        if normalized_email == "":
+            normalized_email = None
+
+        user = cast(
+            "User",
+            self.model(
+                username=username,
+                email=normalized_email,
+                name=name,
+                **extra_fields,
+            ),
+        )
         if password:
             user.set_password(password)
         else:
@@ -72,10 +95,10 @@ class UserManager(BaseUserManager):
 
     def create_superuser(self, username, name, password=None, **extra_fields):
         """
-        Create and persist a superuser with admin role.
+        Create and persist a superuser with admin privileges.
 
-        Superusers are automatically granted is_staff and is_superuser flags,
-        and receive the ADMIN role in the user_roles table.
+        Superusers are automatically granted is_staff and is_superuser flags.
+        No user role is assigned — admin status is determined by is_staff.
 
         Args:
             username: Email address for the superuser
@@ -84,7 +107,7 @@ class UserManager(BaseUserManager):
             **extra_fields: Additional fields (is_staff/is_superuser enforced)
 
         Returns:
-            User: The created superuser with ADMIN role
+            User: The created superuser with is_staff=True
 
         Raises:
             ValueError: If is_staff or is_superuser explicitly set to False
@@ -96,20 +119,21 @@ class UserManager(BaseUserManager):
             raise ValueError("Superuser must have is_staff=True.")
         if extra_fields.get("is_superuser") is not True:
             raise ValueError("Superuser must have is_superuser=True.")
+        extra_fields.setdefault("email", username)
         user = self.create_user(username, name, password, **extra_fields)
-        UserRole.objects.get_or_create(user=user, role=Role.ADMIN)
         return user
 
 
 class User(AbstractBaseUser, PermissionsMixin):
     """
-    Custom user model using email as the primary identifier.
+    Custom user model using username as the primary identifier.
 
-    This model replaces Django's default User model to support email-based
+    This model replaces Django's default User model to support identifier-based
     authentication. Users can authenticate via password or OAuth (Google).
 
     Attributes:
-        username: Email address serving as unique identifier (max 320 chars)
+        username: Login identifier serving as unique key (max 320 chars)
+        email: Optional email identifier/contact (max 320 chars)
         name: Display name shown in UI (max 255 chars)
         is_active: Whether account can authenticate (db column: enabled)
         is_staff: Whether user can access Django admin
@@ -119,12 +143,17 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     Related Models:
         roles: UserRole instances defining user's permissions
+        sudo_grant: SudoGrant if user is a sudoed researcher
+        researcher_profile: ResearcherProfile if user is a researcher
         teacher_profile: TeacherProfile if user is a teacher
         student_profile: StudentProfile if user is a student
     """
 
-    # Email address used as the unique identifier for authentication
-    username = models.EmailField(max_length=320, unique=True)
+    # Unique login identifier for all roles.
+    username = models.CharField(max_length=320, unique=True)
+
+    # Optional email address. Non-student accounts are expected to provide this.
+    email = models.EmailField(max_length=320, blank=True, null=True)
 
     # Display name shown throughout the application UI
     name = models.CharField(max_length=255)
@@ -160,9 +189,15 @@ class User(AbstractBaseUser, PermissionsMixin):
         db_table = "app_users"
         constraints = [
             models.UniqueConstraint(fields=["username"], name="uq_user_username"),
+            models.UniqueConstraint(
+                fields=["email"],
+                condition=models.Q(email__isnull=False),
+                name="uq_user_email",
+            ),
         ]
         indexes = [
             models.Index(fields=["username"], name="idx_user_username"),
+            models.Index(fields=["email"], name="idx_user_email"),
         ]
 
     def __str__(self):
@@ -179,29 +214,37 @@ class Role(models.TextChoices):
     checks typically use the "primary" role (highest privilege).
 
     Role Hierarchy (highest to lowest):
-        ADMIN > TEACHER > STUDENT
+        RESEARCHER > TEACHER > STUDENT
 
     Values:
-        ADMIN: System administrator with full access
+        RESEARCHER: Can design assessments, oversee studies, view all data
         TEACHER: Can create courses, assignments, view student data
         STUDENT: Can view assigned work and submit responses
     """
 
-    ADMIN = "ADMIN", "Admin"
+    RESEARCHER = "RESEARCHER", "Researcher"
     TEACHER = "TEACHER", "Teacher"
     STUDENT = "STUDENT", "Student"
+
+
+class RegistrationCodeType(models.TextChoices):
+    """Code type used for invite-based registration flows."""
+
+    STUDENT = "STUDENT", "Student"
+    TEACHER = "TEACHER", "Teacher"
+    RESEARCHER = "RESEARCHER", "Researcher"
 
 
 class UserRole(models.Model):
     """
     Join table mapping users to their assigned roles.
 
-    Users can have multiple roles (e.g., a teacher who is also an admin).
+    Users can have multiple roles (e.g., a user with both RESEARCHER and TEACHER).
     The unique constraint ensures no duplicate role assignments.
 
     Attributes:
         user: Foreign key to the User model
-        role: One of the Role enum values (ADMIN, TEACHER, STUDENT)
+        role: One of the Role enum values (RESEARCHER, TEACHER, STUDENT)
 
     Note:
         When checking permissions, the system uses the user's "primary"
@@ -227,6 +270,162 @@ class UserRole(models.Model):
     def __str__(self):
         """Return a readable string representation."""
         return f"{self.user.username}: {self.role}"
+
+
+class SudoPermission(models.TextChoices):
+    """
+    Enumeration of elevated permissions that can be granted to researchers.
+
+    Sudo permissions allow researchers to perform admin-level actions without
+    being full system admins. Each permission is granted explicitly and stored
+    in the SudoGrant.permissions JSONField.
+
+    Values:
+        CREATE_TEACHER: Can create teacher accounts
+        CREATE_STUDENT: Can create student accounts
+        ISSUE_RESEARCHER_REG_CODE: Can generate researcher invite codes
+        ISSUE_STUDENT_REG_CODE: Can generate student registration codes for courses
+        EDIT_USER: Can edit user accounts (within user role space)
+        DELETE_USER: Can delete user accounts (within user role space)
+        ISSUE_STUDENT_RESET_CODE: Can issue student reset codes (researcher sudo extension)
+        ISSUE_RESEARCHER_RESET_CODE: Can issue researcher reset codes (researcher sudo extension)
+        VIEW_SUBMISSIONS: Can read submissions endpoints (FR-08)
+        VIEW_IDENTIFIABLE_VIZ: Can view identifiable fields in visualization data (FR-09)
+        EXPORT_IDENTIFIABLE: Can export identifiable fields in CSV exports (FR-10)
+
+    Note:
+        Sudo permissions only apply within the user role space (RESEARCHER,
+        TEACHER, STUDENT). A sudoed researcher cannot create, modify, or
+        delete admin accounts regardless of their permissions.
+    """
+
+    CREATE_TEACHER = "CREATE_TEACHER", "Create Teacher"
+    CREATE_STUDENT = "CREATE_STUDENT", "Create Student"
+    ISSUE_RESEARCHER_REG_CODE = "ISSUE_RESEARCHER_REG_CODE", "Issue Researcher Registration Code"
+    ISSUE_STUDENT_REG_CODE = "ISSUE_STUDENT_REG_CODE", "Issue Student Registration Code"
+    EDIT_USER = "EDIT_USER", "Edit User"
+    DELETE_USER = "DELETE_USER", "Delete User"
+    ISSUE_STUDENT_RESET_CODE = "ISSUE_STUDENT_RESET_CODE", "Issue Student Reset Code"
+    ISSUE_RESEARCHER_RESET_CODE = "ISSUE_RESEARCHER_RESET_CODE", "Issue Researcher Reset Code"
+    VIEW_SUBMISSIONS = "VIEW_SUBMISSIONS", "View Submissions"
+    VIEW_IDENTIFIABLE_VIZ = "VIEW_IDENTIFIABLE_VIZ", "View Identifiable Visualizations"
+    EXPORT_IDENTIFIABLE = "EXPORT_IDENTIFIABLE", "Export Identifiable Data"
+
+
+class SudoGrant(models.Model):
+    """
+    Elevated permissions granted to a researcher for admin-level actions.
+
+    A SudoGrant allows a researcher to perform specific admin actions without
+    being a full system admin (is_staff=True). Each researcher can have at most
+    one SudoGrant (OneToOne relationship).
+
+    Attributes:
+        user: The researcher receiving elevated permissions (must have RESEARCHER role)
+        granted_by: Admin or sudoed researcher who created this grant (PROTECT on delete)
+        granted_at: When the grant was created
+        can_grant_sudo: Whether this researcher can grant sudo to other researchers
+        permissions: List of SudoPermission values this researcher holds
+
+    Sudo Rules:
+        - Only an admin (is_staff=True) can grant sudo to a researcher
+        - A sudoed researcher with can_grant_sudo=True can grant sudo to others, but:
+          - They can only delegate a subset of their own permissions (no escalation)
+          - Only an admin can set can_grant_sudo=True (never transitive)
+        - Sudo is default-deny: zero elevated permissions unless explicitly listed
+        - Admin and user role spaces never cross: sudo cannot affect admin accounts
+
+    Example:
+        grant = SudoGrant.objects.create(
+            user=researcher,
+            granted_by=admin,
+            can_grant_sudo=False,
+            permissions=["CREATE_TEACHER", "CREATE_STUDENT"]
+        )
+    """
+
+    # The researcher receiving elevated permissions
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="sudo_grant")
+
+    # Admin or sudoed researcher who created this grant
+    # PROTECT prevents deleting the granter if they have active grants
+    granted_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name="sudo_grants_given")
+
+    # Timestamp for auditing when sudo was granted
+    granted_at = models.DateTimeField(auto_now_add=True)
+
+    # Whether this researcher can grant sudo to other researchers
+    # Only an admin can set this to True
+    can_grant_sudo = models.BooleanField(default=False)
+
+    # List of SudoPermission values (e.g., ["CREATE_TEACHER", "EDIT_USER"])
+    # Validated against SudoPermission enum choices
+    permissions = models.JSONField(default=list)
+
+    class Meta:
+        """Database table configuration for SudoGrant."""
+
+        db_table = "sudo_grants"
+
+    def __str__(self):
+        """Return a readable string representation."""
+        return f"SudoGrant({self.user.username}, permissions={self.permissions})"
+
+    def clean(self):
+        """Validate permissions JSONField against SudoPermission enum."""
+        super().clean()
+        if not isinstance(self.permissions, list):
+            raise ValidationError({"permissions": "Permissions must be a list"})
+
+        valid_permissions = {p.value for p in SudoPermission}
+        invalid = [p for p in self.permissions if p not in valid_permissions]
+
+        if invalid:
+            raise ValidationError(
+                {
+                    "permissions": (
+                        f"Invalid permissions: {invalid}. Valid values: {list(valid_permissions)}"
+                    )
+                }
+            )
+
+
+class ResearcherProfile(models.Model):
+    """
+    Extended profile data for researcher accounts.
+
+    Every user with the RESEARCHER role should have an associated ResearcherProfile.
+    Researchers design studies and assessments, and oversee the research workflow.
+    This model provides a place to attach researcher-specific fields later
+    (institution, IRB number, research area, etc.).
+
+    Attributes:
+        user: One-to-one link to the User model
+        created_at: When the researcher profile was created
+
+    Related Models:
+        (Future) studies, assessments owned by this researcher
+    """
+
+    # One-to-one link to the user account
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, db_column="user_id", related_name="researcher_profile"
+    )
+
+    # Timestamp for auditing when researcher was onboarded
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        """Database table configuration for ResearcherProfile."""
+
+        db_table = "researcher_profiles"
+        constraints = [
+            models.UniqueConstraint(fields=["user"], name="uq_researcher_user"),
+        ]
+
+    def __str__(self):
+        """Return a readable string representation."""
+        return f"ResearcherProfile({self.user.username})"
 
 
 class TeacherProfile(models.Model):
@@ -338,6 +537,99 @@ class OAuthProvider(models.TextChoices):
     GOOGLE = "GOOGLE", "Google"
 
 
+class PasswordResetRequestStatus(models.TextChoices):
+    """Lifecycle states for reset issuance records."""
+
+    PENDING = "PENDING", "Pending"
+    APPROVED = "APPROVED", "Approved"
+    DENIED = "DENIED", "Denied"
+    EXPIRED = "EXPIRED", "Expired"
+
+
+class RegistrationCode(models.Model):
+    """
+    Invite/registration code with bounded usage and optional course linkage.
+
+    For student onboarding, the code points at a course and is consumed when
+    the user registers or redeems it against an existing account.
+    """
+
+    code_hash = models.CharField(max_length=64, unique=True)
+    code_prefix = models.CharField(max_length=8)
+    code_type = models.CharField(max_length=32, choices=RegistrationCodeType.choices)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        db_column="created_by_user_id",
+        related_name="registration_codes_created",
+    )
+    course = models.ForeignKey(
+        "courses.Course",
+        on_delete=models.PROTECT,
+        db_column="course_id",
+        related_name="registration_codes",
+        null=True,
+        blank=True,
+    )
+    max_uses = models.PositiveIntegerField(default=1)
+    times_used = models.PositiveIntegerField(default=0)
+    expires_at = models.DateTimeField()
+    is_active = models.BooleanField(default=True)
+    metadata = models.JSONField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        """Database table configuration for RegistrationCode."""
+
+        db_table = "registration_codes"
+        constraints = [
+            models.UniqueConstraint(fields=["code_hash"], name="uq_registration_code_hash"),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        code_type=RegistrationCodeType.STUDENT,
+                        course_id__isnull=False,
+                    )
+                    | (
+                        ~models.Q(code_type=RegistrationCodeType.STUDENT)
+                        & models.Q(course_id__isnull=True)
+                    )
+                ),
+                name="ck_registration_code_course_binding",
+            ),
+        ]
+        indexes = [
+            # code_hash index omitted: the uq_registration_code_hash UniqueConstraint
+            # already creates an implicit index.
+            models.Index(fields=["code_prefix"], name="idx_registration_code_prefix"),
+            models.Index(fields=["code_type"], name="idx_registration_code_type"),
+            models.Index(fields=["course"], name="idx_registration_course"),
+            models.Index(fields=["expires_at"], name="idx_registration_expires"),
+            models.Index(fields=["archived_at"], name="idx_registration_archived"),
+        ]
+
+    def clean(self):
+        """Model-level constraints for bounded code usage and course binding."""
+        super().clean()
+        if self.max_uses < 1:
+            raise ValidationError("max_uses must be >= 1")
+        if self.times_used < 0:
+            raise ValidationError("times_used must be >= 0")
+        if self.times_used > self.max_uses:
+            raise ValidationError("times_used cannot exceed max_uses")
+        if self.code_type == RegistrationCodeType.STUDENT and not self.course_id:
+            raise ValidationError({"course": "Student registration codes must reference a course."})
+        if self.code_type != RegistrationCodeType.STUDENT and self.course_id:
+            raise ValidationError(
+                {"course": "Only student registration codes may reference a course."}
+            )
+
+    def __str__(self):
+        """Return a readable string representation."""
+        return f"{self.code_type}:{self.code_prefix}"
+
+
 class OAuthAccount(models.Model):
     """
     External OAuth account linked to a local user.
@@ -401,3 +693,86 @@ class OAuthAccount(models.Model):
     def __str__(self):
         """Return a readable string representation."""
         return f"{self.provider}:{self.subject}"
+
+
+class PasswordResetRequest(models.Model):
+    """
+    Password reset issuance record.
+
+    Each issuance stores the target user, issuer context, and lifecycle state used
+    to validate or expire one-time reset codes.
+    """
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        db_column="user_id",
+        related_name="password_reset_requests",
+    )
+    identifier = models.CharField(max_length=320)
+    requested_role = models.CharField(max_length=32, choices=Role.choices)
+    request_token_hash = models.CharField(max_length=128, unique=True)
+    status = models.CharField(
+        max_length=16,
+        choices=PasswordResetRequestStatus.choices,
+        default=PasswordResetRequestStatus.PENDING,
+    )
+    reason = models.CharField(max_length=255, null=True, blank=True)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        db_column="reviewed_by_user_id",
+        related_name="password_reset_requests_reviewed",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        """Database table configuration for PasswordResetRequest."""
+
+        db_table = "password_reset_requests"
+        indexes = [
+            models.Index(fields=["identifier"], name="idx_prr_identifier"),
+            models.Index(fields=["status"], name="idx_prr_status"),
+            models.Index(fields=["expires_at"], name="idx_prr_expires_at"),
+            models.Index(fields=["user"], name="idx_prr_user"),
+        ]
+
+    def __str__(self):
+        """Return a readable string representation."""
+        return f"PasswordResetRequest({self.user_id}, {self.status})"
+
+
+class PasswordResetCode(models.Model):
+    """
+    One-time reset code generated from a reset issuance record.
+
+    Code values are never persisted directly, only their hash is stored.
+    """
+
+    request = models.OneToOneField(
+        PasswordResetRequest,
+        on_delete=models.CASCADE,
+        db_column="request_id",
+        related_name="reset_code",
+    )
+    code_hash = models.CharField(max_length=128, unique=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        """Database table configuration for PasswordResetCode."""
+
+        db_table = "password_reset_codes"
+        indexes = [
+            models.Index(fields=["expires_at"], name="idx_prc_expires_at"),
+            models.Index(fields=["used_at"], name="idx_prc_used_at"),
+        ]
+
+    def __str__(self):
+        """Return a readable string representation."""
+        return f"PasswordResetCode(request={self.request_id})"

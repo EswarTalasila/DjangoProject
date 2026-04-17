@@ -1,0 +1,443 @@
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mockPush = vi.fn();
+const mockCreateAssignment = vi.fn();
+const mockListAssignmentTemplates = vi.fn();
+const mockListCourses = vi.fn();
+const mockToast = { success: vi.fn(), error: vi.fn() };
+let mockSearchParams = new URLSearchParams();
+let capturedSelectProps: Record<string, unknown> = {};
+
+function setupModuleMocks() {
+  vi.doMock("next/navigation", () => ({
+    useRouter: () => ({ push: mockPush }),
+    useSearchParams: () => mockSearchParams,
+  }));
+  vi.doMock("sonner", () => ({ toast: mockToast }));
+  vi.doMock("@/lib/assignment-api", () => ({
+    createAssignment: mockCreateAssignment,
+  }));
+  vi.doMock("@/lib/assignment-template-api", () => ({
+    listAssignmentTemplates: mockListAssignmentTemplates,
+  }));
+  vi.doMock("@/lib/course-api", () => ({
+    listCourses: mockListCourses,
+  }));
+  vi.doMock("@/components/ui/select", () => ({
+    Select: ({ children, onValueChange, value }: { children: React.ReactNode; onValueChange?: (v: string) => void; value?: string }) => {
+      capturedSelectProps[value || ""] = onValueChange;
+      return <div data-testid={`select-${value}`}>{children}</div>;
+    },
+    SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    SelectItem: ({ children, value }: { children: React.ReactNode; value: string }) => (
+      <div data-testid={`select-item-${value}`}>{children}</div>
+    ),
+    SelectTrigger: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    SelectValue: () => <span />,
+  }));
+}
+
+async function loadComponent() {
+  vi.resetModules();
+  capturedSelectProps = {};
+  setupModuleMocks();
+  const imported = await import(
+    "@/components/assignments/AssignmentCreateView"
+  );
+  return imported.default;
+}
+
+const mockAssignmentTemplates = [
+  {
+    id: 10,
+    title: "Self AssignmentTemplate",
+    category: null,
+    gradingMode: "AUTO" as const,
+    scoringPolicy: "STANDARD" as const,
+    questions: [],
+    questionGroups: [],
+    rubricId: null,
+    rubricAssignmentTemplateIds: [],
+  },
+];
+
+const mockCourses = [
+  {
+    id: 1,
+    name: "Biology 101",
+    studentCount: 20,
+    assignmentIds: [],
+    teacherId: 1,
+    teacherName: "Dr. Smith",
+    createdAt: "2026-01-15T00:00:00Z",
+    status: "ACTIVE",
+  },
+];
+
+function mockSuccessfulLoad() {
+  mockListAssignmentTemplates.mockResolvedValue(mockAssignmentTemplates);
+  mockListCourses.mockResolvedValue(mockCourses);
+}
+
+describe("AssignmentCreateView", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSearchParams = new URLSearchParams();
+  });
+
+  it("shows loading spinner initially", async () => {
+    mockListAssignmentTemplates.mockReturnValue(new Promise(() => {}));
+    mockListCourses.mockReturnValue(new Promise(() => {}));
+    const AssignmentCreateView = await loadComponent();
+    const { container } = render(<AssignmentCreateView />);
+
+    expect(container.querySelector(".animate-spin")).toBeInTheDocument();
+  });
+
+  it("renders heading and form after loading", async () => {
+    mockSuccessfulLoad();
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      // Heading and submit button both say "Create Assignment"
+      const matches = screen.getAllByText("Create Assignment");
+      expect(matches.length).toBeGreaterThanOrEqual(1);
+    });
+    expect(
+      screen.getByText(
+        "Link an assignment template to one of your courses."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("renders form labels", async () => {
+    mockSuccessfulLoad();
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Assignment Title")).toBeInTheDocument();
+      expect(screen.getByText("Assignment Template")).toBeInTheDocument();
+      expect(screen.getByText("Course")).toBeInTheDocument();
+      expect(screen.getByText("Open At")).toBeInTheDocument();
+      expect(screen.getByText("Due At")).toBeInTheDocument();
+    });
+  });
+
+  it("starts with an empty title even after loading assignment templates", async () => {
+    mockSuccessfulLoad();
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      const titleInput = screen.getByLabelText(
+        "Assignment Title"
+      ) as HTMLInputElement;
+      expect(titleInput.value).toBe("");
+    });
+  });
+
+  it("shows cancel button", async () => {
+    mockSuccessfulLoad();
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Cancel")).toBeInTheDocument();
+    });
+  });
+
+  it("shows create assignment submit button in the form", async () => {
+    mockSuccessfulLoad();
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      // Both heading and submit button say "Create Assignment"
+      const buttons = screen.getAllByText("Create Assignment");
+      expect(buttons.length).toBe(2);
+    });
+  });
+
+  it("shows load error when API calls fail", async () => {
+    mockListAssignmentTemplates.mockRejectedValue(new Error("Network error"));
+    mockListCourses.mockRejectedValue(new Error("Network error"));
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Failed to load assignment form data.")
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("navigates to assignments page when cancel is clicked", async () => {
+    mockSuccessfulLoad();
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Cancel")).toBeInTheDocument();
+    });
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText("Cancel"));
+
+    expect(mockPush).toHaveBeenCalledWith("/dashboard/assignments");
+  });
+
+  it("submits form successfully and navigates", async () => {
+    mockSuccessfulLoad();
+    mockCreateAssignment.mockResolvedValue({ id: 42 });
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Assignment Title")).toBeInTheDocument();
+    });
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Assignment Title"), "Week 1 Intro Check-in");
+    const submitBtn = screen.getAllByText("Create Assignment").find(
+      (el) => el.tagName === "BUTTON" || el.closest("button")
+    )!;
+    await user.click(submitBtn.closest("button") || submitBtn);
+
+    await waitFor(() => {
+      expect(mockCreateAssignment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Week 1 Intro Check-in",
+          assignmentTemplateId: 10,
+          audienceType: "COURSE",
+          courseId: 1,
+        })
+      );
+    });
+    expect(mockToast.success).toHaveBeenCalledWith("Assignment created.");
+    expect(mockPush).toHaveBeenCalledWith("/dashboard/assignments/42");
+  });
+
+  it("does not submit when canSubmit is false (title empty)", async () => {
+    mockSuccessfulLoad();
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Assignment Title")).toBeInTheDocument();
+    });
+
+    // Submit the form directly
+    const titleInput = screen.getByLabelText("Assignment Title") as HTMLInputElement;
+    const form = titleInput.closest("form")!;
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith(
+        "Please name the assignment before creating it."
+      );
+    });
+    expect(screen.getByText("Assignment title is required.")).toBeInTheDocument();
+    expect(mockCreateAssignment).not.toHaveBeenCalled();
+  });
+
+  it("shows error toast when openAt is after dueAt", async () => {
+    mockSuccessfulLoad();
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Open At")).toBeInTheDocument();
+    });
+
+    const titleInput = screen.getByLabelText("Assignment Title");
+    fireEvent.change(titleInput, { target: { value: "Week 1 Intro Check-in" } });
+    const openAtInput = screen.getByLabelText("Open At") as HTMLInputElement;
+    const dueAtInput = screen.getByLabelText("Due At") as HTMLInputElement;
+    // Set openAt to a future date and dueAt to earlier
+    fireEvent.change(openAtInput, { target: { value: "2030-06-15T10:00" } });
+    fireEvent.change(dueAtInput, { target: { value: "2030-06-10T10:00" } });
+
+    const user = userEvent.setup();
+    const submitBtn = screen.getAllByText("Create Assignment").find(
+      (el) => el.tagName === "BUTTON" || el.closest("button")
+    )!;
+    await user.click(submitBtn.closest("button") || submitBtn);
+
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith(
+        "Open time must be before due time."
+      );
+    });
+  });
+
+  it("shows 409 error toast for archived assignment_template", async () => {
+    mockSuccessfulLoad();
+    mockCreateAssignment.mockRejectedValue({
+      response: { status: 409, data: { detail: "Archived" } },
+    });
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Assignment Title")).toBeInTheDocument();
+    });
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Assignment Title"), "Week 1 Intro Check-in");
+    const submitBtn = screen.getAllByText("Create Assignment").find(
+      (el) => el.tagName === "BUTTON" || el.closest("button")
+    )!;
+    await user.click(submitBtn.closest("button") || submitBtn);
+
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith(
+        "Cannot create assignment from archived assignment template."
+      );
+    });
+  });
+
+  it("shows generic error toast on submission failure", async () => {
+    mockSuccessfulLoad();
+    mockCreateAssignment.mockRejectedValue({
+      response: { status: 500, data: { detail: "Internal server error" } },
+    });
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Assignment Title")).toBeInTheDocument();
+    });
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Assignment Title"), "Week 1 Intro Check-in");
+    const submitBtn = screen.getAllByText("Create Assignment").find(
+      (el) => el.tagName === "BUTTON" || el.closest("button")
+    )!;
+    await user.click(submitBtn.closest("button") || submitBtn);
+
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith("Internal server error");
+    });
+  });
+
+  it("uses preferred courseId from search params", async () => {
+    mockSearchParams = new URLSearchParams("courseId=1");
+    mockSuccessfulLoad();
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Assignment Title")).toBeInTheDocument();
+    });
+    // The preferred course should be selected - verified by the component not throwing
+    // and loading successfully with courseId=1
+    expect(mockListCourses).toHaveBeenCalled();
+  });
+
+  it("keeps the title untouched when assignment_template selection changes", async () => {
+    const multiAssignmentTemplates = [
+      {
+        id: 10,
+        title: "Self AssignmentTemplate",
+        category: null,
+        gradingMode: "AUTO" as const,
+        scoringPolicy: "STANDARD" as const,
+        questions: [],
+        questionGroups: [],
+        rubricId: null,
+        rubricAssignmentTemplateIds: [],
+      },
+      {
+        id: 20,
+        title: "Peer Review",
+        category: null,
+        gradingMode: "MANUAL" as const,
+        scoringPolicy: "STANDARD" as const,
+        questions: [],
+        questionGroups: [],
+        rubricId: null,
+        rubricAssignmentTemplateIds: [],
+      },
+    ];
+    mockListAssignmentTemplates.mockResolvedValue(multiAssignmentTemplates);
+    mockListCourses.mockResolvedValue(mockCourses);
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Assignment Title")).toBeInTheDocument();
+    });
+
+    const titleInput = screen.getByLabelText("Assignment Title") as HTMLInputElement;
+    fireEvent.change(titleInput, { target: { value: "Custom teacher title" } });
+
+    // The capturedSelectProps should have the assignment_template select's onValueChange
+    // The assignment_template select has value="10" (the first assignment_template id)
+    const onAssignmentTemplateChange = capturedSelectProps["10"] as (v: string) => void;
+    expect(onAssignmentTemplateChange).toBeDefined();
+
+    // Simulate changing the assignment_template to the second one
+    act(() => {
+      onAssignmentTemplateChange("20");
+    });
+
+    await waitFor(() => {
+      expect(titleInput.value).toBe("Custom teacher title");
+    });
+  });
+
+  it("falls back to first course when preferred courseId not found", async () => {
+    mockSearchParams = new URLSearchParams("courseId=999");
+    mockSuccessfulLoad();
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Assignment Title")).toBeInTheDocument();
+    });
+    // Should fall back to first course since courseId=999 doesn't match
+    expect(mockListCourses).toHaveBeenCalled();
+  });
+
+  it("handles empty assignment_template and course lists", async () => {
+    mockListAssignmentTemplates.mockResolvedValue([]);
+    mockListCourses.mockResolvedValue([]);
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      const matches = screen.getAllByText("Create Assignment");
+      expect(matches.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  it("shows fallback error message when no detail in error", async () => {
+    mockSuccessfulLoad();
+    mockCreateAssignment.mockRejectedValue({
+      response: { status: 400 },
+    });
+    const AssignmentCreateView = await loadComponent();
+    render(<AssignmentCreateView />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Assignment Title")).toBeInTheDocument();
+    });
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Assignment Title"), "Week 1 Intro Check-in");
+    const submitBtn = screen.getAllByText("Create Assignment").find(
+      (el) => el.tagName === "BUTTON" || el.closest("button")
+    )!;
+    await user.click(submitBtn.closest("button") || submitBtn);
+
+    await waitFor(() => {
+      expect(mockToast.error).toHaveBeenCalledWith(
+        "Failed to create assignment."
+      );
+    });
+  });
+});

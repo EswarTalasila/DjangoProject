@@ -7,6 +7,7 @@ Configuration is loaded via pydantic-settings for type safety and validation.
 
 from datetime import timedelta
 from pathlib import Path
+import logging
 
 import dj_database_url
 
@@ -19,7 +20,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = env.django_secret_key
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env.django_debug
+DEBUG = env.debug
+ENVIRONMENT = env.environment
 
 ALLOWED_HOSTS = env.allowed_hosts_list
 
@@ -41,7 +43,8 @@ INSTALLED_APPS = [
     "core",
     "accounts",
     "courses",
-    "assessments",
+    "assignment_templates",
+    "rubrics",
     "assignments",
     "submissions",
     "visualizations",
@@ -51,7 +54,7 @@ INSTALLED_APPS = [
 # Development-only apps (not loaded in production)
 # - debug_toolbar: SQL query inspection, request/response debugging
 # - django_extensions: shell_plus with auto-imports, show_urls, graph_models
-if DEBUG:
+if env.debug_toolbar_enabled:
     INSTALLED_APPS += [
         "debug_toolbar",
         "django_extensions",
@@ -59,6 +62,7 @@ if DEBUG:
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -69,7 +73,7 @@ MIDDLEWARE = [
 ]
 
 # Debug toolbar middleware (insert after SecurityMiddleware)
-if DEBUG:
+if env.debug_toolbar_enabled:
     MIDDLEWARE.insert(1, "debug_toolbar.middleware.DebugToolbarMiddleware")
 
 ROOT_URLCONF = "config.urls"
@@ -126,11 +130,95 @@ USE_I18N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
-STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_URL = "/static/"
+STATIC_ROOT = Path("/app/staticfiles") if env.is_production else BASE_DIR / "staticfiles"
+try:
+    STATIC_ROOT.mkdir(parents=True, exist_ok=True)
+except PermissionError:
+    logging.warning("Could not create STATIC_ROOT at %s — ensure it exists and is writable", STATIC_ROOT)
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        if env.is_production
+        else "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
+# Media files (user uploads — FR-15 Image Upload)
+MEDIA_ROOT = Path(env.media_root) if env.media_root else BASE_DIR / "media"
+try:
+    MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+except PermissionError:
+    logging.warning("Could not create MEDIA_ROOT at %s — ensure it exists and is writable", MEDIA_ROOT)
+
+# Media and artifact directories must follow the profile-scoped runtime layout
+# documented in Prompt.md.
+IMAGE_ROOT = MEDIA_ROOT / "images"
+QUESTION_IMAGE_DIR = IMAGE_ROOT / "questions"
+SUBMISSION_IMAGE_DIR = IMAGE_ROOT / "submissions"
+ARTIFACT_ROOT = MEDIA_ROOT / "artifacts"
+for directory in (
+    IMAGE_ROOT,
+    QUESTION_IMAGE_DIR,
+    SUBMISSION_IMAGE_DIR,
+    ARTIFACT_ROOT,
+):
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        logging.warning("Could not create directory at %s — ensure it exists and is writable", directory)
+
+# Image upload constants (FR-15)
+IMG_ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+IMG_MAX_FILE_SIZE_BYTES = 10_485_760  # 10 MB
+IMG_MAX_IMAGES_PER_SUBMISSION = 10
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Logging
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {name} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "accounts": {
+            "handlers": ["console"],
+            "level": "DEBUG" if DEBUG else "INFO",
+            "propagate": False,
+        },
+        "submissions": {
+            "handlers": ["console"],
+            "level": "DEBUG" if DEBUG else "INFO",
+            "propagate": False,
+        },
+        "visualizations": {
+            "handlers": ["console"],
+            "level": "DEBUG" if DEBUG else "INFO",
+            "propagate": False,
+        },
+    },
+}
 
 # CORS settings
 CORS_ALLOWED_ORIGINS = env.cors_origins_list
@@ -140,7 +228,7 @@ CORS_ALLOW_CREDENTIALS = True
 # Debug toolbar settings
 # For Docker, we need to include the Docker network gateway
 INTERNAL_IPS = ["127.0.0.1", "localhost"]
-if DEBUG:
+if env.debug_toolbar_enabled:
     import socket
 
     # Add Docker host IP for debug toolbar to work in containers
@@ -153,17 +241,21 @@ if DEBUG:
 # REST Framework
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "core.authentication.CookieJWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
-    "PAGE_SIZE": 50,
+    "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardPagination",
     "DEFAULT_RENDERER_CLASSES": [
         "rest_framework.renderers.JSONRenderer",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_EXCEPTION_HANDLER": "core.exception_handler.custom_exception_handler",
+    "DEFAULT_THROTTLE_RATES": {
+        "anon_auth": "30/minute",
+        "anon_burst": "10/minute",
+    },
 }
 
 # drf-spectacular settings (OpenAPI/Swagger documentation)
@@ -174,7 +266,7 @@ REST_FRAMEWORK = {
 #   - /api/schema/ (Raw OpenAPI YAML)
 SPECTACULAR_SETTINGS = {
     "TITLE": "EE Lab Data Dashboard API",
-    "DESCRIPTION": "API for managing educational assessments, submissions, and visualization.",
+    "DESCRIPTION": "API for managing assignment templates, assignments, submissions, and visualization.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,  # Don't include schema endpoint in schema itself
     "SWAGGER_UI_SETTINGS": {
@@ -187,8 +279,8 @@ SPECTACULAR_SETTINGS = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=1),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(hours=24),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
@@ -198,10 +290,23 @@ SIMPLE_JWT = {
 GOOGLE_CLIENT_ID = env.google_client_id
 GOOGLE_CLIENT_SECRET = env.google_client_secret
 
-# Security settings (production overrides)
-if not DEBUG:
-    SECURE_BROWSER_XSS_FILTER = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-    X_FRAME_OPTIONS = "DENY"
-    CSRF_COOKIE_SECURE = True
-    SESSION_COOKIE_SECURE = True
+# Security settings
+SECURE_BROWSER_XSS_FILTER = env.is_production
+SECURE_CONTENT_TYPE_NOSNIFF = env.is_production
+X_FRAME_OPTIONS = "DENY"
+CSRF_COOKIE_SECURE = env.csrf_cookie_secure
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = "Lax"
+if env.csrf_trusted_origins_list:
+    CSRF_TRUSTED_ORIGINS = env.csrf_trusted_origins_list
+SESSION_COOKIE_SECURE = env.session_cookie_secure
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+SECURE_SSL_REDIRECT = env.ssl_redirect_enabled
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_HSTS_SECONDS = 31536000 if env.is_production else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env.is_production
+SECURE_HSTS_PRELOAD = env.is_production
+
+# Prevent Django from trying to chmod files on Windows/Docker volumes
+FILE_UPLOAD_PERMISSIONS = None

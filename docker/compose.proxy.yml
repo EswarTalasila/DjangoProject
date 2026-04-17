@@ -1,0 +1,30 @@
+services:
+  proxy:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+      - "8443:8443"
+      - "9080:9080"
+      - "9443:9443"
+    volumes:
+      - ../proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../proxy/templates:/etc/nginx/templates:ro
+      - ../proxy/ssl:/etc/nginx/ssl:ro
+    networks:
+      eelab-proxy:
+        aliases:
+          - proxy
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  eelab-proxy:
+    name: eelab-proxy

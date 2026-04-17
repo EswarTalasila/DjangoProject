@@ -1,0 +1,70 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    env_file:
+      - ./env/.env.production
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      app: {}
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./env/.env.production
+    environment:
+      MEDIA_ROOT: /srv/eelab-prod/media
+    volumes:
+      - media-data:/srv/eelab-prod/media
+      - artifact-data:/srv/eelab-prod/media/artifacts
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_started
+    networks:
+      app: {}
+      eelab-proxy:
+        aliases:
+          - eelab-prod-backend
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./env/.env.production
+    expose:
+      - "3000"
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      app: {}
+      eelab-proxy:
+        aliases:
+          - eelab-prod-frontend
+
+volumes:
+  db-data:
+    name: eelab-prod-db-data
+  media-data:
+    name: eelab-prod-media-data
+  artifact-data:
+    name: eelab-prod-artifact-data
+
+networks:
+  app:
+    name: eelab-prod-app
+  eelab-proxy:
+    external: true
+    name: eelab-proxy

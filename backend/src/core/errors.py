@@ -43,7 +43,7 @@ def error_response(exc: Exception | str, status_code: int | None = None) -> Resp
     code = status_code or status.HTTP_400_BAD_REQUEST
     if "not found" in message.lower():
         code = status.HTTP_404_NOT_FOUND
-    return Response(message, status=code)
+    return Response({"detail": message}, status=code)
 
 
 def server_error_response() -> Response:
@@ -57,4 +57,6 @@ def server_error_response() -> Response:
     Returns:
         Response with generic error message and 500 status
     """
-    return Response("Internal server error", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    return Response(
+        {"detail": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+    )
