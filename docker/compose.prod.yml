@@ -37,6 +37,7 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       MEDIA_ROOT: ${MEDIA_ROOT}
+      FORCE_SCRIPT_NAME: ${FORCE_SCRIPT_NAME}
     volumes:
       - ../Taskfile.yml:/app/Taskfile.yml:ro
       - ../.env.template:/app/.env.template:ro
@@ -68,12 +69,14 @@ services:
       context: ../frontend
       dockerfile: Dockerfile.prod
       args:
-        NEXT_PUBLIC_API_URL: /api/v1
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_BASE_PATH: ${NEXT_BASE_PATH}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
     restart: unless-stopped
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_BASE_PATH: ${NEXT_BASE_PATH}
       SERVER_PROXY_ORIGIN: ${SERVER_PROXY_ORIGIN}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
     expose:
@@ -82,7 +85,7 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000 || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000${NEXT_BASE_PATH}/login || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5

@@ -29,7 +29,7 @@ const EMPTY_SUDO_CAPABILITIES: SudoCapabilities = {
 /** Resolve the API base URL for server-side fetches.
  *  Priority: SERVER_PROXY_ORIGIN + NEXT_PUBLIC_API_URL > NEXT_PUBLIC_API_URL.
  *  Browser code uses same-origin "/api/v1" through nginx. Server-side fetches
- *  need an absolute URL, so local fallback points at the proxy entrypoint. */
+ *  need an absolute URL, so local fallback points at the shared proxy host. */
 function resolveApiBaseUrl() {
   const configured = process.env.NEXT_PUBLIC_API_URL || "/api/v1";
   const normalizedConfigured = configured.replace(/\/$/, "");
@@ -54,8 +54,8 @@ function resolveApiBaseUrl() {
     return url.toString().replace(/\/$/, "");
   } catch {
     // configured is a relative path (e.g. "/api/v1") — unusable for server-side fetch
-    // without a proxy origin. Fall back to the local proxy listener.
-    return `http://localhost:8080${normalizedConfigured}`;
+    // without a proxy origin. Fall back to the local shared proxy listener.
+    return `http://localhost${configuredPath}`;
   }
 }
 

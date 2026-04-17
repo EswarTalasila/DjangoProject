@@ -60,7 +60,7 @@ pnpm dev
 bun dev
 ```
 
-Open [http://localhost:8080](http://localhost:8080) with your browser to use the app through the local nginx proxy.
+Open [https://localhost/_dev/login](https://localhost/_dev/login) with your browser to use the app through the local nginx proxy.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

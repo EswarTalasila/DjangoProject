@@ -42,8 +42,7 @@ Runs:
 
 Access through proxy:
 
-- `http://localhost:8080`
-- `https://localhost:8443`
+- `https://localhost/_dev/login`
 
 ### Testing
 
@@ -60,8 +59,7 @@ Runs:
 
 Access through proxy:
 
-- `http://localhost:9080`
-- `https://localhost:9443`
+- `https://localhost/_test/login`
 
 ## 3) Readiness and Validation
 

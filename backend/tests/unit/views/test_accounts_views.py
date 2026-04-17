@@ -359,6 +359,38 @@ class TestLoginView:
             response = login(request)
         assert response.status_code == status.HTTP_200_OK
 
+    @patch("accounts.views.authenticate_user")
+    @patch("accounts.views.identifier_allowed_for_user")
+    @patch("accounts.views.find_user_by_identifier")
+    @patch("accounts.views.check_identifier_throttle")
+    def test_successful_login_scopes_auth_cookie_path(
+        self, mock_throttle, mock_find, mock_allowed, mock_auth
+    ):
+        """Successful login scopes auth cookies to FORCE_SCRIPT_NAME when configured."""
+        from accounts.views import login
+
+        mock_throttle.return_value = True
+        user = _user(role=Role.TEACHER)
+        mock_find.return_value = user
+        mock_allowed.return_value = True
+        mock_auth.return_value = user
+        mock_refresh = MagicMock()
+        mock_refresh.access_token = "mock-access"
+        mock_refresh.__str__ = MagicMock(return_value="mock-refresh")
+        with (
+            patch("accounts.views.build_user_response", return_value={"id": str(user.id)}),
+            patch("accounts.views.RefreshToken") as mock_rt,
+            patch("accounts.views.settings.FORCE_SCRIPT_NAME", "/_test"),
+        ):
+            mock_rt.for_user.return_value = mock_refresh
+            request = _auth_request(
+                "post", "/api/v1/auth/sessions",
+                data={"identifier": "user@test.com", "password": "pass"},
+            )
+            response = login(request)
+        assert response.cookies["access_token"]["path"] == "/_test"
+        assert response.cookies["refresh_token"]["path"] == "/_test"
+
     @patch("accounts.views.check_identifier_throttle")
     def test_throttled_login_returns_429(self, mock_throttle):
         """Throttled identifier returns 429."""
@@ -512,6 +544,22 @@ class TestRefreshView:
         assert response.data["message"] == "Session refreshed."
 
     @patch("accounts.views.RefreshToken")
+    def test_refresh_scopes_auth_cookie_path(self, mock_rt_class):
+        """Refresh returns cookies scoped to FORCE_SCRIPT_NAME when configured."""
+        from accounts.views import refresh
+
+        mock_token = MagicMock()
+        mock_token.access_token = "new-access"
+        mock_rt_class.return_value = mock_token
+        with patch("accounts.views.settings.FORCE_SCRIPT_NAME", "/_dev"):
+            request = _auth_request(
+                "post", "/api/v1/auth/token-exchanges",
+                data={"refreshToken": "valid-refresh"},
+            )
+            response = refresh(request)
+        assert response.cookies["access_token"]["path"] == "/_dev"
+
+    @patch("accounts.views.RefreshToken")
     def test_invalid_refresh_token_returns_401(self, mock_rt_class):
         """Invalid refresh token returns 401."""
         from rest_framework_simplejwt.exceptions import TokenError
@@ -560,6 +608,22 @@ class TestLogoutView:
         response = logout(request)
         assert response.status_code == status.HTTP_200_OK
         assert response.data["message"] == "Logged out."
+
+    @patch("accounts.views.blacklist_refresh_token")
+    def test_logout_clears_cookies_for_profile_path(self, mock_blacklist):
+        """Logout clears auth cookies using the active FORCE_SCRIPT_NAME path."""
+        from accounts.views import logout
+
+        mock_blacklist.return_value = True
+        user = _user()
+        with patch("accounts.views.settings.FORCE_SCRIPT_NAME", "/_test"):
+            request = _auth_request(
+                "post", "/api/v1/auth/session-revocations",
+                data={"refreshToken": "valid"}, user=user,
+            )
+            response = logout(request)
+        assert response.cookies["access_token"]["path"] == "/_test"
+        assert response.cookies["refresh_token"]["path"] == "/_test"
 
     @patch("accounts.views.blacklist_refresh_token")
     def test_failed_blacklist_still_returns_200(self, mock_blacklist):

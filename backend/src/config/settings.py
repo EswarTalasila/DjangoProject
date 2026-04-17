@@ -25,6 +25,13 @@ ENVIRONMENT = env.environment
 
 ALLOWED_HOSTS = env.allowed_hosts_list
 
+# Path prefix (e.g. "/_dev" or "/_test") when this stack is served behind a
+# single proxy alongside other profiles. Empty for prod (served at root).
+if env.force_script_name:
+    FORCE_SCRIPT_NAME = env.force_script_name
+    SESSION_COOKIE_PATH = env.force_script_name
+    CSRF_COOKIE_PATH = env.force_script_name
+
 # Application definition
 INSTALLED_APPS = [
     "django.contrib.admin",

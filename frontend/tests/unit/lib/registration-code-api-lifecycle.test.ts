@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../mocks/server';
 
-const API_BASE = 'http://localhost:8080/api/v1';
+const API_BASE = 'http://localhost/_test/api/v1';
 const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
 
 async function loadApi() {

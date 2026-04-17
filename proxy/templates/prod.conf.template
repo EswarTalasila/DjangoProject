@@ -17,7 +17,160 @@ server {
 
     set $prod_backend http://eelab-prod-backend:8000;
     set $prod_frontend http://eelab-prod-frontend:3000;
+    set $dev_backend http://eelab-dev-backend:8000;
+    set $dev_frontend http://eelab-dev-frontend:3000;
+    set $test_backend http://eelab-test-backend:8000;
+    set $test_frontend http://eelab-test-frontend:3000;
 
+    # ---- /_dev/ — development stack mirror ----
+    # Only reachable while the dev stack is up (task up:dev). Intended for
+    # brief testing; keep the stack down in normal operation.
+    location /_dev/api/v1/ {
+        rewrite ^/_dev(/.*)$ $1 break;
+        proxy_pass $dev_backend;
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Prefix /_dev;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /_dev/admin/ {
+        rewrite ^/_dev(/.*)$ $1 break;
+        proxy_pass $dev_backend;
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Prefix /_dev;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /_dev/static/ {
+        rewrite ^/_dev(/.*)$ $1 break;
+        proxy_pass $dev_backend;
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /_dev/api/docs/ {
+        rewrite ^/_dev(/.*)$ $1 break;
+        proxy_pass $dev_backend;
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Prefix /_dev;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /_dev/api/redoc/ {
+        rewrite ^/_dev(/.*)$ $1 break;
+        proxy_pass $dev_backend;
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Prefix /_dev;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /_dev/api/schema/ {
+        rewrite ^/_dev(/.*)$ $1 break;
+        proxy_pass $dev_backend;
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Prefix /_dev;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /_dev/_next/webpack-hmr {
+        proxy_pass $dev_frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_read_timeout 86400;
+    }
+
+    location /_dev/ {
+        proxy_pass $dev_frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Prefix /_dev;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # ---- /_test/ — testing stack mirror ----
+    location /_test/api/v1/ {
+        rewrite ^/_test(/.*)$ $1 break;
+        proxy_pass $test_backend;
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Prefix /_test;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /_test/admin/ {
+        rewrite ^/_test(/.*)$ $1 break;
+        proxy_pass $test_backend;
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Prefix /_test;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /_test/static/ {
+        rewrite ^/_test(/.*)$ $1 break;
+        proxy_pass $test_backend;
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /_test/api/docs/ {
+        rewrite ^/_test(/.*)$ $1 break;
+        proxy_pass $test_backend;
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Prefix /_test;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /_test/api/redoc/ {
+        rewrite ^/_test(/.*)$ $1 break;
+        proxy_pass $test_backend;
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Prefix /_test;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /_test/api/schema/ {
+        rewrite ^/_test(/.*)$ $1 break;
+        proxy_pass $test_backend;
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Prefix /_test;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /_test/_next/webpack-hmr {
+        proxy_pass $test_frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_read_timeout 86400;
+    }
+
+    location /_test/ {
+        proxy_pass $test_frontend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Prefix /_test;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # ---- / — production root ----
     location /api/v1/ {
         proxy_pass $prod_backend;
         proxy_set_header Host ${PUBLIC_HOST};

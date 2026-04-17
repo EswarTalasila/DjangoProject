@@ -169,8 +169,8 @@ They are the same architecture with different topology inputs, such as:
 
 The system must work locally with the same proxy-driven routing model:
 
-- dev: `localhost:8080` and `localhost:8443`
-- test: `localhost:9080` and `localhost:9443`
+- dev: `https://localhost/_dev/...`
+- test: `https://localhost/_test/...`
 
 ---
 
@@ -270,9 +270,11 @@ Each profile owns only its own data.
 
 ### Ports
 
-- prod: `80` and `443`
-- dev: `8080` and `8443`
-- test: `9080` and `9443`
+- shared proxy ingress: `80` and `443`
+- profile routing is path-based:
+  - prod: `/`
+  - dev: `/_dev`
+  - test: `/_test`
 
 ### Proxy Aliases
 
@@ -306,9 +308,10 @@ It is not responsible for:
 
 Routing intent:
 
-- `80/443` -> prod
-- `8080/8443` -> dev
-- `9080/9443` -> test
+- `80/443` -> shared proxy ingress
+- `/` -> prod
+- `/_dev` -> dev
+- `/_test` -> test
 
 Within each profile route:
 

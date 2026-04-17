@@ -38,6 +38,7 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       MEDIA_ROOT: ${MEDIA_ROOT}
+      FORCE_SCRIPT_NAME: ${FORCE_SCRIPT_NAME}
     volumes:
       - ../Taskfile.yml:/app/Taskfile.yml:cached
       - ../.env.template:/app/.env.template:cached
@@ -75,6 +76,7 @@ services:
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NEXT_BASE_PATH: ${NEXT_BASE_PATH}
       SERVER_PROXY_ORIGIN: ${SERVER_PROXY_ORIGIN}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
     volumes:
@@ -93,7 +95,9 @@ services:
              rm -f .next/dev/lock &&
              npm run dev"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000 || exit 1"]
+      # Probe the login page under the profile's basePath ("" for prod,
+      # "/_dev" for dev, "/_test" for test).
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000${NEXT_BASE_PATH}/login || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5

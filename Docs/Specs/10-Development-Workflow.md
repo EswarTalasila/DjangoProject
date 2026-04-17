@@ -87,7 +87,7 @@ task test:frontend
 ## Notes
 - Keep `/api/v1/*` paths compatible with frontend services and route them through the proxy.
 - Version endpoints under `/api/v1` with compatibility routing.
-- Proxy remains active locally; use `localhost:8080/8443` for dev and `localhost:9080/9443` for test.
+- Proxy remains active locally; use `https://localhost/_dev/...` for dev and `https://localhost/_test/...` for test.
 - Use a unified `.env` during development and a committed `.env.template` for defaults/documentation.
 - Do not keep `.env.local` variants; `.env` is gitignored and treated as the single source of truth for dev.
 
