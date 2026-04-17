@@ -259,18 +259,21 @@ tasks:
     cmds:
       - task: _check:docker
       - ./scripts/tasks/rebuild.sh dev
+      - task: _ensure:admin:dev
 
   rebuild:test:
     desc: Rebuild and recreate testing app containers
     cmds:
       - task: _check:docker
       - ./scripts/tasks/rebuild.sh test
+      - task: _ensure:admin:test
 
   rebuild:prod:
     desc: Rebuild and recreate production app containers
     cmds:
       - task: _check:docker
       - ./scripts/tasks/rebuild.sh prod
+      - task: _ensure:admin:prod
 
   test:
     desc: Ensure testing stack and run backend plus frontend tests
