@@ -49,10 +49,16 @@ def question_image_to_dto(question: Question) -> dict | None:
     meta = parse_question_image(question)
     if not meta:
         return None
+    # Prepend FORCE_SCRIPT_NAME so dev (/_dev) and test (/_test) images
+    # stay on their own profile's backend instead of hitting prod.
+    from django.conf import settings
+
+    script_name = getattr(settings, "FORCE_SCRIPT_NAME", "") or ""
+    storage_key = meta.get("storageKey", "")
     return {
         "id": meta.get("assetId", ""),
-        "storageKey": meta.get("storageKey", ""),
-        "url": f"/api/v1/assignment-templates/images/{meta.get('storageKey', '')}",
+        "storageKey": storage_key,
+        "url": f"{script_name}/api/v1/assignment-templates/images/{storage_key}",
         "originalFilename": meta.get("originalFilename", ""),
         "mimeType": meta.get("mimeType", ""),
         "sizeBytes": meta.get("sizeBytes", 0),

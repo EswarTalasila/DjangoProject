@@ -1,5 +1,6 @@
 import Cookies from "js-cookie";
 import api from "@/lib/api";
+import { withBasePath } from "@/lib/base-path";
 
 export async function logout(): Promise<void> {
   try {
@@ -8,6 +9,6 @@ export async function logout(): Promise<void> {
     // Continue logout UX even if backend session revocation fails.
   } finally {
     Cookies.remove("user_name");
-    window.location.href = "/login";
+    window.location.href = withBasePath("/login");
   }
 }

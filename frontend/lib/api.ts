@@ -12,6 +12,7 @@
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import type { AxiosRequestConfig } from 'axios';
+import { withBasePath } from '@/lib/base-path';
 
 export type ApiRequestOptions = AxiosRequestConfig & {
   suppressAuthRedirect?: boolean;
@@ -70,7 +71,7 @@ api.interceptors.response.use(
           typeof window !== 'undefined' &&
           !window.location.pathname.includes('/login')
         ) {
-          window.location.href = '/login';
+          window.location.href = withBasePath('/login');
         }
       }
     }
