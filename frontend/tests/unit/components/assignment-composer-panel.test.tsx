@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AssignmentComposerPanel from '@/components/assignments/AssignmentComposerPanel';
+import type { AssignmentContent } from '@/lib/assignment-api';
 
 const {
   mockAddAssignmentQuestion,
@@ -113,7 +114,7 @@ vi.mock('@/components/media/ImagePicker', () => ({
   ),
 }));
 
-function makeContent(overrides: Record<string, unknown> = {}) {
+function makeContent(overrides: Partial<AssignmentContent> = {}): AssignmentContent {
   return {
     id: 10,
     title: 'Assignment Template Alpha',
