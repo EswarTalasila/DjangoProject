@@ -1351,8 +1351,8 @@ class TestAuthRegCompletion:
             {"status": "ARCHIVED"},
             format="json",
         )
-        assert response.status_code == 409
-        assert "Only EXHAUSTED, EXPIRED, or REVOKED" in response.json()["detail"]
+        assert response.status_code == 400
+        assert "status" in response.json()
 
     def test_REG_CN_04(self, api_client, teacher_user):
         """Code visibility is role-scoped, with admin global visibility."""
@@ -1419,7 +1419,7 @@ class TestAuthRegCompletion:
         archived.save(update_fields=["archived_at"])
 
         api_client.force_authenticate(user=teacher_user)
-        response = api_client.get("/api/v1/codes?includeArchived=true")
+        response = api_client.get("/api/v1/codes")
         assert response.status_code == 200
         by_id = {entry["id"]: entry for entry in response.json()["results"]}
         assert by_id[active.id]["status"] == "ACTIVE"
@@ -1429,7 +1429,7 @@ class TestAuthRegCompletion:
         assert by_id[archived.id]["status"] == "ARCHIVED"
 
     def test_REG_CN_15(self, api_client, teacher_user):
-        """Revoke blocks new registrations; archive only hides code from default listings."""
+        """Revoke blocks new registrations and delete removes the code from listings."""
         code = self._student_code(teacher_user, "REG-CN15-CODE", max_uses=2)
         first_registration = api_client.post(
             "/api/v1/registration/accounts",
@@ -1478,18 +1478,9 @@ class TestAuthRegCompletion:
         assert existing_login.status_code == 200
 
         api_client.force_authenticate(user=teacher_user)
-        archive = api_client.patch(
-            f"/api/v1/codes/{code.id}",
-            {"status": "ARCHIVED"},
-            format="json",
-        )
-        assert archive.status_code == 200
-        assert archive.json()["status"] == "ARCHIVED"
+        delete = api_client.delete(f"/api/v1/codes/{code.id}")
+        assert delete.status_code == 204
 
         default_list = api_client.get("/api/v1/codes")
         default_ids = {entry["id"] for entry in default_list.json()["results"]}
         assert code.id not in default_ids
-
-        archived_list = api_client.get("/api/v1/codes?includeArchived=true")
-        archived_ids = {entry["id"] for entry in archived_list.json()["results"]}
-        assert code.id in archived_ids

@@ -1,6 +1,6 @@
 'use client';
 
-import { Archive, ShieldOff } from 'lucide-react';
+import { ShieldOff, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -27,7 +27,7 @@ type CodeDetailDialogProps = {
   onOpenChange: (open: boolean) => void;
   code: RegistrationCode | null;
   onRevoke: (code: RegistrationCode) => Promise<void>;
-  onArchive: (code: RegistrationCode) => Promise<void>;
+  onDelete: (code: RegistrationCode) => Promise<void>;
   isActionLoading: boolean;
 };
 
@@ -36,16 +36,13 @@ export function CodeDetailDialog({
   onOpenChange,
   code,
   onRevoke,
-  onArchive,
+  onDelete,
   isActionLoading,
 }: CodeDetailDialogProps) {
   if (!code) return null;
 
   const canRevoke = code.status === 'ACTIVE';
-  const canArchive =
-    code.status === 'EXHAUSTED' ||
-    code.status === 'EXPIRED' ||
-    code.status === 'REVOKED';
+  const canDelete = true;
 
   const metadata = code.metadata && Object.keys(code.metadata).length > 0 ? code.metadata : null;
 
@@ -60,7 +57,7 @@ export function CodeDetailDialog({
         </DialogHeader>
 
         <div className="grid gap-4">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+          <div className="grid gap-x-4 gap-y-3 text-sm sm:grid-cols-2">
             <div>
               <p className="font-medium text-muted-foreground">Prefix</p>
               <p className="font-mono text-foreground">{code.codePrefix}</p>
@@ -102,7 +99,7 @@ export function CodeDetailDialog({
               <p className="text-foreground">{formatDateTime(code.expiresAt)}</p>
             </div>
             {code.archivedAt && (
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <p className="font-medium text-muted-foreground">Archived</p>
                 <p className="text-foreground">{formatDateTime(code.archivedAt)}</p>
               </div>
@@ -114,7 +111,7 @@ export function CodeDetailDialog({
               <p className="text-sm font-medium text-muted-foreground mb-1">Metadata</p>
               <div className="rounded border border-border bg-muted p-3">
                 {Object.entries(metadata).map(([key, value]) => (
-                  <div key={key} className="flex gap-2 text-sm">
+                  <div key={key} className="flex flex-wrap gap-2 text-sm">
                     <span className="font-medium text-foreground">{key}:</span>
                     <span className="text-muted-foreground">{String(value)}</span>
                   </div>
@@ -138,14 +135,14 @@ export function CodeDetailDialog({
               Revoke
             </Button>
           )}
-          {canArchive && (
+          {canDelete && (
             <Button
               variant="outline"
               disabled={isActionLoading}
-              onClick={() => void onArchive(code)}
+              onClick={() => void onDelete(code)}
             >
-              <Archive className="mr-2 h-4 w-4" />
-              Archive
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
             </Button>
           )}
         </DialogFooter>

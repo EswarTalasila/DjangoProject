@@ -1,9 +1,10 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockListRegistrationCodes = vi.fn();
 const mockUpdateRegistrationCodeStatus = vi.fn();
+const mockDeleteRegistrationCode = vi.fn();
 const mockCreateRegistrationCodes = vi.fn();
 const mockToastSuccess = vi.fn();
 const mockToastError = vi.fn();
@@ -12,6 +13,7 @@ function setupModuleMocks() {
   vi.doMock('@/lib/registration-code-api', () => ({
     listRegistrationCodes: mockListRegistrationCodes,
     updateRegistrationCodeStatus: mockUpdateRegistrationCodeStatus,
+    deleteRegistrationCode: mockDeleteRegistrationCode,
     createRegistrationCodes: mockCreateRegistrationCodes,
   }));
   vi.doMock('@/lib/course-api', () => ({
@@ -29,6 +31,16 @@ async function loadCodeManagementView() {
   setupModuleMocks();
   const imported = await import('@/components/codes/CodeManagementView');
   return imported.default;
+}
+
+function getDesktopRow(prefix: string): HTMLTableRowElement {
+  const match = screen
+    .getAllByText(prefix)
+    .find((node) => node.closest('tr') instanceof HTMLTableRowElement);
+  if (!match) {
+    throw new Error(`No desktop table row found for code ${prefix}.`);
+  }
+  return match.closest('tr') as HTMLTableRowElement;
 }
 
 const ACTIVE_CODE = {
@@ -63,11 +75,17 @@ const EXHAUSTED_CODE = {
 describe('CodeManagementView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal('confirm', vi.fn(() => true));
     mockListRegistrationCodes.mockReset();
     mockUpdateRegistrationCodeStatus.mockReset();
+    mockDeleteRegistrationCode.mockReset();
     mockCreateRegistrationCodes.mockReset();
     mockToastSuccess.mockReset();
     mockToastError.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('renders code table with data', async () => {
@@ -82,13 +100,13 @@ describe('CodeManagementView', () => {
     render(<CodeManagementView userRole="TEACHER" />);
 
     await waitFor(() => {
-      expect(screen.getByText('REG-ABC')).toBeInTheDocument();
-      expect(screen.getByText('REG-XYZ')).toBeInTheDocument();
+      expect(screen.getAllByText('REG-ABC').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('REG-XYZ').length).toBeGreaterThan(0);
     });
 
-    expect(screen.getByText('ACTIVE')).toBeInTheDocument();
-    expect(screen.getByText('EXHAUSTED')).toBeInTheDocument();
-    expect(screen.getByText('2/5')).toBeInTheDocument();
+    expect(screen.getAllByText('ACTIVE').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('EXHAUSTED').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('2/5').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Biology 101').length).toBeGreaterThanOrEqual(1);
   });
 
@@ -126,7 +144,7 @@ describe('CodeManagementView', () => {
     render(<CodeManagementView userRole="TEACHER" />);
 
     await waitFor(() => {
-      expect(screen.getByText('REG-ABC')).toBeInTheDocument();
+      expect(screen.getAllByText('REG-ABC').length).toBeGreaterThan(0);
     });
 
     const user = userEvent.setup();
@@ -138,7 +156,6 @@ describe('CodeManagementView', () => {
       expect(mockListRegistrationCodes).toHaveBeenLastCalledWith({
         status: 'ACTIVE',
         codeType: 'STUDENT',
-        includeArchived: false,
       });
     });
   });
@@ -166,10 +183,10 @@ describe('CodeManagementView', () => {
 
     const user = userEvent.setup();
     await waitFor(() => {
-      expect(screen.getByText('REG-ABC')).toBeInTheDocument();
+      expect(screen.getAllByText('REG-ABC').length).toBeGreaterThan(0);
     });
 
-    const row = screen.getByText('REG-ABC').closest('tr')!;
+    const row = getDesktopRow('REG-ABC');
     const menuButton = within(row).getByRole('button');
     await user.click(menuButton);
 
@@ -182,17 +199,14 @@ describe('CodeManagementView', () => {
     });
   });
 
-  it('archive action calls API and refreshes', async () => {
+  it('delete action calls API and refreshes', async () => {
     mockListRegistrationCodes.mockResolvedValueOnce({
       count: 1,
       next: null,
       previous: null,
       results: [EXHAUSTED_CODE],
     });
-    mockUpdateRegistrationCodeStatus.mockResolvedValueOnce({
-      ...EXHAUSTED_CODE,
-      status: 'ARCHIVED',
-    });
+    mockDeleteRegistrationCode.mockResolvedValueOnce(undefined);
     mockListRegistrationCodes.mockResolvedValueOnce({
       count: 0,
       next: null,
@@ -205,19 +219,19 @@ describe('CodeManagementView', () => {
 
     const user = userEvent.setup();
     await waitFor(() => {
-      expect(screen.getByText('REG-XYZ')).toBeInTheDocument();
+      expect(screen.getAllByText('REG-XYZ').length).toBeGreaterThan(0);
     });
 
-    const row = screen.getByText('REG-XYZ').closest('tr')!;
+    const row = getDesktopRow('REG-XYZ');
     const menuButton = within(row).getByRole('button');
     await user.click(menuButton);
 
-    const archiveItem = await screen.findByText('Archive');
-    await user.click(archiveItem);
+    const deleteItem = await screen.findByText('Delete');
+    await user.click(deleteItem);
 
     await waitFor(() => {
-      expect(mockUpdateRegistrationCodeStatus).toHaveBeenCalledWith(2, 'ARCHIVED');
-      expect(mockToastSuccess).toHaveBeenCalledWith('Code REG-XYZ archived.');
+      expect(mockDeleteRegistrationCode).toHaveBeenCalledWith(2);
+      expect(mockToastSuccess).toHaveBeenCalledWith('Code REG-XYZ deleted.');
     });
   });
 
@@ -234,10 +248,10 @@ describe('CodeManagementView', () => {
 
     const user = userEvent.setup();
     await waitFor(() => {
-      expect(screen.getByText('REG-ABC')).toBeInTheDocument();
+      expect(screen.getAllByText('REG-ABC').length).toBeGreaterThan(0);
     });
 
-    const row = screen.getByText('REG-ABC').closest('tr')!;
+    const row = getDesktopRow('REG-ABC');
     const menuButton = within(row).getByRole('button');
     await user.click(menuButton);
 

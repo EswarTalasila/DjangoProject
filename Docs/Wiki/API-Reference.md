@@ -70,7 +70,8 @@ Example:
 | REG | REG-UC-02 | POST | `/api/v1/codes` | Access token | ADMIN, RESEARCHER, TEACHER | Creates ACTIVE codes | count + uses_per_code + expires_at + target role (+ optional metadata/course) | REG-UC-02-E1/E2/E3/E4/E5 | REG-CN-06, REG-CN-07, REG-CN-11, REG-CN-12, REG-CN-22 | `test_REG_UC_02_*` | Proposed |
 | REG | REG-UC-03 | GET | `/api/v1/codes` | Access token | ADMIN, RESEARCHER, TEACHER | List | filters/pagination (draft) | REG-UC-03-E1 | REG-CN-04, REG-CN-05, REG-CN-22 | `test_REG_UC_03_*` | Proposed |
 | REG | REG-UC-03 | GET | `/api/v1/codes/{id}` | Access token | ADMIN, RESEARCHER, TEACHER | Detail | none | REG-UC-03-E1 | REG-CN-04, REG-CN-22 | `test_REG_UC_03_*` | Proposed |
-| REG | REG-UC-03 | PATCH | `/api/v1/codes/{id}` | Access token | ADMIN, RESEARCHER, TEACHER | `ACTIVE -> REVOKED`; `REVOKED|EXPIRED|EXHAUSTED -> ARCHIVED` | status + optional reason | REG-UC-03-E1/E2 | REG-CN-05, REG-CN-15, REG-CN-22 | `test_REG_UC_03_*` | Proposed |
+| REG | REG-UC-03 | PATCH | `/api/v1/codes/{id}` | Access token | ADMIN, RESEARCHER, TEACHER | `ACTIVE -> REVOKED` | status + optional reason | REG-UC-03-E1/E2 | REG-CN-05, REG-CN-15, REG-CN-22 | `test_REG_UC_03_*` | Proposed |
+| REG | REG-UC-03 | DELETE | `/api/v1/codes/{id}` | Access token | ADMIN, RESEARCHER, TEACHER | Remove code after scope/permission checks | none | REG-UC-03-E1 | REG-CN-04, REG-CN-05, REG-CN-22 | `test_REG_UC_03_*` | Proposed |
 | USER | USER-UC-01 | POST | `/api/v1/users` | Access token | ADMIN, RESEARCHER, TEACHER | Creates user + role + profile | name + optional role/password/email (username rejected) | USER-UC-01-E1/E2/E3/E4/E5 | USER-CN-01, USER-CN-02, USER-CN-03, USER-CN-06, USER-CN-07 | `test_USER_UC_01_*` | Proposed |
 | USER | USER-UC-02 | PATCH | `/api/v1/users/{user_id}` | Access token | ADMIN, RESEARCHER, TEACHER | Updates user fields + optional role transition | name/email/password/role (username immutable) | USER-UC-02-E1/E2/E3/E4/E5 | USER-CN-01, USER-CN-02, USER-CN-03, USER-CN-04, USER-CN-05, USER-CN-06, USER-CN-08 | `test_USER_UC_02_*` | Proposed |
 | USER | USER-UC-03 | DELETE | `/api/v1/users/{user_id}` | Access token | ADMIN, RESEARCHER, TEACHER | Deletes user by ID | none | USER-UC-03-E1/E2 | USER-CN-01, USER-CN-05, USER-CN-08 | `test_USER_UC_03_*` | Proposed |
@@ -91,17 +92,14 @@ Example:
 ### Registration Codes (`REG-UC-03`)
 - Allowed client transitions:
   - `ACTIVE -> REVOKED`
-  - `REVOKED|EXPIRED|EXHAUSTED -> ARCHIVED`
 - Server-derived only (not client-settable):
   - `EXPIRED`
   - `EXHAUSTED`
+  - `ARCHIVED` (legacy compatibility rows only)
 
 Example payloads:
 ```json
 { "status": "REVOKED", "reason": "manual_stop" }
-```
-```json
-{ "status": "ARCHIVED" }
 ```
 
 ---

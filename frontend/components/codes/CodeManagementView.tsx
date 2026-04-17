@@ -11,6 +11,7 @@ import { CreateRegistrationCodeDialog } from '@/components/codes/CreateRegistrat
 import { RegistrationCodeDialog } from '@/components/codes/RegistrationCodeDialog';
 import {
   createRegistrationCodes,
+  deleteRegistrationCode,
   listRegistrationCodes,
   updateRegistrationCodeStatus,
   type RegistrationCode,
@@ -61,15 +62,12 @@ export default function CodeManagementView({
   const [detailCode, setDetailCode] = useState<RegistrationCode | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-  const includeArchived = statusFilter === 'ARCHIVED';
-
   const loadCodes = useCallback(async () => {
     setLoadError(null);
     try {
       const response = await listRegistrationCodes({
         status: statusFilter || undefined,
         codeType: activeTab,
-        includeArchived,
       });
       setCodes(response.results);
     } catch {
@@ -77,7 +75,7 @@ export default function CodeManagementView({
     } finally {
       setIsLoading(false);
     }
-  }, [statusFilter, activeTab, includeArchived]);
+  }, [statusFilter, activeTab]);
 
   useEffect(() => {
     setIsLoading(true);
@@ -133,21 +131,28 @@ export default function CodeManagementView({
     }
   }
 
-  async function handleArchive(code: RegistrationCode) {
+  async function handleDelete(code: RegistrationCode) {
+    const confirmed =
+      typeof window === 'undefined' ||
+      window.confirm(
+        `Delete registration code ${code.codePrefix}? This permanently removes it from the system.`,
+      );
+    if (!confirmed) return;
+
     setIsActionLoading(true);
     try {
-      await updateRegistrationCodeStatus(code.id, 'ARCHIVED');
-      toast.success(`Code ${code.codePrefix} archived.`);
+      await deleteRegistrationCode(code.id);
+      toast.success(`Code ${code.codePrefix} deleted.`);
       await loadCodes();
     } catch (error: unknown) {
-      toast.error(toErrorMessage(error, 'Failed to archive code.'));
+      toast.error(toErrorMessage(error, 'Failed to delete code.'));
     } finally {
       setIsActionLoading(false);
     }
   }
 
   return (
-    <div className="space-y-6 p-6 max-w-6xl mx-auto">
+    <div className="mx-auto max-w-6xl space-y-6 p-4 md:p-6">
       <CreateRegistrationCodeDialog
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
@@ -177,7 +182,7 @@ export default function CodeManagementView({
         onOpenChange={setIsDetailOpen}
         code={detailCode}
         onRevoke={handleRevoke}
-        onArchive={handleArchive}
+        onDelete={handleDelete}
         isActionLoading={isActionLoading}
       />
 
@@ -186,7 +191,7 @@ export default function CodeManagementView({
           Registration Codes
         </h1>
         <p className="text-muted-foreground mt-1">
-          Manage registration codes and their lifecycle.
+          Generate, revoke, review, and remove registration codes.
         </p>
       </div>
 
@@ -213,7 +218,7 @@ export default function CodeManagementView({
           setIsDetailOpen(true);
         }}
         onRevoke={(code) => void handleRevoke(code)}
-        onArchive={(code) => void handleArchive(code)}
+        onDelete={(code) => void handleDelete(code)}
       />
     </div>
   );

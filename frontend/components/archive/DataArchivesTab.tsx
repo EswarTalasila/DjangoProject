@@ -659,7 +659,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                 })}
               </div>
 
-              <div className="hidden overflow-x-auto md:block">
+              <div className="hidden overflow-x-auto xl:block">
                 <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
@@ -933,7 +933,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                 })}
               </div>
 
-              <div className="hidden overflow-x-auto md:block">
+              <div className="hidden overflow-x-auto xl:block">
                 <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">
@@ -1228,7 +1228,7 @@ export default function DataArchivesTab({ role }: DataArchivesTabProps) {
                 })}
               </div>
 
-              <div className="hidden overflow-x-auto md:block">
+              <div className="hidden overflow-x-auto xl:block">
                 <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left text-muted-foreground">

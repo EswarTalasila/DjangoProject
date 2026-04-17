@@ -214,7 +214,7 @@ class RegistrationCodeCreateSerializer(serializers.Serializer):
 class RegistrationCodeUpdateSerializer(serializers.Serializer):
     """Payload for code lifecycle state transitions."""
 
-    status = serializers.ChoiceField(choices=["REVOKED", "ARCHIVED"])
+    status = serializers.ChoiceField(choices=["REVOKED"])
     reason = serializers.CharField(required=False, allow_blank=False, max_length=255)
 
 

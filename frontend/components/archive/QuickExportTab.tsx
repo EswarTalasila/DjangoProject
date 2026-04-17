@@ -186,7 +186,7 @@ export default function QuickExportTab({ role, canExportIdentifiable }: QuickExp
         defaultOpen
       >
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-3">
             {/* Course selector */}
             <div className="space-y-1">
               <Label>Course <HelpTip text="Select which course to export data from." /></Label>
@@ -258,7 +258,7 @@ export default function QuickExportTab({ role, canExportIdentifiable }: QuickExp
         helpText="Export submission data for a specific course as a CSV file."
       >
         <div className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 lg:grid-cols-3">
             {/* Course selector */}
             <div className="space-y-1">
               <Label>Course <HelpTip text="Select which course to export data from." /></Label>

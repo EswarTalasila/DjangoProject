@@ -96,6 +96,7 @@ from accounts.services import (  # noqa: F401
     redeem_non_student_oauth_invite,
     redeem_student_invite,
     redeem_student_join_course,
+    remove_registration_code,
     register_identifier_failure,
     registration_code_scope_queryset,
     registration_code_status,

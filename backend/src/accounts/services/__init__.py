@@ -39,6 +39,7 @@ from ._registration import (
     redeem_student_join_course,
     registration_code_scope_queryset,
     registration_code_status,
+    remove_registration_code,
     transition_registration_code_status,
     validate_registration_code,
 )
@@ -154,6 +155,7 @@ __all__ = [
     "registration_code_prefix",
     "registration_code_scope_queryset",
     "registration_code_status",
+    "remove_registration_code",
     "revoke_sudo_grant",
     "set_single_role",
     "teacher_owns_student",

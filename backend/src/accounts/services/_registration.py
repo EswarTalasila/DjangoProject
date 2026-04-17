@@ -482,3 +482,23 @@ def transition_registration_code_status(
         return registration_code
 
     raise ValueError("Unsupported status transition.")
+
+
+@transaction.atomic
+def remove_registration_code(*, actor: User, registration_code_id: int) -> None:
+    """Delete a scoped registration code, revoking active codes first."""
+    registration_code: RegistrationCode | None = (
+        registration_code_scope_queryset(actor, include_related=False)
+        .select_for_update()
+        .filter(id=registration_code_id)
+        .first()
+    )
+    if not registration_code:
+        raise ValueError("Registration code not found.")
+
+    current_status = registration_code_status(registration_code)
+    if current_status == REGISTRATION_CODE_STATUS_ACTIVE:
+        registration_code.is_active = False
+        registration_code.save(update_fields=["is_active"])
+
+    registration_code.delete()

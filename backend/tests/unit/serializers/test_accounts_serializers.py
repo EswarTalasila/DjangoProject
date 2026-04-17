@@ -625,11 +625,6 @@ class TestRegistrationCodeUpdateSerializer:
         ser = RegistrationCodeUpdateSerializer(data={"status": "REVOKED"})
         assert ser.is_valid() is True
 
-    def test_valid_archived(self):
-        """ARCHIVED status passes validation."""
-        ser = RegistrationCodeUpdateSerializer(data={"status": "ARCHIVED"})
-        assert ser.is_valid() is True
-
     def test_invalid_status_rejected(self):
         """Status not in allowed choices is rejected."""
         ser = RegistrationCodeUpdateSerializer(data={"status": "ACTIVE"})

@@ -647,7 +647,7 @@ class TestAccountRoutes:
         assert forbidden_foreign.status_code == 404
 
     def test_REG_UC_03_TEACHER(self, api_client, teacher_user):
-        """Teacher can list, revoke, and archive own student codes."""
+        """Teacher can list, revoke, and delete own student codes."""
         code = self._student_code(teacher_user, code="LIFE-ONE", max_uses=1)
         api_client.force_authenticate(user=teacher_user)
 
@@ -674,13 +674,8 @@ class TestAccountRoutes:
         assert revoke_response.status_code == 200
         assert revoke_response.json()["status"] == "REVOKED"
 
-        archive_response = api_client.patch(
-            f"/api/v1/codes/{code.id}",
-            {"status": "ARCHIVED"},
-            format="json",
-        )
-        assert archive_response.status_code == 200
-        assert archive_response.json()["status"] == "ARCHIVED"
+        delete_response = api_client.delete(f"/api/v1/codes/{code.id}")
+        assert delete_response.status_code == 204
 
     def test_REG_UC_03_E1(self, api_client, teacher_user):
         """Teacher cannot transition registration codes outside their scope."""

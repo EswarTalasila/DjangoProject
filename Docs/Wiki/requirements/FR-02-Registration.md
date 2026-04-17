@@ -20,7 +20,7 @@
 - OAuth registration (Google) for non-students
 - Access code validation (status, expiry, uses remaining)
 - Code generation (count + uses per code, expiration, optional metadata)
-- Code lifecycle management (list, detail, state transitions, archive visibility)
+- Code lifecycle management (list, detail, revoke, delete, legacy archived visibility)
 - Student auto-enrollment when registering with a teacher-issued code
 - Student join-course redemption using additional teacher-issued codes after account creation
 
@@ -234,11 +234,11 @@
 **Main Flow:**
 1. System lists codes scoped to role/ownership.
 2. User views code detail.
-3. User may request a lifecycle transition via state update (REVOKED or ARCHIVED).
-4. System validates transition against current state and permissions.
-5. System updates code status accordingly.
+3. User may revoke an active code via state update.
+4. User may delete a code in scope; active deletion first revokes, then removes the row.
+5. System validates the action against current state and permissions.
 
-**Postcondition:** Code lifecycle state updated; no changes to existing accounts.
+**Postcondition:** Code is revoked or removed; no changes to existing accounts.
 
 **Role Coverage:**
 
@@ -257,8 +257,8 @@
 - Trigger: User attempts to access code outside scope
 - Behavior: Access denied
 
-**REG-UC-03-E2** — Invalid state transition
-- Trigger: Revoke or archive not allowed for current state
+**REG-UC-03-E2** — Invalid lifecycle action
+- Trigger: Revoke not allowed for current state
 - Behavior: Error message; state unchanged
 
 **Tests (representative):**
@@ -293,8 +293,8 @@
 - **Applies to:** REG-UC-02, REG-UC-03
 
 ### REG-CN-05 — Code Lifecycle States
-- States: ACTIVE, EXHAUSTED, EXPIRED, REVOKED, ARCHIVED
-- Archival hides from default list; does not delete
+- States: ACTIVE, EXHAUSTED, EXPIRED, REVOKED
+- Legacy archived rows may still exist for compatibility, but active lifecycle management uses revoke and delete
 - **Applies to:** REG-UC-03
 
 ### REG-CN-06 — Researcher Codes Admin-Only
@@ -340,10 +340,10 @@
 - No admin self-registration
 - **Applies to:** REG-UC-01
 
-### REG-CN-15 — Revoke/Archive Semantics
+### REG-CN-15 — Revoke/Delete Semantics
 - Revoke blocks new registrations only
-- Archive hides from default lists (visibility-only)
-- Manual lifecycle transitions are requested as state changes (`REVOKED`, `ARCHIVED`)
+- Delete permanently removes the code record; deleting an active code first revokes it internally
+- Manual lifecycle transitions are requested only as state change `REVOKED`
 - `EXPIRED` and `EXHAUSTED` are server-derived states (not client-settable)
 - Neither action disables existing accounts
 - **Applies to:** REG-UC-03
@@ -418,10 +418,10 @@ Notes:
 | GET | `/api/v1/codes` | Access token | REG-UC-03 |
 | GET | `/api/v1/codes/{id}` | Access token | REG-UC-03 |
 | PATCH | `/api/v1/codes/{id}` | Access token | REG-UC-03 |
+| DELETE | `/api/v1/codes/{id}` | Access token | REG-UC-03 |
 
 **PATCH payload examples (state-driven):**
 - `{ "status": "REVOKED", "reason": "manual_stop" }`
-- `{ "status": "ARCHIVED" }`
 
 > Endpoints are proposed and can be adjusted during implementation.
 
@@ -434,7 +434,7 @@ Notes:
                  → Expired (time elapsed)
                  → Revoked (manual)
 
-Exhausted / Expired / Revoked → Archived (visibility-only)
+Active / Exhausted / Expired / Revoked → Deleted
 ```
 
 #### Registration Transaction
@@ -488,7 +488,7 @@ Exhausted / Expired / Revoked → Archived (visibility-only)
 | Metadata with count > 1 | Error; single code required with metadata | `400` |
 | Insufficient permission for target role | Access denied | `403` |
 | Access code outside visibility scope | Access denied | `403` |
-| Invalid state transition (revoke/archive) | Error; state unchanged | `409` |
+| Invalid lifecycle action | Error; state unchanged | `409` |
 | Non-student attempts course-join endpoint | Access denied | `403` |
 
 ---
@@ -534,7 +534,7 @@ Exhausted / Expired / Revoked → Archived (visibility-only)
 - test_REG_CN_11 (metadata -> single code)
 - test_REG_CN_12 (expiry required)
 - test_REG_CN_13 (auto-enroll)
-- test_REG_CN_15 (revoke/archive semantics)
+- test_REG_CN_15 (revoke/delete semantics)
 - test_REG_CN_16 (username generation + collision suffix)
 - test_REG_CN_20 (idempotent already-enrolled semantics)
 
@@ -550,7 +550,7 @@ Exhausted / Expired / Revoked → Archived (visibility-only)
 - test_REG_UC_02_generate_codes_teacher
 - test_REG_UC_03_list_scope
 - test_REG_UC_03_revoke_flow
-- test_REG_UC_03_archive_flow
+- test_REG_UC_03_delete_flow
 
 ### Frontend Unit
 - test_REG_UC_01_code_validation
@@ -566,7 +566,7 @@ Exhausted / Expired / Revoked → Archived (visibility-only)
 - test_REG_UC_03_list_view
 - test_REG_UC_03_detail_view
 - test_REG_UC_03_revoke_confirm
-- test_REG_UC_03_archive_action
+- test_REG_UC_03_delete_action
 
 ### System Tests (Black Box)
 - ST-REG-UC-01

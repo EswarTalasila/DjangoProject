@@ -1173,7 +1173,7 @@ export default function AssignmentTemplateStudioShell({
         }
         event.preventDefault();
       }}
-      className="flex flex-col h-[calc(100vh-64px)] overflow-hidden -m-8 -mt-8"
+      className="flex min-h-[calc(100dvh-4rem)] flex-col overflow-hidden md:min-h-0 lg:h-[calc(100vh-64px)] lg:-m-8 lg:-mt-8"
     >
       {/* Top header bar */}
       <AssignmentTemplateStudioHeader
@@ -1214,7 +1214,7 @@ export default function AssignmentTemplateStudioShell({
             type="button"
             onClick={() => setMobileView(tab.key)}
             className={cn(
-              'flex-1 py-2.5 text-[10px] font-bold uppercase tracking-widest transition-colors',
+              'flex-1 py-3 text-xs font-bold uppercase tracking-[0.16em] transition-colors',
               mobileView === tab.key
                 ? 'text-foreground border-b-2 border-primary bg-card'
                 : 'text-muted-foreground',

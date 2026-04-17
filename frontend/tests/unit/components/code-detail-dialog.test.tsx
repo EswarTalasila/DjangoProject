@@ -34,13 +34,13 @@ function makeCode(overrides: Partial<RegistrationCode> = {}): RegistrationCode {
 
 describe('CodeDetailDialog', () => {
   let onRevoke: ReturnType<typeof vi.fn<(code: RegistrationCode) => Promise<void>>>;
-  let onArchive: ReturnType<typeof vi.fn<(code: RegistrationCode) => Promise<void>>>;
+  let onDelete: ReturnType<typeof vi.fn<(code: RegistrationCode) => Promise<void>>>;
   let onOpenChange: ReturnType<typeof vi.fn<(open: boolean) => void>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     onRevoke = vi.fn<(code: RegistrationCode) => Promise<void>>().mockResolvedValue(undefined);
-    onArchive = vi.fn<(code: RegistrationCode) => Promise<void>>().mockResolvedValue(undefined);
+    onDelete = vi.fn<(code: RegistrationCode) => Promise<void>>().mockResolvedValue(undefined);
     onOpenChange = vi.fn<(open: boolean) => void>();
   });
 
@@ -52,7 +52,7 @@ describe('CodeDetailDialog', () => {
         onOpenChange={onOpenChange}
         code={null}
         onRevoke={onRevoke}
-        onArchive={onArchive}
+        onDelete={onDelete}
         isActionLoading={false}
       />,
     );
@@ -69,7 +69,7 @@ describe('CodeDetailDialog', () => {
         onOpenChange={onOpenChange}
         code={code}
         onRevoke={onRevoke}
-        onArchive={onArchive}
+        onDelete={onDelete}
         isActionLoading={false}
       />,
     );
@@ -83,7 +83,7 @@ describe('CodeDetailDialog', () => {
     expect(screen.getByText('User #1')).toBeInTheDocument();
   });
 
-  it('shows Revoke button for ACTIVE code, no Archive', async () => {
+  it('shows Revoke and Delete buttons for ACTIVE code', async () => {
     const Dialog = await loadDialog();
     render(
       <Dialog
@@ -91,16 +91,16 @@ describe('CodeDetailDialog', () => {
         onOpenChange={onOpenChange}
         code={makeCode({ status: 'ACTIVE' })}
         onRevoke={onRevoke}
-        onArchive={onArchive}
+        onDelete={onDelete}
         isActionLoading={false}
       />,
     );
 
     expect(screen.getByRole('button', { name: /Revoke/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Archive/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Delete/i })).toBeInTheDocument();
   });
 
-  it('shows Archive button for EXHAUSTED code, no Revoke', async () => {
+  it('shows Delete button for EXHAUSTED code, no Revoke', async () => {
     const Dialog = await loadDialog();
     render(
       <Dialog
@@ -108,16 +108,16 @@ describe('CodeDetailDialog', () => {
         onOpenChange={onOpenChange}
         code={makeCode({ status: 'EXHAUSTED' })}
         onRevoke={onRevoke}
-        onArchive={onArchive}
+        onDelete={onDelete}
         isActionLoading={false}
       />,
     );
 
-    expect(screen.getByRole('button', { name: /Archive/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Delete/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Revoke/i })).not.toBeInTheDocument();
   });
 
-  it('shows Archive button for EXPIRED code', async () => {
+  it('shows Delete button for EXPIRED code', async () => {
     const Dialog = await loadDialog();
     render(
       <Dialog
@@ -125,16 +125,16 @@ describe('CodeDetailDialog', () => {
         onOpenChange={onOpenChange}
         code={makeCode({ status: 'EXPIRED' })}
         onRevoke={onRevoke}
-        onArchive={onArchive}
+        onDelete={onDelete}
         isActionLoading={false}
       />,
     );
 
-    expect(screen.getByRole('button', { name: /Archive/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Delete/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Revoke/i })).not.toBeInTheDocument();
   });
 
-  it('shows Archive button for REVOKED code', async () => {
+  it('shows Delete button for REVOKED code', async () => {
     const Dialog = await loadDialog();
     render(
       <Dialog
@@ -142,16 +142,16 @@ describe('CodeDetailDialog', () => {
         onOpenChange={onOpenChange}
         code={makeCode({ status: 'REVOKED' })}
         onRevoke={onRevoke}
-        onArchive={onArchive}
+        onDelete={onDelete}
         isActionLoading={false}
       />,
     );
 
-    expect(screen.getByRole('button', { name: /Archive/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Delete/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Revoke/i })).not.toBeInTheDocument();
   });
 
-  it('shows no action buttons for ARCHIVED code', async () => {
+  it('shows Delete button for ARCHIVED code and no Revoke', async () => {
     const Dialog = await loadDialog();
     render(
       <Dialog
@@ -159,13 +159,13 @@ describe('CodeDetailDialog', () => {
         onOpenChange={onOpenChange}
         code={makeCode({ status: 'ARCHIVED', archivedAt: '2026-03-15T00:00:00Z' })}
         onRevoke={onRevoke}
-        onArchive={onArchive}
+        onDelete={onDelete}
         isActionLoading={false}
       />,
     );
 
     expect(screen.queryByRole('button', { name: /Revoke/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Archive/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Delete/i })).toBeInTheDocument();
   });
 
   it('shows archived date when present', async () => {
@@ -176,7 +176,7 @@ describe('CodeDetailDialog', () => {
         onOpenChange={onOpenChange}
         code={makeCode({ status: 'ARCHIVED', archivedAt: '2026-03-15T00:00:00Z' })}
         onRevoke={onRevoke}
-        onArchive={onArchive}
+        onDelete={onDelete}
         isActionLoading={false}
       />,
     );
@@ -193,7 +193,7 @@ describe('CodeDetailDialog', () => {
         onOpenChange={onOpenChange}
         code={code}
         onRevoke={onRevoke}
-        onArchive={onArchive}
+        onDelete={onDelete}
         isActionLoading={false}
       />,
     );
@@ -204,7 +204,7 @@ describe('CodeDetailDialog', () => {
     expect(onRevoke).toHaveBeenCalledWith(code);
   });
 
-  it('archive button calls onArchive with the code', async () => {
+  it('delete button calls onDelete with the code', async () => {
     const Dialog = await loadDialog();
     const code = makeCode({ status: 'EXHAUSTED' });
     render(
@@ -213,15 +213,15 @@ describe('CodeDetailDialog', () => {
         onOpenChange={onOpenChange}
         code={code}
         onRevoke={onRevoke}
-        onArchive={onArchive}
+        onDelete={onDelete}
         isActionLoading={false}
       />,
     );
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /Archive/i }));
+    await user.click(screen.getByRole('button', { name: /Delete/i }));
 
-    expect(onArchive).toHaveBeenCalledWith(code);
+    expect(onDelete).toHaveBeenCalledWith(code);
   });
 
   it('disables action buttons when isActionLoading is true', async () => {
@@ -232,12 +232,13 @@ describe('CodeDetailDialog', () => {
         onOpenChange={onOpenChange}
         code={makeCode({ status: 'ACTIVE' })}
         onRevoke={onRevoke}
-        onArchive={onArchive}
+        onDelete={onDelete}
         isActionLoading={true}
       />,
     );
 
     expect(screen.getByRole('button', { name: /Revoke/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Delete/i })).toBeDisabled();
   });
 
   it('renders metadata key-value pairs', async () => {
@@ -248,7 +249,7 @@ describe('CodeDetailDialog', () => {
         onOpenChange={onOpenChange}
         code={makeCode({ metadata: { cohort: 'Spring2026', section: 'A' } })}
         onRevoke={onRevoke}
-        onArchive={onArchive}
+        onDelete={onDelete}
         isActionLoading={false}
       />,
     );
@@ -268,7 +269,7 @@ describe('CodeDetailDialog', () => {
         onOpenChange={onOpenChange}
         code={makeCode({ metadata: null })}
         onRevoke={onRevoke}
-        onArchive={onArchive}
+        onDelete={onDelete}
         isActionLoading={false}
       />,
     );
@@ -284,7 +285,7 @@ describe('CodeDetailDialog', () => {
         onOpenChange={onOpenChange}
         code={makeCode({ metadata: {} })}
         onRevoke={onRevoke}
-        onArchive={onArchive}
+        onDelete={onDelete}
         isActionLoading={false}
       />,
     );
@@ -300,7 +301,7 @@ describe('CodeDetailDialog', () => {
         onOpenChange={onOpenChange}
         code={makeCode({ courseId: null, courseName: null })}
         onRevoke={onRevoke}
-        onArchive={onArchive}
+        onDelete={onDelete}
         isActionLoading={false}
       />,
     );

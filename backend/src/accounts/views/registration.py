@@ -259,15 +259,12 @@ def _create_codes(request):
 def _list_codes(request):
     """List registration codes scoped to the authenticated user's role."""
     v = _v()
-    include_archived = str(request.query_params.get("includeArchived", "")).lower() in ("1", "true", "yes")
     status_filter = str(request.query_params.get("status", "")).strip().upper()
     code_type_filter = str(request.query_params.get("codeType", "")).strip().upper()
 
     queryset = v.registration_code_scope_queryset(request.user)
     if code_type_filter:
         queryset = queryset.filter(code_type=code_type_filter)
-    if not include_archived:
-        queryset = queryset.filter(archived_at__isnull=True)
 
     records = list(queryset.order_by("-created_at"))
     if status_filter:
@@ -284,7 +281,7 @@ def codes_collection(request):
     return _v()._create_codes(request)
 
 
-@api_view(["GET", "PATCH"])
+@api_view(["GET", "PATCH", "DELETE"])
 @permission_classes([IsAuthenticated])
 def code_detail(request, code_id: int):
     """Get or transition a single registration code within role scope."""
@@ -294,6 +291,13 @@ def code_detail(request, code_id: int):
         if not record:
             return Response({"detail": "Registration code not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(_serialize_registration_code(record), status=status.HTTP_200_OK)
+
+    if request.method == "DELETE":
+        try:
+            v.remove_registration_code(actor=request.user, registration_code_id=code_id)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     serializer = v.RegistrationCodeUpdateSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)

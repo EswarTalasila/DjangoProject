@@ -29,8 +29,8 @@ export function CodesToolbar({
   isActionLoading,
 }: CodesToolbarProps) {
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-1">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-wrap items-center gap-1">
         {STATUS_OPTIONS.map((option) => (
           <button
             key={option.value}
@@ -48,7 +48,7 @@ export function CodesToolbar({
         ))}
       </div>
       <Button
-        className="bg-primary hover:bg-primary/90 text-primary-foreground"
+        className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto sm:self-auto"
         onClick={onGenerateClick}
         disabled={isActionLoading}
       >
