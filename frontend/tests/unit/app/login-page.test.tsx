@@ -44,6 +44,7 @@ describe("Login page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.NEXT_PUBLIC_API_URL = "/api/v1";
+    process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID = "test-google-client.apps.googleusercontent.com";
     window.history.replaceState({}, "", "/login");
   });
 
@@ -249,6 +250,18 @@ describe("Login page", () => {
     await user.click(screen.getByRole("button", { name: /Continue with Google/i }));
 
     expect(mockGoogleLoginTrigger).toHaveBeenCalled();
+  });
+
+  it("does not mount Google OAuth when no client id is configured", async () => {
+    process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID = "";
+    const LoginPage = await loadLoginPage();
+    render(<LoginPage />);
+
+    const button = screen.getByRole("button", { name: /Continue with Google/i });
+    expect(button).toBeDisabled();
+    expect(
+      screen.getByText("Google sign-in is unavailable in this environment."),
+    ).toBeInTheDocument();
   });
 
   it("uses default name Instructor when login response has no name", async () => {

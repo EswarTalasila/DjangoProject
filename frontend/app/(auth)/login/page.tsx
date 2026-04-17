@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -34,9 +34,11 @@ type LoginSuccessPayload = {
 };
 const loginFieldNames = new Set<keyof LoginForm>(["identifier", "password"]);
 const adminConsoleHref = "/admin/";
+const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim() || "";
 
 function LoginPageContent() {
   const router = useRouter();
+  const [isHydrated, setIsHydrated] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [adminBlocked, setAdminBlocked] = useState(false);
@@ -45,6 +47,10 @@ function LoginPageContent() {
     resolver: zodResolver(loginSchema),
     defaultValues: { identifier: "", password: "" },
   });
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   // Shared success handler for both password and Google login
   const handleLoginSuccess = (data: LoginSuccessPayload) => {
@@ -167,11 +173,9 @@ function LoginPageContent() {
           </Alert>
         )}
 
-        {/* method="post" is a belt-and-suspenders guard: if client JS hasn't
-            hydrated yet (slow network, hydration error), browser-native form
-            submission uses POST instead of leaking credentials into the URL
-            query string via GET. The onSubmit handler below intercepts when
-            JS is live. */}
+        {/* Keep the login form inert until hydration completes. This avoids a
+            browser-native submit race on slow dev/test pages and ensures
+            credentials are never leaked into the URL query string. */}
         <form method="post" onSubmit={form.handleSubmit(onSubmit)}>
           <div className="grid gap-4">
             {/* Identifier */}
@@ -184,7 +188,7 @@ function LoginPageContent() {
                 autoCapitalize="none"
                 autoComplete="username"
                 autoCorrect="off"
-                disabled={isLoading}
+                disabled={!isHydrated || isLoading}
                 className={
                   form.formState.errors.identifier
                     ? "border-red-500 focus-visible:ring-red-500"
@@ -220,7 +224,7 @@ function LoginPageContent() {
                 type="password"
                 placeholder="••••••••"
                 autoComplete="current-password"
-                disabled={isLoading}
+                disabled={!isHydrated || isLoading}
                 className={
                   form.formState.errors.password
                     ? "border-red-500 focus-visible:ring-red-500"
@@ -236,7 +240,12 @@ function LoginPageContent() {
               )}
             </div>
 
-            <Button disabled={isLoading}>
+            {!isHydrated && (
+              <p className="text-xs text-slate-500">
+                Preparing secure sign-in…
+              </p>
+            )}
+            <Button disabled={!isHydrated || isLoading}>
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Sign In
             </Button>
@@ -257,12 +266,11 @@ function LoginPageContent() {
         {/* Google Login Button */}
         <Button
           onClick={() => loginGoogle()}
-          disabled={isLoading}
+          disabled={!googleClientId || isLoading}
           variant="outline"
-      >
+        >
           {isLoading ? (
-
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
             <svg
               className="mr-2 h-4 w-4"
@@ -279,11 +287,14 @@ function LoginPageContent() {
               d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"
               ></path>
           </svg>
-
           )}
           Continue with Google
-
-      </Button>
+        </Button>
+        {!googleClientId && (
+          <p className="text-xs text-slate-500">
+            Google sign-in is unavailable in this environment.
+          </p>
+        )}
       </div>
 
       <p className="px-8 text-center text-sm text-slate-500">
@@ -308,9 +319,13 @@ function LoginPageContent() {
 
 // Wrapper component to provide OAuth context
 export default function LoginPage() {
+  if (!googleClientId) {
+    return <LoginPageContent />;
+  }
+
   return (
     <GoogleOAuthProvider
-      clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ""}
+      clientId={googleClientId}
     >
       <LoginPageContent />
     </GoogleOAuthProvider>
