@@ -58,9 +58,39 @@ Required production values include:
 ```bash
 task up:prod
 task down:prod
+task auto-deploy:on
+task auto-deploy:off
+task auto-deploy:status
 ```
 
-## 5) Volume and Routing Isolation
+## 5) Toggleable Auto-Deploy
+
+The repo owns a toggleable prod auto-deploy installation:
+
+- `scripts/tasks/auto-deploy.sh`
+- `scripts/tasks/auto-deploy-run.sh`
+- `Deployment/templates/eelab-auto-deploy.cron.template`
+
+`task auto-deploy:on` installs:
+
+- `/opt/deploy/auto-deploy.sh`
+- `/etc/cron.d/eelab-auto-deploy`
+
+These commands are intended for the server checkout. When run as a non-root user they escalate with `sudo` to install into `/opt/deploy` and `/etc/cron.d`.
+
+The installed runner:
+
+- fetches `origin/master` by default (`AUTO_DEPLOY_BRANCH` may override this)
+- refuses to run if the server checkout has uncommitted or untracked files
+- hard-resets the server checkout to the fetched revision only after confirming the repo is clean
+- runs `task env:init`
+- runs `task rebuild:prod`
+- rolls back to the previous revision if rebuild fails
+- writes output to `/opt/deploy/deploy.log`
+
+`task auto-deploy:off` removes only the cron entry so the next team can re-enable it instantly without re-provisioning the deploy key or runner.
+
+## 6) Volume and Routing Isolation
 
 Production data is isolated by:
 

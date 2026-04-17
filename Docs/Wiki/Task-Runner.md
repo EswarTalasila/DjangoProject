@@ -90,6 +90,26 @@ Rules:
   - `provision_account`
   - `seed_demo_data`
 
+### Auto-Deploy
+
+| Command | Intent |
+|---|---|
+| `task auto-deploy:on` | Install/update the prod auto-deploy runner and cron schedule |
+| `task auto-deploy:off` | Disable the prod auto-deploy cron schedule without removing keys or logs |
+| `task auto-deploy:status` | Show installed state, drift, and recent deploy log lines |
+
+Rules:
+- These commands are intended to be run on the server-side checkout, not on normal day-to-day local development machines.
+- When not already root they use `sudo` to write into `/opt/deploy` and `/etc/cron.d`.
+- The repo owns the source-of-truth runner and cron template.
+- `task auto-deploy:on` installs a rendered runtime copy to `/opt/deploy/auto-deploy.sh`.
+- `task auto-deploy:on` also installs `/etc/cron.d/eelab-auto-deploy`.
+- `task auto-deploy:off` removes only the cron file; it leaves the deploy key, installed runner, and log intact.
+- The installed runner fetches `origin/master` by default, but `AUTO_DEPLOY_BRANCH` may override the tracked branch.
+- The installed runner refuses to run when the server checkout is dirty.
+- The installed runner rolls back to the previous revision if `task env:init` or `task rebuild:prod` fails.
+- The deploy key is expected at `/opt/deploy/keys/github_deploy` unless overridden explicitly.
+
 ### Destructive
 
 | Command | Intent |

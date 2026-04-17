@@ -58,6 +58,9 @@ class TestTaskSurface:
             "test:frontend:",
             "seed:account:",
             "seed:data:",
+            "auto-deploy:on:",
+            "auto-deploy:off:",
+            "auto-deploy:status:",
             "destroy:all:",
         ]:
             assert task_name in taskfile
@@ -262,7 +265,7 @@ class TestTaskScripts:
     """The new scripts/tasks entrypoints must exist."""
 
     def test_required_task_scripts_exist(self):
-        """All 11 required task workflow scripts are present."""
+        """All required task workflow scripts are present."""
         for relpath in [
             "scripts/tasks/prepare-env.sh",
             "scripts/tasks/check-env.sh",
@@ -274,9 +277,28 @@ class TestTaskScripts:
             "scripts/tasks/restart.sh",
             "scripts/tasks/rebuild.sh",
             "scripts/tasks/test.sh",
+            "scripts/tasks/auto-deploy.sh",
+            "scripts/tasks/auto-deploy-run.sh",
             "scripts/tasks/destroy-all.sh",
         ]:
             assert (PROJECT_ROOT / relpath).exists()
+
+    def test_auto_deploy_cron_template_exists(self):
+        """The repo owns the auto-deploy cron template used for installation."""
+        assert (PROJECT_ROOT / "Deployment/templates/eelab-auto-deploy.cron.template").exists()
+
+    def test_auto_deploy_runner_contract_markers_exist(self):
+        """The repo-owned deploy runner keeps rollback, dirty-check, and branch override markers."""
+        text = _read_text("scripts/tasks/auto-deploy-run.sh")
+        assert 'DEPLOY_BRANCH="__DEPLOY_BRANCH__"' in text
+        assert "repo checkout is dirty; refusing to auto-deploy" in text
+        assert "rolling back to" in text
+        assert 'git checkout -B "${DEPLOY_BRANCH}" "refs/remotes/origin/${DEPLOY_BRANCH}"' in text
+
+    def test_auto_deploy_cron_template_points_at_rendered_runner(self):
+        """The cron template invokes the installed rendered runner path placeholder."""
+        text = _read_text("Deployment/templates/eelab-auto-deploy.cron.template")
+        assert '"__RUNNER_PATH__"' in text
 
     def test_legacy_runtime_scripts_removed(self):
         """Old backend_start.sh and profile_guard.py are deleted."""

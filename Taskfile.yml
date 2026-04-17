@@ -57,6 +57,9 @@ tasks:
         print_section "Init"
         print_cmd "task ensure:admin:<dev|test|prod>" "migrate + collectstatic + ensure admin"
 
+        print_section "Auto-Deploy"
+        print_cmd "task auto-deploy:<on|off|status>" "manage the installed prod auto-deploy runner and cron"
+
         print_section "Dangerous"
         printf '  %s%-36s%s %s%s%s\n' "$RED" "task destroy:all" "$RESET" "$DIM" "wipe all EElab containers, volumes, and proxy state" "$RESET"
         printf '  %s%-36s%s %s%s%s\n' "" "" "" "$YELLOW" "requires y/N confirmation and exact phrase EELab" "$RESET"
@@ -304,6 +307,21 @@ tasks:
     cmds:
       - task: _check:docker
       - ./scripts/tasks/seed-data.sh {{.CLI_ARGS}}
+
+  auto-deploy:on:
+    desc: Install/update the prod auto-deploy runner and cron schedule
+    cmds:
+      - ./scripts/tasks/auto-deploy.sh on
+
+  auto-deploy:off:
+    desc: Disable the prod auto-deploy cron schedule without removing keys or logs
+    cmds:
+      - ./scripts/tasks/auto-deploy.sh off
+
+  auto-deploy:status:
+    desc: Show auto-deploy installation state, drift, and recent deploy logs
+    cmds:
+      - ./scripts/tasks/auto-deploy.sh status
 
   destroy:all:
     desc: Destroy all EElab containers, volumes, and proxy state

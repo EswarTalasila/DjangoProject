@@ -179,6 +179,7 @@
 - **Runtime:** `status:*`, `logs:*`, `restart:*`, `rebuild:*`
 - **Testing:** `test`, `test:backend`, `test:frontend`
 - **Seeding:** `seed:account -- <role> [--profile dev|test]`, `seed:data -- [--profile dev|test]`
+- **Auto-deploy:** `auto-deploy:on`, `auto-deploy:off`, `auto-deploy:status`
 - **Dangerous:** `task destroy:all` with interactive confirmation
 
 **Postconditions:**
@@ -367,6 +368,7 @@ Shared proxy network: `eelab-proxy`. Each profile stack also owns a private app 
 | Env | 3 | `env:local`, `env:server`, `env:init` |
 | Docs | 0 | Documentation is maintained directly in the repo; no public docs tasks are part of the retained task surface |
 | Safety | 1 | `destroy:all` |
+| Auto-Deploy | 3 | `auto-deploy:on`, `auto-deploy:off`, `auto-deploy:status` |
 
 ---
 
