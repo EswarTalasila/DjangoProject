@@ -57,50 +57,90 @@ export default function VizCourseSummaryView({
         >
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Course summary
+          </p>
+          <h1 className="text-3xl font-semibold tracking-tight">
             {data?.courseName ?? `Course ${courseId}`}
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground">
             {data ? `${data.enrolledCount} enrolled students` : 'Loading...'}
           </p>
         </div>
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
+      {error && (
+        <div className="rounded-2xl border border-destructive/25 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+      {loading && (
+        <Card className="border-border/70 shadow-sm">
+          <CardContent className="px-5 py-8 text-sm text-muted-foreground">Loading...</CardContent>
+        </Card>
+      )}
 
       {!loading && data && (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Assignments</CardTitle>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Card className="border-border/70 shadow-sm">
+              <CardContent className="p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  Total assignments
+                </p>
+                <p className="mt-2 text-3xl font-semibold tracking-tight">
+                  {data.assignments.length}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/70 shadow-sm">
+              <CardContent className="p-5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  Enrollment
+                </p>
+                <p className="mt-2 text-3xl font-semibold tracking-tight">
+                  {data.enrolledCount}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="overflow-hidden border-border/70 shadow-sm">
+            <CardHeader className="border-b border-border/70 bg-muted/30">
+              <div className="space-y-1">
+                <CardTitle className="text-base">Assignments</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Open an assignment to review completion, grading, and score distribution.
+                </p>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               {data.assignments.length === 0 ? (
                 <p className="p-6 text-sm text-muted-foreground">No assignments found.</p>
               ) : (
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-muted border-b border-border">
+                    <TableRow className="border-b border-border bg-muted/40">
                       {data.assignments[0]?.assignmentTitle !== undefined && (
-                        <TableHead className="text-xs font-semibold uppercase tracking-wider">
+                        <TableHead className="text-xs font-semibold uppercase tracking-[0.16em]">
                           Title
                         </TableHead>
                       )}
-                      <TableHead className="text-xs font-semibold uppercase tracking-wider">
+                      <TableHead className="text-xs font-semibold uppercase tracking-[0.16em]">
                         Category
                       </TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-right">
+                      <TableHead className="text-xs font-semibold uppercase tracking-[0.16em] text-right">
                         Submitted
                       </TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-right">
+                      <TableHead className="text-xs font-semibold uppercase tracking-[0.16em] text-right">
                         Completion
                       </TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-right">
+                      <TableHead className="text-xs font-semibold uppercase tracking-[0.16em] text-right">
                         Avg Score
                       </TableHead>
-                      <TableHead className="text-xs font-semibold uppercase tracking-wider text-right">
+                      <TableHead className="text-xs font-semibold uppercase tracking-[0.16em] text-right">
                         Pending
                       </TableHead>
                     </TableRow>
@@ -111,8 +151,8 @@ export default function VizCourseSummaryView({
                       return (
                         <TableRow
                           key={a.assignmentId ?? i}
-                          className={`even:bg-muted/50 transition-colors ${
-                            isNavigable ? 'cursor-pointer hover:bg-accent' : ''
+                          className={`transition-colors ${
+                            isNavigable ? 'cursor-pointer hover:bg-accent/40' : ''
                           }`}
                           onClick={() => {
                             if (a.assignmentId != null) {
@@ -128,7 +168,11 @@ export default function VizCourseSummaryView({
                           }}
                           role={isNavigable ? 'link' : undefined}
                           tabIndex={isNavigable ? 0 : undefined}
-                          aria-label={isNavigable ? `Open assignment ${a.assignmentId}` : undefined}
+                          aria-label={
+                            isNavigable
+                              ? `Open assignment ${a.assignmentTitle ?? a.assignmentId}`
+                              : undefined
+                          }
                         >
                         {a.assignmentTitle !== undefined && (
                             <TableCell className="font-medium text-sm">
@@ -161,6 +205,7 @@ export default function VizCourseSummaryView({
                     })}
                   </TableBody>
                 </Table>
+                </div>
               )}
             </CardContent>
           </Card>
