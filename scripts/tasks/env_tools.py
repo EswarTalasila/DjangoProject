@@ -174,9 +174,13 @@ def build_runtime(profile: str, root_values: dict[str, str], policy: dict) -> di
         "NEXT_PUBLIC_API_URL": f"{base_path}/api/v1",
         "NEXT_BASE_PATH": base_path,
         "FORCE_SCRIPT_NAME": base_path,
-        # SSR traverses the same nginx proxy as browser traffic so the
-        # /_dev/ and /_test/ locations route SSR calls to the right backend.
-        "SERVER_PROXY_ORIGIN": "http://proxy",
+        # SSR fetches go through the public host over HTTPS rather than a
+        # docker-internal http://proxy hop. Using http://proxy hit the port 80
+        # redirect-to-HTTPS server block, and the cross-origin redirect caused
+        # fetch() to drop the Authorization header, which broke /auth/me calls
+        # during dashboard SSR. Hitting the public URL directly avoids the
+        # redirect altogether and uses the same valid TLS cert browsers see.
+        "SERVER_PROXY_ORIGIN": f"{public_scheme}://{public_host}",
         "MEDIA_ROOT": profile_cfg["media_root"],
     }
 
