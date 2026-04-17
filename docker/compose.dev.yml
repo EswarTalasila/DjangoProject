@@ -90,6 +90,7 @@ services:
       sh -c "if [ ! -x node_modules/.bin/next ] || [ ! -x node_modules/.bin/vitest ]; then
                npm ci --prefer-offline --no-audit;
              fi &&
+             rm -f .next/dev/lock &&
              npm run dev"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000 || exit 1"]
