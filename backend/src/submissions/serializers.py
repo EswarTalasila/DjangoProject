@@ -49,7 +49,9 @@ class AnswerSerializer(serializers.Serializer):
     """
 
     questionId = serializers.IntegerField()
-    type = serializers.ChoiceField(choices=["MULTIPLE_CHOICE", "SHORT_ANSWER", "NUMBER_SCALE"])
+    type = serializers.ChoiceField(
+        choices=["MULTIPLE_CHOICE", "SHORT_ANSWER", "NUMBER_SCALE", "MOOD_METER", "FILE_UPLOAD"]
+    )
     data = serializers.DictField()  # type: ignore[assignment]
     score = serializers.FloatField(required=False, allow_null=True, read_only=True)
 

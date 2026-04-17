@@ -42,14 +42,29 @@ class TestAnswerSerializer:
         s = AnswerSerializer(data=data)
         assert s.is_valid(), s.errors
 
-    def test_invalid_mood_meter_rejected(self):
-        """MOOD_METER type is no longer valid and is rejected."""
+    def test_valid_mood_meter(self):
+        """Valid MOOD_METER payload passes validation."""
         from submissions.serializers import AnswerSerializer
 
-        data = {"questionId": 4, "type": "MOOD_METER", "data": {"row": 1, "col": 2}}
+        data = {
+            "questionId": 4,
+            "type": "MOOD_METER",
+            "data": {"quadrant": "highEnergyHighPleasantness", "moodName": "Excited"},
+        }
         s = AnswerSerializer(data=data)
-        assert not s.is_valid()
-        assert "type" in s.errors
+        assert s.is_valid(), s.errors
+
+    def test_valid_file_upload(self):
+        """Valid FILE_UPLOAD payload passes validation."""
+        from submissions.serializers import AnswerSerializer
+
+        data = {
+            "questionId": 5,
+            "type": "FILE_UPLOAD",
+            "data": {"originalFilename": "report.pdf"},
+        }
+        s = AnswerSerializer(data=data)
+        assert s.is_valid(), s.errors
 
     def test_invalid_type_rejected(self):
         """Invalid answer type is rejected."""
