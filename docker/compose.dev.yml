@@ -69,9 +69,19 @@ services:
           - eelab-dev-backend
 
   frontend:
+    # Dev-on-server uses the same Dockerfile.prod build + `next start` the prod
+    # stack uses, just with the /_dev basePath baked in. This avoids relying on
+    # the webpack HMR WebSocket (which the nginx-in-front-of-docker setup never
+    # reliably upgrades) and gives dev the same serving model as prod. Trade-off
+    # is no hot reload, but server-hosted dev is for deployment testing, not
+    # iteration speed.
     build:
       context: ../frontend
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_BASE_PATH: ${NEXT_BASE_PATH}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
     restart: unless-stopped
     environment:
       NEXT_TELEMETRY_DISABLED: "1"
@@ -79,24 +89,12 @@ services:
       NEXT_BASE_PATH: ${NEXT_BASE_PATH}
       SERVER_PROXY_ORIGIN: ${SERVER_PROXY_ORIGIN}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
-    volumes:
-      - ../frontend:/app:cached
-      - frontend-node-modules:/app/node_modules
-      - frontend-npm-cache:/root/.npm
     expose:
       - "3000"
     depends_on:
       backend:
         condition: service_healthy
-    command: >
-      sh -c "if [ ! -x node_modules/.bin/next ] || [ ! -x node_modules/.bin/vitest ]; then
-               npm ci --prefer-offline --no-audit;
-             fi &&
-             rm -f .next/dev/lock &&
-             npm run dev"
     healthcheck:
-      # Probe the login page under the profile's basePath ("" for prod,
-      # "/_dev" for dev, "/_test" for test).
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000${NEXT_BASE_PATH}/login || exit 1"]
       interval: 15s
       timeout: 10s
@@ -114,10 +112,6 @@ volumes:
     name: eelab-dev-media-data
   artifact-data:
     name: eelab-dev-artifact-data
-  frontend-node-modules:
-    name: eelab-dev-frontend-node-modules
-  frontend-npm-cache:
-    name: eelab-dev-frontend-npm-cache
 
 networks:
   app:
