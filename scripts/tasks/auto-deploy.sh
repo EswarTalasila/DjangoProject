@@ -62,7 +62,7 @@ esac
 repo_path="${AUTO_DEPLOY_REPO_PATH:-${REPO_ROOT}}"
 install_root="${AUTO_DEPLOY_INSTALL_ROOT:-/opt/deploy}"
 runner_path="${AUTO_DEPLOY_RUNNER_PATH:-${install_root}/auto-deploy.sh}"
-cron_path="${AUTO_DEPLOY_CRON_PATH:-/etc/cron.d/eelab-auto-deploy}"
+cron_path="${AUTO_DEPLOY_CRON_PATH:-/etc/cron.d/lattice-auto-deploy}"
 log_path="${AUTO_DEPLOY_LOG_PATH:-${install_root}/deploy.log}"
 lock_path="${AUTO_DEPLOY_LOCK_PATH:-${install_root}/auto-deploy.lock}"
 deploy_key_path="${AUTO_DEPLOY_DEPLOY_KEY_PATH:-${install_root}/keys/github_deploy}"
@@ -72,7 +72,7 @@ deploy_branch="${AUTO_DEPLOY_BRANCH:-master}"
 task_bin="${AUTO_DEPLOY_TASK_BIN:-$(command -v task || true)}"
 python_bin="${AUTO_DEPLOY_PYTHON_BIN:-$(command -v python3 || command -v python || true)}"
 runner_template="${TASK_SCRIPT_DIR}/auto-deploy-run.sh"
-cron_template="${REPO_ROOT}/Deployment/templates/eelab-auto-deploy.cron.template"
+cron_template="${REPO_ROOT}/Deployment/templates/lattice-auto-deploy.cron.template"
 
 require_command() {
   if ! command -v "${1}" >/dev/null 2>&1; then

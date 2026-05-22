@@ -276,7 +276,7 @@ REST_FRAMEWORK = {
 #   - /api/redoc/  (ReDoc - clean reading)
 #   - /api/schema/ (Raw OpenAPI YAML)
 SPECTACULAR_SETTINGS = {
-    "TITLE": "EE Lab Data Dashboard API",
+    "TITLE": "Lattice Data Dashboard API",
     "DESCRIPTION": "API for managing assignment templates, assignments, submissions, and visualization.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,  # Don't include schema endpoint in schema itself

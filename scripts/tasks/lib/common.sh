@@ -37,10 +37,10 @@ fail() {
 
 project_name() {
   case "${1:?profile required}" in
-    proxy) echo "eelab-proxy" ;;
-    dev) echo "eelab-dev" ;;
-    test) echo "eelab-test" ;;
-    prod) echo "eelab-prod" ;;
+    proxy) echo "lattice-proxy" ;;
+    dev) echo "lattice-dev" ;;
+    test) echo "lattice-test" ;;
+    prod) echo "lattice-prod" ;;
     *) fail "unknown profile: $1"; return 1 ;;
   esac
 }

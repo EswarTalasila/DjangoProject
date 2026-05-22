@@ -93,7 +93,7 @@ export function Sidebar({ role, groups }: SidebarProps) {
           <div className="flex items-center justify-between border-b border-sidebar-border px-4 py-4">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-sidebar-foreground/60">
-                Ready, Set, Resilience
+                Prism
               </p>
               <p className="mt-1 text-sm font-semibold text-sidebar-foreground">
                 Navigation
@@ -171,14 +171,14 @@ export function Sidebar({ role, groups }: SidebarProps) {
               >
                 <button
                   className={cn(
-                    "flex h-11 w-full items-center justify-center",
-                    "text-sidebar-foreground/70 transition-colors duration-150",
+                    "group flex h-11 w-full items-center justify-center",
+                    "text-sidebar-foreground/70 transition-all duration-200",
                     active && "bg-sidebar-accent text-sidebar-foreground",
                     !active && "hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
                   )}
                   aria-label={group.label}
                 >
-                  <Icon className="h-5 w-5" />
+                  <Icon className="h-5 w-5 transition-transform duration-200 group-hover:scale-110 group-active:scale-95" />
                 </button>
 
                 {active && (
@@ -189,10 +189,10 @@ export function Sidebar({ role, groups }: SidebarProps) {
                   className={cn(
                     "absolute left-full top-0 z-50 ml-0 min-w-[180px]",
                     "origin-left rounded-r-lg border border-sidebar-border bg-sidebar shadow-lg",
-                    "transition-all duration-200 ease-out",
+                    "transition-all duration-250 ease-out",
                     isOpen
-                      ? "pointer-events-auto scale-x-100 opacity-100"
-                      : "pointer-events-none scale-x-0 opacity-0",
+                      ? "pointer-events-auto translate-x-0 scale-x-100 opacity-100"
+                      : "pointer-events-none -translate-x-2 scale-x-95 opacity-0",
                   )}
                 >
                   <div className="border-b border-sidebar-border px-3 py-2 text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/60">
@@ -206,10 +206,10 @@ export function Sidebar({ role, groups }: SidebarProps) {
                           key={link.href}
                           href={link.href}
                           className={cn(
-                            "block px-3 py-2 text-sm transition-colors",
+                            "block px-3 py-2 text-sm transition-all duration-150",
                             linkActive
                               ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                              : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+                              : "text-sidebar-foreground/80 hover:translate-x-1 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
                           )}
                         >
                           {link.label}

@@ -103,7 +103,7 @@ Rules:
 - When not already root they use `sudo` to write into `/opt/deploy` and `/etc/cron.d`.
 - The repo owns the source-of-truth runner and cron template.
 - `task auto-deploy:on` installs a rendered runtime copy to `/opt/deploy/auto-deploy.sh`.
-- `task auto-deploy:on` also installs `/etc/cron.d/eelab-auto-deploy`.
+- `task auto-deploy:on` also installs `/etc/cron.d/lattice-auto-deploy`.
 - `task auto-deploy:off` removes only the cron file; it leaves the deploy key, installed runner, and log intact.
 - The installed runner fetches `origin/master` by default, but `AUTO_DEPLOY_BRANCH` may override the tracked branch.
 - The installed runner refuses to run when the server checkout is dirty.
@@ -114,11 +114,11 @@ Rules:
 
 | Command | Intent |
 |---|---|
-| `task destroy:all` | Wipe all EElab containers, volumes, and proxy state after interactive confirmation |
+| `task destroy:all` | Wipe all Lattice containers, volumes, and proxy state after interactive confirmation |
 
 Rules:
 - The command first requires explicit `y/N` confirmation.
-- The command then requires the exact typed phrase `EELab`.
+- The command then requires the exact typed phrase `Lattice`.
 - No hidden destructive cleanup is allowed in normal startup/shutdown tasks.
 
 ---

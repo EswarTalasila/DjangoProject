@@ -61,15 +61,15 @@ tasks:
         print_cmd "task auto-deploy:<on|off|status>" "manage the installed prod auto-deploy runner and cron"
 
         print_section "Dangerous"
-        printf '  %s%-36s%s %s%s%s\n' "$RED" "task destroy:all" "$RESET" "$DIM" "wipe all EElab containers, volumes, and proxy state" "$RESET"
-        printf '  %s%-36s%s %s%s%s\n' "" "" "" "$YELLOW" "requires y/N confirmation and exact phrase EELab" "$RESET"
+        printf '  %s%-36s%s %s%s%s\n' "$RED" "task destroy:all" "$RESET" "$DIM" "wipe all Lattice containers, volumes, and proxy state" "$RESET"
+        printf '  %s%-36s%s %s%s%s\n' "" "" "" "$YELLOW" "requires y/N confirmation and exact phrase Lattice" "$RESET"
 
   _check:docker:
     internal: true
     desc: Verify Docker daemon is running
     preconditions:
       - sh: docker info >/dev/null 2>&1
-        msg: Docker is not running. Start Docker before running EElab tasks.
+        msg: Docker is not running. Start Docker before running Lattice tasks.
 
   _check:env:dev:
     internal: true
@@ -324,6 +324,6 @@ tasks:
       - ./scripts/tasks/auto-deploy.sh status
 
   destroy:all:
-    desc: Destroy all EElab containers, volumes, and proxy state
+    desc: Destroy all Lattice containers, volumes, and proxy state
     cmds:
       - ./scripts/tasks/destroy-all.sh

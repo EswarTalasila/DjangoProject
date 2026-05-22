@@ -12,10 +12,10 @@ services:
       - ./proxy/templates:/etc/nginx/templates:ro
       - ./proxy/ssl:/etc/nginx/ssl:ro
     networks:
-      eelab-proxy:
+      lattice-proxy:
         aliases:
           - proxy
 
 networks:
-  eelab-proxy:
-    name: eelab-proxy
+  lattice-proxy:
+    name: lattice-proxy

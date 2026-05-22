@@ -21,10 +21,10 @@ services:
     env_file:
       - ./env/.env.testing
     environment:
-      MEDIA_ROOT: /srv/eelab-test/media
+      MEDIA_ROOT: /srv/lattice-test/media
     volumes:
-      - media-data:/srv/eelab-test/media
-      - artifact-data:/srv/eelab-test/media/artifacts
+      - media-data:/srv/lattice-test/media
+      - artifact-data:/srv/lattice-test/media/artifacts
     expose:
       - "8000"
     depends_on:
@@ -32,9 +32,9 @@ services:
         condition: service_started
     networks:
       app: {}
-      eelab-proxy:
+      lattice-proxy:
         aliases:
-          - eelab-test-backend
+          - lattice-test-backend
 
   frontend:
     build:
@@ -50,21 +50,21 @@ services:
         condition: service_started
     networks:
       app: {}
-      eelab-proxy:
+      lattice-proxy:
         aliases:
-          - eelab-test-frontend
+          - lattice-test-frontend
 
 volumes:
   db-data:
-    name: eelab-test-db-data
+    name: lattice-test-db-data
   media-data:
-    name: eelab-test-media-data
+    name: lattice-test-media-data
   artifact-data:
-    name: eelab-test-artifact-data
+    name: lattice-test-artifact-data
 
 networks:
   app:
-    name: eelab-test-app
-  eelab-proxy:
+    name: lattice-test-app
+  lattice-proxy:
     external: true
-    name: eelab-proxy
+    name: lattice-proxy

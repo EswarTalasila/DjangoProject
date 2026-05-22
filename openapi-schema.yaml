@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: EE Lab Data Dashboard API
+  title: Lattice Data Dashboard API
   version: 1.0.0
   description: API for managing assignment templates, assignments, submissions, and
     visualization.

@@ -19,7 +19,7 @@ def _mock_env(**overrides):
         "django_secret_key": "change-me-to-a-secure-random-string",
         "admin_email": "admin@example.com",
         "admin_password": "change-me",
-        "database_url": "postgres://eelab:change-me@database:5432/eelab",
+        "database_url": "postgres://lattice:change-me@database:5432/lattice",
         "google_client_id": "",
         "google_client_secret": "",
         "django_debug": True,

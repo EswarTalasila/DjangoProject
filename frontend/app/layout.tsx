@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EE Lab Dashboard",
-  description: "Ready, Set, Resilience project sponsored by the Environmental Education Lab.",
+  title: "Prism",
+  description: "Prism — an educational assessment platform connecting researchers, teachers, and students.",
 };
 
 export default function RootLayout({

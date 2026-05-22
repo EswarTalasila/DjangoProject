@@ -29,7 +29,7 @@ ensure_proxy_certs() {
     -out "${cert_file}" \
     -days 365 \
     -subj "/CN=${public_host}" \
-    -addext "subjectAltName=DNS:${public_host},DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+    -addext "subjectAltName=DNS:${public_host},DNS:localhost,DNS:proxy,IP:127.0.0.1" >/dev/null 2>&1
 }
 
 profile="${1:?profile required}"

@@ -15,12 +15,12 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 
-    set $prod_backend http://eelab-prod-backend:8000;
-    set $prod_frontend http://eelab-prod-frontend:3000;
-    set $dev_backend http://eelab-dev-backend:8000;
-    set $dev_frontend http://eelab-dev-frontend:3000;
-    set $test_backend http://eelab-test-backend:8000;
-    set $test_frontend http://eelab-test-frontend:3000;
+    set $prod_backend http://lattice-prod-backend:8000;
+    set $prod_frontend http://lattice-prod-frontend:3000;
+    set $dev_backend http://lattice-dev-backend:8000;
+    set $dev_frontend http://lattice-dev-frontend:3000;
+    set $test_backend http://lattice-test-backend:8000;
+    set $test_frontend http://lattice-test-frontend:3000;
 
     # ---- /_dev/ — development stack mirror ----
     # Only reachable while the dev stack is up (task up:dev). Intended for

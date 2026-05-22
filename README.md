@@ -1,4 +1,4 @@
-# EE Lab Data Dashboard
+# Lattice Data Dashboard
 
 This repo now uses one explicit task surface, one canonical root `.env`, four compose files, and a shared proxy that handles all browser and SSR traffic for `dev`, `test`, and `prod`.
 
@@ -73,10 +73,10 @@ The repo no longer uses one profile-driven mega-compose. The active files are:
 
 Compose project names:
 
-- `eelab-proxy`
-- `eelab-dev`
-- `eelab-test`
-- `eelab-prod`
+- `lattice-proxy`
+- `lattice-dev`
+- `lattice-test`
+- `lattice-prod`
 
 Each app stack owns its own DB/media/artifact volumes. Only the shared proxy owns the public ports.
 

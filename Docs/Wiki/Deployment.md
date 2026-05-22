@@ -69,12 +69,12 @@ The repo owns a toggleable prod auto-deploy installation:
 
 - `scripts/tasks/auto-deploy.sh`
 - `scripts/tasks/auto-deploy-run.sh`
-- `Deployment/templates/eelab-auto-deploy.cron.template`
+- `Deployment/templates/lattice-auto-deploy.cron.template`
 
 `task auto-deploy:on` installs:
 
 - `/opt/deploy/auto-deploy.sh`
-- `/etc/cron.d/eelab-auto-deploy`
+- `/etc/cron.d/lattice-auto-deploy`
 
 These commands are intended for the server checkout. When run as a non-root user they escalate with `sudo` to install into `/opt/deploy` and `/etc/cron.d`.
 
@@ -94,14 +94,14 @@ The installed runner:
 
 Production data is isolated by:
 
-- compose project `eelab-prod`
-- network `eelab-prod-app`
+- compose project `lattice-prod`
+- network `lattice-prod-app`
 - volumes:
-  - `eelab-prod-db-data`
-  - `eelab-prod-media-data`
-  - `eelab-prod-artifact-data`
+  - `lattice-prod-db-data`
+  - `lattice-prod-media-data`
+  - `lattice-prod-artifact-data`
 
 The shared proxy owns public ports and routes `80/443` to:
 
-- `eelab-prod-backend`
-- `eelab-prod-frontend`
+- `lattice-prod-backend`
+- `lattice-prod-frontend`

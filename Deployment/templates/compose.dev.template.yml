@@ -21,10 +21,10 @@ services:
     env_file:
       - ./env/.env.development
     environment:
-      MEDIA_ROOT: /srv/eelab-dev/media
+      MEDIA_ROOT: /srv/lattice-dev/media
     volumes:
-      - media-data:/srv/eelab-dev/media
-      - artifact-data:/srv/eelab-dev/media/artifacts
+      - media-data:/srv/lattice-dev/media
+      - artifact-data:/srv/lattice-dev/media/artifacts
     expose:
       - "8000"
     depends_on:
@@ -33,9 +33,9 @@ services:
     command: python src/manage.py runserver 0.0.0.0:8000
     networks:
       app: {}
-      eelab-proxy:
+      lattice-proxy:
         aliases:
-          - eelab-dev-backend
+          - lattice-dev-backend
 
   frontend:
     build:
@@ -52,21 +52,21 @@ services:
     command: npm run dev
     networks:
       app: {}
-      eelab-proxy:
+      lattice-proxy:
         aliases:
-          - eelab-dev-frontend
+          - lattice-dev-frontend
 
 volumes:
   db-data:
-    name: eelab-dev-db-data
+    name: lattice-dev-db-data
   media-data:
-    name: eelab-dev-media-data
+    name: lattice-dev-media-data
   artifact-data:
-    name: eelab-dev-artifact-data
+    name: lattice-dev-artifact-data
 
 networks:
   app:
-    name: eelab-dev-app
-  eelab-proxy:
+    name: lattice-dev-app
+  lattice-proxy:
     external: true
-    name: eelab-proxy
+    name: lattice-proxy

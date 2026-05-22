@@ -157,55 +157,55 @@ class TestComposeLayout:
 
 
 class TestComposeNamesAndVolumes:
-    """Networks, aliases, and volumes must use explicit EElab naming."""
+    """Networks, aliases, and volumes must use explicit Lattice naming."""
 
     def test_proxy_network_name(self):
-        """Shared proxy network is named eelab-proxy."""
+        """Shared proxy network is named lattice-proxy."""
         config = _load_yaml("docker/compose.proxy.yml")
-        assert config["networks"]["eelab-proxy"]["name"] == "eelab-proxy"
+        assert config["networks"]["lattice-proxy"]["name"] == "lattice-proxy"
 
     def test_app_network_names(self):
         """Each app stack has a profile-scoped private network plus shared proxy."""
         expectations = {
-            "docker/compose.dev.yml": "eelab-dev-app",
-            "docker/compose.test.yml": "eelab-test-app",
-            "docker/compose.prod.yml": "eelab-prod-app",
+            "docker/compose.dev.yml": "lattice-dev-app",
+            "docker/compose.test.yml": "lattice-test-app",
+            "docker/compose.prod.yml": "lattice-prod-app",
         }
         for relpath, expected_name in expectations.items():
             config = _load_yaml(relpath)
             assert config["networks"]["app"]["name"] == expected_name
-            assert config["networks"]["eelab-proxy"]["external"] is True
-            assert config["networks"]["eelab-proxy"]["name"] == "eelab-proxy"
+            assert config["networks"]["lattice-proxy"]["external"] is True
+            assert config["networks"]["lattice-proxy"]["name"] == "lattice-proxy"
 
     def test_service_aliases_are_explicit(self):
         """Backend and frontend expose stable proxy aliases per profile."""
         expectations = {
-            "docker/compose.dev.yml": ("eelab-dev-backend", "eelab-dev-frontend"),
-            "docker/compose.test.yml": ("eelab-test-backend", "eelab-test-frontend"),
-            "docker/compose.prod.yml": ("eelab-prod-backend", "eelab-prod-frontend"),
+            "docker/compose.dev.yml": ("lattice-dev-backend", "lattice-dev-frontend"),
+            "docker/compose.test.yml": ("lattice-test-backend", "lattice-test-frontend"),
+            "docker/compose.prod.yml": ("lattice-prod-backend", "lattice-prod-frontend"),
         }
         for relpath, (backend_alias, frontend_alias) in expectations.items():
             services = _services(relpath)
-            assert backend_alias in services["backend"]["networks"]["eelab-proxy"]["aliases"]
-            assert frontend_alias in services["frontend"]["networks"]["eelab-proxy"]["aliases"]
+            assert backend_alias in services["backend"]["networks"]["lattice-proxy"]["aliases"]
+            assert frontend_alias in services["frontend"]["networks"]["lattice-proxy"]["aliases"]
 
     def test_named_volumes_are_profile_specific(self):
-        """Named volumes use eelab-{profile}-{purpose} naming convention."""
+        """Named volumes use lattice-{profile}-{purpose} naming convention."""
         expectations = {
             "docker/compose.dev.yml": {
-                "db-data": "eelab-dev-db-data",
-                "media-data": "eelab-dev-media-data",
-                "artifact-data": "eelab-dev-artifact-data",
+                "db-data": "lattice-dev-db-data",
+                "media-data": "lattice-dev-media-data",
+                "artifact-data": "lattice-dev-artifact-data",
             },
             "docker/compose.test.yml": {
-                "db-data": "eelab-test-db-data",
-                "media-data": "eelab-test-media-data",
-                "artifact-data": "eelab-test-artifact-data",
+                "db-data": "lattice-test-db-data",
+                "media-data": "lattice-test-media-data",
+                "artifact-data": "lattice-test-artifact-data",
             },
             "docker/compose.prod.yml": {
-                "db-data": "eelab-prod-db-data",
-                "media-data": "eelab-prod-media-data",
-                "artifact-data": "eelab-prod-artifact-data",
+                "db-data": "lattice-prod-db-data",
+                "media-data": "lattice-prod-media-data",
+                "artifact-data": "lattice-prod-artifact-data",
             },
         }
         for relpath, volume_map in expectations.items():
@@ -234,26 +234,26 @@ class TestProxyRouting:
             assert (PROJECT_ROOT / relpath).exists()
 
     def test_dev_proxy_template_routes_expected_aliases(self):
-        """Dev proxy routes to eelab-dev-backend/frontend under /_dev/."""
+        """Dev proxy routes to lattice-dev-backend/frontend under /_dev/."""
         text = _read_text("proxy/templates/prod.conf.template")
-        assert "eelab-dev-backend:8000" in text
-        assert "eelab-dev-frontend:3000" in text
+        assert "lattice-dev-backend:8000" in text
+        assert "lattice-dev-frontend:3000" in text
         for path in ["/_dev/api/v1/", "/_dev/admin/", "/_dev/static/", "/_dev/"]:
             assert path in text
 
     def test_test_proxy_template_routes_expected_aliases(self):
-        """Test proxy routes to eelab-test-backend/frontend under /_test/."""
+        """Test proxy routes to lattice-test-backend/frontend under /_test/."""
         text = _read_text("proxy/templates/prod.conf.template")
-        assert "eelab-test-backend:8000" in text
-        assert "eelab-test-frontend:3000" in text
+        assert "lattice-test-backend:8000" in text
+        assert "lattice-test-frontend:3000" in text
         for path in ["/_test/api/v1/", "/_test/admin/", "/_test/static/", "/_test/"]:
             assert path in text
 
     def test_prod_proxy_template_routes_expected_aliases(self):
-        """Prod proxy routes to eelab-prod-backend/frontend at root on 80/443."""
+        """Prod proxy routes to lattice-prod-backend/frontend at root on 80/443."""
         text = _read_text("proxy/templates/prod.conf.template")
-        assert "eelab-prod-backend:8000" in text
-        assert "eelab-prod-frontend:3000" in text
+        assert "lattice-prod-backend:8000" in text
+        assert "lattice-prod-frontend:3000" in text
         # Both listeners must be marked default_server so the stock
         # default.conf shipped in the nginx:alpine image doesn't shadow us
         # for unmatched Host headers (internal docker-network traffic).
@@ -285,7 +285,7 @@ class TestTaskScripts:
 
     def test_auto_deploy_cron_template_exists(self):
         """The repo owns the auto-deploy cron template used for installation."""
-        assert (PROJECT_ROOT / "Deployment/templates/eelab-auto-deploy.cron.template").exists()
+        assert (PROJECT_ROOT / "Deployment/templates/lattice-auto-deploy.cron.template").exists()
 
     def test_auto_deploy_runner_contract_markers_exist(self):
         """The repo-owned deploy runner keeps rollback, dirty-check, and branch override markers."""
@@ -297,7 +297,7 @@ class TestTaskScripts:
 
     def test_auto_deploy_cron_template_points_at_rendered_runner(self):
         """The cron template invokes the installed rendered runner path placeholder."""
-        text = _read_text("Deployment/templates/eelab-auto-deploy.cron.template")
+        text = _read_text("Deployment/templates/lattice-auto-deploy.cron.template")
         assert '"__RUNNER_PATH__"' in text
 
     def test_legacy_runtime_scripts_removed(self):

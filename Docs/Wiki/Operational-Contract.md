@@ -225,10 +225,10 @@ The repo does not use one profile-driven mega-compose anymore.
 
 ### Compose Projects
 
-- `eelab-proxy`
-- `eelab-dev`
-- `eelab-test`
-- `eelab-prod`
+- `lattice-proxy`
+- `lattice-dev`
+- `lattice-test`
+- `lattice-prod`
 
 `container_name` should not be used.
 
@@ -248,23 +248,23 @@ No OTEL, Jaeger, Playwright, or E2E sidecars are part of the active contract.
 
 ### Networks
 
-- shared external proxy network: `eelab-proxy`
+- shared external proxy network: `lattice-proxy`
 - per-profile private app network:
-  - `eelab-dev-app`
-  - `eelab-test-app`
-  - `eelab-prod-app`
+  - `lattice-dev-app`
+  - `lattice-test-app`
+  - `lattice-prod-app`
 
 ### Volumes
 
-- `eelab-dev-db-data`
-- `eelab-dev-media-data`
-- `eelab-dev-artifact-data`
-- `eelab-test-db-data`
-- `eelab-test-media-data`
-- `eelab-test-artifact-data`
-- `eelab-prod-db-data`
-- `eelab-prod-media-data`
-- `eelab-prod-artifact-data`
+- `lattice-dev-db-data`
+- `lattice-dev-media-data`
+- `lattice-dev-artifact-data`
+- `lattice-test-db-data`
+- `lattice-test-media-data`
+- `lattice-test-artifact-data`
+- `lattice-prod-db-data`
+- `lattice-prod-media-data`
+- `lattice-prod-artifact-data`
 
 Each profile owns only its own data.
 
@@ -278,12 +278,12 @@ Each profile owns only its own data.
 
 ### Proxy Aliases
 
-- `eelab-dev-backend`
-- `eelab-dev-frontend`
-- `eelab-test-backend`
-- `eelab-test-frontend`
-- `eelab-prod-backend`
-- `eelab-prod-frontend`
+- `lattice-dev-backend`
+- `lattice-dev-frontend`
+- `lattice-test-backend`
+- `lattice-test-frontend`
+- `lattice-prod-backend`
+- `lattice-prod-frontend`
 
 Implementation should match these names unless this contract changes.
 
@@ -370,8 +370,8 @@ It:
 
 It must:
 
-- require the operator to type `EELAB` at an interactive confirmation prompt
-- act only on EElab-owned Docker state
+- require the operator to type `LATTICE` at an interactive confirmation prompt
+- act only on Lattice-owned Docker state
 - never be used as an implicit fallback by normal commands
 
 ---
@@ -386,9 +386,9 @@ It must:
 
 ### Instance-Scoped Roots
 
-- `/srv/eelab-dev/media`
-- `/srv/eelab-test/media`
-- `/srv/eelab-prod/media`
+- `/srv/lattice-dev/media`
+- `/srv/lattice-test/media`
+- `/srv/lattice-prod/media`
 
 ### Namespaces
 

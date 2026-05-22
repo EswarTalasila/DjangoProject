@@ -174,13 +174,17 @@ def build_runtime(profile: str, root_values: dict[str, str], policy: dict) -> di
         "NEXT_PUBLIC_API_URL": f"{base_path}/api/v1",
         "NEXT_BASE_PATH": base_path,
         "FORCE_SCRIPT_NAME": base_path,
-        # SSR fetches go through the public host over HTTPS rather than a
-        # docker-internal http://proxy hop. Using http://proxy hit the port 80
-        # redirect-to-HTTPS server block, and the cross-origin redirect caused
-        # fetch() to drop the Authorization header, which broke /auth/me calls
-        # during dashboard SSR. Hitting the public URL directly avoids the
-        # redirect altogether and uses the same valid TLS cert browsers see.
-        "SERVER_PROXY_ORIGIN": f"{public_scheme}://{public_host}",
+        # SSR fetches go through the proxy. For local dev (PUBLIC_HOST=localhost)
+        # the public host is unreachable from inside the frontend container — it
+        # resolves to the container itself, not the host. Use the proxy's docker
+        # network alias instead. The self-signed cert lists "proxy" as a SAN so
+        # TLS verification succeeds. For server deployments, the public host
+        # resolves correctly via real DNS, so we use it directly.
+        "SERVER_PROXY_ORIGIN": (
+            "https://proxy"
+            if root_values.get("ENV_TARGET", "local") == "local"
+            else f"{public_scheme}://{public_host}"
+        ),
         "MEDIA_ROOT": profile_cfg["media_root"],
     }
 
@@ -188,8 +192,8 @@ def build_runtime(profile: str, root_values: dict[str, str], policy: dict) -> di
         runtime.update(
             {
                 "DJANGO_SECRET_KEY": root_values.get("DJANGO_SECRET_KEY", ""),
-                "POSTGRES_DB": root_values.get("POSTGRES_DB", "eelab_prod"),
-                "POSTGRES_USER": root_values.get("POSTGRES_USER", "eelab_prod"),
+                "POSTGRES_DB": root_values.get("POSTGRES_DB", "lattice_prod"),
+                "POSTGRES_USER": root_values.get("POSTGRES_USER", "lattice_prod"),
                 "POSTGRES_PASSWORD": root_values.get("POSTGRES_PASSWORD", ""),
                 "GOOGLE_CLIENT_ID": root_values.get("GOOGLE_CLIENT_ID", ""),
                 "GOOGLE_CLIENT_SECRET": root_values.get("GOOGLE_CLIENT_SECRET", ""),

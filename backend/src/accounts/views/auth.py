@@ -153,6 +153,42 @@ def login(request):
     )
 
 
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([AnonBurstThrottle])
+def demo_login(request):
+    """Log in as a pre-seeded demo user for the requested role (STUDENT, TEACHER, RESEARCHER)."""
+    v = _v()
+    role = request.data.get("role", "").upper() if isinstance(request.data, dict) else ""
+    if role not in ("STUDENT", "TEACHER", "RESEARCHER"):
+        return Response(
+            {"detail": "Invalid role. Must be STUDENT, TEACHER, or RESEARCHER."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    user = (
+        v.User.objects.filter(
+            is_active=True,
+            is_staff=False,
+            roles__role=role,
+        )
+        .order_by("id")
+        .first()
+    )
+    if user is None:
+        return Response(
+            {"detail": "Demo accounts are not configured on this server."},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    refresh = v.RefreshToken.for_user(user)
+    body = v.build_user_response(user)
+    response = Response(body, status=status.HTTP_200_OK)
+    return _set_auth_cookies(
+        response,
+        access_token=str(refresh.access_token),
+        refresh_token=str(refresh),
+    )
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def current_user_profile(request):

@@ -64,9 +64,9 @@ services:
       retries: 5
     networks:
       app: {}
-      eelab-proxy:
+      lattice-proxy:
         aliases:
-          - eelab-dev-backend
+          - lattice-dev-backend
 
   frontend:
     # Dev-on-server uses the same Dockerfile.prod build + `next start` the prod
@@ -89,6 +89,11 @@ services:
       NEXT_BASE_PATH: ${NEXT_BASE_PATH}
       SERVER_PROXY_ORIGIN: ${SERVER_PROXY_ORIGIN}
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID}
+      # Trust the proxy's self-signed cert during SSR fetches to https://proxy.
+      # Production deploys use real certs and don't need this.
+      NODE_EXTRA_CA_CERTS: /etc/ssl/certs/proxy.crt
+    volumes:
+      - ../proxy/ssl/nginx.crt:/etc/ssl/certs/proxy.crt:ro
     expose:
       - "3000"
     depends_on:
@@ -101,21 +106,21 @@ services:
       retries: 5
     networks:
       app: {}
-      eelab-proxy:
+      lattice-proxy:
         aliases:
-          - eelab-dev-frontend
+          - lattice-dev-frontend
 
 volumes:
   db-data:
-    name: eelab-dev-db-data
+    name: lattice-dev-db-data
   media-data:
-    name: eelab-dev-media-data
+    name: lattice-dev-media-data
   artifact-data:
-    name: eelab-dev-artifact-data
+    name: lattice-dev-artifact-data
 
 networks:
   app:
-    name: eelab-dev-app
-  eelab-proxy:
+    name: lattice-dev-app
+  lattice-proxy:
     external: true
-    name: eelab-proxy
+    name: lattice-proxy

@@ -1,6 +1,6 @@
 # EEL Data Dashboard - Backend
 
-Django REST Framework API backend for the EE Lab Data Dashboard.
+Django REST Framework API backend for the Lattice Data Dashboard.
 
 ## Stack
 
@@ -57,7 +57,7 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 
 # Set required environment variables
-export DATABASE_URL=postgres://eelab:password@localhost:5432/eelab
+export DATABASE_URL=postgres://lattice:password@localhost:5432/lattice
 export DJANGO_SECRET_KEY=local-dev-secret-key
 export ENVIRONMENT=development
 export DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1

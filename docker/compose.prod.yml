@@ -60,9 +60,9 @@ services:
       retries: 5
     networks:
       app: {}
-      eelab-proxy:
+      lattice-proxy:
         aliases:
-          - eelab-prod-backend
+          - lattice-prod-backend
 
   frontend:
     build:
@@ -91,21 +91,21 @@ services:
       retries: 5
     networks:
       app: {}
-      eelab-proxy:
+      lattice-proxy:
         aliases:
-          - eelab-prod-frontend
+          - lattice-prod-frontend
 
 volumes:
   db-data:
-    name: eelab-prod-db-data
+    name: lattice-prod-db-data
   media-data:
-    name: eelab-prod-media-data
+    name: lattice-prod-media-data
   artifact-data:
-    name: eelab-prod-artifact-data
+    name: lattice-prod-artifact-data
 
 networks:
   app:
-    name: eelab-prod-app
-  eelab-proxy:
+    name: lattice-prod-app
+  lattice-proxy:
     external: true
-    name: eelab-proxy
+    name: lattice-proxy

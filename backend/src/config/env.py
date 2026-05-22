@@ -66,7 +66,7 @@ class EnvSettings(BaseSettings):
 
     # Database
     database_url: str = Field(
-        default="postgres://eelab:change-me@localhost:5432/eelab",
+        default="postgres://lattice:change-me@localhost:5432/lattice",
         description="PostgreSQL connection URL",
     )
 

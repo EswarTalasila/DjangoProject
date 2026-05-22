@@ -4,9 +4,9 @@
       "Name": "EEL Development Database",
       "Group": "Servers",
       "Port": 5432,
-      "Username": "eelab",
+      "Username": "lattice",
       "Host": "database",
-      "MaintenanceDB": "eelab",
+      "MaintenanceDB": "lattice",
       "PassFile": "/var/lib/pgadmin/pgpass",
       "SSLMode": "prefer"
     }

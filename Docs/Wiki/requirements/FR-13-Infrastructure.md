@@ -348,15 +348,15 @@ INFRA has no user-facing REST API endpoints. All behavior is Docker Compose orch
 
 | Volume | Purpose |
 |--------|---------|
-| `eelab-*-db-data` | Persistent profile-scoped database storage |
-| `eelab-*-media-data` | Persistent profile-scoped media storage |
-| `eelab-*-artifact-data` | Persistent profile-scoped artifact storage |
+| `lattice-*-db-data` | Persistent profile-scoped database storage |
+| `lattice-*-media-data` | Persistent profile-scoped media storage |
+| `lattice-*-artifact-data` | Persistent profile-scoped artifact storage |
 | `frontend_node_modules` | Persistent node_modules across container restarts |
 | `frontend_npm_cache` | Persistent npm cache to reduce download time |
 
 ### Network
 
-Shared proxy network: `eelab-proxy`. Each profile stack also owns a private app network (`eelab-dev-app`, `eelab-test-app`, `eelab-prod-app`) so services remain isolated while still being routable through the shared proxy.
+Shared proxy network: `lattice-proxy`. Each profile stack also owns a private app network (`lattice-dev-app`, `lattice-test-app`, `lattice-prod-app`) so services remain isolated while still being routable through the shared proxy.
 
 ### Taskfile Task Summary
 

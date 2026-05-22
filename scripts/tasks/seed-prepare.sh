@@ -30,7 +30,7 @@ case "${profile}" in
     ;;
 esac
 
-lock_dir="/tmp/eelab-seed-${profile}.lock"
+lock_dir="/tmp/lattice-seed-${profile}.lock"
 if ! mkdir "${lock_dir}" 2>/dev/null; then
   fail "another seed operation is already running for profile=${profile}"
   exit 1

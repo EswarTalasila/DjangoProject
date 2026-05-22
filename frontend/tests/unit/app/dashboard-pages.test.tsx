@@ -61,7 +61,7 @@ describe("app/(auth)/layout.tsx", () => {
     const AuthLayout = mod.default;
     render(<AuthLayout><div>Login Form</div></AuthLayout>);
     expect(screen.getByText("Login Form")).toBeInTheDocument();
-    expect(screen.getByText("EE Lab Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Prism")).toBeInTheDocument();
   });
 });
 
@@ -100,7 +100,7 @@ describe("app/(dashboard)/layout.tsx", () => {
     expect(screen.getByText("Dashboard Content")).toBeInTheDocument();
     expect(screen.getByTestId("sidebar")).toBeInTheDocument();
     expect(screen.getByTestId("avatar")).toBeInTheDocument();
-    expect(screen.getByText("Ready, Set, Resilience")).toBeInTheDocument();
+    expect(screen.getByText("Prism")).toBeInTheDocument();
   });
 
   it("redirects to /login when no profile", async () => {

@@ -1,6 +1,6 @@
 # EEL Data Dashboard - Frontend
 
-Next.js frontend for the EE Lab Data Dashboard.
+Next.js frontend for the Lattice Data Dashboard.
 
 ## Stack
 

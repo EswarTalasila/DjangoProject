@@ -72,7 +72,7 @@ class TestENV_UC_02_Integration:
             EnvSettings(
                 environment="production",
                 django_secret_key="django-insecure-local-dev-only-change-in-production",
-                database_url="postgres://eelab:change-me@localhost:5432/eelab",
+                database_url="postgres://lattice:change-me@localhost:5432/lattice",
                 google_client_id="",
                 google_client_secret="",
             )

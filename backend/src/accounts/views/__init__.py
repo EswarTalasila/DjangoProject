@@ -128,6 +128,7 @@ from .auth import (  # noqa: F401, E402
     _identifier_throttle_response,
     _google_userinfo,
     login,
+    demo_login,
     current_user_profile,
     refresh,
     logout,

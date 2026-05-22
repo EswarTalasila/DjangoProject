@@ -14,10 +14,10 @@
       "environment": "development",
       "http_port": 80,
       "https_port": 443,
-      "media_root": "/srv/eelab-dev/media",
+      "media_root": "/srv/lattice-dev/media",
       "db_defaults": {
-        "POSTGRES_DB": "eelab_dev",
-        "POSTGRES_USER": "eelab_dev",
+        "POSTGRES_DB": "lattice_dev",
+        "POSTGRES_USER": "lattice_dev",
         "POSTGRES_PASSWORD": "change-me"
       },
       "app_defaults": {
@@ -31,10 +31,10 @@
       "environment": "testing",
       "http_port": 80,
       "https_port": 443,
-      "media_root": "/srv/eelab-test/media",
+      "media_root": "/srv/lattice-test/media",
       "db_defaults": {
-        "POSTGRES_DB": "eelab_test",
-        "POSTGRES_USER": "eelab_test",
+        "POSTGRES_DB": "lattice_test",
+        "POSTGRES_USER": "lattice_test",
         "POSTGRES_PASSWORD": "change-me"
       },
       "app_defaults": {
@@ -48,7 +48,7 @@
       "environment": "production",
       "http_port": 80,
       "https_port": 443,
-      "media_root": "/srv/eelab-prod/media"
+      "media_root": "/srv/lattice-prod/media"
     }
   },
   "validation": {
@@ -81,12 +81,12 @@
       "frontend",
       "db",
       "proxy",
-      "eelab-dev-backend",
-      "eelab-dev-frontend",
-      "eelab-test-backend",
-      "eelab-test-frontend",
-      "eelab-prod-backend",
-      "eelab-prod-frontend"
+      "lattice-dev-backend",
+      "lattice-dev-frontend",
+      "lattice-test-backend",
+      "lattice-test-frontend",
+      "lattice-prod-backend",
+      "lattice-prod-frontend"
     ]
   }
 }

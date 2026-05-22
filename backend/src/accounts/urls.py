@@ -6,6 +6,7 @@ from . import views
 
 urlpatterns = [
     path("sessions", views.login, name="auth-sessions"),
+    path("demo-sessions", views.demo_login, name="auth-demo-sessions"),
     path("me", views.current_user_profile, name="auth-me"),
     path("sessions/oauth", views.login_with_google, name="auth-sessions-oauth"),
     path("token-exchanges", views.refresh, name="auth-token-exchanges"),

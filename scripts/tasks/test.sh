@@ -58,8 +58,8 @@ run_backend() {
   cols="$(terminal_cols)"
   lines="$(terminal_lines)"
   run_compose test exec -T \
-    -e "EELAB_TERM_COLUMNS=${cols}" \
-    -e "EELAB_TERM_LINES=${lines}" \
+    -e "LATTICE_TERM_COLUMNS=${cols}" \
+    -e "LATTICE_TERM_LINES=${lines}" \
     -e "COLUMNS=${cols}" \
     -e "LINES=${lines}" \
     backend \
@@ -73,8 +73,8 @@ run_backend() {
   # -----------------------------------------------------------------------
   step "test" "generating coverage and FR progress report"
   run_compose test exec -T \
-    -e "EELAB_TERM_COLUMNS=${cols}" \
-    -e "EELAB_TERM_LINES=${lines}" \
+    -e "LATTICE_TERM_COLUMNS=${cols}" \
+    -e "LATTICE_TERM_LINES=${lines}" \
     -e "COLUMNS=${cols}" \
     -e "LINES=${lines}" \
     backend \

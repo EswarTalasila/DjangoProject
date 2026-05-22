@@ -19,7 +19,7 @@ export default async function DashboardLayout({
       <div className="flex flex-col flex-1">
         <header className="flex h-16 items-center justify-between border-b bg-card px-4 md:px-8">
           <h2 className="ml-12 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground md:ml-0 md:text-sm md:tracking-wider">
-            Ready, Set, Resilience
+            Prism
           </h2>
           <div className="flex items-center gap-4">
             <UserAvatarMenu
